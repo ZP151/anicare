@@ -109,7 +109,17 @@ begin
        and s.visible_at is not null
        and s.visible_at <= pg_catalog.now()
        and s.risk <> 'critical'
-       and a.visibility = 'public';
+       and a.visibility = 'public'
+       and (
+         caller_id is null
+         or s.reporter_id is null
+         or not exists (
+           select 1
+           from public.user_blocks b
+           where (b.blocker_id = caller_id and b.blocked_id = s.reporter_id)
+              or (b.blocker_id = s.reporter_id and b.blocked_id = caller_id)
+         )
+       );
     if not found then
       raise exception 'invalid_feed_cursor' using errcode = 'P0001';
     end if;

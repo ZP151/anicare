@@ -32,6 +32,14 @@ No report/block controls were added to the feed screens. The safe projection int
 
 ## Database gate
 
-`supabase/tests/003_public_and_safety_rpcs.sql` was written before the migration and contains 50 pgTAP assertions covering role impersonation, raw privilege denial, exact feed projection, delay/critical exclusion, coarse time values, UUID cursor behavior, forged signature fields, adult/provisional behavior, target failures, allow-lists, idempotency conflicts, owner-only unblock behavior, block feed effects, and exactly-once audit writes.
+`supabase/tests/003_public_and_safety_rpcs.sql` was written before the migration and contains 57 pgTAP assertions covering role impersonation, raw privilege denial, exact feed projection, delay/critical exclusion, coarse time values, UUID cursor behavior, forged signature fields, adult/provisional behavior, target failures, allow-lists, idempotency conflicts, owner-only unblock behavior, block feed effects, and exactly-once audit writes.
 
 The SQL test suite was not executed locally because this workspace has no `supabase`, Docker, or `psql` executable. Database verification therefore remains a mandatory CI/Supabase-runtime gate; this branch is not represented as deployed or pilot-ready.
+
+## Fix round 1: cursor privacy and pagination
+
+- Cursor resolution now applies the same mutual-block predicate as feed row selection. If either the caller or the sighting author has blocked the other, that sighting UUID fails generically with `invalid_feed_cursor`; it cannot reveal relative ordering or produce a page. Anonymous cursor behavior is unchanged.
+- Added constraint-valid sightings with identical `visible_at` values. The pgTAP contract verifies deterministic UUID-descending tie-breaking, limit-two ordering, concatenated limit-one pages without gaps or duplicates, and exclusion of the cursor row.
+- Added both caller-blocked-author and author-blocked-caller cursor tests after their respective block mutations.
+
+Concurrent idempotency remains a mandatory database-runtime test and is intentionally not simulated inside single-session pgTAP. A Supabase/PostgreSQL-capable gate must open two sessions and verify: (1) simultaneous matching calls with the same actor/request UUID produce one mutation, one result, and one audit event; and (2) simultaneous cross-operation reuse of the same actor/request UUID yields one accepted operation and one deterministic `idempotency_conflict`. The transaction-scoped advisory lock remains in the migration, but its concurrency behavior is not claimed as locally executed.

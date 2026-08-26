@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(57);
 
 select has_function(
   'public', 'list_public_sighting_feed', array['uuid', 'integer'],
@@ -164,12 +164,52 @@ select throws_ok(
   'unknown UUID cursors fail closed without timestamp parsing'
 );
 
+insert into public.sightings (
+  id, animal_id, reporter_id, occurred_at, recorded_at, public_cell_id,
+  time_bucket, risk, visibility, visible_at, traits, notes, client_dedupe_key
+) values
+  ('00000000-0000-4000-8000-000000000608', '00000000-0000-4000-8000-000000000502', '00000000-0000-4000-8000-000000000444', '2024-12-31T23:00:00Z', '2025-01-01T00:00:00Z', '8928308280bffff', 'overnight', 'normal', 'public', '2025-01-01T00:00:00Z', '{}', null, 'feed-tie-lower-id'),
+  ('00000000-0000-4000-8000-000000000609', '00000000-0000-4000-8000-000000000502', '00000000-0000-4000-8000-000000000444', '2024-12-31T23:00:00Z', '2025-01-01T00:00:00Z', '8928308280bffff', 'overnight', 'normal', 'public', '2025-01-01T00:00:00Z', '{}', null, 'feed-tie-higher-id');
+
+select is(
+  (select array_agg(feed."sightingId" order by feed.ordinality)
+     from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000607', 2)
+       with ordinality as feed),
+  array[
+    '00000000-0000-4000-8000-000000000609'::uuid,
+    '00000000-0000-4000-8000-000000000608'::uuid
+  ],
+  'identical visible times use deterministic sighting UUID descending order with limit two'
+);
+select is(
+  array[
+    (select "sightingId" from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000607', 1)),
+    (select "sightingId" from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000609', 1))
+  ],
+  array[
+    '00000000-0000-4000-8000-000000000609'::uuid,
+    '00000000-0000-4000-8000-000000000608'::uuid
+  ],
+  'successive limit-one pages concatenate without gaps or duplicate tie rows'
+);
+select is_empty(
+  $$select 1
+      from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000609', 2)
+     where "sightingId" = '00000000-0000-4000-8000-000000000609'$$,
+  'the cursor row is excluded from the next page when visible times tie'
+);
+
 set local role anon;
 select set_config('request.jwt.claim.role', 'anon', true);
 select is(
   (select count(*) from public.list_public_sighting_feed(null, 50)),
-  3::bigint,
+  5::bigint,
   'anonymous JWT callers can read only the narrow delayed feed'
+);
+select is(
+  (select "sightingId" from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000601', 1)),
+  '00000000-0000-4000-8000-000000000602'::uuid,
+  'anonymous UUID cursor semantics remain unchanged by authenticated block filtering'
 );
 select throws_ok(
   $$select * from public.sightings$$,
@@ -355,6 +395,12 @@ select is_empty(
   'authenticated feed excludes content authored by a blocked user'
 );
 select throws_ok(
+  $$select *
+      from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000601', 50)$$,
+  'P0001', 'invalid_feed_cursor',
+  'a caller-blocked author sighting UUID is not a valid cursor oracle'
+);
+select throws_ok(
   $$select public.unblock_user(
       '00000000-0000-4000-8000-000000000222',
       '00000000-0000-4000-8000-000000000907'
@@ -443,6 +489,29 @@ select is(
   1::bigint,
   'matching unblock retries append one audit event'
 );
+
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000222', true);
+select lives_ok(
+  $$select public.block_user(
+      '00000000-0000-4000-8000-000000000111',
+      '00000000-0000-4000-8000-000000000915'
+    )$$,
+  'the content author can create the reverse-direction block relation'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000111', true);
+select throws_ok(
+  $$select *
+      from public.list_public_sighting_feed('00000000-0000-4000-8000-000000000601', 50)$$,
+  'P0001', 'invalid_feed_cursor',
+  'an author-blocked caller cannot use the author sighting UUID as a cursor oracle'
+);
+reset role;
 
 select * from finish();
 rollback;
