@@ -92,12 +92,22 @@ function validateHuffmanTables(bytes: Uint8Array, dataStart: number, end: number
     const id = tableClassAndId & 0x0f;
     if (tableClass > 1 || id > 3 || offset + 16 > end || tables.has(`${tableClass}:${id}`)) invalidJpeg();
     let symbols = 0;
-    for (let index = 0; index < 16; index += 1) symbols += bytes[offset + index]!;
+    let remainingCodeSpace = 1;
+    for (let index = 0; index < 16; index += 1) {
+      const count = bytes[offset + index]!;
+      symbols += count;
+      remainingCodeSpace = (remainingCodeSpace * 2) - count;
+      if (remainingCodeSpace < 0) invalidJpeg();
+    }
     if (symbols === 0 || symbols > 256 || offset + 16 + symbols > end) invalidJpeg();
     const seenSymbols = new Set<number>();
     for (let index = 0; index < symbols; index += 1) {
       const symbol = bytes[offset + 16 + index]!;
-      if (seenSymbols.has(symbol)) invalidJpeg();
+      const acSize = symbol & 0x0f;
+      const validBaselineSymbol = tableClass === 0
+        ? symbol <= 11
+        : symbol === 0x00 || symbol === 0xf0 || acSize >= 1 && acSize <= 10;
+      if (seenSymbols.has(symbol) || !validBaselineSymbol) invalidJpeg();
       seenSymbols.add(symbol);
     }
     tables.add(`${tableClass}:${id}`);

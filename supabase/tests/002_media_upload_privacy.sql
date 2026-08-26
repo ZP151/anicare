@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(34);
 
 select has_table('private', 'media_upload_jobs', 'upload jobs are private');
 select ok(
@@ -50,10 +50,14 @@ select ok(
   exists (
     select 1 from pg_constraint
     where conrelid = 'private.media_upload_jobs'::regclass
-      and contype = 'f' and confdeltype = 'c'
+      and contype = 'f' and confdeltype = 'n'
       and pg_get_constraintdef(oid) like '%uploader_id%'
+  ) and exists (
+    select 1 from pg_attribute
+    where attrelid = 'private.media_upload_jobs'::regclass
+      and attname = 'uploader_id' and not attnotnull
   ),
-  'service-only jobs cascade with profile deletion rather than blocking account deletion'
+  'profile deletion nulls retained service jobs instead of deleting their cleanup record'
 );
 
 set local role authenticated;
@@ -200,6 +204,25 @@ select ok(
   ),
   'a unique database constraint makes concurrent duplicate reservations safe'
 );
+select lives_ok($test$
+do $body$
+declare job uuid; first_usable_until timestamptz; reminted_usable_until timestamptz;
+begin
+  select id into job from private.media_upload_jobs
+  where uploader_id = '00000000-0000-0000-0000-000000000111' and media_id = 'media-123456';
+  first_usable_until := public.record_media_upload_token_expiry(
+    job, '00000000-0000-0000-0000-000000000111', now() + interval '2 hours 1 minute'
+  );
+  reminted_usable_until := public.record_media_upload_token_expiry(
+    job, '00000000-0000-0000-0000-000000000111', now() + interval '2 hours 4 minutes'
+  );
+  if reminted_usable_until <= first_usable_until or reminted_usable_until is distinct from
+      (select upload_token_expires_at from private.media_upload_jobs where id = job) then
+    raise exception 'remint did not monotonically extend credential usability';
+  end if;
+end
+$body$;
+$test$, 'a later signed-token remint monotonically extends the stored usable-until time');
 select lives_ok(
   $$select public.finalize_media_upload_job(
       (select id from private.media_upload_jobs
@@ -250,7 +273,7 @@ do $body$
 declare claim record;
 begin
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'cleanup-123', repeat('c', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
-  update private.media_upload_jobs set reservation_expires_at = now() - interval '20 minutes', upload_token_expires_at = now() + interval '1 hour', next_cleanup_at = now() - interval '1 second' where media_id = 'cleanup-123';
+  update private.media_upload_jobs set reserved_at = now() - interval '30 minutes', reservation_expires_at = now() - interval '20 minutes', upload_token_expires_at = now() + interval '1 hour', next_cleanup_at = now() - interval '1 second' where media_id = 'cleanup-123';
   select * into claim from public.claim_expired_media_staging_jobs(25) where job_id = (select id from private.media_upload_jobs where media_id = 'cleanup-123');
   if not found or claim.cleanup_action <> 'remove_and_retry' then raise exception 'expected retry action'; end if;
   perform public.complete_media_staging_cleanup(claim.job_id, claim.object_path, claim.cleanup_claim_id, claim.cleanup_action, true);
@@ -272,12 +295,16 @@ begin
   select public.finalize_media_upload_job(id, uploader_id, sighting_id, media_id, sha256) into asset from private.media_upload_jobs where media_id = 'active-123456';
   update private.media_upload_jobs set upload_token_expires_at = now() - interval '6 minutes', next_cleanup_at = now() - interval '1 second' where media_id = 'active-123456';
   select * into claim from public.claim_expired_media_staging_jobs(25) where job_id = (select id from private.media_upload_jobs where media_id = 'active-123456');
-  if not found or claim.cleanup_action <> 'purge_bookkeeping' then raise exception 'expected bookkeeping purge'; end if;
-  perform public.complete_media_staging_cleanup(claim.job_id, claim.object_path, claim.cleanup_claim_id, claim.cleanup_action, false);
-  if exists (select 1 from private.media_upload_jobs where media_id = 'active-123456') or not exists (select 1 from public.media_assets where id = asset and deleted_at is null and status = 'quarantined') then raise exception 'active media was not retained while bookkeeping was purged'; end if;
+  if found then raise exception 'active finalized job was incorrectly scheduled for purge'; end if;
+  if not exists (select 1 from private.media_upload_jobs where media_id = 'active-123456') or not exists (select 1 from public.media_assets where id = asset and deleted_at is null and status = 'quarantined') then raise exception 'active media lost its deletion cleanup record'; end if;
+  perform public.server_request_media_deletion('00000000-0000-0000-0000-000000000111', asset);
+  select * into claim from public.claim_expired_media_staging_jobs(25) where job_id = (select id from private.media_upload_jobs where media_id = 'active-123456');
+  if not found or claim.cleanup_action <> 'remove_and_purge' then raise exception 'logical deletion after credential expiry did not create a terminal cleanup action'; end if;
+  perform public.complete_media_staging_cleanup(claim.job_id, claim.object_path, claim.cleanup_claim_id, claim.cleanup_action, true);
+  if exists (select 1 from private.media_upload_jobs where media_id = 'active-123456') then raise exception 'logical deletion did not purge its retained finalized job'; end if;
 end
 $body$;
-$test$, 'finalized active quarantined objects are retained when expired job bookkeeping is purged');
+$test$, 'an expired active finalized job is retained until user deletion creates a terminal cleanup action');
 
 select lives_ok($test$
 do $body$
@@ -312,9 +339,9 @@ begin
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'fair-old-123', repeat('f', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'fair-new-123', repeat('0', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'fair-lease-12', repeat('1', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
-  update private.media_upload_jobs set reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '50 minutes' where media_id = 'fair-old-123';
-  update private.media_upload_jobs set reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '1 minute' where media_id = 'fair-new-123';
-  update private.media_upload_jobs set reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '2 hours', cleanup_claimed_at = now(), cleanup_claim_id = extensions.gen_random_uuid() where media_id = 'fair-lease-12';
+  update private.media_upload_jobs set reserved_at = now() - interval '2 hours', reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '50 minutes' where media_id = 'fair-old-123';
+  update private.media_upload_jobs set reserved_at = now() - interval '2 hours', reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '1 minute' where media_id = 'fair-new-123';
+  update private.media_upload_jobs set reserved_at = now() - interval '3 hours', reservation_expires_at = now() - interval '2 hours', next_cleanup_at = now() - interval '2 hours', cleanup_claimed_at = now(), cleanup_claim_id = extensions.gen_random_uuid() where media_id = 'fair-lease-12';
 end
 $body$;
 $test$, 'fair cleanup fixtures are scheduled');
@@ -328,6 +355,7 @@ select is(
 );
 select lives_ok($test$
 do $body$
+declare claim record; job uuid;
 begin
   set local session_replication_role = replica;
   insert into public.user_profiles (id, public_name, adult_confirmed_at)
@@ -336,12 +364,18 @@ begin
   insert into public.sightings (id, reporter_id, occurred_at, public_cell_id, time_bucket, risk, visibility, client_dedupe_key)
   values ('00000000-0000-0000-0000-000000000444', '00000000-0000-0000-0000-000000000333', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'profile-delete-media-001');
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000333', '00000000-0000-0000-0000-000000000444', 'profile-delete-1', repeat('2', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
+  update private.media_upload_jobs set reserved_at = now() - interval '3 hours', reservation_expires_at = now() - interval '2 hours', upload_token_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '1 second' where media_id = 'profile-delete-1'
+  returning id into job;
   delete from public.user_profiles where id = '00000000-0000-0000-0000-000000000333';
-  if exists (select 1 from private.media_upload_jobs where uploader_id = '00000000-0000-0000-0000-000000000333') then
-    raise exception 'profile deletion was blocked by service job bookkeeping';
+  if not exists (select 1 from private.media_upload_jobs where id = job and uploader_id is null) then
+    raise exception 'profile deletion destroyed the retained cleanup job instead of nulling ownership';
   end if;
+  select * into claim from public.claim_expired_media_staging_jobs(25) where job_id = job;
+  if not found or claim.cleanup_action <> 'remove_and_purge' then raise exception 'retained account-deletion job was not available for terminal cleanup'; end if;
+  perform public.complete_media_staging_cleanup(claim.job_id, claim.object_path, claim.cleanup_claim_id, claim.cleanup_action, true);
+  if exists (select 1 from private.media_upload_jobs where id = job) then raise exception 'retained account-deletion cleanup job was not terminally purged'; end if;
 end
 $body$;
-$test$, 'profile deletion cascades service job bookkeeping instead of being permanently blocked');
+$test$, 'profile deletion nulls service-job ownership while retaining and later purging cleanup state');
 select * from finish();
 rollback;

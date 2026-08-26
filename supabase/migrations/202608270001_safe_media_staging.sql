@@ -18,7 +18,9 @@ create type private.media_upload_job_status as enum (
 
 create table private.media_upload_jobs (
   id uuid primary key default extensions.gen_random_uuid(),
-  uploader_id uuid not null references public.user_profiles(id) on delete cascade,
+  -- Jobs outlive account deletion so a still-valid signed token cannot leave
+  -- an unreachable object. Reservation creation still requires an uploader.
+  uploader_id uuid references public.user_profiles(id) on delete set null,
   sighting_id uuid not null references public.sightings(id) on delete cascade,
   media_id text not null check (media_id ~ '^[A-Za-z0-9][A-Za-z0-9-]{7,63}$'),
   sha256 text not null check (sha256 ~ '^[a-f0-9]{64}$'),
@@ -32,8 +34,8 @@ create table private.media_upload_jobs (
   status private.media_upload_job_status not null default 'reserved',
   reserved_at timestamptz not null default now(),
   reservation_expires_at timestamptz not null,
-  -- This is set conservatively on reservation and then overwritten with the
-  -- server-derived time immediately after Storage mints a two-hour token.
+  -- This is set conservatively on reservation and then updated with the
+  -- pre-mint two-hour usable-until time after Storage returns a token.
   upload_token_expires_at timestamptz,
   next_cleanup_at timestamptz not null,
   cleanup_claimed_at timestamptz,
@@ -229,7 +231,10 @@ set search_path = pg_catalog
 as $$
 declare recorded_expiry timestamptz;
 begin
-  if p_upload_token_expires_at is null or p_upload_token_expires_at < now() + interval '1 hour 55 minutes' or
+  if p_uploader_id is null or p_upload_token_expires_at is null or p_upload_token_expires_at <= now() or
+      -- The Edge timestamp is captured before Storage mints the fixed two-hour
+      -- token. Allow only a small server-clock skew above two hours; never
+      -- derive this value from caller input.
       p_upload_token_expires_at > now() + interval '2 hours 5 minutes' then
     raise exception 'invalid_upload_token_expiry' using errcode = '22023';
   end if;
@@ -237,7 +242,7 @@ begin
   set upload_token_expires_at = greatest(coalesce(upload_token_expires_at, p_upload_token_expires_at), p_upload_token_expires_at),
       updated_at = now()
   where id = p_job_id and uploader_id = p_uploader_id and status = 'reserved'
-  returning p_upload_token_expires_at into recorded_expiry;
+  returning upload_token_expires_at into recorded_expiry;
   if not found then raise exception 'media_reservation_unavailable' using errcode = 'P0001'; end if;
   return recorded_expiry;
 end;
@@ -339,7 +344,7 @@ begin
 
   update private.media_upload_jobs
   set status = 'finalized', media_asset_id = asset_id, finalized_at = now(),
-      next_cleanup_at = coalesce(upload_token_expires_at, reservation_expires_at) + interval '5 minutes',
+      next_cleanup_at = 'infinity'::timestamptz,
       cleanup_claimed_at = null, cleanup_claim_id = null, updated_at = now()
   where id = job.id;
   return asset_id;
@@ -363,7 +368,6 @@ begin
       and (
         (j.status = 'reserved' and j.reservation_expires_at <= now())
         or j.status = 'deletion_pending'
-        or (j.status = 'finalized' and j.media_asset_id is not null)
       )
     order by j.next_cleanup_at, j.id
     limit p_limit
@@ -381,7 +385,6 @@ begin
       when c.status = 'reserved' then 'remove_and_retry'
       when c.status = 'deletion_pending' and now() >= coalesce(c.upload_token_expires_at, c.reservation_expires_at) + interval '5 minutes' then 'remove_and_purge'
       when c.status = 'deletion_pending' then 'defer_delete'
-      when c.status = 'finalized' then 'purge_bookkeeping'
       else 'invalid'
     end
   from claimed c;
@@ -431,9 +434,6 @@ begin
       delete from private.media_upload_jobs where id = job.id;
       return;
     end if;
-  elsif job.status = 'finalized' and p_cleanup_action = 'purge_bookkeeping' and not p_object_removed and now() >= safe_purge_at then
-    delete from private.media_upload_jobs where id = job.id;
-    return;
   end if;
   raise exception 'invalid_cleanup_action' using errcode = 'P0001';
 end;
@@ -502,8 +502,8 @@ grant execute on function public.complete_media_staging_cleanup(uuid, text, uuid
 grant execute on function public.server_request_media_deletion(uuid, uuid) to service_role;
 
 comment on table private.media_upload_jobs is
-  'Service-only idempotent staging jobs. Paths stay internal; cleanup retains objects until non-upsert upload tokens cannot replay.';
+  'Service-only idempotent staging jobs. Paths stay internal; jobs retain cleanup state after account deletion and until logically deleted media can be purged safely.';
 comment on function public.record_media_upload_token_expiry(uuid, uuid, timestamptz) is
-  'Service-only recording of the fixed-duration Storage signed-upload credential lifetime.';
+  'Service-only recording of a conservative fixed-duration Storage signed-upload usable-until time.';
 
 commit;

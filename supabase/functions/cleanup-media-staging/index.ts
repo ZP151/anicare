@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const MAX_CLEANUP_JOBS = 25;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type CleanupAction = 'remove_and_retry' | 'defer_delete' | 'remove_and_purge' | 'purge_bookkeeping';
+type CleanupAction = 'remove_and_retry' | 'defer_delete' | 'remove_and_purge';
 type CleanupJob = Readonly<{
   job_id: string;
   object_path: string;
@@ -43,7 +43,7 @@ function cleanupJob(value: unknown): CleanupJob | null {
     typeof job.object_path === 'string' && job.object_path === `jobs/${job.job_id}.jpg` &&
     typeof job.cleanup_claim_id === 'string' && uuid.test(job.cleanup_claim_id) &&
     (job.cleanup_action === 'remove_and_retry' || job.cleanup_action === 'defer_delete' ||
-      job.cleanup_action === 'remove_and_purge' || job.cleanup_action === 'purge_bookkeeping')
+      job.cleanup_action === 'remove_and_purge')
     ? job as CleanupJob
     : null;
 }

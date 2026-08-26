@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-import { UPLOAD_CREDENTIAL_VALIDITY_MS } from '../_shared/media-staging-lifecycle.ts';
+import { deriveConservativeUploadCredentialUsableUntil } from '../_shared/media-staging-lifecycle.ts';
 
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 32 * 1024;
@@ -161,6 +161,7 @@ Deno.serve(async (request) => {
     return json(request, { error: 'media_reservation_conflict' }, 409);
   }
 
+  const signedUploadRequestStartedAt = new Date();
   const { data: signedUpload, error: signedUploadError } = await service.storage
     .from('media-staging')
     .createSignedUploadUrl(row.object_path, { upsert: false });
@@ -168,14 +169,14 @@ Deno.serve(async (request) => {
     return json(request, { error: 'service_unavailable' }, 503);
   }
 
-  // Storage's createSignedUploadUrl has a fixed two-hour validity and does not
-  // take an expiry argument. Record that separate server-derived deadline
-  // before ever returning the token to a client.
-  const uploadCredentialExpiresAt = new Date(Date.now() + UPLOAD_CREDENTIAL_VALIDITY_MS).toISOString();
+  // Storage's fixed token lifetime starts during this call but the API does
+  // not report the precise mint instant. The pre-call lower bound is safe to
+  // return and record because it can never outlive the actual token.
+  const uploadCredentialUsableUntil = deriveConservativeUploadCredentialUsableUntil(signedUploadRequestStartedAt).toISOString();
   const { data: recordedExpiry, error: recordError } = await service.rpc('record_media_upload_token_expiry', {
     p_job_id: row.job_id,
     p_uploader_id: callerData.user.id,
-    p_upload_token_expires_at: uploadCredentialExpiresAt,
+    p_upload_token_expires_at: uploadCredentialUsableUntil,
   });
   if (recordError || typeof recordedExpiry !== 'string' || !Number.isFinite(Date.parse(recordedExpiry))) {
     return json(request, { error: 'service_unavailable' }, 503);
@@ -185,7 +186,7 @@ Deno.serve(async (request) => {
     jobId: row.job_id,
     mediaId: payload.mediaId,
     reservationExpiresAt: row.reservation_expires_at,
-    uploadCredentialExpiresAt: recordedExpiry,
+    uploadCredentialUsableUntil: recordedExpiry,
     upload: { signedUrl: signedUpload.signedUrl, token: signedUpload.token },
   }, 201);
 });

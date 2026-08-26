@@ -31,7 +31,8 @@ export type MediaReservationResponse = Readonly<{
   jobId: string;
   mediaId: string;
   reservationExpiresAt: string;
-  uploadCredentialExpiresAt: string;
+  /** Conservative lower bound captured before Storage minted the token. */
+  uploadCredentialUsableUntil: string;
   upload: Readonly<{ signedUrl: string; token: string }>;
 }>;
 
@@ -132,10 +133,10 @@ export function buildFinalizeMediaRequest(input: FinalizeMediaInput): FinalizeMe
  */
 export function parseMediaReservationResponse(value: unknown): MediaReservationResponse {
   if (!hasExactKeys(value, [
-    'jobId', 'mediaId', 'reservationExpiresAt', 'uploadCredentialExpiresAt', 'upload',
+    'jobId', 'mediaId', 'reservationExpiresAt', 'uploadCredentialUsableUntil', 'upload',
   ]) || !isStableMediaId(value.jobId) || !isStableMediaId(value.mediaId) ||
-      !validConfirmedAt(value.reservationExpiresAt) || !validConfirmedAt(value.uploadCredentialExpiresAt) ||
-      Date.parse(value.uploadCredentialExpiresAt) <= Date.parse(value.reservationExpiresAt) ||
+      !validConfirmedAt(value.reservationExpiresAt) || !validConfirmedAt(value.uploadCredentialUsableUntil) ||
+      Date.parse(value.uploadCredentialUsableUntil) <= Date.parse(value.reservationExpiresAt) ||
       !validSignedUpload(value.upload)) {
     throw new Error('invalid_media_reservation_response');
   }
@@ -143,7 +144,7 @@ export function parseMediaReservationResponse(value: unknown): MediaReservationR
     jobId: value.jobId as string,
     mediaId: value.mediaId as string,
     reservationExpiresAt: value.reservationExpiresAt as string,
-    uploadCredentialExpiresAt: value.uploadCredentialExpiresAt as string,
+    uploadCredentialUsableUntil: value.uploadCredentialUsableUntil as string,
     upload: value.upload as Readonly<{ signedUrl: string; token: string }>,
   };
 }

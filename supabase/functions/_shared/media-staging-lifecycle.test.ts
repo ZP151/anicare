@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   UPLOAD_CREDENTIAL_VALIDITY_MS,
   cleanupAction,
-  deriveUploadCredentialExpiry,
+  deriveConservativeUploadCredentialUsableUntil,
   selectFairCleanupJobs,
   type CleanupCandidate,
 } from './media-staging-lifecycle.js';
@@ -15,7 +15,7 @@ function candidate(overrides: Partial<CleanupCandidate> = {}): CleanupCandidate 
     id: '00000000-0000-4000-8000-000000000001',
     status: 'reserved',
     reservationExpiresAt: new Date('2026-08-26T23:50:00.000Z'),
-    uploadCredentialExpiresAt: new Date('2026-08-27T02:00:00.000Z'),
+    uploadCredentialUsableUntil: new Date('2026-08-27T02:00:00.000Z'),
     nextCleanupAt: new Date('2026-08-26T23:50:00.000Z'),
     cleanupClaimedAt: null,
     mediaDeletedAt: null,
@@ -24,8 +24,12 @@ function candidate(overrides: Partial<CleanupCandidate> = {}): CleanupCandidate 
 }
 
 describe('media staging lifecycle', () => {
-  it('models the platform signed-upload lifetime separately from a ten-minute reservation', () => {
-    expect(deriveUploadCredentialExpiry(now)).toEqual(new Date(now.getTime() + UPLOAD_CREDENTIAL_VALIDITY_MS));
+  it('reports a conservative credential usable-until from immediately before a delayed token mint', () => {
+    const mintStartedAt = new Date('2026-08-27T00:00:00.000Z');
+    const actualMintedAt = new Date('2026-08-27T00:00:30.000Z');
+    const usableUntil = deriveConservativeUploadCredentialUsableUntil(mintStartedAt);
+    expect(usableUntil).toEqual(new Date(mintStartedAt.getTime() + UPLOAD_CREDENTIAL_VALIDITY_MS));
+    expect(usableUntil.getTime()).toBeLessThan(actualMintedAt.getTime() + UPLOAD_CREDENTIAL_VALIDITY_MS);
   });
 
   it('keeps a finalized deleted object while a non-upsert upload token could replay, then purges it', () => {
@@ -37,10 +41,10 @@ describe('media staging lifecycle', () => {
     expect(cleanupAction(deleting, new Date('2026-08-27T02:05:00.000Z'))).toBe('remove_and_purge');
   });
 
-  it('purges active finalized bookkeeping only after credential expiry while retaining its quarantined object', () => {
+  it('retains active finalized bookkeeping after credential expiry so later logical deletion has a cleanup record', () => {
     const active = candidate({ status: 'finalized', mediaDeletedAt: null });
     expect(cleanupAction(active, now)).toBe('none');
-    expect(cleanupAction(active, new Date('2026-08-27T02:05:00.000Z'))).toBe('purge_bookkeeping');
+    expect(cleanupAction(active, new Date('2026-08-27T02:05:00.000Z'))).toBe('none');
   });
 
   it('retries unfinalized cleanup while a token can replay, then terminally purges the job', () => {

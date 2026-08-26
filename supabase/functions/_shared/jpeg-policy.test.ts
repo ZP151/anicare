@@ -37,6 +37,35 @@ function duplicateJfif(bytes: Uint8Array): Uint8Array {
   return insert(bytes, 2 + 2 + length, [...bytes.slice(2, 2 + 2 + length)]);
 }
 
+function huffmanDefinition(bytes: Uint8Array, tableClass: number, tableId: number): Readonly<{
+  countsOffset: number;
+  symbolsOffset: number;
+}> {
+  let offset = 2;
+  while (offset + 3 < bytes.byteLength) {
+    if (bytes[offset] !== 0xff) throw new Error('expected marker');
+    const marker = bytes[offset + 1]!;
+    if (marker === 0xda) break;
+    const length = (bytes[offset + 2]! << 8) | bytes[offset + 3]!;
+    const dataStart = offset + 4;
+    const end = offset + 2 + length;
+    if (marker === 0xc4) {
+      let tableOffset = dataStart;
+      while (tableOffset < end) {
+        const header = bytes[tableOffset++]!;
+        const countsOffset = tableOffset;
+        let symbolCount = 0;
+        for (let index = 0; index < 16; index += 1) symbolCount += bytes[tableOffset + index]!;
+        const symbolsOffset = tableOffset + 16;
+        if (header >> 4 === tableClass && (header & 0x0f) === tableId) return { countsOffset, symbolsOffset };
+        tableOffset = symbolsOffset + symbolCount;
+      }
+    }
+    offset = end;
+  }
+  throw new Error(`Huffman table ${tableClass}:${tableId} was not found`);
+}
+
 describe('inspectJpeg', () => {
   it('returns bounded dimensions from a decoder-valid canonical baseline JFIF JPEG', () => {
     expect(inspectJpeg(decoderValidJpeg)).toEqual({ width: 1, height: 1 });
@@ -69,6 +98,26 @@ describe('inspectJpeg', () => {
     ['invalid SOS table selector', (() => {
       const sos = markerOffset(decoderValidJpeg, 0xda);
       return replaceAt(decoderValidJpeg, sos + 6, 0x44);
+    })()],
+  ])('rejects %s', (_name, bytes) => {
+    expect(() => inspectJpeg(bytes)).toThrow('invalid_jpeg');
+  });
+
+  it.each([
+    ['an oversubscribed Huffman code space', (() => {
+      const definition = huffmanDefinition(decoderValidJpeg, 0, 0);
+      const copy = decoderValidJpeg.slice();
+      copy[definition.countsOffset] = 3;
+      copy[definition.countsOffset + 2] = 2;
+      return copy;
+    })()],
+    ['a DC category outside the baseline 0..11 range', (() => {
+      const definition = huffmanDefinition(decoderValidJpeg, 0, 0);
+      return replaceAt(decoderValidJpeg, definition.symbolsOffset, 12);
+    })()],
+    ['an AC run/size outside the baseline range', (() => {
+      const definition = huffmanDefinition(decoderValidJpeg, 1, 0);
+      return replaceAt(decoderValidJpeg, definition.symbolsOffset, 0xfb);
     })()],
   ])('rejects %s', (_name, bytes) => {
     expect(() => inspectJpeg(bytes)).toThrow('invalid_jpeg');

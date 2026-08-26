@@ -33,7 +33,7 @@ Raw and canonical cache files are transient. A reviewed draft stores an AES-GCM 
 
 ## Media backend
 
-The database adds `media_upload_jobs` in the private schema and a private `media-staging` bucket. Reservation returns a short-lived signed upload target. Finalization verifies object ownership and expected SHA/size/type, runs the pure JPEG marker policy, creates or updates one media row, and returns `quarantined` until a trusted publisher promotes it. Expired jobs and orphaned objects are cleaned by a service-role scheduler.
+The database adds `media_upload_jobs` in the private schema and a private `media-staging` bucket. Reservation returns a signed upload target plus separate 10-minute reservation and conservative two-hour credential-usable-until times; the latter is captured before Storage mints its token and is never represented as an exact expiry. Finalization verifies object ownership and expected SHA/size/type, runs the pure JPEG marker policy, creates or updates one media row, and returns `quarantined` until a trusted publisher promotes it. Expired unfinalized jobs are retried and ultimately purged by a service-role scheduler. Active quarantined-media jobs remain as deletion bookkeeping; logical deletion waits through the credential replay window before removing the private object and job. Jobs retain cleanup state with a null uploader after profile deletion.
 
 JPEG validation rejects APP1, APP13 and COM markers, malformed/truncated files, dimension/length mismatches and non-JPEG magic bytes. A client attestation alone never enables public publication.
 
@@ -63,4 +63,3 @@ The Python service adds strict schemas for normalized crops, image-quality resul
 - Moderator recusal and audit writes are proven transactionally.
 - AI callback serialization contains no vectors, scores, locations, paths or image data.
 - Native automatic detectors and public media promotion remain disabled until device/model, licence, adversarial-corpus and server residual-check gates pass.
-
