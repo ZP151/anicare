@@ -1,0 +1,109 @@
+import { MAX_REVIEWED_MEDIA_BYTES, type ReviewReceipt } from '../media/contracts';
+import { isStableMediaId } from '../media/media-reference';
+
+export type ReserveMediaInput = Readonly<{
+  sightingId: string;
+  mediaId: string;
+  receipt: ReviewReceipt;
+}>;
+
+export type ReserveMediaRequest = Readonly<{
+  sightingId: string;
+  mediaId: string;
+  sha256: string;
+  byteLength: number;
+  review: Readonly<{
+    recipeVersion: 'jpeg-srgb-2048-q88.v1';
+    detectorVersions: Readonly<{ cats: 'unavailable'; people: 'unavailable'; plates: 'unavailable' }>;
+    width: number;
+    height: number;
+    confirmedAtLocal: string;
+  }>;
+}>;
+
+export type FinalizeMediaInput = Readonly<{
+  sightingId: string;
+  mediaId: string;
+  sha256: string;
+}>;
+
+/**
+ * This is intentionally an interface only. Task 2 persists an AHM1 encrypted
+ * envelope and exposes no authenticated native read API, so no URI/File-based
+ * upload shortcut is permitted until a reader implements this boundary.
+ */
+export interface ReviewedArtifactReader {
+  readDecryptedReviewedJpeg(input: Readonly<{
+    draftId: string;
+    mediaId: string;
+    encryptedReviewedRef: string;
+    receipt: ReviewReceipt;
+  }>): Promise<Readonly<{ bytes: Uint8Array; sha256: string; byteLength: number }>>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isPlainObject(value)) return false;
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function validSha256(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function validConfirmedAt(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 40 &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function validDetectorVersions(value: unknown): value is Readonly<{ cats: 'unavailable'; people: 'unavailable'; plates: 'unavailable' }> {
+  return hasExactKeys(value, ['cats', 'people', 'plates']) &&
+    value.cats === 'unavailable' && value.people === 'unavailable' && value.plates === 'unavailable';
+}
+
+function validReceipt(value: unknown): value is ReviewReceipt {
+  if (!hasExactKeys(value, [
+    'sanitizedSha256', 'recipeVersion', 'detectorVersions', 'width', 'height', 'byteLength', 'confirmedAtLocal',
+  ])) return false;
+  return validSha256(value.sanitizedSha256) && value.recipeVersion === 'jpeg-srgb-2048-q88.v1' &&
+    validDetectorVersions(value.detectorVersions) &&
+    typeof value.width === 'number' && Number.isInteger(value.width) && value.width > 0 && value.width <= 2048 &&
+    typeof value.height === 'number' && Number.isInteger(value.height) && value.height > 0 && value.height <= 2048 &&
+    typeof value.byteLength === 'number' && Number.isInteger(value.byteLength) && value.byteLength > 0 && value.byteLength <= MAX_REVIEWED_MEDIA_BYTES &&
+    validConfirmedAt(value.confirmedAtLocal);
+}
+
+export function buildReserveMediaRequest(input: ReserveMediaInput): ReserveMediaRequest {
+  if (!hasExactKeys(input, ['sightingId', 'mediaId', 'receipt']) ||
+      !isStableMediaId(input.sightingId) || !isStableMediaId(input.mediaId) || !validReceipt(input.receipt)) {
+    throw new Error('invalid_media_reservation');
+  }
+  const receipt = input.receipt;
+  return {
+    sightingId: input.sightingId,
+    mediaId: input.mediaId,
+    sha256: receipt.sanitizedSha256.toLowerCase(),
+    byteLength: receipt.byteLength,
+    review: {
+      recipeVersion: 'jpeg-srgb-2048-q88.v1',
+      detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+      width: receipt.width,
+      height: receipt.height,
+      confirmedAtLocal: receipt.confirmedAtLocal,
+    },
+  };
+}
+
+export function buildFinalizeMediaRequest(input: FinalizeMediaInput): FinalizeMediaInput {
+  if (!hasExactKeys(input, ['sightingId', 'mediaId', 'sha256']) ||
+      !isStableMediaId(input.sightingId) || !isStableMediaId(input.mediaId) || !validSha256(input.sha256)) {
+    throw new Error('invalid_media_finalization');
+  }
+  return { sightingId: input.sightingId, mediaId: input.mediaId, sha256: input.sha256.toLowerCase() };
+}

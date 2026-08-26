@@ -23,17 +23,24 @@ Deno.serve(async (request) => {
   }
 
   const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: authorization } },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
-  const { data, error } = await userClient.rpc('request_media_deletion', {
-    requested_media_id: mediaId,
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  const { data: userData, error: userError } = token ? await userClient.auth.getUser(token) : { data: null, error: true };
+  if (userError || !userData?.user) {
+    return Response.json({ error: 'authentication_required' }, { status: 401 });
+  }
+
+  const serviceClient = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } = await serviceClient.rpc('server_request_media_deletion', {
+    p_actor_id: userData.user.id,
+    p_media_id: mediaId,
   });
   const target = data?.[0];
   if (error || !target) {
     return Response.json({ error: 'media_not_found_or_forbidden' }, { status: 403 });
   }
 
-  const serviceClient = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { error: storageError } = await serviceClient.storage
     .from(target.storage_bucket)
     .remove([target.storage_path]);
