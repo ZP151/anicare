@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "AnimalHelper",
+    "slug": "animalhelper",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "animalhelper",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "sg.animalhelper.app"
+    },
+    "android": {
+      "package": "sg.animalhelper.app",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "AnimalHelper uses your location once to protect and associate a community-cat sighting. Exact coordinates are never public."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a cat photo to attach to your report. Review and redact bystanders before upload.",
+          "cameraPermission": "Take a community-cat photo for a sighting report."
+        }
+      ],
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true,
+          "enableFTS": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

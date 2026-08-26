@@ -1,0 +1,13 @@
+{
+  "name": "@animalhelper/ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "python -m compileall -q src",
+    "dev": "cross-env PYTHONPATH=src python -m uvicorn animalhelper_ai.api:app --reload",
+    "lint": "python -m compileall -q src tests",
+    "test": "cross-env PYTHONPATH=src python -m unittest discover -s tests -v",
+    "typecheck": "python -m compileall -q src"
+  }
+}
+

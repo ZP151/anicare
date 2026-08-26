@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "outDir": "dist",
+    "rootDir": "_shared"
+  },
+  "include": ["_shared/**/*.ts"],
+  "exclude": ["_shared/**/*.test.ts"]
+}
+
