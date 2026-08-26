@@ -71,6 +71,26 @@ function validConfirmedAt(value: unknown): value is string {
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
 }
 
+const RESPONSE_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function canonicalizeResponseTimestamp(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 40) return null;
+  const match = RESPONSE_TIMESTAMP.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]!);
+  const month = Number(match[2]!);
+  const day = Number(match[3]!);
+  const hour = Number(match[4]!);
+  const minute = Number(match[5]!);
+  const second = Number(match[6]!);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]! ||
+      hour > 23 || minute > 59 || second > 59) return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
 function validSignedUpload(value: unknown): value is Readonly<{ signedUrl: string; token: string }> {
   if (!hasExactKeys(value, ['signedUrl', 'token']) || typeof value.signedUrl !== 'string' ||
       typeof value.token !== 'string' || value.token.length < 1 || value.token.length > 8192) return false;
@@ -132,19 +152,23 @@ export function buildFinalizeMediaRequest(input: FinalizeMediaInput): FinalizeMe
  * transport: Task 2 has no native authenticated reviewed-artifact reader yet.
  */
 export function parseMediaReservationResponse(value: unknown): MediaReservationResponse {
+  const reservationExpiresAt = isPlainObject(value) ? canonicalizeResponseTimestamp(value.reservationExpiresAt) : null;
+  const uploadCredentialUsableUntil = isPlainObject(value)
+    ? canonicalizeResponseTimestamp(value.uploadCredentialUsableUntil)
+    : null;
   if (!hasExactKeys(value, [
     'jobId', 'mediaId', 'reservationExpiresAt', 'uploadCredentialUsableUntil', 'upload',
   ]) || !isStableMediaId(value.jobId) || !isStableMediaId(value.mediaId) ||
-      !validConfirmedAt(value.reservationExpiresAt) || !validConfirmedAt(value.uploadCredentialUsableUntil) ||
-      Date.parse(value.uploadCredentialUsableUntil) <= Date.parse(value.reservationExpiresAt) ||
+      reservationExpiresAt === null || uploadCredentialUsableUntil === null ||
+      Date.parse(uploadCredentialUsableUntil) <= Date.parse(reservationExpiresAt) ||
       !validSignedUpload(value.upload)) {
     throw new Error('invalid_media_reservation_response');
   }
   return {
     jobId: value.jobId as string,
     mediaId: value.mediaId as string,
-    reservationExpiresAt: value.reservationExpiresAt as string,
-    uploadCredentialUsableUntil: value.uploadCredentialUsableUntil as string,
+    reservationExpiresAt,
+    uploadCredentialUsableUntil,
     upload: value.upload as Readonly<{ signedUrl: string; token: string }>,
   };
 }

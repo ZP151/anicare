@@ -73,6 +73,19 @@ describe('reviewed media API mapping', () => {
     });
   });
 
+  it('normalizes PostgREST microsecond offset timestamps to canonical millisecond UTC', () => {
+    expect(parseMediaReservationResponse({
+      jobId: 'job-12345678',
+      mediaId: 'media-123456',
+      reservationExpiresAt: '2026-08-27T12:34:56.123456+00:00',
+      uploadCredentialUsableUntil: '2026-08-27T14:34:56.987654+00:00',
+      upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
+    })).toMatchObject({
+      reservationExpiresAt: '2026-08-27T12:34:56.123Z',
+      uploadCredentialUsableUntil: '2026-08-27T14:34:56.987Z',
+    });
+  });
+
   it('rejects legacy single expiry and raw storage-path response fields', () => {
     expect(() => parseMediaReservationResponse({
       jobId: 'job-12345678',
@@ -86,6 +99,13 @@ describe('reviewed media API mapping', () => {
       reservationExpiresAt: '2026-08-27T00:10:00.000Z',
       uploadCredentialUsableUntil: '2026-08-27T02:00:00.000Z',
       storagePath: 'jobs/private.jpg',
+      upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
+    })).toThrow('invalid_media_reservation_response');
+    expect(() => parseMediaReservationResponse({
+      jobId: 'job-12345678',
+      mediaId: 'media-123456',
+      reservationExpiresAt: '2026-08-27T12:34:56.1234567+00:00',
+      uploadCredentialUsableUntil: '2026-08-27T14:34:56.000000+00:00',
       upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
     })).toThrow('invalid_media_reservation_response');
   });

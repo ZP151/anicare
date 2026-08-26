@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(35);
 
 select has_table('private', 'media_upload_jobs', 'upload jobs are private');
 select ok(
@@ -259,6 +259,13 @@ select ok(
   'a unique media-row constraint makes concurrent finalization safe'
 );
 select ok(
+  position(
+    'p_uploader_id is null' in
+    pg_get_functiondef('public.finalize_media_upload_job(uuid,uuid,uuid,text,text)'::regprocedure)
+  ) > 0,
+  'finalization explicitly rejects a null uploader before row comparison'
+);
+select ok(
   exists (
     select 1 from pg_constraint
     where conrelid = 'public.media_assets'::regclass
@@ -339,9 +346,9 @@ begin
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'fair-old-123', repeat('f', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'fair-new-123', repeat('0', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'fair-lease-12', repeat('1', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
-  update private.media_upload_jobs set reserved_at = now() - interval '2 hours', reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '50 minutes' where media_id = 'fair-old-123';
-  update private.media_upload_jobs set reserved_at = now() - interval '2 hours', reservation_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '1 minute' where media_id = 'fair-new-123';
-  update private.media_upload_jobs set reserved_at = now() - interval '3 hours', reservation_expires_at = now() - interval '2 hours', next_cleanup_at = now() - interval '2 hours', cleanup_claimed_at = now(), cleanup_claim_id = extensions.gen_random_uuid() where media_id = 'fair-lease-12';
+  update private.media_upload_jobs set reserved_at = now() - interval '70 minutes', reservation_expires_at = now() - interval '60 minutes', upload_token_expires_at = now() - interval '30 minutes', next_cleanup_at = now() - interval '50 minutes' where media_id = 'fair-old-123';
+  update private.media_upload_jobs set reserved_at = now() - interval '70 minutes', reservation_expires_at = now() - interval '60 minutes', upload_token_expires_at = now() - interval '30 minutes', next_cleanup_at = now() - interval '1 minute' where media_id = 'fair-new-123';
+  update private.media_upload_jobs set reserved_at = now() - interval '130 minutes', reservation_expires_at = now() - interval '120 minutes', upload_token_expires_at = now() - interval '30 minutes', next_cleanup_at = now() - interval '2 hours', cleanup_claimed_at = now(), cleanup_claim_id = extensions.gen_random_uuid() where media_id = 'fair-lease-12';
 end
 $body$;
 $test$, 'fair cleanup fixtures are scheduled');
@@ -364,7 +371,7 @@ begin
   insert into public.sightings (id, reporter_id, occurred_at, public_cell_id, time_bucket, risk, visibility, client_dedupe_key)
   values ('00000000-0000-0000-0000-000000000444', '00000000-0000-0000-0000-000000000333', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'profile-delete-media-001');
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000333', '00000000-0000-0000-0000-000000000444', 'profile-delete-1', repeat('2', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
-  update private.media_upload_jobs set reserved_at = now() - interval '3 hours', reservation_expires_at = now() - interval '2 hours', upload_token_expires_at = now() - interval '1 hour', next_cleanup_at = now() - interval '1 second' where media_id = 'profile-delete-1'
+  update private.media_upload_jobs set reserved_at = now() - interval '130 minutes', reservation_expires_at = now() - interval '120 minutes', upload_token_expires_at = now() - interval '30 minutes', next_cleanup_at = now() - interval '1 second' where media_id = 'profile-delete-1'
   returning id into job;
   delete from public.user_profiles where id = '00000000-0000-0000-0000-000000000333';
   if not exists (select 1 from private.media_upload_jobs where id = job and uploader_id is null) then

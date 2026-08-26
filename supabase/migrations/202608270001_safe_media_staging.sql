@@ -299,6 +299,9 @@ declare
   existing_asset public.media_assets%rowtype;
   asset_id uuid;
 begin
+  if p_uploader_id is null then
+    raise exception 'media_not_found_or_forbidden' using errcode = '42501';
+  end if;
   select * into job from private.media_upload_jobs where id = p_job_id for update;
   if not found or job.uploader_id is distinct from p_uploader_id or job.sighting_id is distinct from p_sighting_id or
       job.media_id is distinct from p_media_id or job.sha256 is distinct from p_sha256 then

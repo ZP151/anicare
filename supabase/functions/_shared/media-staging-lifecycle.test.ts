@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   UPLOAD_CREDENTIAL_VALIDITY_MS,
+  canonicalizeTimestamp,
   cleanupAction,
   deriveConservativeUploadCredentialUsableUntil,
+  extendCredentialUsableUntilWatermark,
   selectFairCleanupJobs,
   type CleanupCandidate,
 } from './media-staging-lifecycle.js';
@@ -30,6 +32,24 @@ describe('media staging lifecycle', () => {
     const usableUntil = deriveConservativeUploadCredentialUsableUntil(mintStartedAt);
     expect(usableUntil).toEqual(new Date(mintStartedAt.getTime() + UPLOAD_CREDENTIAL_VALIDITY_MS));
     expect(usableUntil.getTime()).toBeLessThan(actualMintedAt.getTime() + UPLOAD_CREDENTIAL_VALIDITY_MS);
+  });
+
+  it('canonicalizes a PostgREST microsecond offset timestamp for the Edge response boundary', () => {
+    expect(canonicalizeTimestamp('2026-08-27T12:34:56.123456+00:00'))
+      .toBe('2026-08-27T12:34:56.123Z');
+    expect(canonicalizeTimestamp('2026-08-27T12:34:56.1234567+00:00')).toBeNull();
+  });
+
+  it('returns each overlapping mint its own conservative bound while the cleanup watermark only grows', () => {
+    const delayedOlderRequestBound = deriveConservativeUploadCredentialUsableUntil(new Date('2026-08-27T00:00:00.000Z'));
+    const newerRequestBound = deriveConservativeUploadCredentialUsableUntil(new Date('2026-08-27T00:00:30.000Z'));
+
+    const afterNewerRequest = extendCredentialUsableUntilWatermark(null, newerRequestBound);
+    const afterDelayedOlderRequest = extendCredentialUsableUntilWatermark(afterNewerRequest, delayedOlderRequestBound);
+
+    expect(delayedOlderRequestBound.toISOString()).toBe('2026-08-27T02:00:00.000Z');
+    expect(newerRequestBound.toISOString()).toBe('2026-08-27T02:00:30.000Z');
+    expect(afterDelayedOlderRequest).toEqual(newerRequestBound);
   });
 
   it('keeps a finalized deleted object while a non-upsert upload token could replay, then purges it', () => {

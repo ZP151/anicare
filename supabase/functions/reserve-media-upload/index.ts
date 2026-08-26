@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-import { deriveConservativeUploadCredentialUsableUntil } from '../_shared/media-staging-lifecycle.ts';
+import {
+  canonicalizeTimestamp,
+  deriveConservativeUploadCredentialUsableUntil,
+} from '../_shared/media-staging-lifecycle.ts';
 
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 32 * 1024;
@@ -86,11 +89,12 @@ async function readBoundedJson(request: Request): Promise<unknown> {
 function reservationRow(value: unknown): ReservationRow | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as Partial<ReservationRow>;
+  const reservationExpiresAt = canonicalizeTimestamp(row.reservation_expires_at);
   return typeof row.job_id === 'string' && stableId.test(row.job_id) &&
     typeof row.object_path === 'string' && row.object_path === `jobs/${row.job_id}.jpg` &&
-    typeof row.reservation_expires_at === 'string' && Number.isFinite(Date.parse(row.reservation_expires_at)) &&
+    reservationExpiresAt !== null &&
     (row.finalized_media_asset_id === null || typeof row.finalized_media_asset_id === 'string')
-    ? row as ReservationRow
+    ? { ...row, reservation_expires_at: reservationExpiresAt } as ReservationRow
     : null;
 }
 
@@ -178,7 +182,7 @@ Deno.serve(async (request) => {
     p_uploader_id: callerData.user.id,
     p_upload_token_expires_at: uploadCredentialUsableUntil,
   });
-  if (recordError || typeof recordedExpiry !== 'string' || !Number.isFinite(Date.parse(recordedExpiry))) {
+  if (recordError || canonicalizeTimestamp(recordedExpiry) === null) {
     return json(request, { error: 'service_unavailable' }, 503);
   }
 
@@ -186,7 +190,9 @@ Deno.serve(async (request) => {
     jobId: row.job_id,
     mediaId: payload.mediaId,
     reservationExpiresAt: row.reservation_expires_at,
-    uploadCredentialUsableUntil: recordedExpiry,
+    // This response is deliberately this request's pre-mint bound, not the
+    // monotonic cleanup watermark returned by the recording RPC.
+    uploadCredentialUsableUntil,
     upload: { signedUrl: signedUpload.signedUrl, token: signedUpload.token },
   }, 201);
 });
