@@ -54,4 +54,23 @@ describe('media review policy', () => {
     expect(canStageMedia({ ...reviewedState, receipt: { ...reviewedState.receipt!, recipeVersion: 'other.v1' } })).toBe(false);
     expect(canStageMedia({ ...reviewedState, receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'detector.v2' } } })).toBe(false);
   });
+
+  it('matches detector versions semantically regardless of insertion order', () => {
+    expect(canStageMedia({ ...reviewedState, rendered: { ...rendered, detectorVersions: { plates: 'v1', people: 'v2' } }, receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'v2', plates: 'v1' } } })).toBe(true);
+    const mismatches: Array<Record<string, string>> = [{ people: 'v2' }, { people: 'v1', plates: 'v1' }, { people: 'v2', plates: 'v2' }];
+    for (const detectorVersions of mismatches) {
+      expect(canStageMedia({ ...reviewedState, rendered: { ...rendered, detectorVersions: { people: 'v2', plates: 'v1' } }, receipt: { ...reviewedState.receipt!, detectorVersions } })).toBe(false);
+    }
+  });
+
+  it('rejects receipts with mismatched media bytes or dimensions', () => {
+    for (const receipt of [
+      { ...reviewedState.receipt!, sanitizedSha256: 'different' },
+      { ...reviewedState.receipt!, width: 101 },
+      { ...reviewedState.receipt!, height: 101 },
+      { ...reviewedState.receipt!, byteLength: 43 },
+    ]) {
+      expect(canStageMedia({ ...reviewedState, receipt })).toBe(false);
+    }
+  });
 });

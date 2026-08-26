@@ -1,5 +1,11 @@
 import type { MediaReviewEvent, MediaReviewState, PrivacyMask, ReviewReceipt } from './contracts';
 
+function equalVersionMaps(left: Readonly<Record<string, string>>, right: Readonly<Record<string, string>>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => right[key] === left[key]);
+}
+
 function receiptFor(state: MediaReviewState, confirmedAtLocal: string): ReviewReceipt | null {
   if (!state.rendered) return null;
   return {
@@ -34,7 +40,7 @@ export function canStageMedia(state: MediaReviewState): boolean {
     state.receipt !== null &&
     state.receipt.sanitizedSha256 === state.rendered.sha256 &&
     state.receipt.recipeVersion === state.rendered.recipeVersion &&
-    JSON.stringify(state.receipt.detectorVersions) === JSON.stringify(state.rendered.detectorVersions) &&
+    equalVersionMaps(state.receipt.detectorVersions, state.rendered.detectorVersions) &&
     state.receipt.width === state.rendered.width &&
     state.receipt.height === state.rendered.height &&
     state.receipt.byteLength === state.rendered.byteLength;

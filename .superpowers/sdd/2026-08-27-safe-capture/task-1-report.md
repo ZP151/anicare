@@ -74,3 +74,23 @@ Changes:
 Focused green: 3 suites, 7 tests passed.
 
 Full verification: 7 suites, 17 tests passed; mobile typecheck passed; Expo web build passed with 13 static routes (the test is not exported as a route).
+
+## Fix round 2
+
+Red command:
+
+```text
+pnpm --filter @animalhelper/mobile test -- review-policy.test.ts draft-policy.test.ts draft-store.native.test.ts
+```
+
+Result: failed for the targeted gaps: insertion-order-equivalent detector maps were rejected by `JSON.stringify`, and native SQL regression constants were not yet exposed for verification. The draft privacy test was also corrected to exercise the actual leaked `photoUri` field.
+
+Changes:
+
+- Replaced order-sensitive detector-version serialization with exact key-set/value semantic comparison.
+- Added rejection coverage for mismatched hash, width, height, byte length, and missing/extra/different detector versions; equivalent maps in different insertion order are accepted.
+- Added native-store source-level regression coverage proving save/read SQL omit `photo_uri` and initialization clears legacy values; no raw URI was reintroduced.
+
+Focused green: 3 suites, 9 tests passed.
+
+Full verification: 8 suites, 20 tests passed; mobile typecheck passed; Expo web build passed with 13 static routes.
