@@ -1,5 +1,6 @@
 import type { SightingRisk } from '../api/sightings';
 import type { ReviewReceipt } from '../media/contracts';
+import { isReviewedMediaReference } from '../media/media-reference';
 import type { UploadJob } from './upload-job';
 
 export type StoredDraft = {
@@ -14,7 +15,7 @@ export type StoredDraft = {
 };
 
 const risks = new Set<SightingRisk>(['normal', 'sensitive', 'critical']);
-const uploadStates = new Set<UploadJob['state']>(['upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete']);
+const uploadStates = new Set<UploadJob['state']>(['local_persisting', 'upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete']);
 
 function stableId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/.test(value);
@@ -49,7 +50,7 @@ function sanitizeUploadJob(value: unknown): UploadJob | undefined {
   if (job.state === 'waiting' && !validNextAttemptAt) throw new Error('invalid_reviewed_media_draft');
   const nextAttemptAt = job.state === 'waiting' ? job.nextAttemptAt as string : null;
   const lastError = typeof job.lastError === 'string' &&
-    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|retry_limit_reached|invalid_upload_attempt|upload_error)$/.test(job.lastError)
+    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|retry_limit_reached|invalid_upload_attempt|local_media_missing|local_media_corrupt|upload_error)$/.test(job.lastError)
     ? job.lastError
     : null;
   return { state: job.state, attempts: job.attempts!, nextAttemptAt, lastError };
@@ -71,7 +72,7 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     input.receipt !== undefined || input.uploadJob !== undefined || input.sightingId !== undefined;
   if (!hasAnyMedia) return draft;
 
-  if (!stableId(input.mediaId) || input.encryptedReviewedRef !== `reviewed-media/${input.mediaId}.agcm` ||
+  if (!stableId(input.mediaId) || !isReviewedMediaReference(input.encryptedReviewedRef, input.mediaId) ||
       !validReceipt(input.receipt)) {
     throw new Error('invalid_reviewed_media_draft');
   }

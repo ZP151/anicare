@@ -200,3 +200,102 @@ git diff --check: exit 0 (Windows LF-to-CRLF advisories only)
 ```
 
 No dependency or lockfile change was needed in fix round 1. The existing Windows-only native-device release gate remains: representative iOS and Android development builds must still validate ImageManipulator, Skia JPEG structure/output, atomic file replacement, SecureStore, and AES-GCM end to end.
+
+## Fix round 2
+
+Independent scoped re-review status before this round: **FAILED** with three Important and two Minor findings. This section supersedes Fix round 1's replace/overwrite design: Expo 57's overwrite move is destructive on both native platforms, so the final design never replaces a ciphertext file.
+
+### RED evidence
+
+The initial adversarial batch was run before production changes:
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-media.coordinator.test.ts reviewed-media-envelope.test.ts reviewed-draft.test.ts render-coordinator.test.ts draft-policy.test.ts draft-store.native.test.ts media-reference.test.ts
+```
+
+Observed result:
+
+```text
+Test Suites: 7 failed, 7 total
+Tests:       23 failed, 23 passed, 46 total
+```
+
+Those failures covered missing immutable commit references and no-overwrite behavior, missing authenticated envelope verification, missing durable local-persistence journal/recovery, stale async render coordination, immutable-reference draft policy, corrupt-row containment, and anchored orphan/deletion selection.
+
+Additional focused RED cycles were captured before their corresponding implementation changes:
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-media.native.test.ts reviewed-draft.test.ts --runInBand
+Test Suites: 2 failed, 2 total
+Tests:       11 failed, 4 passed, 15 total
+# persistence still accepted the old stable final and deleted plaintext before DB finalization;
+# the durable coordinator/recovery API did not exist
+
+pnpm --filter @animalhelper/mobile test -- reviewed-draft.test.ts --runInBand
+Tests: 1 failed, 10 passed, 11 total
+# an omitted rendered URI was not included in post-finalization cache cleanup
+
+pnpm --filter @animalhelper/mobile test -- draft-media.native.test.ts --runInBand
+Tests: 1 failed, 4 passed, 5 total
+# AAD did not yet bind the immutable encrypted reference
+```
+
+### Fixes and invariants
+
+1. **Immutable native commit.** Ciphertext now targets `reviewed-media/<mediaId>.<commitId>.agcm`, where every identifier is bounded and validated. A unique temp file in the same app-owned directory is written first and moved to a previously nonexistent final with `{ overwrite: false }`. Existing finals are never deleted or replaced. Partial temp writes and commit failures clean only the owned temp; a final that already exists or appears during a race is preserved. Injected adapter tests assert the exact no-overwrite option and prior-final preservation.
+2. **Authenticated, reference-bound envelope.** Native persistence wraps Expo Crypto's AES-256-GCM combined nonce/ciphertext/tag in a length-checked versioned `AHM1` envelope. AAD now binds the draft ID, media ID, immutable encrypted reference, exact receipt/hash/dimensions/recipe/detector status, and encryption version. Recovery reads only an anchored owned reference, parses the envelope, authenticates/decrypts with the SecureStore-held key, and rechecks plaintext length and SHA-256. Existence alone is never treated as a valid commit; absent, valid, and corrupt/tampered artifacts are distinct outcomes.
+3. **Durable two-phase journal.** Before any ciphertext operation, SQLCipher persists the stable draft/media IDs, exact receipt, intended immutable reference, and `local_persisting` state. Only after that write succeeds may encryption and immutable commit run. The committed artifact is authenticated before a single SQL upsert moves the row to `upload_pending`; only then are owned canonical/reviewed caches deleted best effort. DB prepare failure performs no encryption. Ciphertext or final-DB failure leaves the durable journal and same reference retryable. Same-session retry uses the same journal/reference; process-restart recovery finalizes a valid artifact without plaintext or re-encryption, while absent and corrupt artifacts become bounded `needs_user` states.
+4. **Startup recovery and sweep.** Root startup invokes the platform-split recovery adapter. Native recovery loads durable drafts, processes only `local_persisting` rows, protects every still-referenced immutable ciphertext, and best-effort removes only app-owned temp files and unreferenced immutable ciphertext. The web adapter performs no staging or filesystem recovery. Deleting a draft removes its row and then deletes only a validated anchored owned ciphertext; absolute attacker paths, traversal, content/gallery URIs, unrelated files, and unknown references are untouched.
+5. **Synchronous render coordination.** Selection and mask mutation now acquire a synchronous in-flight coordinator before any await or React state scheduling. Each operation receives a generation token; stale completions cannot update state or clear a newer operation's busy flag. Mask arrays and rectangles are copied/frozen so the exact immutable snapshot passed to the renderer is also stored in review state. Tests cover rapid taps, add-vs-clear exclusion, selection invalidating an old render, stale completion order, and snapshot mutation.
+6. **Per-row corruption containment.** Draft deserialization parses and sanitizes media fields independently per row. A malformed receipt or other media snapshot corruption produces a valid text-only fail-closed draft (or skips an invalid draft identity) without rejecting the rest of the list.
+
+The durable invariant is: a row may advertise `upload_pending` only after its exact immutable, reference-bound AES-GCM artifact authenticates against the durably stored receipt. `local_persisting` is the only intermediate state. Plaintext never enters SQL or the reviewed-media directory, and cache cleanup cannot precede final metadata commit.
+
+### Preserved properties and dependency decisions
+
+- The strict JPEG structural scanner, real synthetic decoder-valid fixture, contain-mode geometry, serialized key coordinator, hostile retry validation, anchored processor-cache deletion, and invalid-draft-ID checks from Fix round 1 remain covered and unchanged.
+- Web media processing/persistence still fails closed with `secure_media_processing_unavailable`; the successful web export confirms platform resolution does not pull native storage/crypto code into the web bundle.
+- AES-256-GCM continues to use a fresh 12-byte nonce and 16-byte authentication tag. Media bytes do not enter SecureStore, and raw keys are never logged or written to app files/storage.
+- Automatic cat, people, and plate detectors remain explicitly `unavailable`. No upload, publication, or client-attestation publication path was added.
+- Drafts still omit coordinates, tokens, selected-source URIs, and canonical URIs. Technical scheme, bundle/package, database, and SecureStore key identifiers are unchanged. No credentials, service role, real user data, or model weights were introduced.
+- No package or lockfile change was required. The implementation uses the already aligned Expo 57 Crypto, FileSystem, SecureStore, and SQLCipher-capable SQLite dependencies. Frozen offline installation succeeded; no registry/network retries were attempted or active.
+
+### GREEN and final verification
+
+Focused Fix round 2 suites:
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-media.coordinator.test.ts draft-media.native.test.ts reviewed-media-envelope.test.ts reviewed-draft.test.ts draft-store.native.test.ts media-reference.test.ts render-coordinator.test.ts draft-policy.test.ts processor.web.test.ts redaction-review.test.tsx --runInBand
+Test Suites: 10 passed, 10 total
+Tests:       62 passed, 62 total
+```
+
+Fresh final verification chain:
+
+```text
+pnpm --filter @animalhelper/mobile test
+pnpm --filter @animalhelper/mobile typecheck
+pnpm --filter @animalhelper/mobile build
+pnpm install --frozen-lockfile --offline
+git diff --check
+```
+
+Observed results before commit:
+
+```text
+Test Suites: 20 passed, 20 total
+Tests:       121 passed, 121 total
+tsc --noEmit: exit 0
+expo export --platform web: exit 0 (14 static routes, including /report/redaction-review)
+frozen offline install: exit 0, already up to date
+git diff --check: exit 0 (Windows LF-to-CRLF advisories only)
+```
+
+### Self-review and remaining gate
+
+- Re-read the re-review findings against the final data-flow order and tested every requested failure boundary: DB prepare, partial temp write, immutable move, prior/racing final, ciphertext commit, authentication, final DB update, restart with absent/valid/corrupt files, stable retry, stale render completion, corrupt row, startup sweep, and draft deletion.
+- Confirmed there is no `overwrite: true` in reviewed-media persistence. Final and temp path resolution accepts only exact relative app-owned reference grammars under `Paths.document/reviewed-media`.
+- Confirmed the startup sweep protects all durable references regardless of retry/completion state and deletes only grammar-validated owned temp/orphan entries returned by the app-owned directory listing.
+- Confirmed selected source URIs remain transient component inputs and are never included in journal metadata or deletion targets.
+
+The remaining release gate is native-device validation. This Windows environment cannot execute an iOS or Android development build, so representative devices must still validate Expo 57's actual no-overwrite move behavior, post-move file visibility, AES-GCM encrypt/decrypt/tamper rejection, SecureStore lock/unlock behavior, SQLCipher restart recovery, and the complete HEIC/orientation/mask/encrypt lifecycle. No native capability was stubbed or claimed as device-verified.

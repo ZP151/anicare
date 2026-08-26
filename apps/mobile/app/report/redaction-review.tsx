@@ -15,11 +15,17 @@ import {
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors, radii } from '../../src/design/theme';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
-import { persistReviewedMedia } from '../../src/media/draft-media';
+import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
 import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
 import { normalizePreviewTap } from '../../src/media/redaction-geometry';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
-import { saveReviewedDraft, type PendingReviewedDraft } from '../../src/media/reviewed-draft';
+import { createRenderCoordinator } from '../../src/media/render-coordinator';
+import {
+  commitReviewedDraft,
+  resumeReviewedDraftCommit,
+  type ReviewedDraftCommitDependencies,
+  type ReviewedMediaJournal,
+} from '../../src/media/reviewed-draft';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 
 const EMPTY_REVIEW: MediaReviewState = { status: 'idle', rendered: null, masks: [], receipt: null };
@@ -47,10 +53,12 @@ export default function RedactionReviewScreen() {
   const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingReviewedDraft | null>(null);
+  const [pending, setPending] = useState<ReviewedMediaJournal | null>(null);
   const processorCacheUris = useRef<string[]>([]);
+  const renderCoordinator = useRef(createRenderCoordinator()).current;
 
   async function choosePhoto() {
+    const operation = renderCoordinator.beginSelection();
     setBusy(true);
     setStatus('Preparing a private review copy…');
     try {
@@ -60,22 +68,25 @@ export default function RedactionReviewScreen() {
         exif: false,
         quality: 1,
       });
-      if (selected.canceled || !selected.assets[0]?.uri) return;
+      if (selected.canceled || !selected.assets[0]?.uri || !renderCoordinator.isCurrent(operation.token)) return;
       const sourceUri = selected.assets[0].uri;
       processorCacheUris.current = [];
       const prepared = await prepareCanonical(sourceUri);
       processorCacheUris.current.push(prepared.uri);
+      if (!renderCoordinator.isCurrent(operation.token)) return;
       setCanonical(prepared);
       const rendered = await renderOpaqueMasks({ canonical: prepared, masks: [] });
       processorCacheUris.current.push(rendered.uri);
+      if (!renderCoordinator.isCurrent(operation.token)) return;
       setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
       setStatus('Tap anywhere on the image to burn in an opaque mask. Review every pixel before confirming.');
     } catch (error) {
+      if (!renderCoordinator.isCurrent(operation.token)) return;
       setStatus(error instanceof Error && error.message === 'secure_media_processing_unavailable'
         ? 'Secure media processing is unavailable on this device.'
         : 'The photo could not be prepared safely. Nothing was staged.');
     } finally {
-      setBusy(false);
+      if (renderCoordinator.finish(operation.token)) setBusy(false);
     }
   }
 
@@ -90,36 +101,48 @@ export default function RedactionReviewScreen() {
       y: event.nativeEvent.locationY,
     });
     if (!tap) return;
-    const masks = [...review.masks, maskAt(tap.x, tap.y)];
-    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks }));
+    const operation = renderCoordinator.beginMutation([...review.masks, maskAt(tap.x, tap.y)]);
+    if (!operation) return;
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
     setBusy(true);
     setStatus('Rendering the updated opaque masks…');
     try {
-      const rendered = await renderOpaqueMasks({ canonical, masks });
+      const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
       processorCacheUris.current.push(rendered.uri);
-      setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
+      if (!renderCoordinator.isCurrent(operation.token)) return;
+      setReview((current) => reduceMediaReview(
+        { ...current, masks: operation.masks },
+        { type: 'rendered_changed', rendered },
+      ));
       setStatus('Mask applied to final pixels. Review again before confirming.');
     } catch {
+      if (!renderCoordinator.isCurrent(operation.token)) return;
       setStatus('The mask could not be rendered safely. Confirmation remains disabled.');
     } finally {
-      setBusy(false);
+      if (renderCoordinator.finish(operation.token)) setBusy(false);
     }
   }
 
   async function clearMasks() {
     if (!canonical || busy || pending) return;
-    const masks: PrivacyMask[] = [];
-    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks }));
+    const operation = renderCoordinator.beginMutation([]);
+    if (!operation) return;
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
     setBusy(true);
     try {
-      const rendered = await renderOpaqueMasks({ canonical, masks });
+      const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
       processorCacheUris.current.push(rendered.uri);
-      setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
+      if (!renderCoordinator.isCurrent(operation.token)) return;
+      setReview((current) => reduceMediaReview(
+        { ...current, masks: operation.masks },
+        { type: 'rendered_changed', rendered },
+      ));
       setStatus('Masks cleared. Review the newly rendered pixels before confirming.');
     } catch {
+      if (!renderCoordinator.isCurrent(operation.token)) return;
       setStatus('The clean review copy could not be rendered. Confirmation remains disabled.');
     } finally {
-      setBusy(false);
+      if (renderCoordinator.finish(operation.token)) setBusy(false);
     }
   }
 
@@ -135,15 +158,35 @@ export default function RedactionReviewScreen() {
     setBusy(true);
     setStatus('Encrypting the reviewed copy on this device…');
     try {
-      const result = await saveReviewedDraft({
-        draftId, mediaId, review: confirmed, processorCacheUris: processorCacheUris.current, pending,
-      }, {
-        persistMedia: persistReviewedMedia,
-        saveMetadata: saveOfflineDraft,
-      });
-      if (result.status === 'metadata_retry') {
-        setPending(result.pending);
-        setStatus('The media is encrypted. Retry saving its private draft reference; re-encryption is not required.');
+      const dependencies: ReviewedDraftCommitDependencies = {
+        createCommitId: () => `commit-${Crypto.randomUUID()}`,
+        prepareJournal: async (journal) => { await saveJournal(journal, 'local_persisting', null); },
+        inspectArtifact: verifyReviewedMedia,
+        commitMedia: persistReviewedMedia,
+        finalizeJournal: async (journal) => { await saveJournal(journal, 'upload_pending', null); },
+        markNeedsUser: async (journal, error) => { await saveJournal(journal, 'needs_user', error); },
+        cleanupCaches: cleanupProcessorCacheUris,
+      };
+      const result = pending
+        ? await resumeReviewedDraftCommit(pending, {
+            review: confirmed,
+            processorCacheUris: processorCacheUris.current,
+          }, dependencies)
+        : await commitReviewedDraft({
+            draftId,
+            mediaId,
+            review: confirmed,
+            processorCacheUris: processorCacheUris.current,
+          }, dependencies);
+      if (result.status === 'local_persisting') {
+        setPending(result.journal);
+        setStatus('Private persistence is pending. Retry safely with the same immutable encrypted reference.');
+        return;
+      }
+      if (result.status === 'needs_user') {
+        setPending(null);
+        setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
+        setStatus('The encrypted copy could not be authenticated. Select and review the photo again.');
         return;
       }
       setPending(null);
@@ -155,6 +198,16 @@ export default function RedactionReviewScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function saveJournal(journal: ReviewedMediaJournal, state: 'local_persisting' | 'upload_pending' | 'needs_user', lastError: string | null) {
+    await saveOfflineDraft({
+      id: journal.draftId,
+      mediaId: journal.mediaId,
+      encryptedReviewedRef: journal.encryptedReviewedRef,
+      receipt: journal.receipt,
+      uploadJob: { state, attempts: 0, nextAttemptAt: null, lastError },
+    });
   }
 
   function rememberPreviewSize(event: LayoutChangeEvent) {

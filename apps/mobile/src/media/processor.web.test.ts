@@ -20,6 +20,7 @@ describe('web secure media boundary', () => {
     await expect(persistReviewedMedia({
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
+      intendedEncryptedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       review: { status: 'reviewed', rendered: canonical, masks: [], receipt: null } as MediaReviewState,
       processorCacheUris: [],
     })).rejects.toThrow('secure_media_processing_unavailable');

@@ -3,6 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 
+import { deleteReviewedMediaReference } from '../media/draft-media';
+import { isReviewedMediaReference } from '../media/media-reference';
 import { sanitizeDraftForStorage, type StoredDraft } from './draft-policy';
 
 const DATABASE_KEY_NAME = 'animalhelper.offline-drafts.v1';
@@ -29,6 +31,20 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
 export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_ref,
   review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error
   FROM sighting_drafts ORDER BY updated_at DESC`;
+
+type DraftRow = {
+  id: string;
+  notes: string;
+  risk: StoredDraft['risk'];
+  media_id: string | null;
+  sighting_id: string | null;
+  reviewed_media_ref: string | null;
+  review_receipt_json: string | null;
+  upload_state: string | null;
+  upload_attempts: number | null;
+  next_attempt_at: string | null;
+  last_error: string | null;
+};
 
 const SCHEMA_V2_COLUMNS = {
   media_id: 'TEXT',
@@ -124,39 +140,67 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
 
 export async function listOfflineDrafts(): Promise<StoredDraft[]> {
   const database = await getDatabase();
-  const rows = await database.getAllAsync<{
-    id: string;
-    notes: string;
-    risk: StoredDraft['risk'];
-    media_id: string | null;
-    sighting_id: string | null;
-    reviewed_media_ref: string | null;
-    review_receipt_json: string | null;
-    upload_state: string | null;
-    upload_attempts: number | null;
-    next_attempt_at: string | null;
-    last_error: string | null;
-  }>(DRAFT_LIST_SQL);
-  return rows.map((row) => sanitizeDraftForStorage({
-    id: row.id,
-    notes: row.notes,
-    risk: row.risk,
-    ...(row.media_id && row.reviewed_media_ref && row.review_receipt_json ? {
-      mediaId: row.media_id,
-      sightingId: row.sighting_id ?? undefined,
-      encryptedReviewedRef: row.reviewed_media_ref,
-      receipt: JSON.parse(row.review_receipt_json),
-      uploadJob: {
-        state: row.upload_state,
-        attempts: row.upload_attempts,
-        nextAttemptAt: row.next_attempt_at,
-        lastError: row.last_error,
-      },
-    } : {}),
-  }));
+  return deserializeDraftRows(await database.getAllAsync<DraftRow>(DRAFT_LIST_SQL));
+}
+
+export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
+  const drafts: StoredDraft[] = [];
+  for (const row of rows) {
+    let textOnly: StoredDraft;
+    try {
+      textOnly = sanitizeDraftForStorage({ id: row.id, notes: row.notes, risk: row.risk });
+    } catch {
+      continue;
+    }
+    if (!row.media_id || !row.reviewed_media_ref || !row.review_receipt_json) {
+      drafts.push(textOnly);
+      continue;
+    }
+    try {
+      drafts.push(sanitizeDraftForStorage({
+        id: row.id,
+        notes: row.notes,
+        risk: row.risk,
+        mediaId: row.media_id,
+        sightingId: row.sighting_id ?? undefined,
+        encryptedReviewedRef: row.reviewed_media_ref,
+        receipt: JSON.parse(row.review_receipt_json),
+        uploadJob: {
+          state: row.upload_state,
+          attempts: row.upload_attempts,
+          nextAttemptAt: row.next_attempt_at,
+          lastError: row.last_error,
+        },
+      }));
+    } catch {
+      drafts.push(textOnly);
+    }
+  }
+  return drafts;
+}
+
+export type DeleteDraftDependencies = Readonly<{
+  loadReviewedReference(id: string): Promise<string | null>;
+  deleteRow(id: string): Promise<void>;
+  deleteOwnedReference(reference: string): Promise<void>;
+}>;
+
+export async function deleteOfflineDraftWithDependencies(id: string, dependencies: DeleteDraftDependencies): Promise<void> {
+  const reference = await dependencies.loadReviewedReference(id);
+  await dependencies.deleteRow(id);
+  if (isReviewedMediaReference(reference)) await dependencies.deleteOwnedReference(reference);
 }
 
 export async function deleteOfflineDraft(id: string) {
   const database = await getDatabase();
-  await database.runAsync('DELETE FROM sighting_drafts WHERE id = ?', id);
+  await deleteOfflineDraftWithDependencies(id, {
+    loadReviewedReference: async (draftId) => {
+      const row = await database.getFirstAsync<{ reviewed_media_ref: string | null }>(
+        'SELECT reviewed_media_ref FROM sighting_drafts WHERE id = ?', draftId,
+      );
+      return row?.reviewed_media_ref ?? null;
+    },
+    deleteRow: async (draftId) => { await database.runAsync('DELETE FROM sighting_drafts WHERE id = ?', draftId); },
+    deleteOwnedReference: async (reference) => { await deleteReviewedMediaReference(reference).catch(() => undefined); },
+  });
 }

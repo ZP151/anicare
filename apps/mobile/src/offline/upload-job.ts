@@ -1,4 +1,4 @@
-export type UploadJobState = 'upload_pending' | 'uploading' | 'waiting' | 'needs_user' | 'quarantined' | 'complete';
+export type UploadJobState = 'local_persisting' | 'upload_pending' | 'uploading' | 'waiting' | 'needs_user' | 'quarantined' | 'complete';
 
 export type UploadJob = Readonly<{
   state: UploadJobState;
@@ -14,7 +14,7 @@ export type UploadAttemptResult =
   | Readonly<{ kind: 'quarantined' | 'complete' }>;
 
 const uploadStates = new Set<UploadJobState>([
-  'upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete',
+  'local_persisting', 'upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete',
 ]);
 
 function invalidAttempt(): UploadJob {

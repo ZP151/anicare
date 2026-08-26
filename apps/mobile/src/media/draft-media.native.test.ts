@@ -1,7 +1,13 @@
 jest.mock('@shopify/react-native-skia', () => ({ ImageFormat: { JPEG: 3 }, Skia: {} }));
 
 import type { MediaReviewState } from './contracts';
-import { persistReviewedMedia, type DraftMediaDependencies } from './draft-media.native';
+import {
+  cleanupProcessorCacheUris,
+  persistReviewedMedia,
+  type DraftMediaDependencies,
+} from './draft-media.native';
+
+const encryptedReviewedRef = 'reviewed-media/media-12345678.commit-12345678.agcm';
 
 const reviewed: MediaReviewState = {
   status: 'reviewed',
@@ -39,9 +45,9 @@ function dependencies(events: string[]): DraftMediaDependencies {
       events.push(`encrypt:${bytes.byteLength}:${aad}`);
       return new Uint8Array([9, 8, 7]);
     },
-    commitEncrypted: async (mediaId, bytes) => {
-      events.push(`write:${mediaId}:${bytes.byteLength}`);
-      return `reviewed-media/${mediaId}.agcm`;
+    commitEncrypted: async (reference, bytes) => {
+      events.push(`write:${reference}:${bytes.byteLength}`);
+      return reference;
     },
     cacheRootUri: 'file:///cache/',
     deleteProcessorCache: async (uri) => {
@@ -51,11 +57,12 @@ function dependencies(events: string[]): DraftMediaDependencies {
 }
 
 describe('native reviewed-media persistence', () => {
-  it('encrypts confirmed rendered bytes before deleting every transient copy', async () => {
+  it('encrypts confirmed rendered bytes to the prepared immutable reference without prematurely deleting plaintext', async () => {
     const events: string[] = [];
     const result = await persistReviewedMedia({
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
+      intendedEncryptedRef: encryptedReviewedRef,
       review: reviewed,
       processorCacheUris: [
         'file:///cache/animalhelper-canonical-12345678.jpg',
@@ -67,20 +74,31 @@ describe('native reviewed-media persistence', () => {
     }, dependencies(events));
 
     expect(result).toEqual({
-      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef,
       encryptionVersion: 'aes-256-gcm.v1',
       mediaId: 'media-12345678',
     });
     expect(events.slice(0, 3)).toEqual([
       'read:file:///cache/animalhelper-reviewed-12345678.jpg',
       expect.stringContaining('encrypt:4:'),
-      'write:media-12345678:3',
+      `write:${encryptedReviewedRef}:3`,
     ]);
+    expect(events.slice(3)).toEqual([]);
+
+    await cleanupProcessorCacheUris([
+      'file:///cache/animalhelper-canonical-12345678.jpg',
+      'file:///cache/unrelated.db',
+      'file:///cache/../documents/secret.txt',
+      'file:///attacker/animalhelper-canonical-12345678.jpg',
+      'content://gallery/animalhelper-canonical-12345678.jpg',
+      reviewed.rendered!.uri,
+    ], dependencies(events));
     expect(events.slice(3)).toEqual([
       'delete:file:///cache/animalhelper-canonical-12345678.jpg',
       'delete:file:///cache/animalhelper-reviewed-12345678.jpg',
     ]);
     expect(events[1]).toContain('draft-12345678');
+    expect(events[1]).toContain(encryptedReviewedRef);
     expect(events[1]).toContain('a'.repeat(64));
   });
 
@@ -89,6 +107,7 @@ describe('native reviewed-media persistence', () => {
     await expect(persistReviewedMedia({
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
+      intendedEncryptedRef: encryptedReviewedRef,
       review: { ...reviewed, status: 'needs_review', receipt: null },
       processorCacheUris: [],
     }, dependencies(events))).rejects.toThrow('media_review_required');
@@ -100,6 +119,7 @@ describe('native reviewed-media persistence', () => {
     await expect(persistReviewedMedia({
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
+      intendedEncryptedRef: encryptedReviewedRef,
       review: { ...reviewed, rendered: { ...reviewed.rendered!, uri: 'content://gallery/original.jpg' } },
       processorCacheUris: [],
     }, dependencies(events))).rejects.toThrow('unowned_rendered_media');
@@ -112,6 +132,7 @@ describe('native reviewed-media persistence', () => {
     await expect(persistReviewedMedia({
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
+      intendedEncryptedRef: encryptedReviewedRef,
       review: reviewed,
       processorCacheUris: ['file:///cache/animalhelper-canonical-12345678.jpg'],
     }, {
@@ -127,6 +148,7 @@ describe('native reviewed-media persistence', () => {
     await expect(persistReviewedMedia({
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
+      intendedEncryptedRef: encryptedReviewedRef,
       review: reviewed,
       processorCacheUris: ['file:///cache/animalhelper-canonical-12345678.jpg'],
     }, {

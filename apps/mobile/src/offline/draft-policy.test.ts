@@ -38,7 +38,7 @@ describe('offline draft privacy', () => {
       notes: 'tabby',
       risk: 'normal',
       mediaId: 'media-12345678',
-      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -56,7 +56,7 @@ describe('offline draft privacy', () => {
       accessToken: 'secret',
     })).toMatchObject({
       mediaId: 'media-12345678',
-      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       sightingId: 'sighting-12345678',
       uploadJob: { state: 'waiting', attempts: 2, lastError: 'network' },
     });
@@ -87,16 +87,16 @@ describe('offline draft privacy', () => {
     expect(() => sanitizeDraftForStorage({
       id: 'draft-12345678',
       mediaId: 'media-12345678',
-      encryptedReviewedRef: 'reviewed-media/media-87654321.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-87654321.commit-12345678.agcm',
       receipt,
     })).toThrow('invalid_reviewed_media_draft');
   });
 
   it.each([
-    'file:///attacker/reviewed-media/media-12345678.agcm',
-    'reviewed-media/../media-12345678.agcm',
-    '../reviewed-media/media-12345678.agcm',
-    'content://gallery/media-12345678.agcm',
+    'file:///attacker/reviewed-media/media-12345678.commit-12345678.agcm',
+    'reviewed-media/../media-12345678.commit-12345678.agcm',
+    '../reviewed-media/media-12345678.commit-12345678.agcm',
+    'content://gallery/media-12345678.commit-12345678.agcm',
   ])('rejects non-app-owned reviewed media reference %s', (encryptedReviewedRef) => {
     expect(() => sanitizeDraftForStorage({
       id: 'draft-12345678',
@@ -122,7 +122,7 @@ describe('offline draft privacy', () => {
     expect(() => sanitizeDraftForStorage({
       id: 'draft-12345678',
       mediaId: 'media-12345678',
-      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -140,7 +140,7 @@ describe('offline draft privacy', () => {
     expect(sanitizeDraftForStorage({
       id: 'draft-12345678',
       mediaId: 'media-12345678',
-      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -158,7 +158,7 @@ describe('offline draft privacy', () => {
     expect(sanitizeDraftForStorage({
       id: 'draft-12345678',
       mediaId: 'media-12345678',
-      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -170,5 +170,28 @@ describe('offline draft privacy', () => {
       },
       uploadJob: { state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt' },
     }).uploadJob?.lastError).toBe('invalid_upload_attempt');
+  });
+
+  it('persists a bounded local_persisting journal without source paths', () => {
+    expect(sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100,
+        height: 100,
+        byteLength: 100,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+      uploadJob: { state: 'local_persisting', attempts: 0, nextAttemptAt: null, lastError: null },
+      sourceUri: 'file:///gallery/raw.heic',
+      canonicalUri: 'file:///cache/canonical.jpg',
+    })).toMatchObject({
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      uploadJob: { state: 'local_persisting', attempts: 0 },
+    });
   });
 });

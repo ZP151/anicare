@@ -37,17 +37,21 @@ describe('reviewed-media key initialization', () => {
   });
 });
 
-type Store = { files: Map<string, Uint8Array>; deleted: string[] };
+type Store = { files: Map<string, Uint8Array>; deleted: string[]; moveOptions: unknown[] };
 
-function fileDependencies(store: Store, failure?: 'write' | 'commit') {
+function fileDependencies(store: Store, failure?: 'write' | 'commit' | 'race') {
   return {
     randomId: () => 'temp-12345678',
+    finalExists: async (reference: string) => store.files.has(reference),
     writeTemp: async (reference: string, bytes: Uint8Array) => {
       store.files.set(reference, failure === 'write' ? bytes.slice(0, 1) : bytes);
       if (failure === 'write') throw new Error('partial_write');
     },
-    replaceTemp: async (temporary: string, final: string) => {
+    moveTemp: async (temporary: string, final: string, options: { overwrite: false }) => {
+      store.moveOptions.push(options);
+      if (failure === 'race') store.files.set(final, new Uint8Array([9]));
       if (failure === 'commit') throw new Error('commit_failed');
+      if (store.files.has(final)) throw new Error('destination_exists');
       store.files.set(final, store.files.get(temporary)!);
       store.files.delete(temporary);
     },
@@ -60,27 +64,45 @@ function fileDependencies(store: Store, failure?: 'write' | 'commit') {
 
 describe('reviewed-media file commit', () => {
   it('cleans a partially written app-owned temp file', async () => {
-    const store: Store = { files: new Map(), deleted: [] };
-    await expect(commitEncryptedFile('media-12345678', new Uint8Array([1, 2]), fileDependencies(store, 'write')))
+    const store: Store = { files: new Map(), deleted: [], moveOptions: [] };
+    await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store, 'write')))
       .rejects.toThrow('partial_write');
     expect([...store.files.keys()]).toEqual([]);
-    expect(store.deleted).toEqual(['reviewed-media/.media-12345678.temp-12345678.tmp']);
+    expect(store.deleted).toEqual(['reviewed-media/.media-12345678.commit-12345678.temp-12345678.tmp']);
   });
 
-  it('cleans temp state and remains retryable when final replacement fails', async () => {
-    const store: Store = { files: new Map(), deleted: [] };
-    await expect(commitEncryptedFile('media-12345678', new Uint8Array([1, 2]), fileDependencies(store, 'commit')))
+  it('moves to a nonexistent immutable final with overwrite disabled', async () => {
+    const store: Store = { files: new Map(), deleted: [], moveOptions: [] };
+    await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store)))
+      .resolves.toBe('reviewed-media/media-12345678.commit-12345678.agcm');
+    expect(store.moveOptions).toEqual([{ overwrite: false }]);
+    expect([...store.files.get('reviewed-media/media-12345678.commit-12345678.agcm')!]).toEqual([1, 2]);
+  });
+
+  it('cleans temp state and remains retryable when immutable commit fails', async () => {
+    const store: Store = { files: new Map(), deleted: [], moveOptions: [] };
+    await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store, 'commit')))
       .rejects.toThrow('commit_failed');
     expect([...store.files.keys()]).toEqual([]);
   });
 
-  it('atomically replaces a prior final file for the same stable media ID', async () => {
+  it('never overwrites or deletes a prior immutable final', async () => {
     const store: Store = {
-      files: new Map([['reviewed-media/media-12345678.agcm', new Uint8Array([9])]]),
+      files: new Map([['reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([9])]]),
       deleted: [],
+      moveOptions: [],
     };
-    await expect(commitEncryptedFile('media-12345678', new Uint8Array([1, 2]), fileDependencies(store)))
-      .resolves.toBe('reviewed-media/media-12345678.agcm');
-    expect([...store.files.get('reviewed-media/media-12345678.agcm')!]).toEqual([1, 2]);
+    await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store)))
+      .rejects.toThrow('encrypted_media_already_exists');
+    expect([...store.files.get('reviewed-media/media-12345678.commit-12345678.agcm')!]).toEqual([9]);
+    expect(store.moveOptions).toEqual([]);
+  });
+
+  it('preserves a final that appears during a failed no-overwrite move', async () => {
+    const store: Store = { files: new Map(), deleted: [], moveOptions: [] };
+    await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store, 'race')))
+      .rejects.toThrow('destination_exists');
+    expect([...store.files.get('reviewed-media/media-12345678.commit-12345678.agcm')!]).toEqual([9]);
+    expect(store.moveOptions).toEqual([{ overwrite: false }]);
   });
 });
