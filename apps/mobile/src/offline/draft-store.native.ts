@@ -3,19 +3,42 @@ import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 
-import { sanitizeDraftForStorage, StoredDraft } from './draft-policy';
+import { sanitizeDraftForStorage, type StoredDraft } from './draft-policy';
 
 const DATABASE_KEY_NAME = 'animalhelper.offline-drafts.v1';
 const DATABASE_NAME = 'animalhelper-drafts.db';
 
 export const LEGACY_URI_CLEAR_SQL = 'UPDATE sighting_drafts SET photo_uri = NULL;';
-export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts (id, notes, risk, updated_at)
-     VALUES (?, ?, ?, ?)
+export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
+     (id, notes, risk, media_id, sighting_id, reviewed_media_path, review_receipt_json,
+      upload_state, upload_attempts, next_attempt_at, last_error, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        notes = excluded.notes,
        risk = excluded.risk,
+       media_id = COALESCE(excluded.media_id, sighting_drafts.media_id),
+       sighting_id = COALESCE(excluded.sighting_id, sighting_drafts.sighting_id),
+       reviewed_media_path = COALESCE(excluded.reviewed_media_path, sighting_drafts.reviewed_media_path),
+       review_receipt_json = COALESCE(excluded.review_receipt_json, sighting_drafts.review_receipt_json),
+       upload_state = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.upload_state ELSE sighting_drafts.upload_state END,
+       upload_attempts = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.upload_attempts ELSE sighting_drafts.upload_attempts END,
+       next_attempt_at = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.next_attempt_at ELSE sighting_drafts.next_attempt_at END,
+       last_error = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.last_error ELSE sighting_drafts.last_error END,
        updated_at = excluded.updated_at`;
-export const DRAFT_LIST_SQL = 'SELECT id, notes, risk FROM sighting_drafts ORDER BY updated_at DESC';
+export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_path,
+  review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error
+  FROM sighting_drafts ORDER BY updated_at DESC`;
+
+const SCHEMA_V2_COLUMNS = {
+  media_id: 'TEXT',
+  sighting_id: 'TEXT',
+  reviewed_media_path: 'TEXT',
+  review_receipt_json: 'TEXT',
+  upload_state: 'TEXT',
+  upload_attempts: 'INTEGER',
+  next_attempt_at: 'TEXT',
+  last_error: 'TEXT',
+} as const;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -50,11 +73,24 @@ async function openDraftDatabase() {
       photo_uri TEXT,
       notes TEXT NOT NULL,
       risk TEXT NOT NULL CHECK (risk IN ('normal', 'sensitive', 'critical')),
+      media_id TEXT,
+      sighting_id TEXT,
+      reviewed_media_path TEXT,
+      review_receipt_json TEXT,
+      upload_state TEXT,
+      upload_attempts INTEGER,
+      next_attempt_at TEXT,
+      last_error TEXT,
       updated_at TEXT NOT NULL
     );
     -- Clear any selected source URI left by the legacy schema before use.
     ${LEGACY_URI_CLEAR_SQL}
   `);
+  const columns = await database.getAllAsync<{ name: string }>('PRAGMA table_info(sighting_drafts)');
+  const existing = new Set(columns.map(({ name }) => name));
+  for (const [name, type] of Object.entries(SCHEMA_V2_COLUMNS)) {
+    if (!existing.has(name)) await database.execAsync(`ALTER TABLE sighting_drafts ADD COLUMN ${name} ${type};`);
+  }
   return database;
 }
 
@@ -71,6 +107,14 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
     draft.id,
     draft.notes,
     draft.risk,
+    draft.mediaId ?? null,
+    draft.sightingId ?? null,
+    draft.encryptedReviewedPath ?? null,
+    draft.receipt ? JSON.stringify(draft.receipt) : null,
+    draft.uploadJob?.state ?? null,
+    draft.uploadJob?.attempts ?? null,
+    draft.uploadJob?.nextAttemptAt ?? null,
+    draft.uploadJob?.lastError ?? null,
     new Date().toISOString(),
   );
   return draft;
@@ -82,11 +126,31 @@ export async function listOfflineDrafts(): Promise<StoredDraft[]> {
     id: string;
     notes: string;
     risk: StoredDraft['risk'];
+    media_id: string | null;
+    sighting_id: string | null;
+    reviewed_media_path: string | null;
+    review_receipt_json: string | null;
+    upload_state: string | null;
+    upload_attempts: number | null;
+    next_attempt_at: string | null;
+    last_error: string | null;
   }>(DRAFT_LIST_SQL);
-  return rows.map((row) => ({
+  return rows.map((row) => sanitizeDraftForStorage({
     id: row.id,
     notes: row.notes,
     risk: row.risk,
+    ...(row.media_id && row.reviewed_media_path && row.review_receipt_json ? {
+      mediaId: row.media_id,
+      sightingId: row.sighting_id ?? undefined,
+      encryptedReviewedPath: row.reviewed_media_path,
+      receipt: JSON.parse(row.review_receipt_json),
+      uploadJob: {
+        state: row.upload_state,
+        attempts: row.upload_attempts,
+        nextAttemptAt: row.next_attempt_at,
+        lastError: row.last_error,
+      },
+    } : {}),
   }));
 }
 

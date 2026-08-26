@@ -9,7 +9,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "sg.animalhelper.app"
+      "bundleIdentifier": "sg.animalhelper.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Choose a cat photo to create a private reviewed copy. Selected source media is never uploaded."
+      }
     },
     "android": {
       "package": "sg.animalhelper.app",

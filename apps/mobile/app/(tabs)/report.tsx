@@ -1,8 +1,8 @@
 import * as Crypto from 'expo-crypto';
-import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { getSupabaseClient } from '../../src/api/supabase';
 import { SightingRisk, submitSighting } from '../../src/api/sightings';
@@ -14,7 +14,6 @@ import { deleteOfflineDraft, saveOfflineDraft } from '../../src/offline/draft-st
 export default function ReportScreen() {
   const { t } = useLocale();
   const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [risk, setRisk] = useState<SightingRisk>('normal');
   const [submitting, setSubmitting] = useState(false);
@@ -22,13 +21,7 @@ export default function ReportScreen() {
   const [draftId] = useState(() => Crypto.randomUUID());
 
   async function choosePhoto() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.85,
-      exif: false,
-    });
-    if (!result.canceled) setPhotoUri(result.assets[0]?.uri ?? null);
+    router.push({ pathname: '/report/redaction-review', params: { draftId } });
   }
 
   async function useCurrentLocation() {
@@ -92,7 +85,7 @@ export default function ReportScreen() {
   async function saveDraft() {
     try {
       await saveOfflineDraft({ id: draftId, notes, risk });
-      setStatus('Draft saved without the selected photo or precise location. Add the photo again when you resume.');
+      setStatus('Draft saved without precise location. Confirmed media remains encrypted on this device.');
     } catch {
       setStatus('Encrypted offline drafts are available in native iOS and Android builds.');
     }
@@ -101,9 +94,9 @@ export default function ReportScreen() {
   return (
     <ScreenScaffold title={t('report.title')} subtitle={t('report.subtitle')}>
       <Pressable accessibilityRole="button" onPress={choosePhoto} style={styles.photo}>
-        {photoUri ? <Image source={{ uri: photoUri }} style={styles.preview} /> : <Text style={styles.photoCopy}>＋ Add a cat photo</Text>}
+        <Text style={styles.photoCopy}>＋ Review a cat photo privately</Text>
       </Pressable>
-      {photoUri ? <Text style={styles.warning}>Review the crop for bystanders and licence plates. Upload redaction is a release gate.</Text> : null}
+      <Text style={styles.warning}>Automatic people, licence-plate and cat detectors are unavailable. Add opaque masks manually before confirming.</Text>
       <TextInput
         accessibilityLabel="Sighting notes"
         multiline
@@ -139,7 +132,6 @@ export default function ReportScreen() {
 
 const styles = StyleSheet.create({
   photo: { height: 230, borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leafSoft, overflow: 'hidden' },
-  preview: { width: '100%', height: '100%' },
   photoCopy: { color: colors.leaf, fontWeight: '700' },
   warning: { color: colors.amber, fontSize: 13, lineHeight: 19 },
   input: { minHeight: 120, padding: 16, textAlignVertical: 'top', borderRadius: radii.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, color: colors.ink },

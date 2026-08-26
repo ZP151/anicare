@@ -1,0 +1,210 @@
+import * as Crypto from 'expo-crypto';
+import * as ImagePicker from 'expo-image-picker';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useRef, useState } from 'react';
+import {
+  Image,
+  type LayoutChangeEvent,
+  type GestureResponderEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import { ScreenScaffold } from '../../src/components/ScreenScaffold';
+import { colors, radii } from '../../src/design/theme';
+import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
+import { persistReviewedMedia } from '../../src/media/draft-media';
+import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
+import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
+import { saveOfflineDraft } from '../../src/offline/draft-store';
+
+const EMPTY_REVIEW: MediaReviewState = { status: 'idle', rendered: null, masks: [], receipt: null };
+
+function maskAt(x: number, y: number): PrivacyMask {
+  const width = 0.24;
+  const height = 0.14;
+  return {
+    id: Crypto.randomUUID(),
+    rect: {
+      x: Math.min(1 - width, Math.max(0, x - width / 2)),
+      y: Math.min(1 - height, Math.max(0, y - height / 2)),
+      width,
+      height,
+    },
+  };
+}
+
+export default function RedactionReviewScreen() {
+  const params = useLocalSearchParams<{ draftId?: string }>();
+  const draftId = typeof params.draftId === 'string' ? params.draftId : '';
+  const [mediaId] = useState(() => `media-${Crypto.randomUUID()}`);
+  const [canonical, setCanonical] = useState<RenderedMedia | null>(null);
+  const [review, setReview] = useState<MediaReviewState>(EMPTY_REVIEW);
+  const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const transientUris = useRef<string[]>([]);
+
+  async function choosePhoto() {
+    setBusy(true);
+    setStatus('Preparing a private review copy…');
+    try {
+      const selected = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        exif: false,
+        quality: 1,
+      });
+      if (selected.canceled || !selected.assets[0]?.uri) return;
+      const sourceUri = selected.assets[0].uri;
+      transientUris.current = [sourceUri];
+      const prepared = await prepareCanonical(sourceUri);
+      transientUris.current.push(prepared.uri);
+      setCanonical(prepared);
+      const rendered = await renderOpaqueMasks({ canonical: prepared, masks: [] });
+      transientUris.current.push(rendered.uri);
+      setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
+      setStatus('Tap anywhere on the image to burn in an opaque mask. Review every pixel before confirming.');
+    } catch (error) {
+      setStatus(error instanceof Error && error.message === 'secure_media_processing_unavailable'
+        ? 'Secure media processing is unavailable on this device.'
+        : 'The photo could not be prepared safely. Nothing was staged.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addMask(event: GestureResponderEvent) {
+    if (!canonical || busy) return;
+    const x = event.nativeEvent.locationX / previewSize.width;
+    const y = event.nativeEvent.locationY / previewSize.height;
+    const masks = [...review.masks, maskAt(x, y)];
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks }));
+    setBusy(true);
+    setStatus('Rendering the updated opaque masks…');
+    try {
+      const rendered = await renderOpaqueMasks({ canonical, masks });
+      transientUris.current.push(rendered.uri);
+      setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
+      setStatus('Mask applied to final pixels. Review again before confirming.');
+    } catch {
+      setStatus('The mask could not be rendered safely. Confirmation remains disabled.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearMasks() {
+    if (!canonical || busy) return;
+    const masks: PrivacyMask[] = [];
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks }));
+    setBusy(true);
+    try {
+      const rendered = await renderOpaqueMasks({ canonical, masks });
+      transientUris.current.push(rendered.uri);
+      setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
+      setStatus('Masks cleared. Review the newly rendered pixels before confirming.');
+    } catch {
+      setStatus('The clean review copy could not be rendered. Confirmation remains disabled.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmPrivateCopy() {
+    if (!draftId || !review.rendered || busy) return;
+    const confirmed = reduceMediaReview(review, { type: 'confirm' });
+    setReview(confirmed);
+    if (!canStageMedia(confirmed) || !confirmed.receipt) {
+      setStatus('The exact rendered pixels must be reviewed again.');
+      return;
+    }
+
+    setBusy(true);
+    setStatus('Encrypting the reviewed copy on this device…');
+    try {
+      const persisted = await persistReviewedMedia({
+        draftId,
+        mediaId,
+        review: confirmed,
+        transientUris: transientUris.current,
+      });
+      await saveOfflineDraft({
+        id: draftId,
+        mediaId,
+        encryptedReviewedPath: persisted.encryptedReviewedPath,
+        receipt: confirmed.receipt,
+        uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null },
+      });
+      setStatus('Encrypted reviewed media saved privately. It has not been uploaded or published.');
+      router.back();
+    } catch {
+      setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
+      setStatus('Private encrypted storage failed. The media was not staged.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function rememberPreviewSize(event: LayoutChangeEvent) {
+    setPreviewSize(event.nativeEvent.layout);
+  }
+
+  return (
+    <ScreenScaffold title="Private photo review" subtitle="Only a newly rendered, confirmed copy can be encrypted for this draft.">
+      <View style={styles.detectors}>
+        <Text style={styles.detector}>People detection: unavailable</Text>
+        <Text style={styles.detector}>Licence-plate detection: unavailable</Text>
+        <Text style={styles.detector}>Cat detection: unavailable</Text>
+        <Text style={styles.warning}>No automatic detector has checked this image. You must inspect it manually.</Text>
+      </View>
+
+      {review.rendered ? (
+        <Pressable
+          accessibilityLabel="Reviewed image. Tap to add an opaque mask"
+          disabled={busy}
+          onLayout={rememberPreviewSize}
+          onPress={addMask}
+          style={styles.previewFrame}
+        >
+          <Image resizeMode="contain" source={{ uri: review.rendered.uri }} style={styles.preview} />
+        </Pressable>
+      ) : (
+        <Pressable accessibilityLabel="Choose photo for private review" accessibilityRole="button" disabled={busy} onPress={choosePhoto} style={styles.photoButton}>
+          <Text style={styles.photoButtonText}>{busy ? 'Preparing…' : 'Choose photo for private review'}</Text>
+        </Pressable>
+      )}
+
+      {review.rendered ? (
+        <>
+          <Text style={styles.help}>{review.masks.length} manual opaque mask{review.masks.length === 1 ? '' : 's'} · tap the image to add one.</Text>
+          <Pressable accessibilityRole="button" disabled={busy || review.masks.length === 0} onPress={clearMasks} style={styles.secondary}>
+            <Text style={styles.secondaryText}>Clear all masks</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={busy || review.status === 'reviewed'} onPress={confirmPrivateCopy} style={styles.action}>
+            <Text style={styles.actionText}>{busy ? 'Working…' : 'Confirm exact pixels and encrypt'}</Text>
+          </Pressable>
+        </>
+      ) : null}
+      {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
+    </ScreenScaffold>
+  );
+}
+
+const styles = StyleSheet.create({
+  detectors: { padding: 16, gap: 6, borderRadius: radii.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
+  detector: { color: colors.danger, fontWeight: '700' },
+  warning: { color: colors.muted, lineHeight: 19, marginTop: 4 },
+  photoButton: { minHeight: 180, alignItems: 'center', justifyContent: 'center', borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, backgroundColor: colors.leafSoft },
+  photoButtonText: { color: colors.leaf, fontWeight: '800' },
+  previewFrame: { height: 360, overflow: 'hidden', borderRadius: radii.large, backgroundColor: '#111111' },
+  preview: { width: '100%', height: '100%' },
+  help: { color: colors.muted, lineHeight: 20 },
+  secondary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.leaf },
+  secondaryText: { color: colors.leaf, fontWeight: '800' },
+  action: { minHeight: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },
+  actionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  status: { color: colors.muted, lineHeight: 20, textAlign: 'center' },
+});

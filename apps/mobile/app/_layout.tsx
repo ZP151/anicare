@@ -9,7 +9,10 @@ export default function RootLayout() {
     <LocaleProvider>
       <AuthLinkHandler />
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="report/redaction-review" options={{ presentation: 'modal' }} />
+      </Stack>
     </LocaleProvider>
   );
 }
