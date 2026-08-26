@@ -1,58 +1,74 @@
-import { buildReviewQueue } from '../lib/queue-policy';
+import { randomUUID } from 'node:crypto';
 
-const now = new Date('2026-08-28T08:00:00.000Z');
-const queue = buildReviewQueue(
-  [
-    { id: 'MOD-104', risk: 'critical', status: 'auto_hidden', dueAt: '2026-08-27T13:00:00.000Z' },
-    { id: 'ID-082', risk: 'sensitive', status: 'identity_review', dueAt: '2026-08-29T09:00:00.000Z' },
-    { id: 'MOD-097', risk: 'normal', status: 'open', dueAt: '2026-08-30T11:00:00.000Z' },
-  ],
-  now,
-);
+import { redirect } from 'next/navigation';
 
-export default function OperationsPage() {
+import { resolveModerationReportAction } from './actions/moderation';
+import { getAdminSession } from '../lib/admin-session';
+import { listModerationQueue } from '../lib/moderation-api';
+import { createAdminServerClient } from '../lib/supabase/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export default async function OperationsPage() {
+  const session = await getAdminSession(async () => (await createAdminServerClient()) as never);
+
+  if (session.state === 'unavailable') {
+    return <main><section className="panel"><h1>Operations console unavailable</h1><p>The public connection is not configured.</p></section></main>;
+  }
+  if (session.state === 'unauthenticated') redirect('/login');
+  if (session.state === 'unauthorised') {
+    return <main><section className="panel"><h1>Access denied</h1><p>This signed-in account does not have an active platform-admin grant.</p></section></main>;
+  }
+
+  let queue;
+  try {
+    queue = await listModerationQueue(session.client, randomUUID());
+  } catch {
+    return <main><section className="panel"><h1>Operations console unavailable</h1><p>The moderated queue could not be loaded safely.</p></section></main>;
+  }
+
   return (
     <main>
       <aside>
         <div className="brand"><span>🐾</span><strong>WhiskerCommons</strong></div>
         <nav aria-label="Operations navigation">
           <a className="active" href="#queue">Review queue</a>
-          <a href="#identity">Identity matches</a>
-          <a href="#roles">Role grants</a>
-          <a href="#access">Location access</a>
-          <a href="#audit">Audit log</a>
         </nav>
-        <p className="privacy">Precise locations require task grants and are never shown in list views.</p>
+        <p className="privacy">This console never displays precise locations, media paths, access grants, or audit records.</p>
       </aside>
       <section className="workspace">
         <header>
-          <div><p className="eyebrow">Private operations</p><h1>Safety review queue</h1><p>Critical content stays hidden until a conflict-free reviewer decides.</p></div>
-          <div className="status">Founder shift · active</div>
+          <div><p className="eyebrow">Authenticated operations</p><h1>Safety review queue</h1><p>Each read and decision is server-authorized and audited. Recusal is enforced at decision time.</p></div>
+          <div className="status">Platform admin</div>
         </header>
-        <section className="metrics" aria-label="Queue metrics">
-          <article><strong>1</strong><span>Critical / 24h</span></article>
-          <article><strong>2</strong><span>Due within 72h</span></article>
-          <article><strong>0</strong><span>Location access grants</span></article>
-          <article><strong>100%</strong><span>Actions audited</span></article>
-        </section>
         <section className="panel" id="queue">
-          <div className="panelHeading"><div><h2>Assigned queue</h2><p>Ordered by animal safety risk, then deadline.</p></div><button type="button">Refresh</button></div>
+          <div className="panelHeading"><div><h2>Open queue</h2><p>Only safe report metadata is shown.</p></div></div>
           <div className="table" role="table" aria-label="Moderation queue">
-            <div className="row head" role="row"><span>ID</span><span>Risk</span><span>Status</span><span>Deadline</span><span>Action</span></div>
+            <div className="row head" role="row"><span>Report</span><span>Risk</span><span>Status</span><span>Deadline</span><span>Decision</span></div>
             {queue.map((item) => (
-              <div className="row" role="row" key={item.id}>
-                <strong>{item.id}</strong>
+              <div className="row" role="row" key={item.reportId}>
+                <strong>{item.reportId}</strong>
                 <span className={`pill ${item.risk}`}>{item.risk}</span>
                 <span>{item.status.replace('_', ' ')}</span>
-                <span className={item.overdue ? 'overdue' : ''}>{item.overdue ? 'Overdue' : 'On time'}</span>
-                <button type="button">Review</button>
+                <span>{new Date(item.dueAt).toLocaleString()}</span>
+                <form action={resolveModerationReportAction}>
+                  <input name="reportId" type="hidden" value={item.reportId} />
+                  <select aria-label={`Decision for ${item.reportId}`} name="action" defaultValue="no_action">
+                    <option value="no_action">No action</option>
+                    <option value="hide_sighting">Hide sighting</option>
+                    <option value="restore_sighting">Restore to limited</option>
+                  </select>
+                  <input aria-label={`Rationale for ${item.reportId}`} name="rationale" minLength={10} maxLength={2000} required />
+                  <button type="submit">Record</button>
+                </form>
               </div>
             ))}
           </div>
         </section>
         <section className="guardrail">
-          <div><strong>Reviewer recusal enforced</strong><p>Reporters, content authors and target users cannot adjudicate their own cases.</p></div>
-          <div><strong>Break-glass disabled</strong><p>Enable only with a reason, DPO notification and 24-hour review.</p></div>
+          <div><strong>Reviewer recusal enforced</strong><p>Reporters, content authors, and targets cannot adjudicate their own cases.</p></div>
+          <div><strong>High-risk restoration is constrained</strong><p>Restoration returns a sighting only to limited visibility and cannot override active holds.</p></div>
         </section>
       </section>
     </main>
