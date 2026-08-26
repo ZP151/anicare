@@ -43,8 +43,8 @@ select ok(
   'authenticated clients cannot select raw media rows'
 );
 select ok(
-  not has_table_privilege('authenticated', 'public.public_animal_feed', 'select'),
-  'legacy feed view exposing a storage path is not client-readable'
+  to_regclass('public.public_animal_feed') is null,
+  'legacy feed view exposing a storage path is removed'
 );
 select ok(
   exists (
