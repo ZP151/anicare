@@ -6,8 +6,7 @@ describe('owned immutable reviewed-media references', () => {
       .toBe('reviewed-media/media-12345678.commit-12345678.agcm');
   });
 
-  it('sweeps only owned temp files and unreferenced immutable ciphertext', () => {
-    const active = new Set(['reviewed-media/media-12345678.commit-active01.agcm']);
+  it('sweeps only owned temp files and retains every final ciphertext even when no row protects it', () => {
     expect(selectReviewedMediaSweepTargets([
       'reviewed-media/.media-12345678.commit-orphan01.temp-12345678.tmp',
       'reviewed-media/media-12345678.commit-active01.agcm',
@@ -15,9 +14,8 @@ describe('owned immutable reviewed-media references', () => {
       'reviewed-media/../secret.agcm',
       'file:///attacker/reviewed-media/media-87654321.commit-orphan01.agcm',
       'reviewed-media/unrelated.txt',
-    ], active)).toEqual([
+    ])).toEqual([
       'reviewed-media/.media-12345678.commit-orphan01.temp-12345678.tmp',
-      'reviewed-media/media-87654321.commit-orphan01.agcm',
     ]);
   });
 });

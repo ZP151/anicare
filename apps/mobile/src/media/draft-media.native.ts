@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
-import type { MediaReviewState, ReviewReceipt } from './contracts';
+import { MAX_REVIEWED_MEDIA_BYTES, type MediaReviewState, type ReviewReceipt } from './contracts';
 import { createReviewedMediaTempReference, isReviewedMediaReference, isReviewedMediaTempReference, isStableMediaId, selectReviewedMediaSweepTargets } from './media-reference';
 import { canStageMedia } from './review-policy';
 
@@ -10,6 +10,10 @@ const REVIEWED_MEDIA_KEY_NAME = 'animalhelper.reviewed-media.v1';
 const ENCRYPTION_VERSION = 'aes-256-gcm.v1' as const;
 const ENVELOPE_MAGIC = new Uint8Array([0x41, 0x48, 0x4d, 0x31]);
 const ENVELOPE_HEADER_LENGTH = 8;
+const AES_GCM_COMBINED_OVERHEAD = 12 + 16;
+export { MAX_REVIEWED_MEDIA_BYTES } from './contracts';
+const MAX_ENCRYPTED_PAYLOAD_BYTES = MAX_REVIEWED_MEDIA_BYTES + AES_GCM_COMBINED_OVERHEAD;
+const ENVELOPE_OVERHEAD = ENVELOPE_HEADER_LENGTH + AES_GCM_COMBINED_OVERHEAD;
 
 export type DraftMediaDependencies = Readonly<{
   getOrCreateKey(): Promise<unknown>;
@@ -35,7 +39,7 @@ export type PersistedReviewedMedia = Readonly<{
   mediaId: string;
 }>;
 
-export type ReviewedMediaArtifactStatus = 'absent' | 'valid' | 'corrupt';
+export type ReviewedMediaArtifactStatus = 'absent' | 'valid' | 'corrupt' | 'retryable_unavailable';
 export type VerifyReviewedMediaInput = Readonly<{
   draftId: string;
   mediaId: string;
@@ -44,7 +48,8 @@ export type VerifyReviewedMediaInput = Readonly<{
 }>;
 export type VerifyReviewedMediaDependencies = Readonly<{
   getOrCreateKey(): Promise<unknown>;
-  readCommitted(reference: string): Promise<Uint8Array | null>;
+  getCommittedSize(reference: string): Promise<number | null | undefined>;
+  readCommitted(reference: string): Promise<Uint8Array>;
   decryptEnvelope(payload: Uint8Array, key: unknown, additionalAuthenticatedData: string): Promise<Uint8Array>;
   sha256(bytes: Uint8Array): Promise<string>;
 }>;
@@ -91,23 +96,44 @@ export type EncryptedFileDependencies = Readonly<{
   deleteTemp(reference: string): Promise<void>;
 }>;
 
-export async function commitEncryptedFile(finalReference: string, bytes: Uint8Array, dependencies: EncryptedFileDependencies): Promise<string> {
-  if (!isReviewedMediaReference(finalReference)) throw new Error('invalid_reviewed_media_reference');
-  const temporaryId = dependencies.randomId();
-  if (!isStableMediaId(temporaryId)) throw new Error('invalid_temporary_identity');
-  const temporaryReference = createReviewedMediaTempReference(finalReference, temporaryId);
+// Expo's Android move implementation is check-then-move and may replace in its
+// fallback. The app has one JS runtime/writer, so serialize each immutable final.
+const finalCommitLocks = new Map<string, Promise<void>>();
+
+async function withFinalCommitLock<T>(reference: string, operation: () => Promise<T>): Promise<T> {
+  const predecessor = finalCommitLocks.get(reference) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  finalCommitLocks.set(reference, current);
+  await predecessor;
   try {
-    if (await dependencies.finalExists(finalReference)) throw new Error('encrypted_media_already_exists');
-    await dependencies.writeTemp(temporaryReference, bytes);
-    await dependencies.moveTemp(temporaryReference, finalReference, { overwrite: false });
-    return finalReference;
+    return await operation();
   } finally {
-    await dependencies.deleteTemp(temporaryReference).catch(() => undefined);
+    release();
+    if (finalCommitLocks.get(reference) === current) finalCommitLocks.delete(reference);
   }
 }
 
+export async function commitEncryptedFile(finalReference: string, bytes: Uint8Array, dependencies: EncryptedFileDependencies): Promise<string> {
+  if (!isReviewedMediaReference(finalReference)) throw new Error('invalid_reviewed_media_reference');
+  return withFinalCommitLock(finalReference, async () => {
+    if (await dependencies.finalExists(finalReference)) return finalReference;
+    const temporaryId = dependencies.randomId();
+    if (!isStableMediaId(temporaryId)) throw new Error('invalid_temporary_identity');
+    const temporaryReference = createReviewedMediaTempReference(finalReference, temporaryId);
+    try {
+      await dependencies.writeTemp(temporaryReference, bytes);
+      await dependencies.moveTemp(temporaryReference, finalReference, { overwrite: false });
+      return finalReference;
+    } finally {
+      await dependencies.deleteTemp(temporaryReference).catch(() => undefined);
+    }
+  });
+}
+
 export function encodeEncryptedEnvelope(payload: Uint8Array): Uint8Array {
-  if (payload.byteLength > 0xffffffff) throw new Error('encrypted_media_too_large');
+  if (payload.byteLength < AES_GCM_COMBINED_OVERHEAD) throw new Error('invalid_encrypted_media_payload');
+  if (payload.byteLength > MAX_ENCRYPTED_PAYLOAD_BYTES) throw new Error('encrypted_media_too_large');
   const result = new Uint8Array(ENVELOPE_HEADER_LENGTH + payload.byteLength);
   result.set(ENVELOPE_MAGIC);
   new DataView(result.buffer).setUint32(4, payload.byteLength, false);
@@ -115,12 +141,16 @@ export function encodeEncryptedEnvelope(payload: Uint8Array): Uint8Array {
   return result;
 }
 
-export function decodeEncryptedEnvelope(envelope: Uint8Array): Uint8Array {
+export function decodeEncryptedEnvelope(envelope: Uint8Array, expectedPlaintextBytes?: number): Uint8Array {
   if (envelope.byteLength < ENVELOPE_HEADER_LENGTH || ENVELOPE_MAGIC.some((byte, index) => envelope[index] !== byte)) {
     throw new Error('invalid_encrypted_media_envelope');
   }
   const length = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength).getUint32(4, false);
-  if (length !== envelope.byteLength - ENVELOPE_HEADER_LENGTH) throw new Error('invalid_encrypted_media_envelope');
+  if (length < AES_GCM_COMBINED_OVERHEAD || length !== envelope.byteLength - ENVELOPE_HEADER_LENGTH ||
+      length > MAX_ENCRYPTED_PAYLOAD_BYTES ||
+      (expectedPlaintextBytes !== undefined && length !== expectedPlaintextBytes + AES_GCM_COMBINED_OVERHEAD)) {
+    throw new Error('invalid_encrypted_media_envelope');
+  }
   return envelope.slice(ENVELOPE_HEADER_LENGTH);
 }
 
@@ -128,6 +158,10 @@ export function isOwnedProcessorCacheUri(uri: string, cacheRootUri: string): boo
   const root = cacheRootUri.endsWith('/') ? cacheRootUri : `${cacheRootUri}/`;
   if (!uri.startsWith(root)) return false;
   return /^animalhelper-(canonical|reviewed)-[A-Za-z0-9-]{8,64}\.jpg$/.test(uri.slice(root.length));
+}
+
+export function selectOwnedProcessorCacheSweepTargets(entries: readonly string[], cacheRootUri: string): string[] {
+  return entries.filter((uri) => isOwnedProcessorCacheUri(uri, cacheRootUri));
 }
 
 function isOwnedReviewedCacheUri(uri: string, cacheRootUri: string): boolean {
@@ -146,6 +180,7 @@ function authenticatedContext(input: VerifyReviewedMediaInput): string {
     width: input.receipt.width,
     height: input.receipt.height,
     byteLength: input.receipt.byteLength,
+    confirmedAtLocal: input.receipt.confirmedAtLocal,
     encryptionVersion: ENCRYPTION_VERSION,
   });
 }
@@ -208,7 +243,11 @@ const nativeDependencies: DraftMediaDependencies = {
 
 const nativeVerifyDependencies: VerifyReviewedMediaDependencies = {
   getOrCreateKey: getOrCreateNativeKey,
-  readCommitted: async (reference) => { const file = fileForReviewedReference(reference); return file.exists ? file.bytes() : null; },
+  getCommittedSize: async (reference) => {
+    const file = fileForReviewedReference(reference);
+    return file.exists ? file.size ?? undefined : null;
+  },
+  readCommitted: async (reference) => fileForReviewedReference(reference).bytes(),
   decryptEnvelope: async (payload, key, additionalAuthenticatedData) => {
     const sealed = Crypto.AESSealedData.fromCombined(payload, { ivLength: 12, tagLength: 16 });
     return Crypto.aesDecryptAsync(sealed, key as Crypto.AESEncryptionKey, {
@@ -228,6 +267,7 @@ export async function persistReviewedMedia(input: PersistReviewedMediaInput, dep
     throw new Error('invalid_media_identity');
   }
   if (!canStageMedia(input.review) || !input.review.rendered || !input.review.receipt) throw new Error('media_review_required');
+  if (input.review.receipt.byteLength > MAX_REVIEWED_MEDIA_BYTES) throw new Error('reviewed_media_too_large');
   const renderedUri = input.review.rendered.uri;
   if (!isOwnedReviewedCacheUri(renderedUri, dependencies.cacheRootUri)) throw new Error('unowned_rendered_media');
   const bytes = await dependencies.readBytes(renderedUri);
@@ -243,15 +283,59 @@ export async function persistReviewedMedia(input: PersistReviewedMediaInput, dep
 
 export async function verifyReviewedMedia(input: VerifyReviewedMediaInput, dependencies: VerifyReviewedMediaDependencies = nativeVerifyDependencies): Promise<ReviewedMediaArtifactStatus> {
   if (!isStableMediaId(input.draftId) || !isStableMediaId(input.mediaId) || !isReviewedMediaReference(input.encryptedReviewedRef, input.mediaId)) return 'corrupt';
-  const envelope = await dependencies.readCommitted(input.encryptedReviewedRef);
-  if (!envelope) return 'absent';
+  if (!Number.isInteger(input.receipt.byteLength) || input.receipt.byteLength <= 0 || input.receipt.byteLength > MAX_REVIEWED_MEDIA_BYTES) {
+    return 'corrupt';
+  }
+  let committedSize: number | null | undefined;
   try {
-    const plaintext = await dependencies.decryptEnvelope(decodeEncryptedEnvelope(envelope), await dependencies.getOrCreateKey(), authenticatedContext(input));
-    if (plaintext.byteLength !== input.receipt.byteLength) return 'corrupt';
-    return await dependencies.sha256(plaintext) === input.receipt.sanitizedSha256.toLowerCase() ? 'valid' : 'corrupt';
+    committedSize = await dependencies.getCommittedSize(input.encryptedReviewedRef);
+  } catch {
+    return 'retryable_unavailable';
+  }
+  if (committedSize === null) return 'absent';
+  if (committedSize === undefined) return 'retryable_unavailable';
+  if (!Number.isInteger(committedSize) || committedSize !== input.receipt.byteLength + ENVELOPE_OVERHEAD) return 'corrupt';
+  let envelope: Uint8Array;
+  try {
+    envelope = await dependencies.readCommitted(input.encryptedReviewedRef);
+  } catch {
+    return 'retryable_unavailable';
+  }
+  if (envelope.byteLength !== committedSize) return 'corrupt';
+  let payload: Uint8Array;
+  try {
+    payload = decodeEncryptedEnvelope(envelope, input.receipt.byteLength);
   } catch {
     return 'corrupt';
   }
+  let key: unknown;
+  try {
+    key = await dependencies.getOrCreateKey();
+  } catch {
+    return 'retryable_unavailable';
+  }
+  let plaintext: Uint8Array;
+  try {
+    plaintext = await dependencies.decryptEnvelope(payload, key, authenticatedContext(input));
+  } catch (error) {
+    return isDefinitiveAuthenticationFailure(error) ? 'corrupt' : 'retryable_unavailable';
+  }
+  try {
+    if (plaintext.byteLength !== input.receipt.byteLength) return 'corrupt';
+    return await dependencies.sha256(plaintext) === input.receipt.sanitizedSha256.toLowerCase() ? 'valid' : 'corrupt';
+  } catch {
+    return 'retryable_unavailable';
+  }
+}
+
+function isDefinitiveAuthenticationFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const coded = error as { code?: unknown; message?: unknown };
+  if (coded.code === 'ERR_CRYPTO_AUTHENTICATION_FAILED') return true;
+  if (typeof coded.message !== 'string') return false;
+  if (/CryptoKit(?:\.CryptoKitError)?\.authenticationFailure/i.test(coded.message)) return true;
+  return coded.code === 'ERR_DECRYPTION_FAILED' &&
+    /(tag mismatch|mac check in gcm failed|authentication failure|unable to authenticate)/i.test(coded.message);
 }
 
 export async function deleteReviewedMediaReference(reference: string): Promise<void> {
@@ -260,11 +344,21 @@ export async function deleteReviewedMediaReference(reference: string): Promise<v
   if (file.exists) file.delete();
 }
 
-export async function sweepOwnedReviewedMedia(activeReferences: ReadonlySet<string>): Promise<void> {
+export async function sweepOwnedReviewedMedia(): Promise<void> {
   const directory = reviewedMediaDirectory();
   const entries = directory.list().map((entry) => `reviewed-media/${entry.name}`);
-  await Promise.allSettled(selectReviewedMediaSweepTargets(entries, activeReferences).map(async (reference) => {
+  await Promise.allSettled(selectReviewedMediaSweepTargets(entries).map(async (reference) => {
     const file = fileForReviewedReference(reference);
+    if (file.exists) file.delete();
+  }));
+}
+
+export async function sweepOwnedProcessorCaches(): Promise<void> {
+  const entries = new Directory(Paths.cache).list()
+    .filter((entry): entry is File => entry instanceof File)
+    .map((entry) => entry.uri);
+  await Promise.allSettled(selectOwnedProcessorCacheSweepTargets(entries, Paths.cache.uri).map(async (uri) => {
+    const file = new File(uri);
     if (file.exists) file.delete();
   }));
 }

@@ -72,6 +72,16 @@ describe('private media upload retry policy', () => {
       .toBe('invalid_upload_attempt');
   });
 
+  it.each([
+    { kind: 'network' } as const,
+    { kind: 'complete' } as const,
+    { kind: 'quarantined' } as const,
+  ])('rejects local_persisting as a transport attempt state for %j', (result) => {
+    expect(nextUploadAttempt({ ...job, state: 'local_persisting' }, result, now, () => 0.5)).toEqual({
+      state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt',
+    });
+  });
+
   it.each([600, Number.POSITIVE_INFINITY, 503.5, 99])('fails closed for invalid HTTP status %s', (status) => {
     expect(nextUploadAttempt(job, { kind: 'http', status }, now, () => 0.5)).toEqual({
       state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt',

@@ -194,4 +194,21 @@ describe('offline draft privacy', () => {
       uploadJob: { state: 'local_persisting', attempts: 0 },
     });
   });
+
+  it('rejects a receipt whose canonical plaintext exceeds the 20 MiB local-media bound', () => {
+    expect(() => sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 2048,
+        height: 2048,
+        byteLength: 20 * 1024 * 1024 + 1,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+    })).toThrow('invalid_reviewed_media_draft');
+  });
 });

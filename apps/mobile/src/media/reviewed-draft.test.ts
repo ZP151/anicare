@@ -39,7 +39,7 @@ const journal: ReviewedMediaJournal = {
 };
 
 function dependencies(options: {
-  artifact?: 'absent' | 'valid' | 'corrupt';
+  artifact?: 'absent' | 'valid' | 'corrupt' | 'retryable_unavailable';
   fail?: 'prepare' | 'commit' | 'finalize';
 } = {}) {
   let artifact = options.artifact ?? 'absent';
@@ -149,6 +149,15 @@ describe('process-restart recovery', () => {
     ]);
   });
 
+  it('does not mark a same-session journal corrupt when inspection is temporarily unavailable', async () => {
+    const run = dependencies({ artifact: 'retryable_unavailable' });
+    await expect(resumeReviewedDraftCommit(journal, {
+      review,
+      processorCacheUris: [review.rendered.uri],
+    }, run.dependencies)).resolves.toEqual({ status: 'local_persisting', journal });
+    expect(run.events).toEqual(['inspect:retryable_unavailable']);
+  });
+
   it.each([
     ['valid', 'finalize', { status: 'saved', journal }],
     ['absent', 'needs_user:local_media_missing', { status: 'needs_user', journal }],
@@ -160,7 +169,13 @@ describe('process-restart recovery', () => {
     expect(run.events.some((event) => event.startsWith('commit:'))).toBe(false);
   });
 
-  it('recovers pending rows at startup and sweeps against every durable active reference', async () => {
+  it('leaves a pending row unchanged when native key or crypto capability is temporarily unavailable', async () => {
+    const run = dependencies({ artifact: 'retryable_unavailable' });
+    await expect(recoverReviewedDraft(journal, run.dependencies)).resolves.toEqual({ status: 'local_persisting', journal });
+    expect(run.events).toEqual(['inspect:retryable_unavailable']);
+  });
+
+  it('cleans stale processor caches, recovers pending rows, and sweeps temp artifacts without final references', async () => {
     const completeRef = 'reviewed-media/media-87654321.commit-87654321.agcm';
     const events: string[] = [];
     await recoverPendingReviewedDrafts([
@@ -175,15 +190,17 @@ describe('process-restart recovery', () => {
         uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null },
       },
     ], {
+      cleanupStaleProcessorCaches: async () => { events.push('cache_cleanup'); },
       inspectArtifact: async () => { events.push('inspect'); return 'valid'; },
       finalizeJournal: async () => { events.push('finalize'); },
       markNeedsUser: async () => { events.push('needs_user'); },
-      sweepArtifacts: async (active) => { events.push(`sweep:${[...active].sort().join(',')}`); },
+      sweepArtifacts: async () => { events.push('sweep_temps'); },
     });
     expect(events).toEqual([
+      'cache_cleanup',
       'inspect',
       'finalize',
-      `sweep:${[completeRef, journal.encryptedReviewedRef].sort().join(',')}`,
+      'sweep_temps',
     ]);
   });
 
@@ -191,6 +208,7 @@ describe('process-restart recovery', () => {
     expect(decideLocalMediaRecovery('local_persisting', 'valid')).toBe('finalize');
     expect(decideLocalMediaRecovery('local_persisting', 'absent')).toBe('needs_reselection');
     expect(decideLocalMediaRecovery('local_persisting', 'corrupt')).toBe('needs_user_corrupt');
+    expect(decideLocalMediaRecovery('local_persisting', 'retryable_unavailable')).toBe('retry_later');
     expect(decideLocalMediaRecovery('upload_pending', 'valid')).toBe('none');
   });
 });

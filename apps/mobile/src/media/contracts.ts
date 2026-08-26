@@ -1,3 +1,5 @@
+export const MAX_REVIEWED_MEDIA_BYTES = 20 * 1024 * 1024;
+
 export type NormalizedRect = Readonly<{
   x: number;
   y: number;

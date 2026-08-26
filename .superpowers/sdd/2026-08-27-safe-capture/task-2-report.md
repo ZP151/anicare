@@ -299,3 +299,95 @@ git diff --check: exit 0 (Windows LF-to-CRLF advisories only)
 - Confirmed selected source URIs remain transient component inputs and are never included in journal metadata or deletion targets.
 
 The remaining release gate is native-device validation. This Windows environment cannot execute an iOS or Android development build, so representative devices must still validate Expo 57's actual no-overwrite move behavior, post-move file visibility, AES-GCM encrypt/decrypt/tamper rejection, SecureStore lock/unlock behavior, SQLCipher restart recovery, and the complete HEIC/orientation/mask/encrypt lifecycle. No native capability was stubbed or claimed as device-verified.
+
+## Fix round 3
+
+Closeout review status before this round: **FAILED** with four Important and three Minor findings.
+
+### RED evidence
+
+All requested behavior was first encoded in adversarial tests and run against Fix round 2:
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-media.coordinator.test.ts media-reference.test.ts draft-media.native.test.ts reviewed-media-envelope.test.ts reviewed-draft.test.ts processor-cache-sweep.test.ts upload-job.test.ts draft-policy.test.ts draft-store.native.test.ts --runInBand
+```
+
+Observed result:
+
+```text
+Test Suites: 9 failed, 9 total
+Tests:       17 failed, 68 passed, 85 total
+```
+
+The failures reproduced the Android check-then-replacing-move race, existing-final rejection, startup deletion of unreferenced final ciphertext, missing processor-cache sweep, missing `confirmedAtLocal` AAD binding, unavailable key/crypto being mislabeled corrupt, whole-file read before size rejection, oversized receipts/envelopes, and transport attempts from `local_persisting`.
+
+Two additional focused RED cycles tightened startup and envelope behavior before implementation:
+
+```text
+pnpm --filter @animalhelper/mobile test -- media-recovery.native.test.ts --runInBand
+Tests: 1 failed, 1 total
+# database failure prevented stale plaintext cache cleanup
+
+pnpm --filter @animalhelper/mobile test -- reviewed-media-envelope.test.ts --runInBand
+Tests: 1 failed, 3 passed, 4 total
+# a payload shorter than the AES-GCM nonce/tag overhead was accepted
+```
+
+### Fixes and security boundaries
+
+1. **Same-reference commit serialization.** A module-level per-final-reference async coordinator now covers the complete exists/write/move decision. Concurrent commits for the same immutable journal queue in one JS runtime. The first absent commit writes and moves once with `{ overwrite: false }`; a later caller that observes the final returns the reference for the existing authenticated-verification step without writing, moving, replacing, or deleting it. The regression adapter intentionally models Expo Android's non-atomic check plus replacing fallback; two concurrent calls now perform exactly one final move and preserve the first final bytes. Different immutable references remain independent.
+2. **Temp-only automatic sweep.** Startup reviewed-media maintenance now selects only exact app-owned `.tmp` grammar entries. It never automatically deletes a final `.agcm`, even when no sanitized draft snapshot appears to reference it. This removes the stale/corrupt-row snapshot deletion race. Corrupt receipt JSON still degrades to a text-only fail-closed list item, but its raw referenced final is retained. Explicit draft deletion remains the only final-file deletion path: it reads the raw `reviewed_media_ref` column first, deletes the DB row, then best-effort deletes only that exact validated anchored reference.
+3. **Startup plaintext cleanup.** Native startup enumerates direct children of `Paths.cache` before attempting to open the draft database and best-effort deletes only exact `animalhelper-canonical-<stable>.jpg` and `animalhelper-reviewed-<stable>.jpg` files. It does this even if SecureStore/SQLCipher is temporarily unavailable. Nested, traversal-shaped, unrelated, attacker-root, gallery/content, and document paths never become deletion targets. After an app restart, no in-memory review operation exists, so every grammar-valid processor cache is stale; committed ciphertext and durable receipt are sufficient for metadata-only recovery.
+4. **Conservative artifact availability.** Verification now returns `absent`, `valid`, `corrupt`, or `retryable_unavailable`. Structural envelope/length failure, authenticated plaintext length/hash mismatch, and narrowly recognized AES-GCM authentication failures are corrupt. SecureStore unavailable/locked, unknown native decrypt/runtime errors, file metadata/read errors, and hash-runtime errors remain retryable. Recovery leaves `local_persisting` unchanged for retryable availability and can validate/finalize on a later startup. It never promotes that state to `upload_pending`, `needs_user`, `complete`, or `quarantined` while native capability is unavailable.
+5. **Bounded envelope and complete receipt AAD.** Canonical plaintext is capped at 20 MiB in both draft receipt policy and native persistence. The versioned envelope accepts exactly the 12-byte nonce plus plaintext-length ciphertext plus 16-byte tag, with an 8-byte outer header. Native verification checks `File.size` for the exact receipt-derived size and maximum before reading the file, rechecks the bytes read, then parses/decrypts. The parser rejects short, oversized, truncated, or trailing payloads. `confirmedAtLocal` is now included with every other receipt field in AAD.
+6. **Transport boundary.** `nextUploadAttempt` accepts only transport states (`upload_pending`, `uploading`, or `waiting`). A `local_persisting` job fails closed to bounded `invalid_upload_attempt`, including when handed `complete` or `quarantined`; local durability cannot transition through the upload state machine.
+
+### Installed native capability inspection
+
+- Expo Crypto 57 Android wraps AES decrypt failures in a generic `DecryptionFailed` `CodedException`, including underlying runtime errors, so the classifier does not treat that code alone as proof of tampering. It recognizes only the paired, definitive GCM tag/MAC failure messages. Unknown Android failures remain retryable.
+- Expo Crypto 57 iOS calls `AES.GCM.open`; the explicit CryptoKit `authenticationFailure` signature is treated as definitive authentication failure. Other unknown native errors remain retryable.
+- Expo SecureStore exposes several coded/native keychain/keystore failures but no stable cross-platform “temporarily locked” discriminator for this non-authenticated key read. All key-load/import failures therefore remain retryable rather than risking permanent data loss.
+- Expo FileSystem 57 exposes nullable `File.size`; absent is distinguished from metadata unavailable, and whole-file reads occur only after a finite integer exact-size check.
+
+No dependency or lockfile change was required, and no registry/network retry was used.
+
+### GREEN and final verification
+
+Focused Fix round 3 suites:
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-media.coordinator.test.ts media-reference.test.ts draft-media.native.test.ts reviewed-media-envelope.test.ts reviewed-draft.test.ts processor-cache-sweep.test.ts media-recovery.native.test.ts upload-job.test.ts draft-policy.test.ts draft-store.native.test.ts --runInBand
+Test Suites: 10 passed, 10 total
+Tests:       87 passed, 87 total
+```
+
+Fresh full verification:
+
+```text
+pnpm --filter @animalhelper/mobile test
+pnpm --filter @animalhelper/mobile typecheck
+pnpm --filter @animalhelper/mobile build
+pnpm install --frozen-lockfile --offline
+git diff --check
+```
+
+Observed results:
+
+```text
+Test Suites: 22 passed, 22 total
+Tests:       132 passed, 132 total
+tsc --noEmit: exit 0
+expo export --platform web: exit 0 (14 static routes, including /report/redaction-review)
+frozen offline install: exit 0, already up to date
+git diff --check: exit 0 (Windows LF-to-CRLF advisories only)
+```
+
+### Self-review and remaining concerns
+
+- Confirmed reviewed-media persistence contains no `overwrite: true`, final automatic deletion, arbitrary absolute-path resolution, or raw/source/canonical URI persistence.
+- Confirmed the per-reference commit lock is module-level and wraps both the existence check and move. Its guarantee is intentionally limited to the app's current single JS runtime; this task enables no headless/background/multi-runtime writer. A future background writer would require a native exclusive-create/transaction primitive before it may share these files.
+- Confirmed raw DB deletion reads the exact reference independent of receipt JSON deserialization, while startup maintenance never uses sanitized row absence to delete finals.
+- Confirmed processor cache cleanup is anchored to direct `Paths.cache` children and occurs before database access, including after a prior committed-file/final-DB-update crash.
+- Confirmed unknown crypto/SecureStore failures cannot permanently mark a journal corrupt, while structural, hash, and definitive authentication failures remain fail closed.
+
+Final ciphertext orphan accumulation is now an accepted safety tradeoff: automatic final deletion is disabled until a future transactional maintenance design can prove against raw durable rows and concurrent updates. Representative iOS and Android development builds remain the release gate for actual Expo move behavior, File metadata, CryptoKit/JCA error surfaces, SecureStore lock/unlock recovery, SQLCipher restart handling, and the full HEIC/orientation/mask/encrypt lifecycle.

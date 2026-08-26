@@ -53,9 +53,10 @@ function sameReceipt(left: ReviewReceipt | null, right: ReviewReceipt): boolean 
 export function decideLocalMediaRecovery(
   state: UploadJobState,
   artifact: ReviewedMediaArtifactStatus,
-): 'finalize' | 'needs_reselection' | 'needs_user_corrupt' | 'none' {
+): 'finalize' | 'needs_reselection' | 'needs_user_corrupt' | 'retry_later' | 'none' {
   if (state !== 'local_persisting') return 'none';
   if (artifact === 'valid') return 'finalize';
+  if (artifact === 'retryable_unavailable') return 'retry_later';
   return artifact === 'absent' ? 'needs_reselection' : 'needs_user_corrupt';
 }
 
@@ -63,6 +64,7 @@ export async function recoverReviewedDraft(journal: ReviewedMediaJournal, depend
   if (!validJournal(journal)) throw new Error('invalid_reviewed_media_journal');
   const artifact = await dependencies.inspectArtifact(journal);
   const decision = decideLocalMediaRecovery('local_persisting', artifact);
+  if (decision === 'retry_later') return { status: 'local_persisting', journal };
   if (decision === 'finalize') {
     try {
       await dependencies.finalizeJournal(journal);
@@ -108,6 +110,7 @@ export async function resumeReviewedDraftCommit(
       return { status: 'local_persisting', journal };
     }
   }
+  if (artifact === 'retryable_unavailable') return { status: 'local_persisting', journal };
   if (artifact !== 'valid') {
     await dependencies.markNeedsUser(journal, artifact === 'absent' ? 'local_media_missing' : 'local_media_corrupt');
     return { status: 'needs_user', journal };
@@ -143,11 +146,12 @@ export async function commitReviewedDraft(
 
 export async function recoverPendingReviewedDrafts(
   drafts: readonly StoredDraft[],
-  dependencies: RecoveryDependencies & Readonly<{ sweepArtifacts(activeReferences: ReadonlySet<string>): Promise<void> }>,
+  dependencies: RecoveryDependencies & Readonly<{
+    cleanupStaleProcessorCaches(): Promise<void>;
+    sweepArtifacts(): Promise<void>;
+  }>,
 ): Promise<void> {
-  const activeReferences = new Set(
-    drafts.map((draft) => draft.encryptedReviewedRef).filter((reference): reference is string => isReviewedMediaReference(reference)),
-  );
+  await dependencies.cleanupStaleProcessorCaches().catch(() => undefined);
   try {
     for (const draft of drafts) {
       if (draft.uploadJob?.state !== 'local_persisting' || !draft.mediaId || !draft.encryptedReviewedRef || !draft.receipt) continue;
@@ -159,6 +163,6 @@ export async function recoverPendingReviewedDrafts(
       }, dependencies);
     }
   } finally {
-    await dependencies.sweepArtifacts(activeReferences);
+    await dependencies.sweepArtifacts().catch(() => undefined);
   }
 }

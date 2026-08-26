@@ -23,4 +23,5 @@ export async function verifyReviewedMedia(_input: Readonly<{
 
 export async function cleanupProcessorCacheUris(_uris: readonly string[]): Promise<void> { unavailable(); }
 export async function deleteReviewedMediaReference(_reference: string): Promise<void> { unavailable(); }
-export async function sweepOwnedReviewedMedia(_activeReferences: ReadonlySet<string>): Promise<void> { unavailable(); }
+export async function sweepOwnedReviewedMedia(): Promise<void> { unavailable(); }
+export async function sweepOwnedProcessorCaches(): Promise<void> { unavailable(); }

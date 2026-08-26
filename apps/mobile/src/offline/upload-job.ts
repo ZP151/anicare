@@ -16,6 +16,7 @@ export type UploadAttemptResult =
 const uploadStates = new Set<UploadJobState>([
   'local_persisting', 'upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete',
 ]);
+const transportAttemptStates = new Set<UploadJobState>(['upload_pending', 'uploading', 'waiting']);
 
 function invalidAttempt(): UploadJob {
   return { state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt' };
@@ -27,7 +28,8 @@ export function nextUploadAttempt(
   now: Date,
   random: () => number,
 ): UploadJob {
-  if (!job || !uploadStates.has(job.state) || !Number.isInteger(job.attempts) || job.attempts < 0 || job.attempts > 5 ||
+  if (!job || !uploadStates.has(job.state) || !transportAttemptStates.has(job.state) ||
+      !Number.isInteger(job.attempts) || job.attempts < 0 || job.attempts > 5 ||
       !(now instanceof Date) || !Number.isFinite(now.getTime()) ||
       !result || !['network', 'http', 'hash_mismatch', 'metadata_mismatch', 'version_mismatch', 'quarantined', 'complete'].includes(result.kind) ||
       (result.kind === 'http' && (!Number.isInteger(result.status) || result.status < 100 || result.status > 599))) {

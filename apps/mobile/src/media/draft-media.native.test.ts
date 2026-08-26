@@ -100,6 +100,7 @@ describe('native reviewed-media persistence', () => {
     expect(events[1]).toContain('draft-12345678');
     expect(events[1]).toContain(encryptedReviewedRef);
     expect(events[1]).toContain('a'.repeat(64));
+    expect(events[1]).toContain('2026-08-27T00:00:00.000Z');
   });
 
   it('fails before reading bytes when the exact render is not confirmed', async () => {

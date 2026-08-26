@@ -27,10 +27,6 @@ export function createReviewedMediaTempReference(finalReference: string, tempora
   return `reviewed-media/.${match[1]}.${match[2]}.${temporaryId}.tmp`;
 }
 
-export function selectReviewedMediaSweepTargets(
-  entries: readonly string[],
-  activeReferences: ReadonlySet<string>,
-): string[] {
-  return entries.filter((entry) => isReviewedMediaTempReference(entry) ||
-    (isReviewedMediaReference(entry) && !activeReferences.has(entry)));
+export function selectReviewedMediaSweepTargets(entries: readonly string[]): string[] {
+  return entries.filter(isReviewedMediaTempReference);
 }

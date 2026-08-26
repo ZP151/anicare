@@ -40,8 +40,9 @@ describe('reviewed-media key initialization', () => {
 type Store = { files: Map<string, Uint8Array>; deleted: string[]; moveOptions: unknown[] };
 
 function fileDependencies(store: Store, failure?: 'write' | 'commit' | 'race') {
+  let temporary = 0;
   return {
-    randomId: () => 'temp-12345678',
+    randomId: () => `temp-1234567${++temporary}`,
     finalExists: async (reference: string) => store.files.has(reference),
     writeTemp: async (reference: string, bytes: Uint8Array) => {
       store.files.set(reference, failure === 'write' ? bytes.slice(0, 1) : bytes);
@@ -68,7 +69,7 @@ describe('reviewed-media file commit', () => {
     await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store, 'write')))
       .rejects.toThrow('partial_write');
     expect([...store.files.keys()]).toEqual([]);
-    expect(store.deleted).toEqual(['reviewed-media/.media-12345678.commit-12345678.temp-12345678.tmp']);
+    expect(store.deleted).toEqual(['reviewed-media/.media-12345678.commit-12345678.temp-12345671.tmp']);
   });
 
   it('moves to a nonexistent immutable final with overwrite disabled', async () => {
@@ -86,14 +87,14 @@ describe('reviewed-media file commit', () => {
     expect([...store.files.keys()]).toEqual([]);
   });
 
-  it('never overwrites or deletes a prior immutable final', async () => {
+  it('reuses a prior immutable final for authenticated verification without moving or deleting it', async () => {
     const store: Store = {
       files: new Map([['reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([9])]]),
       deleted: [],
       moveOptions: [],
     };
     await expect(commitEncryptedFile('reviewed-media/media-12345678.commit-12345678.agcm', new Uint8Array([1, 2]), fileDependencies(store)))
-      .rejects.toThrow('encrypted_media_already_exists');
+      .resolves.toBe('reviewed-media/media-12345678.commit-12345678.agcm');
     expect([...store.files.get('reviewed-media/media-12345678.commit-12345678.agcm')!]).toEqual([9]);
     expect(store.moveOptions).toEqual([]);
   });
@@ -104,5 +105,38 @@ describe('reviewed-media file commit', () => {
       .rejects.toThrow('destination_exists');
     expect([...store.files.get('reviewed-media/media-12345678.commit-12345678.agcm')!]).toEqual([9]);
     expect(store.moveOptions).toEqual([{ overwrite: false }]);
+  });
+
+  it('serializes concurrent same-reference commits around an Android-style replacing move', async () => {
+    const final = 'reviewed-media/media-12345678.commit-12345678.agcm';
+    const files = new Map<string, Uint8Array>();
+    let temporary = 0;
+    let moves = 0;
+    const deleted: string[] = [];
+    const dependencies = {
+      randomId: () => `temp-1234567${++temporary}`,
+      finalExists: async (reference: string) => {
+        await Promise.resolve();
+        return files.has(reference);
+      },
+      writeTemp: async (reference: string, bytes: Uint8Array) => { files.set(reference, bytes); },
+      moveTemp: async (from: string, to: string, options: { overwrite: false }) => {
+        expect(options).toEqual({ overwrite: false });
+        moves += 1;
+        // Models Expo Android's check-then-rename fallback: this replaces if called twice.
+        files.set(to, files.get(from)!);
+        files.delete(from);
+      },
+      deleteTemp: async (reference: string) => { deleted.push(reference); files.delete(reference); },
+    };
+
+    await expect(Promise.all([
+      commitEncryptedFile(final, new Uint8Array([1]), dependencies),
+      commitEncryptedFile(final, new Uint8Array([2]), dependencies),
+    ])).resolves.toEqual([final, final]);
+
+    expect(moves).toBe(1);
+    expect([...files.get(final)!]).toEqual([1]);
+    expect(deleted).not.toContain(final);
   });
 });

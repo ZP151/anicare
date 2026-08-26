@@ -1,6 +1,6 @@
 import { listOfflineDrafts, saveOfflineDraft } from '../offline/draft-store';
 import type { StoredDraft } from '../offline/draft-policy';
-import { sweepOwnedReviewedMedia, verifyReviewedMedia } from './draft-media';
+import { sweepOwnedProcessorCaches, sweepOwnedReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { recoverPendingReviewedDrafts, type ReviewedMediaJournal } from './reviewed-draft';
 
 function mediaDraftUpdate(draft: StoredDraft, journal: ReviewedMediaJournal, state: 'upload_pending' | 'needs_user', lastError: string | null) {
@@ -15,9 +15,11 @@ function mediaDraftUpdate(draft: StoredDraft, journal: ReviewedMediaJournal, sta
 }
 
 export async function recoverPendingMediaDrafts(): Promise<void> {
+  await sweepOwnedProcessorCaches().catch(() => undefined);
   const drafts = await listOfflineDrafts();
   const byId = new Map(drafts.map((draft) => [draft.id, draft]));
   await recoverPendingReviewedDrafts(drafts, {
+    cleanupStaleProcessorCaches: async () => undefined,
     inspectArtifact: verifyReviewedMedia,
     finalizeJournal: async (journal) => {
       const draft = byId.get(journal.draftId);

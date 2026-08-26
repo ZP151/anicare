@@ -6,6 +6,7 @@ import {
   LEGACY_REVIEWED_PATH_CLEAR_SQL,
   LEGACY_URI_CLEAR_SQL,
 } from './draft-store.native';
+import { selectReviewedMediaSweepTargets } from '../media/media-reference';
 
 describe('native draft storage privacy boundary', () => {
   it('never writes or reads photo_uri and clears legacy values', () => {
@@ -63,6 +64,9 @@ describe('native draft storage privacy boundary', () => {
     expect(drafts).toHaveLength(2);
     expect(drafts[0].encryptedReviewedRef).toBe('reviewed-media/media-12345678.commit-12345678.agcm');
     expect(drafts[1]).toEqual({ id: 'draft-87654321', notes: 'corrupt receipt', risk: 'sensitive' });
+    expect(selectReviewedMediaSweepTargets([
+      'reviewed-media/media-87654321.commit-87654321.agcm',
+    ])).toEqual([]);
   });
 
   it.each([

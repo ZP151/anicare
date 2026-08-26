@@ -1,5 +1,5 @@
 import type { SightingRisk } from '../api/sightings';
-import type { ReviewReceipt } from '../media/contracts';
+import { MAX_REVIEWED_MEDIA_BYTES, type ReviewReceipt } from '../media/contracts';
 import { isReviewedMediaReference } from '../media/media-reference';
 import type { UploadJob } from './upload-job';
 
@@ -34,7 +34,7 @@ function validReceipt(value: unknown): value is ReviewReceipt {
     versions.cats === 'unavailable' && versions.people === 'unavailable' && versions.plates === 'unavailable' &&
     Number.isInteger(receipt.width) && receipt.width! > 0 && receipt.width! <= 2048 &&
     Number.isInteger(receipt.height) && receipt.height! > 0 && receipt.height! <= 2048 &&
-    Number.isInteger(receipt.byteLength) && receipt.byteLength! > 0 &&
+    Number.isInteger(receipt.byteLength) && receipt.byteLength! > 0 && receipt.byteLength! <= MAX_REVIEWED_MEDIA_BYTES &&
     typeof receipt.confirmedAtLocal === 'string' && receipt.confirmedAtLocal.length <= 40 &&
     Number.isFinite(Date.parse(receipt.confirmedAtLocal));
 }
