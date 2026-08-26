@@ -7,7 +7,7 @@ const reviewed: MediaReviewState = {
   status: 'reviewed',
   masks: [],
   rendered: {
-    uri: 'file:///cache/reviewed.jpg',
+    uri: 'file:///cache/animalhelper-reviewed-12345678.jpg',
     sha256: 'a'.repeat(64),
     mimeType: 'image/jpeg',
     width: 1200,
@@ -39,11 +39,12 @@ function dependencies(events: string[]): DraftMediaDependencies {
       events.push(`encrypt:${bytes.byteLength}:${aad}`);
       return new Uint8Array([9, 8, 7]);
     },
-    writeEncrypted: async (mediaId, bytes) => {
+    commitEncrypted: async (mediaId, bytes) => {
       events.push(`write:${mediaId}:${bytes.byteLength}`);
-      return `file:///documents/reviewed-media/${mediaId}.agcm`;
+      return `reviewed-media/${mediaId}.agcm`;
     },
-    deleteTransient: async (uri) => {
+    cacheRootUri: 'file:///cache/',
+    deleteProcessorCache: async (uri) => {
       events.push(`delete:${uri}`);
     },
   };
@@ -56,23 +57,28 @@ describe('native reviewed-media persistence', () => {
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
       review: reviewed,
-      transientUris: ['file:///raw.heic', 'file:///cache/canonical.jpg'],
+      processorCacheUris: [
+        'file:///cache/animalhelper-canonical-12345678.jpg',
+        'file:///cache/unrelated.db',
+        'file:///cache/../documents/secret.txt',
+        'file:///attacker/animalhelper-canonical-12345678.jpg',
+        'content://gallery/animalhelper-canonical-12345678.jpg',
+      ],
     }, dependencies(events));
 
     expect(result).toEqual({
-      encryptedReviewedPath: 'file:///documents/reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
       encryptionVersion: 'aes-256-gcm.v1',
       mediaId: 'media-12345678',
     });
     expect(events.slice(0, 3)).toEqual([
-      'read:file:///cache/reviewed.jpg',
+      'read:file:///cache/animalhelper-reviewed-12345678.jpg',
       expect.stringContaining('encrypt:4:'),
       'write:media-12345678:3',
     ]);
     expect(events.slice(3)).toEqual([
-      'delete:file:///raw.heic',
-      'delete:file:///cache/canonical.jpg',
-      'delete:file:///cache/reviewed.jpg',
+      'delete:file:///cache/animalhelper-canonical-12345678.jpg',
+      'delete:file:///cache/animalhelper-reviewed-12345678.jpg',
     ]);
     expect(events[1]).toContain('draft-12345678');
     expect(events[1]).toContain('a'.repeat(64));
@@ -84,8 +90,19 @@ describe('native reviewed-media persistence', () => {
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
       review: { ...reviewed, status: 'needs_review', receipt: null },
-      transientUris: ['file:///raw.heic'],
+      processorCacheUris: [],
     }, dependencies(events))).rejects.toThrow('media_review_required');
+    expect(events).toEqual([]);
+  });
+
+  it('rejects a gallery or caller-controlled rendered URI before reading bytes', async () => {
+    const events: string[] = [];
+    await expect(persistReviewedMedia({
+      draftId: 'draft-12345678',
+      mediaId: 'media-12345678',
+      review: { ...reviewed, rendered: { ...reviewed.rendered!, uri: 'content://gallery/original.jpg' } },
+      processorCacheUris: [],
+    }, dependencies(events))).rejects.toThrow('unowned_rendered_media');
     expect(events).toEqual([]);
   });
 
@@ -96,12 +113,12 @@ describe('native reviewed-media persistence', () => {
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
       review: reviewed,
-      transientUris: ['file:///raw.heic'],
+      processorCacheUris: ['file:///cache/animalhelper-canonical-12345678.jpg'],
     }, {
       ...deps,
-      writeEncrypted: async () => { throw new Error('disk_full'); },
+      commitEncrypted: async () => { throw new Error('disk_full'); },
     })).rejects.toThrow('disk_full');
-    expect(events).not.toContain('delete:file:///raw.heic');
+    expect(events).not.toContain('delete:file:///cache/animalhelper-canonical-12345678.jpg');
   });
 
   it('rejects same-length bytes changed after confirmation before encryption', async () => {
@@ -111,12 +128,12 @@ describe('native reviewed-media persistence', () => {
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
       review: reviewed,
-      transientUris: ['file:///raw.heic'],
+      processorCacheUris: ['file:///cache/animalhelper-canonical-12345678.jpg'],
     }, {
       ...deps,
       sha256: async () => 'b'.repeat(64),
     })).rejects.toThrow('reviewed_media_changed');
     expect(events.some((event) => event.startsWith('encrypt:'))).toBe(false);
-    expect(events).not.toContain('delete:file:///raw.heic');
+    expect(events).not.toContain('delete:file:///cache/animalhelper-canonical-12345678.jpg');
   });
 });

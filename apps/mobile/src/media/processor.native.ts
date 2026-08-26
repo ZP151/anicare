@@ -31,43 +31,114 @@ export function targetDimensions(width: number, height: number): { width: number
 }
 
 export function assertMetadataFreeJpeg(bytes: Uint8Array): void {
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 ||
-      bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) {
-    throw new Error('invalid_rendered_jpeg');
-  }
+  const invalid = () => { throw new Error('invalid_rendered_jpeg'); };
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) invalid();
 
+  const frameComponents = new Set<number>();
   let offset = 2;
+  let sawFrame = false;
   let sawScan = false;
-  let scanning = false;
-  let sawEnd = false;
+
   while (offset < bytes.length) {
-    if (scanning) {
-      while (offset < bytes.length && bytes[offset] !== 0xff) offset += 1;
-      if (offset >= bytes.length) break;
-    } else if (bytes[offset] !== 0xff) {
-      throw new Error('invalid_rendered_jpeg');
-    }
-    while (bytes[offset] === 0xff) offset += 1;
+    if (bytes[offset] !== 0xff) invalid();
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) invalid();
     const marker = bytes[offset++];
-    if (scanning && marker === 0x00) continue;
-    if (marker >= 0xd0 && marker <= 0xd7) continue;
-    scanning = false;
+
+    if (marker === 0x00 || marker === 0x01 || marker === 0xd8 || marker === 0xd9 ||
+        (marker >= 0xd0 && marker <= 0xd7)) invalid();
     if (marker === 0xe1 || marker === 0xed || marker === 0xfe) throw new Error('unsafe_jpeg_metadata');
-    if (marker === 0xd9) {
-      sawEnd = true;
+    if (offset + 1 >= bytes.length) invalid();
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) invalid();
+
+    const isStartOfFrame = (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isStartOfFrame) {
+      if (sawFrame || segmentLength < 11) invalid();
+      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      const componentCount = bytes[offset + 7];
+      if (width === 0 || height === 0 || componentCount < 1 || componentCount > 4 ||
+          segmentLength !== 8 + componentCount * 3) invalid();
+      for (let component = 0; component < componentCount; component += 1) {
+        const componentOffset = offset + 8 + component * 3;
+        const id = bytes[componentOffset];
+        const sampling = bytes[componentOffset + 1];
+        if (id === 0 || frameComponents.has(id) || (sampling >> 4) === 0 || (sampling & 0x0f) === 0) invalid();
+        frameComponents.add(id);
+      }
+      sawFrame = true;
+    }
+
+    if (marker !== 0xda) {
+      offset += segmentLength;
+      continue;
+    }
+
+    if (!sawFrame || segmentLength < 8) invalid();
+    const componentCount = bytes[offset + 2];
+    if (componentCount < 1 || componentCount > 4 || segmentLength !== 6 + componentCount * 2) invalid();
+    const scanComponents = new Set<number>();
+    for (let component = 0; component < componentCount; component += 1) {
+      const componentOffset = offset + 3 + component * 2;
+      const id = bytes[componentOffset];
+      const tables = bytes[componentOffset + 1];
+      if (!frameComponents.has(id) || scanComponents.has(id) || (tables >> 4) > 3 || (tables & 0x0f) > 3) invalid();
+      scanComponents.add(id);
+    }
+    const spectralOffset = offset + 3 + componentCount * 2;
+    const start = bytes[spectralOffset];
+    const end = bytes[spectralOffset + 1];
+    const approximation = bytes[spectralOffset + 2];
+    if (start > 63 || end > 63 || start > end || (approximation >> 4) > 13 || (approximation & 0x0f) > 13) invalid();
+    offset += segmentLength;
+    sawScan = true;
+
+    let entropyBytes = 0;
+    let nextMarkerOffset = -1;
+    while (offset < bytes.length) {
+      if (bytes[offset] !== 0xff) {
+        entropyBytes += 1;
+        offset += 1;
+        continue;
+      }
+      const markerOffset = offset;
+      offset += 1;
+      if (offset >= bytes.length) invalid();
+      if (bytes[offset] === 0x00) {
+        entropyBytes += 1;
+        offset += 1;
+        continue;
+      }
+      while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+      if (offset >= bytes.length || bytes[offset] === 0x00) invalid();
+      const entropyMarker = bytes[offset];
+      if (entropyMarker >= 0xd0 && entropyMarker <= 0xd7) {
+        if (entropyBytes === 0) invalid();
+        offset += 1;
+        continue;
+      }
+      if (entropyBytes === 0) invalid();
+      if (entropyMarker === 0xe1 || entropyMarker === 0xed || entropyMarker === 0xfe) {
+        throw new Error('unsafe_jpeg_metadata');
+      }
+      if (entropyMarker === 0xd9) {
+        offset += 1;
+        if (offset !== bytes.length) invalid();
+        return;
+      }
+      if (entropyMarker === 0xd8 || entropyMarker === 0x00) invalid();
+      nextMarkerOffset = markerOffset;
       break;
     }
-    if (marker === 0xd8 || marker === 0x01) continue;
-    if (offset + 1 >= bytes.length) throw new Error('invalid_rendered_jpeg');
-    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
-    if (segmentLength < 2 || offset + segmentLength > bytes.length) throw new Error('invalid_rendered_jpeg');
-    offset += segmentLength;
-    if (marker === 0xda) {
-      sawScan = true;
-      scanning = true;
-    }
+    if (nextMarkerOffset < 0) invalid();
+    offset = nextMarkerOffset;
   }
-  if (!sawScan || !sawEnd || offset !== bytes.length) throw new Error('invalid_rendered_jpeg');
+  if (!sawScan) invalid();
+  invalid();
 }
 
 function bytesToHex(bytes: Uint8Array): string {

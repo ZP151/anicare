@@ -13,12 +13,26 @@ export type UploadAttemptResult =
   | Readonly<{ kind: 'hash_mismatch' | 'metadata_mismatch' | 'version_mismatch' }>
   | Readonly<{ kind: 'quarantined' | 'complete' }>;
 
+const uploadStates = new Set<UploadJobState>([
+  'upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete',
+]);
+
+function invalidAttempt(): UploadJob {
+  return { state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt' };
+}
+
 export function nextUploadAttempt(
   job: UploadJob,
   result: UploadAttemptResult,
   now: Date,
   random: () => number,
 ): UploadJob {
+  if (!job || !uploadStates.has(job.state) || !Number.isInteger(job.attempts) || job.attempts < 0 || job.attempts > 5 ||
+      !(now instanceof Date) || !Number.isFinite(now.getTime()) ||
+      !result || !['network', 'http', 'hash_mismatch', 'metadata_mismatch', 'version_mismatch', 'quarantined', 'complete'].includes(result.kind) ||
+      (result.kind === 'http' && (!Number.isInteger(result.status) || result.status < 100 || result.status > 599))) {
+    return invalidAttempt();
+  }
   const attempts = Math.min(job.attempts + 1, 5);
 
   if (result.kind === 'complete' || result.kind === 'quarantined') {
@@ -26,7 +40,8 @@ export function nextUploadAttempt(
   }
 
   const retryable = result.kind === 'network' ||
-    (result.kind === 'http' && (result.status === 408 || result.status === 429 || result.status >= 500));
+    (result.kind === 'http' && (result.status === 408 || result.status === 429 ||
+      (result.status >= 500 && result.status <= 599)));
 
   if (!retryable) {
     const error = result.kind === 'http' ? `http_${result.status}` : result.kind;

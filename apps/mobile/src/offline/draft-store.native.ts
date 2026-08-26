@@ -9,8 +9,9 @@ const DATABASE_KEY_NAME = 'animalhelper.offline-drafts.v1';
 const DATABASE_NAME = 'animalhelper-drafts.db';
 
 export const LEGACY_URI_CLEAR_SQL = 'UPDATE sighting_drafts SET photo_uri = NULL;';
+export const LEGACY_REVIEWED_PATH_CLEAR_SQL = 'UPDATE sighting_drafts SET reviewed_media_path = NULL;';
 export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
-     (id, notes, risk, media_id, sighting_id, reviewed_media_path, review_receipt_json,
+     (id, notes, risk, media_id, sighting_id, reviewed_media_ref, review_receipt_json,
       upload_state, upload_attempts, next_attempt_at, last_error, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
@@ -18,21 +19,21 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
        risk = excluded.risk,
        media_id = COALESCE(excluded.media_id, sighting_drafts.media_id),
        sighting_id = COALESCE(excluded.sighting_id, sighting_drafts.sighting_id),
-       reviewed_media_path = COALESCE(excluded.reviewed_media_path, sighting_drafts.reviewed_media_path),
+       reviewed_media_ref = COALESCE(excluded.reviewed_media_ref, sighting_drafts.reviewed_media_ref),
        review_receipt_json = COALESCE(excluded.review_receipt_json, sighting_drafts.review_receipt_json),
        upload_state = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.upload_state ELSE sighting_drafts.upload_state END,
        upload_attempts = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.upload_attempts ELSE sighting_drafts.upload_attempts END,
        next_attempt_at = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.next_attempt_at ELSE sighting_drafts.next_attempt_at END,
        last_error = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.last_error ELSE sighting_drafts.last_error END,
        updated_at = excluded.updated_at`;
-export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_path,
+export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_ref,
   review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error
   FROM sighting_drafts ORDER BY updated_at DESC`;
 
 const SCHEMA_V2_COLUMNS = {
   media_id: 'TEXT',
   sighting_id: 'TEXT',
-  reviewed_media_path: 'TEXT',
+  reviewed_media_ref: 'TEXT',
   review_receipt_json: 'TEXT',
   upload_state: 'TEXT',
   upload_attempts: 'INTEGER',
@@ -75,7 +76,7 @@ async function openDraftDatabase() {
       risk TEXT NOT NULL CHECK (risk IN ('normal', 'sensitive', 'critical')),
       media_id TEXT,
       sighting_id TEXT,
-      reviewed_media_path TEXT,
+      reviewed_media_ref TEXT,
       review_receipt_json TEXT,
       upload_state TEXT,
       upload_attempts INTEGER,
@@ -91,6 +92,7 @@ async function openDraftDatabase() {
   for (const [name, type] of Object.entries(SCHEMA_V2_COLUMNS)) {
     if (!existing.has(name)) await database.execAsync(`ALTER TABLE sighting_drafts ADD COLUMN ${name} ${type};`);
   }
+  if (existing.has('reviewed_media_path')) await database.execAsync(LEGACY_REVIEWED_PATH_CLEAR_SQL);
   return database;
 }
 
@@ -109,7 +111,7 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
     draft.risk,
     draft.mediaId ?? null,
     draft.sightingId ?? null,
-    draft.encryptedReviewedPath ?? null,
+    draft.encryptedReviewedRef ?? null,
     draft.receipt ? JSON.stringify(draft.receipt) : null,
     draft.uploadJob?.state ?? null,
     draft.uploadJob?.attempts ?? null,
@@ -128,7 +130,7 @@ export async function listOfflineDrafts(): Promise<StoredDraft[]> {
     risk: StoredDraft['risk'];
     media_id: string | null;
     sighting_id: string | null;
-    reviewed_media_path: string | null;
+    reviewed_media_ref: string | null;
     review_receipt_json: string | null;
     upload_state: string | null;
     upload_attempts: number | null;
@@ -139,10 +141,10 @@ export async function listOfflineDrafts(): Promise<StoredDraft[]> {
     id: row.id,
     notes: row.notes,
     risk: row.risk,
-    ...(row.media_id && row.reviewed_media_path && row.review_receipt_json ? {
+    ...(row.media_id && row.reviewed_media_ref && row.review_receipt_json ? {
       mediaId: row.media_id,
       sightingId: row.sighting_id ?? undefined,
-      encryptedReviewedPath: row.reviewed_media_path,
+      encryptedReviewedRef: row.reviewed_media_ref,
       receipt: JSON.parse(row.review_receipt_json),
       uploadJob: {
         state: row.upload_state,

@@ -4,7 +4,7 @@ describe('offline draft privacy', () => {
   it('never persists precise coordinates or access tokens', () => {
     expect(
       sanitizeDraftForStorage({
-        id: 'draft-1',
+        id: 'draft-001',
         notes: 'white paws',
         risk: 'sensitive',
         latitude: 1.3521,
@@ -12,7 +12,7 @@ describe('offline draft privacy', () => {
         accessToken: 'secret',
       }),
     ).toEqual({
-      id: 'draft-1',
+      id: 'draft-001',
       notes: 'white paws',
       risk: 'sensitive',
     });
@@ -20,16 +20,16 @@ describe('offline draft privacy', () => {
 
   it('normalises notes and rejects unknown risk values', () => {
     expect(
-      sanitizeDraftForStorage({ id: 'draft-2', notes: '  tabby  ', risk: 'unknown' }),
+      sanitizeDraftForStorage({ id: 'draft-002', notes: '  tabby  ', risk: 'unknown' }),
     ).toEqual({
-      id: 'draft-2',
+      id: 'draft-002',
       notes: 'tabby',
       risk: 'normal',
     });
   });
 
   it('does not persist a raw selected-image URI', () => {
-    expect(sanitizeDraftForStorage({ id: 'd1', photoUri: 'file:///raw.jpg', latitude: 1, accessToken: 'x' })).not.toHaveProperty('photoUri');
+    expect(sanitizeDraftForStorage({ id: 'draft-003', photoUri: 'file:///raw.jpg', latitude: 1, accessToken: 'x' })).not.toHaveProperty('photoUri');
   });
 
   it('keeps only a validated encrypted reviewed-media reference and bounded retry state', () => {
@@ -38,7 +38,7 @@ describe('offline draft privacy', () => {
       notes: 'tabby',
       risk: 'normal',
       mediaId: 'media-12345678',
-      encryptedReviewedPath: 'file:///documents/reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -56,7 +56,7 @@ describe('offline draft privacy', () => {
       accessToken: 'secret',
     })).toMatchObject({
       mediaId: 'media-12345678',
-      encryptedReviewedPath: 'file:///documents/reviewed-media/media-12345678.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
       sightingId: 'sighting-12345678',
       uploadJob: { state: 'waiting', attempts: 2, lastError: 'network' },
     });
@@ -66,7 +66,7 @@ describe('offline draft privacy', () => {
     expect(() => sanitizeDraftForStorage({
       id: 'draft-12345678',
       mediaId: 'media-12345678',
-      encryptedReviewedPath: 'file:///raw.jpg',
+      encryptedReviewedRef: 'file:///raw.jpg',
     })).toThrow('invalid_reviewed_media_draft');
   });
 
@@ -87,8 +87,88 @@ describe('offline draft privacy', () => {
     expect(() => sanitizeDraftForStorage({
       id: 'draft-12345678',
       mediaId: 'media-12345678',
-      encryptedReviewedPath: 'file:///documents/reviewed-media/media-87654321.agcm',
+      encryptedReviewedRef: 'reviewed-media/media-87654321.agcm',
       receipt,
     })).toThrow('invalid_reviewed_media_draft');
+  });
+
+  it.each([
+    'file:///attacker/reviewed-media/media-12345678.agcm',
+    'reviewed-media/../media-12345678.agcm',
+    '../reviewed-media/media-12345678.agcm',
+    'content://gallery/media-12345678.agcm',
+  ])('rejects non-app-owned reviewed media reference %s', (encryptedReviewedRef) => {
+    expect(() => sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef,
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100,
+        height: 100,
+        byteLength: 100,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+    })).toThrow('invalid_reviewed_media_draft');
+  });
+
+  it.each([undefined, null, '', 'short', '../draft-12345678'])('rejects invalid draft ID %s', (id) => {
+    expect(() => sanitizeDraftForStorage({ id })).toThrow('invalid_draft_id');
+  });
+
+  it.each([null, '', 'not-a-date'])('rejects waiting retry state without a valid schedule: %s', (nextAttemptAt) => {
+    expect(() => sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100,
+        height: 100,
+        byteLength: 100,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+      uploadJob: { state: 'waiting', attempts: 1, nextAttemptAt, lastError: 'network' },
+    })).toThrow('invalid_reviewed_media_draft');
+  });
+
+  it('clears a schedule from non-waiting states', () => {
+    expect(sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100,
+        height: 100,
+        byteLength: 100,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+      uploadJob: { state: 'complete', attempts: 1, nextAttemptAt: '2026-08-27T01:00:00.000Z', lastError: null },
+    }).uploadJob?.nextAttemptAt).toBeNull();
+  });
+
+  it('retains the bounded hostile-input retry error for user recovery', () => {
+    expect(sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.agcm',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100,
+        height: 100,
+        byteLength: 100,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+      uploadJob: { state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt' },
+    }).uploadJob?.lastError).toBe('invalid_upload_attempt');
   });
 });

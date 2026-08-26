@@ -8,7 +8,7 @@ export type StoredDraft = {
   risk: SightingRisk;
   mediaId?: string;
   sightingId?: string;
-  encryptedReviewedPath?: string;
+  encryptedReviewedRef?: string;
   receipt?: ReviewReceipt;
   uploadJob?: UploadJob;
 };
@@ -44,35 +44,34 @@ function sanitizeUploadJob(value: unknown): UploadJob | undefined {
   if (!job.state || !uploadStates.has(job.state) || !Number.isInteger(job.attempts) || job.attempts! < 0 || job.attempts! > 5) {
     throw new Error('invalid_reviewed_media_draft');
   }
-  const nextAttemptAt = job.state === 'waiting' && typeof job.nextAttemptAt === 'string' &&
-    job.nextAttemptAt.length <= 40 && Number.isFinite(Date.parse(job.nextAttemptAt))
-    ? job.nextAttemptAt
-    : null;
+  const validNextAttemptAt = typeof job.nextAttemptAt === 'string' && job.nextAttemptAt.length <= 40 &&
+    Number.isFinite(Date.parse(job.nextAttemptAt));
+  if (job.state === 'waiting' && !validNextAttemptAt) throw new Error('invalid_reviewed_media_draft');
+  const nextAttemptAt = job.state === 'waiting' ? job.nextAttemptAt as string : null;
   const lastError = typeof job.lastError === 'string' &&
-    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|retry_limit_reached|upload_error)$/.test(job.lastError)
+    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|retry_limit_reached|invalid_upload_attempt|upload_error)$/.test(job.lastError)
     ? job.lastError
     : null;
   return { state: job.state, attempts: job.attempts!, nextAttemptAt, lastError };
 }
 
 export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredDraft {
+  if (!stableId(input.id)) throw new Error('invalid_draft_id');
   const risk = typeof input.risk === 'string' && risks.has(input.risk as SightingRisk)
     ? (input.risk as SightingRisk)
     : 'normal';
 
   const draft: StoredDraft = {
-    id: String(input.id),
+    id: input.id,
     notes: typeof input.notes === 'string' ? input.notes.trim().slice(0, 1000) : '',
     risk,
   };
 
-  const hasAnyMedia = input.mediaId !== undefined || input.encryptedReviewedPath !== undefined ||
+  const hasAnyMedia = input.mediaId !== undefined || input.encryptedReviewedRef !== undefined ||
     input.receipt !== undefined || input.uploadJob !== undefined || input.sightingId !== undefined;
   if (!hasAnyMedia) return draft;
 
-  if (!stableId(input.mediaId) || typeof input.encryptedReviewedPath !== 'string' ||
-      !/^file:\/\/.+\/reviewed-media\/[A-Za-z0-9-]{8,64}\.agcm$/.test(input.encryptedReviewedPath) ||
-      !input.encryptedReviewedPath.endsWith(`/reviewed-media/${input.mediaId}.agcm`) ||
+  if (!stableId(input.mediaId) || input.encryptedReviewedRef !== `reviewed-media/${input.mediaId}.agcm` ||
       !validReceipt(input.receipt)) {
     throw new Error('invalid_reviewed_media_draft');
   }
@@ -85,7 +84,7 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
   return {
     ...draft,
     mediaId: input.mediaId,
-    encryptedReviewedPath: input.encryptedReviewedPath,
+    encryptedReviewedRef: input.encryptedReviewedRef,
     receipt: input.receipt,
     uploadJob,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),

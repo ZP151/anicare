@@ -105,3 +105,98 @@ Static routes: 14, including /report/redaction-review
 - Automatic cat, people, and licence-plate detectors remain deliberately unavailable. No model weights or unsupported detector claims were added.
 - Upload transport, server finalization, attestation verification, quarantine handling, and any publication flow are outside Task 2. This task provides only private encrypted local persistence and pure retry-state transitions; client attestation does not publish anything.
 - No credentials, service-role key, real user data, or model weights were introduced.
+
+## Fix round 1
+
+Independent review status before this round: **FAILED** with six Important findings and one Minor finding.
+
+### RED evidence
+
+The first adversarial regression batch was run before production changes:
+
+```text
+pnpm --filter @animalhelper/mobile test -- processor.native.test.ts draft-media.native.test.ts draft-media.coordinator.test.ts reviewed-draft.test.ts redaction-geometry.test.ts upload-job.test.ts draft-policy.test.ts draft-store.native.test.ts
+```
+
+Observed result:
+
+```text
+Test Suites: 8 failed, 8 total
+Tests:       28 failed, 38 passed, 66 total
+```
+
+The failures demonstrated the requested gaps rather than incidental syntax issues in existing modules:
+
+- The JPEG policy accepted an empty entropy scan, restart-before-entropy, nested SOI, malformed SOS, and a marker immediately after SOS.
+- The key coordinator and temp-file commit APIs did not exist; current persistence still used a direct final write.
+- The metadata-retry and contain-mode tap helpers did not exist.
+- Retry state accepted negative/fractional/out-of-range attempts, hostile state/clock values, and invalid HTTP statuses including 600, infinity, and fractional values.
+- Draft storage still required an arbitrary absolute path and did not reject invalid draft IDs.
+
+Additional focused RED cycles were captured before their fixes:
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-store.native.test.ts
+Tests: 2 failed, 2 passed, 4 total
+# missing opaque reviewed_media_ref schema and legacy absolute-path clearing
+
+pnpm --filter @animalhelper/mobile test -- draft-media.native.test.ts
+Tests: 1 failed, 4 passed, 5 total
+# caller/gallery rendered URI was read and encrypted instead of rejected
+
+pnpm --filter @animalhelper/mobile test -- draft-policy.test.ts
+Tests: 1 failed, 19 passed, 20 total
+# bounded invalid_upload_attempt error was discarded
+```
+
+### Fixes
+
+1. **Strict JPEG structure.** Replaced the marker-presence check with a structural scanner. SOI is accepted only at byte zero; frame and SOS component layouts/lengths are validated; each scan requires a real entropy byte; stuffed bytes and entropy restart markers are handled; restart markers outside entropy, nested SOI, malformed/truncated segments, empty scans, repeated/early EOI, and trailing data are rejected. APP1, APP13, and COM remain rejected before or after scan data. The positive fixture is a locally generated synthetic black 1×1 decoder-valid JPEG; Skia decode remains a second defense.
+2. **Serialized key initialization.** Added one module-level in-flight coordinator for the SecureStore AES-256 key. Concurrent first use shares one load/generate/re-read/persist operation and one key result. Failed initialization clears the shared promise so a later attempt can recover. The key name, AES-256-GCM construction, 12-byte nonce, 16-byte tag, AAD, and device-only SecureStore policy are unchanged.
+3. **Recoverable encrypted commit.** Encrypted bytes now write to a unique app-owned temp reference in `reviewed-media`, then move/replace the stable final reference with overwrite semantics; temp state is removed after partial-write or final-commit failure. A prior stable media ID is replaceable rather than permanently blocked. The review UI retains the returned encrypted reference plus confirmed receipt when SQL metadata save fails and retries metadata only, without re-reading plaintext or re-encrypting. Plaintext cache deletion occurs only after durable encrypted commit.
+4. **Contain-mode tap geometry.** Added a pure content-rectangle mapper. It derives letterbox/pillarbox offsets from rendered and frame dimensions, rejects taps outside displayed image pixels, and normalizes valid taps relative to those pixels. Tests cover 2:1 and 1:2 images, centers, all content edges, and outside taps. The UI calls this mapper before creating a mask.
+5. **Hostile retry inputs.** `nextUploadAttempt` now validates state, integer attempts in 0..5, a finite valid `Date`, known result kind, and integer HTTP status in 100..599. Invalid inputs fail closed deterministically to `needs_user`, attempt 0, no schedule, and bounded `invalid_upload_attempt`. Only 500..599 (plus 408/429/network) retries. Stored waiting jobs require a valid schedule; all other states clear it.
+6. **Anchored references and deletion.** Drafts now store only `reviewed-media/<validatedMediaId>.agcm` in `reviewed_media_ref`. Native file creation resolves internal references beneath `Paths.document/reviewed-media`; legacy absolute `reviewed_media_path` values are cleared and excluded from save/list queries. Persistence rejects any rendered URI outside the owned reviewed-cache prefix before reading bytes, and cleanup accepts only owned `animalhelper-canonical-*` or `animalhelper-reviewed-*` JPEGs directly beneath `Paths.cache`. Traversal, attacker absolute paths, unrelated cache files, and gallery/content URIs are neither stored nor deleted. The ImagePicker source URI is no longer put in cleanup targets.
+7. **Draft identity.** Missing, empty, short, traversal-shaped, and otherwise invalid draft IDs now fail with `invalid_draft_id` rather than being stringified.
+
+### Preserved properties
+
+- Web processing and persistence adapters still fail closed with `secure_media_processing_unavailable`, and the Expo web bundle does not import native staging paths.
+- Final rendered bytes are re-hashed immediately before authenticated encryption and must match the exact confirmed receipt.
+- Automatic cat, people, and plate detector versions remain explicitly `unavailable`.
+- No media upload, publication, or client-side publication attestation was added.
+- Drafts still omit coordinates, tokens, selected-source URIs, and canonical URIs.
+- Technical package, scheme, bundle, database, and key identifiers remain unchanged. No credentials, real data, model weights, or service-role material were added.
+
+### GREEN and final verification
+
+Focused review suites:
+
+```text
+pnpm --filter @animalhelper/mobile test -- processor.native.test.ts draft-media.native.test.ts draft-media.coordinator.test.ts reviewed-draft.test.ts redaction-geometry.test.ts redaction-review.test.tsx processor.web.test.ts upload-job.test.ts draft-policy.test.ts draft-store.native.test.ts
+Test Suites: 10 passed, 10 total
+Tests:       75 passed, 75 total
+```
+
+Fresh final command chain:
+
+```text
+pnpm --filter @animalhelper/mobile test
+pnpm --filter @animalhelper/mobile typecheck
+pnpm --filter @animalhelper/mobile build
+pnpm install --lockfile-only --frozen-lockfile --offline
+git diff --check
+```
+
+Result:
+
+```text
+Test Suites: 17 passed, 17 total
+Tests:       96 passed, 96 total
+tsc --noEmit: exit 0
+expo export --platform web: exit 0 (14 static routes, including /report/redaction-review)
+frozen offline lockfile validation: exit 0, already up to date
+git diff --check: exit 0 (Windows LF-to-CRLF advisories only)
+```
+
+No dependency or lockfile change was needed in fix round 1. The existing Windows-only native-device release gate remains: representative iOS and Android development builds must still validate ImageManipulator, Skia JPEG structure/output, atomic file replacement, SecureStore, and AES-GCM end to end.

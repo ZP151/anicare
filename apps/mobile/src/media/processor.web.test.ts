@@ -21,7 +21,7 @@ describe('web secure media boundary', () => {
       draftId: 'draft-12345678',
       mediaId: 'media-12345678',
       review: { status: 'reviewed', rendered: canonical, masks: [], receipt: null } as MediaReviewState,
-      transientUris: [],
+      processorCacheUris: [],
     })).rejects.toThrow('secure_media_processing_unavailable');
   });
 });

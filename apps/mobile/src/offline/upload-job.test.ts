@@ -58,4 +58,23 @@ describe('private media upload retry policy', () => {
     expect(nextUploadAttempt(job, { kind: 'network' }, now, () => Number.NaN).nextAttemptAt)
       .toBe('2026-08-27T00:00:02.000Z');
   });
+
+  it.each([-2, 1.5, 6])('fails closed for invalid current attempt count %s', (attempts) => {
+    expect(nextUploadAttempt({ ...job, attempts }, { kind: 'network' }, now, () => 0.5)).toEqual({
+      state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt',
+    });
+  });
+
+  it('fails closed for an invalid current state or clock', () => {
+    expect(nextUploadAttempt({ ...job, state: 'hostile' as UploadJob['state'] }, { kind: 'network' }, now, () => 0.5).lastError)
+      .toBe('invalid_upload_attempt');
+    expect(nextUploadAttempt(job, { kind: 'network' }, new Date(Number.NaN), () => 0.5).lastError)
+      .toBe('invalid_upload_attempt');
+  });
+
+  it.each([600, Number.POSITIVE_INFINITY, 503.5, 99])('fails closed for invalid HTTP status %s', (status) => {
+    expect(nextUploadAttempt(job, { kind: 'http', status }, now, () => 0.5)).toEqual({
+      state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'invalid_upload_attempt',
+    });
+  });
 });

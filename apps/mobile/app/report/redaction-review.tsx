@@ -17,7 +17,9 @@ import { colors, radii } from '../../src/design/theme';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
 import { persistReviewedMedia } from '../../src/media/draft-media';
 import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
+import { normalizePreviewTap } from '../../src/media/redaction-geometry';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
+import { saveReviewedDraft, type PendingReviewedDraft } from '../../src/media/reviewed-draft';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 
 const EMPTY_REVIEW: MediaReviewState = { status: 'idle', rendered: null, masks: [], receipt: null };
@@ -45,7 +47,8 @@ export default function RedactionReviewScreen() {
   const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const transientUris = useRef<string[]>([]);
+  const [pending, setPending] = useState<PendingReviewedDraft | null>(null);
+  const processorCacheUris = useRef<string[]>([]);
 
   async function choosePhoto() {
     setBusy(true);
@@ -59,12 +62,12 @@ export default function RedactionReviewScreen() {
       });
       if (selected.canceled || !selected.assets[0]?.uri) return;
       const sourceUri = selected.assets[0].uri;
-      transientUris.current = [sourceUri];
+      processorCacheUris.current = [];
       const prepared = await prepareCanonical(sourceUri);
-      transientUris.current.push(prepared.uri);
+      processorCacheUris.current.push(prepared.uri);
       setCanonical(prepared);
       const rendered = await renderOpaqueMasks({ canonical: prepared, masks: [] });
-      transientUris.current.push(rendered.uri);
+      processorCacheUris.current.push(rendered.uri);
       setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
       setStatus('Tap anywhere on the image to burn in an opaque mask. Review every pixel before confirming.');
     } catch (error) {
@@ -77,16 +80,23 @@ export default function RedactionReviewScreen() {
   }
 
   async function addMask(event: GestureResponderEvent) {
-    if (!canonical || busy) return;
-    const x = event.nativeEvent.locationX / previewSize.width;
-    const y = event.nativeEvent.locationY / previewSize.height;
-    const masks = [...review.masks, maskAt(x, y)];
+    if (!canonical || busy || pending) return;
+    const tap = normalizePreviewTap({
+      imageWidth: review.rendered?.width ?? canonical.width,
+      imageHeight: review.rendered?.height ?? canonical.height,
+      frameWidth: previewSize.width,
+      frameHeight: previewSize.height,
+      x: event.nativeEvent.locationX,
+      y: event.nativeEvent.locationY,
+    });
+    if (!tap) return;
+    const masks = [...review.masks, maskAt(tap.x, tap.y)];
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks }));
     setBusy(true);
     setStatus('Rendering the updated opaque masks…');
     try {
       const rendered = await renderOpaqueMasks({ canonical, masks });
-      transientUris.current.push(rendered.uri);
+      processorCacheUris.current.push(rendered.uri);
       setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
       setStatus('Mask applied to final pixels. Review again before confirming.');
     } catch {
@@ -97,13 +107,13 @@ export default function RedactionReviewScreen() {
   }
 
   async function clearMasks() {
-    if (!canonical || busy) return;
+    if (!canonical || busy || pending) return;
     const masks: PrivacyMask[] = [];
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks }));
     setBusy(true);
     try {
       const rendered = await renderOpaqueMasks({ canonical, masks });
-      transientUris.current.push(rendered.uri);
+      processorCacheUris.current.push(rendered.uri);
       setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
       setStatus('Masks cleared. Review the newly rendered pixels before confirming.');
     } catch {
@@ -115,9 +125,9 @@ export default function RedactionReviewScreen() {
 
   async function confirmPrivateCopy() {
     if (!draftId || !review.rendered || busy) return;
-    const confirmed = reduceMediaReview(review, { type: 'confirm' });
-    setReview(confirmed);
-    if (!canStageMedia(confirmed) || !confirmed.receipt) {
+    const confirmed = pending ? review : reduceMediaReview(review, { type: 'confirm' });
+    if (!pending) setReview(confirmed);
+    if (!pending && (!canStageMedia(confirmed) || !confirmed.receipt)) {
       setStatus('The exact rendered pixels must be reviewed again.');
       return;
     }
@@ -125,23 +135,22 @@ export default function RedactionReviewScreen() {
     setBusy(true);
     setStatus('Encrypting the reviewed copy on this device…');
     try {
-      const persisted = await persistReviewedMedia({
-        draftId,
-        mediaId,
-        review: confirmed,
-        transientUris: transientUris.current,
+      const result = await saveReviewedDraft({
+        draftId, mediaId, review: confirmed, processorCacheUris: processorCacheUris.current, pending,
+      }, {
+        persistMedia: persistReviewedMedia,
+        saveMetadata: saveOfflineDraft,
       });
-      await saveOfflineDraft({
-        id: draftId,
-        mediaId,
-        encryptedReviewedPath: persisted.encryptedReviewedPath,
-        receipt: confirmed.receipt,
-        uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null },
-      });
+      if (result.status === 'metadata_retry') {
+        setPending(result.pending);
+        setStatus('The media is encrypted. Retry saving its private draft reference; re-encryption is not required.');
+        return;
+      }
+      setPending(null);
       setStatus('Encrypted reviewed media saved privately. It has not been uploaded or published.');
       router.back();
     } catch {
-      setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
+      if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
       setStatus('Private encrypted storage failed. The media was not staged.');
     } finally {
       setBusy(false);
@@ -164,7 +173,7 @@ export default function RedactionReviewScreen() {
       {review.rendered ? (
         <Pressable
           accessibilityLabel="Reviewed image. Tap to add an opaque mask"
-          disabled={busy}
+          disabled={busy || !!pending}
           onLayout={rememberPreviewSize}
           onPress={addMask}
           style={styles.previewFrame}
@@ -180,11 +189,11 @@ export default function RedactionReviewScreen() {
       {review.rendered ? (
         <>
           <Text style={styles.help}>{review.masks.length} manual opaque mask{review.masks.length === 1 ? '' : 's'} · tap the image to add one.</Text>
-          <Pressable accessibilityRole="button" disabled={busy || review.masks.length === 0} onPress={clearMasks} style={styles.secondary}>
+          <Pressable accessibilityRole="button" disabled={busy || !!pending || review.masks.length === 0} onPress={clearMasks} style={styles.secondary}>
             <Text style={styles.secondaryText}>Clear all masks</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" disabled={busy || review.status === 'reviewed'} onPress={confirmPrivateCopy} style={styles.action}>
-            <Text style={styles.actionText}>{busy ? 'Working…' : 'Confirm exact pixels and encrypt'}</Text>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={confirmPrivateCopy} style={styles.action}>
+            <Text style={styles.actionText}>{busy ? 'Working…' : pending ? 'Retry saving encrypted reference' : 'Confirm exact pixels and encrypt'}</Text>
           </Pressable>
         </>
       ) : null}
