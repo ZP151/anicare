@@ -94,3 +94,22 @@ Changes:
 Focused green: 3 suites, 9 tests passed.
 
 Full verification: 8 suites, 20 tests passed; mobile typecheck passed; Expo web build passed with 13 static routes.
+
+## Fix round 3
+
+Red command:
+
+```text
+pnpm --filter @animalhelper/mobile test -- review-policy.test.ts
+```
+
+Result: the new prototype-chain regression initially passed incorrectly, proving `equalVersionMaps` could accept an inherited detector version property.
+
+Changes:
+
+- Required every compared detector key to be an own property of the right-hand map using `Object.prototype.hasOwnProperty.call`, preserving order-independent exact key/value equality and supporting null-prototype maps.
+- Added the inherited-property regression while retaining equivalent insertion-order and missing/extra/value mismatch coverage.
+
+Focused green: 1 suite, 6 tests passed.
+
+Full verification: 8 suites, 21 tests passed; mobile typecheck passed; Expo web build passed with 13 static routes.

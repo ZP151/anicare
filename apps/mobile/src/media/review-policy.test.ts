@@ -63,6 +63,16 @@ describe('media review policy', () => {
     }
   });
 
+  it('does not accept inherited detector version properties', () => {
+    const inherited = Object.create({ people: 'v1' }) as Record<string, string>;
+    inherited.other = 'v2';
+    expect(canStageMedia({
+      ...reviewedState,
+      rendered: { ...rendered, detectorVersions: inherited },
+      receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'v1' } },
+    })).toBe(false);
+  });
+
   it('rejects receipts with mismatched media bytes or dimensions', () => {
     for (const receipt of [
       { ...reviewedState.receipt!, sanitizedSha256: 'different' },
