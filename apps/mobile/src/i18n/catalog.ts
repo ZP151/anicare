@@ -18,7 +18,7 @@ export type MessageKey =
 
 const messages: Record<Locale, Record<MessageKey, string>> = {
   en: {
-    'app.name': 'AnimalHelper',
+    'app.name': 'WhiskerCommons',
     'nearby.title': 'Cats nearby',
     'nearby.subtitle': 'Identity-backed sightings from your community.',
     'nearby.privacyNote': 'Public locations are blurred and shown after a safety delay.',
@@ -34,7 +34,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'common.beta': 'Closed beta',
   },
   'zh-CN': {
-    'app.name': 'AnimalHelper',
+    'app.name': 'WhiskerCommons',
     'nearby.title': '附近的社区猫',
     'nearby.subtitle': '查看与稳定身份关联的社区目击记录。',
     'nearby.privacyNote': '公开位置已模糊处理，并延迟显示。',
@@ -82,4 +82,3 @@ export function getTabDefinitions(locale: Locale): TabDefinition[] {
     { route: 'profile', label: 'Profile', accessibilityLabel: 'Your profile' },
   ];
 }
-

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import './styles.css';
 
 export const metadata: Metadata = {
-  title: 'AnimalHelper Operations',
+  title: 'WhiskerCommons Operations',
   description: 'Private moderation and identity operations console',
 };
 
@@ -15,4 +15,3 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-

@@ -2,7 +2,7 @@
 
 ## Decision
 
-AnimalHelper is a free, privacy-first community-cat identity and care ledger for a closed Singapore pilot. It helps caregivers recognise a cat, understand recent care, coordinate safely and correct community knowledge. It is not a pet-owner social network, veterinary diagnostic tool, public real-time tracker or marketplace.
+WhiskerCommons is a free, privacy-first community-cat identity and care ledger for a closed Singapore pilot. It helps caregivers recognise a cat, understand recent care, coordinate safely and correct community knowledge. It is not a pet-owner social network, veterinary diagnostic tool, public real-time tracker or marketplace.
 
 The first differentiator is AI-assisted cat identity. The model returns at most three candidates plus a “new cat” option, an explanation and a broad confidence band. A contributor choice is always tentative; an independent trusted reviewer confirms or rejects it. The system must prefer “unknown” over a confident false match.
 
@@ -55,4 +55,3 @@ Pause AI suggestions if any model gate fails. Pause new contributions if the mod
 - Show uncertainty and provenance; never make AI look authoritative.
 - Collect less: approximate public location, separate consent for training, no date of birth.
 - Governance is a feature: recusal, reversible proposals, appeals and auditability ship with the contribution flow.
-

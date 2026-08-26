@@ -1,6 +1,6 @@
-# AnimalHelper
+# WhiskerCommons
 
-AnimalHelper is a privacy-first, free community-cat identity and care record platform for a closed Singapore pilot. It treats AI as a review aid, never as an automatic identity authority.
+WhiskerCommons is a privacy-first, free community-cat identity and care record platform for a closed Singapore pilot. It treats AI as a review aid, never as an automatic identity authority.
 
 ## Current implementation
 

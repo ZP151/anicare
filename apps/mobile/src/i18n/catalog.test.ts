@@ -1,6 +1,11 @@
 import { getTabDefinitions, translate } from './catalog';
 
 describe('localization catalog', () => {
+  it('uses the WhiskerCommons display name in both locales', () => {
+    expect(translate('en', 'app.name')).toBe('WhiskerCommons');
+    expect(translate('zh-CN', 'app.name')).toBe('WhiskerCommons');
+  });
+
   it('defines the five approved tabs in stable route order for English', () => {
     expect(getTabDefinitions('en')).toEqual([
       { route: 'index', label: 'Nearby', accessibilityLabel: 'Nearby community cats' },
@@ -22,4 +27,3 @@ describe('localization catalog', () => {
     expect(translate('zh-CN', 'nearby.privacyNote')).toBe('公开位置已模糊处理，并延迟显示。');
   });
 });
-

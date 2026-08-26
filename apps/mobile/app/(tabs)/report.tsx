@@ -73,7 +73,7 @@ export default function ReportScreen() {
           risk,
           traits: {},
           notes: notes.trim() || null,
-          clientDedupeKey: Crypto.randomUUID(),
+          clientDedupeKey: draftId,
         },
       });
       setStatus(

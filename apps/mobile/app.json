@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AnimalHelper",
+    "name": "WhiskerCommons",
     "slug": "animalhelper",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -23,7 +23,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "AnimalHelper uses your location once to protect and associate a community-cat sighting. Exact coordinates are never public."
+          "locationWhenInUsePermission": "WhiskerCommons uses your location once to protect and associate a community-cat sighting. Exact coordinates are never public."
         }
       ],
       [

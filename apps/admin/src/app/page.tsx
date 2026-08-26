@@ -14,7 +14,7 @@ export default function OperationsPage() {
   return (
     <main>
       <aside>
-        <div className="brand"><span>🐾</span><strong>AnimalHelper</strong></div>
+        <div className="brand"><span>🐾</span><strong>WhiskerCommons</strong></div>
         <nav aria-label="Operations navigation">
           <a className="active" href="#queue">Review queue</a>
           <a href="#identity">Identity matches</a>
@@ -58,4 +58,3 @@ export default function OperationsPage() {
     </main>
   );
 }
-

@@ -30,4 +30,8 @@ describe('offline draft privacy', () => {
       risk: 'normal',
     });
   });
+
+  it('does not persist a raw selected-image URI', () => {
+    expect(sanitizeDraftForStorage({ id: 'd1', rawSourceUri: 'file:///raw.jpg', latitude: 1, accessToken: 'x' })).not.toHaveProperty('rawSourceUri');
+  });
 });

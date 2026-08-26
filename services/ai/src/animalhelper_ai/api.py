@@ -6,7 +6,7 @@ from mangum import Mangum
 from .handler import handle_identify
 
 
-app = FastAPI(title="AnimalHelper AI", version="0.1.0")
+app = FastAPI(title="WhiskerCommons AI", version="0.1.0")
 
 
 @app.get("/health")
@@ -23,4 +23,3 @@ def identify(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 lambda_handler = Mangum(app)
-
