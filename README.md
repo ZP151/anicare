@@ -44,9 +44,9 @@ python -m pip install -e "services/ai[dev]"
 pnpm --filter @animalhelper/ai dev
 ```
 
-Copy `.env.example` to a local untracked environment file and populate it with development-only values. `PRECISE_LOCATION_ENCRYPTION_KEY` must be a base64-encoded 32-byte key. Never reuse keys across environments.
+Copy `.env.example` to a local untracked environment file and populate it with development-only values. `PRECISE_LOCATION_ENCRYPTION_KEY` must be a base64-encoded 32-byte key. Never reuse keys across environments. Set `MEDIA_ALLOWED_ORIGIN` to the single trusted web origin for media Edge Functions; it is required there. Native requests have no `Origin` header and are authenticated normally, but browsers from an absent or different origin are rejected.
 
-Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable the Apple/Google providers before testing social sign-in. Invoke `private.apply_location_retention()` and `private.purge_expired_location_grants()` daily from a trusted database scheduler; only `service_role` can execute them.
+Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable the Apple/Google providers before testing social sign-in. Invoke `private.apply_location_retention()` and `private.purge_expired_location_grants()` daily from a trusted database scheduler; only `service_role` can execute them. Invoke `cleanup-media-staging` from the same trusted scheduler with its service credential: it handles orphaned private staging jobs, never deletes active quarantined media, and waits through signed-upload replay windows before physical deletion.
 
 ## Safety invariants
 

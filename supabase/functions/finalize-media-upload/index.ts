@@ -24,9 +24,10 @@ type FinalizationJob = Readonly<{
   recipe_version: string;
   detector_versions: Readonly<{ cats: 'unavailable'; people: 'unavailable'; plates: 'unavailable' }>;
   confirmed_at_local: string;
-  expires_at: string;
-  status: 'reserved' | 'cleanup_pending' | 'expired' | 'finalized';
+  reservation_expires_at: string;
+  status: 'reserved' | 'finalized' | 'deletion_pending';
   media_asset_id: string | null;
+  media_deleted_at: string | null;
 }>;
 
 function allowedCors(request: Request): HeadersInit | null {
@@ -88,7 +89,7 @@ function isExactUnavailableDetectorMap(value: unknown): value is FinalizationJob
 function finalizationJob(value: unknown): FinalizationJob | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const job = value as Partial<FinalizationJob>;
-  const validStatus = job.status === 'reserved' || job.status === 'cleanup_pending' || job.status === 'expired' || job.status === 'finalized';
+  const validStatus = job.status === 'reserved' || job.status === 'finalized' || job.status === 'deletion_pending';
   return typeof job.job_id === 'string' && stableId.test(job.job_id) &&
     typeof job.object_path === 'string' && job.object_path === `jobs/${job.job_id}.jpg` &&
     typeof job.sha256 === 'string' && sha256.test(job.sha256) &&
@@ -97,8 +98,9 @@ function finalizationJob(value: unknown): FinalizationJob | null {
     typeof job.height === 'number' && Number.isInteger(job.height) && job.height > 0 && job.height <= 2048 &&
     job.recipe_version === 'jpeg-srgb-2048-q88.v1' && isExactUnavailableDetectorMap(job.detector_versions) &&
     typeof job.confirmed_at_local === 'string' && Number.isFinite(Date.parse(job.confirmed_at_local)) &&
-    typeof job.expires_at === 'string' && Number.isFinite(Date.parse(job.expires_at)) && validStatus &&
-    (job.media_asset_id === null || typeof job.media_asset_id === 'string')
+    typeof job.reservation_expires_at === 'string' && Number.isFinite(Date.parse(job.reservation_expires_at)) && validStatus &&
+    (job.media_asset_id === null || typeof job.media_asset_id === 'string') &&
+    (job.media_deleted_at === null || typeof job.media_deleted_at === 'string' && Number.isFinite(Date.parse(job.media_deleted_at)))
     ? job as FinalizationJob
     : null;
 }
@@ -164,10 +166,10 @@ Deno.serve(async (request) => {
     .maybeSingle();
   const job = finalizationJob(jobData);
   if (jobError || !job) return json(request, { error: 'media_not_found_or_forbidden' }, 403);
-  if (job.status === 'finalized' && job.media_asset_id) {
+  if (job.status === 'finalized' && job.media_asset_id && job.media_deleted_at === null) {
     return json(request, { mediaAssetId: job.media_asset_id, status: 'quarantined' }, 200);
   }
-  if (job.status !== 'reserved' || Date.parse(job.expires_at) <= Date.now()) {
+  if (job.status !== 'reserved' || Date.parse(job.reservation_expires_at) <= Date.now()) {
     return json(request, { error: 'media_finalization_conflict' }, 409);
   }
 

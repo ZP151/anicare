@@ -27,6 +27,14 @@ export type FinalizeMediaInput = Readonly<{
   sha256: string;
 }>;
 
+export type MediaReservationResponse = Readonly<{
+  jobId: string;
+  mediaId: string;
+  reservationExpiresAt: string;
+  uploadCredentialExpiresAt: string;
+  upload: Readonly<{ signedUrl: string; token: string }>;
+}>;
+
 /**
  * This is intentionally an interface only. Task 2 persists an AHM1 encrypted
  * envelope and exposes no authenticated native read API, so no URI/File-based
@@ -60,6 +68,16 @@ function validSha256(value: unknown): value is string {
 function validConfirmedAt(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 40 &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function validSignedUpload(value: unknown): value is Readonly<{ signedUrl: string; token: string }> {
+  if (!hasExactKeys(value, ['signedUrl', 'token']) || typeof value.signedUrl !== 'string' ||
+      typeof value.token !== 'string' || value.token.length < 1 || value.token.length > 8192) return false;
+  try {
+    return new URL(value.signedUrl).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function validDetectorVersions(value: unknown): value is Readonly<{ cats: 'unavailable'; people: 'unavailable'; plates: 'unavailable' }> {
@@ -106,4 +124,26 @@ export function buildFinalizeMediaRequest(input: FinalizeMediaInput): FinalizeMe
     throw new Error('invalid_media_finalization');
   }
   return { sightingId: input.sightingId, mediaId: input.mediaId, sha256: input.sha256.toLowerCase() };
+}
+
+/**
+ * This maps a narrow response contract only. It intentionally does not start
+ * transport: Task 2 has no native authenticated reviewed-artifact reader yet.
+ */
+export function parseMediaReservationResponse(value: unknown): MediaReservationResponse {
+  if (!hasExactKeys(value, [
+    'jobId', 'mediaId', 'reservationExpiresAt', 'uploadCredentialExpiresAt', 'upload',
+  ]) || !isStableMediaId(value.jobId) || !isStableMediaId(value.mediaId) ||
+      !validConfirmedAt(value.reservationExpiresAt) || !validConfirmedAt(value.uploadCredentialExpiresAt) ||
+      Date.parse(value.uploadCredentialExpiresAt) <= Date.parse(value.reservationExpiresAt) ||
+      !validSignedUpload(value.upload)) {
+    throw new Error('invalid_media_reservation_response');
+  }
+  return {
+    jobId: value.jobId as string,
+    mediaId: value.mediaId as string,
+    reservationExpiresAt: value.reservationExpiresAt as string,
+    uploadCredentialExpiresAt: value.uploadCredentialExpiresAt as string,
+    upload: value.upload as Readonly<{ signedUrl: string; token: string }>,
+  };
 }

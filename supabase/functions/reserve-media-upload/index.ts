@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
+import { UPLOAD_CREDENTIAL_VALIDITY_MS } from '../_shared/media-staging-lifecycle.ts';
+
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 32 * 1024;
 const stableId = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/;
@@ -27,7 +29,7 @@ const requestSchema = z.object({
 type ReservationRow = Readonly<{
   job_id: string;
   object_path: string;
-  expires_at: string;
+  reservation_expires_at: string;
   finalized_media_asset_id: string | null;
 }>;
 
@@ -86,7 +88,7 @@ function reservationRow(value: unknown): ReservationRow | null {
   const row = value as Partial<ReservationRow>;
   return typeof row.job_id === 'string' && stableId.test(row.job_id) &&
     typeof row.object_path === 'string' && row.object_path === `jobs/${row.job_id}.jpg` &&
-    typeof row.expires_at === 'string' && Number.isFinite(Date.parse(row.expires_at)) &&
+    typeof row.reservation_expires_at === 'string' && Number.isFinite(Date.parse(row.reservation_expires_at)) &&
     (row.finalized_media_asset_id === null || typeof row.finalized_media_asset_id === 'string')
     ? row as ReservationRow
     : null;
@@ -166,10 +168,24 @@ Deno.serve(async (request) => {
     return json(request, { error: 'service_unavailable' }, 503);
   }
 
+  // Storage's createSignedUploadUrl has a fixed two-hour validity and does not
+  // take an expiry argument. Record that separate server-derived deadline
+  // before ever returning the token to a client.
+  const uploadCredentialExpiresAt = new Date(Date.now() + UPLOAD_CREDENTIAL_VALIDITY_MS).toISOString();
+  const { data: recordedExpiry, error: recordError } = await service.rpc('record_media_upload_token_expiry', {
+    p_job_id: row.job_id,
+    p_uploader_id: callerData.user.id,
+    p_upload_token_expires_at: uploadCredentialExpiresAt,
+  });
+  if (recordError || typeof recordedExpiry !== 'string' || !Number.isFinite(Date.parse(recordedExpiry))) {
+    return json(request, { error: 'service_unavailable' }, 503);
+  }
+
   return json(request, {
     jobId: row.job_id,
     mediaId: payload.mediaId,
-    expiresAt: row.expires_at,
+    reservationExpiresAt: row.reservation_expires_at,
+    uploadCredentialExpiresAt: recordedExpiry,
     upload: { signedUrl: signedUpload.signedUrl, token: signedUpload.token },
   }, 201);
 });

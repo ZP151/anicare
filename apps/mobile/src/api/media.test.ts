@@ -1,6 +1,7 @@
 import {
   buildFinalizeMediaRequest,
   buildReserveMediaRequest,
+  parseMediaReservationResponse,
   type ReserveMediaInput,
 } from './media';
 
@@ -54,5 +55,38 @@ describe('reviewed media API mapping', () => {
       mediaId: 'media-123456',
       sha256: 'a'.repeat(64),
     });
+  });
+
+  it('accepts distinct truthful reservation and signed-upload credential expiries without exposing a path', () => {
+    expect(parseMediaReservationResponse({
+      jobId: 'job-12345678',
+      mediaId: 'media-123456',
+      reservationExpiresAt: '2026-08-27T00:10:00.000Z',
+      uploadCredentialExpiresAt: '2026-08-27T02:00:00.000Z',
+      upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
+    })).toEqual({
+      jobId: 'job-12345678',
+      mediaId: 'media-123456',
+      reservationExpiresAt: '2026-08-27T00:10:00.000Z',
+      uploadCredentialExpiresAt: '2026-08-27T02:00:00.000Z',
+      upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
+    });
+  });
+
+  it('rejects legacy single expiry and raw storage-path response fields', () => {
+    expect(() => parseMediaReservationResponse({
+      jobId: 'job-12345678',
+      mediaId: 'media-123456',
+      expiresAt: '2026-08-27T00:10:00.000Z',
+      upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
+    })).toThrow('invalid_media_reservation_response');
+    expect(() => parseMediaReservationResponse({
+      jobId: 'job-12345678',
+      mediaId: 'media-123456',
+      reservationExpiresAt: '2026-08-27T00:10:00.000Z',
+      uploadCredentialExpiresAt: '2026-08-27T02:00:00.000Z',
+      storagePath: 'jobs/private.jpg',
+      upload: { signedUrl: 'https://storage.example.invalid/object', token: 'opaque-token' },
+    })).toThrow('invalid_media_reservation_response');
   });
 });
