@@ -91,8 +91,8 @@ export default function ReportScreen() {
 
   async function saveDraft() {
     try {
-      await saveOfflineDraft({ id: draftId, photoUri, notes, risk });
-      setStatus('Draft saved in this device’s encrypted store. Precise location is not included.');
+      await saveOfflineDraft({ id: draftId, notes, risk });
+      setStatus('Draft saved without the selected photo or precise location. Add the photo again when you resume.');
     } catch {
       setStatus('Encrypted offline drafts are available in native iOS and Android builds.');
     }

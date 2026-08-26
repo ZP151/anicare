@@ -11,6 +11,8 @@ const rendered = {
   width: 100,
   height: 100,
   byteLength: 42,
+  recipeVersion: 'jpeg-srgb-2048-q88.v1',
+  detectorVersions: {},
 };
 
 const readyState: MediaReviewState = {
@@ -46,5 +48,10 @@ describe('media review policy', () => {
       status: 'needs_review',
       receipt: null,
     });
+  });
+
+  it('rejects receipts with mismatched processing provenance', () => {
+    expect(canStageMedia({ ...reviewedState, receipt: { ...reviewedState.receipt!, recipeVersion: 'other.v1' } })).toBe(false);
+    expect(canStageMedia({ ...reviewedState, receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'detector.v2' } } })).toBe(false);
   });
 });

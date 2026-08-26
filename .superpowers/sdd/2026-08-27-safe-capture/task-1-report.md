@@ -53,3 +53,24 @@ Result: exit code 0; Expo web export completed with 13 static routes.
 - The design spec referenced by the brief (`docs/superpowers/specs/2026-08-27-safe-capture-design.md`) is not present in the workspace; implementation follows the exact Task 1 brief and plan interfaces.
 - `detectorVersions` is initialized empty because automatic detectors are intentionally unavailable in this task; later processing can populate it.
 - The existing auth callback copy still says `AnimalHelper`; it was not in the brief’s modification list and is a user-facing surface that may merit a later branding sweep.
+
+## Fix round 1
+
+Red command:
+
+```text
+pnpm --filter @animalhelper/mobile test -- review-policy.test.ts draft-policy.test.ts callback.test.tsx
+```
+
+Result: failed for the actual unsafe behaviors: stored drafts still returned `photoUri`, callback branding had no WhiskerCommons message export, and a receipt with mismatched recipe provenance was accepted by `canStageMedia`.
+
+Changes:
+
+- Removed `photoUri` from `StoredDraft`, stopped Report from passing the selected URI to draft storage, removed URI reads/writes from the native store, and clear legacy `photo_uri` values during database initialization. Save status now truthfully says the photo must be added again.
+- Changed auth callback visible copy to WhiskerCommons and added a source-level assertion under `src` (outside Expo routes).
+- Added immutable recipe/detector provenance to `RenderedMedia`; receipts copy it and `canStageMedia` requires exact recipe and detector-version binding.
+- Corrected the missing-spec concern: the referenced design spec exists at `docs/superpowers/specs/2026-08-27-safe-capture-design.md`.
+
+Focused green: 3 suites, 7 tests passed.
+
+Full verification: 7 suites, 17 tests passed; mobile typecheck passed; Expo web build passed with 13 static routes (the test is not exported as a route).

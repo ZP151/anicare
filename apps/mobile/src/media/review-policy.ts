@@ -1,13 +1,11 @@
 import type { MediaReviewEvent, MediaReviewState, PrivacyMask, ReviewReceipt } from './contracts';
 
-const RECIPE_VERSION = 'jpeg-srgb-2048-q88.v1';
-
 function receiptFor(state: MediaReviewState, confirmedAtLocal: string): ReviewReceipt | null {
   if (!state.rendered) return null;
   return {
     sanitizedSha256: state.rendered.sha256,
-    recipeVersion: RECIPE_VERSION,
-    detectorVersions: {},
+    recipeVersion: state.rendered.recipeVersion,
+    detectorVersions: state.rendered.detectorVersions,
     width: state.rendered.width,
     height: state.rendered.height,
     byteLength: state.rendered.byteLength,
@@ -35,6 +33,8 @@ export function canStageMedia(state: MediaReviewState): boolean {
     state.rendered !== null &&
     state.receipt !== null &&
     state.receipt.sanitizedSha256 === state.rendered.sha256 &&
+    state.receipt.recipeVersion === state.rendered.recipeVersion &&
+    JSON.stringify(state.receipt.detectorVersions) === JSON.stringify(state.rendered.detectorVersions) &&
     state.receipt.width === state.rendered.width &&
     state.receipt.height === state.rendered.height &&
     state.receipt.byteLength === state.rendered.byteLength;

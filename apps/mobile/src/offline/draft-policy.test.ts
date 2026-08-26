@@ -5,7 +5,6 @@ describe('offline draft privacy', () => {
     expect(
       sanitizeDraftForStorage({
         id: 'draft-1',
-        photoUri: 'file:///cat.jpg',
         notes: 'white paws',
         risk: 'sensitive',
         latitude: 1.3521,
@@ -14,7 +13,6 @@ describe('offline draft privacy', () => {
       }),
     ).toEqual({
       id: 'draft-1',
-      photoUri: 'file:///cat.jpg',
       notes: 'white paws',
       risk: 'sensitive',
     });
@@ -25,7 +23,6 @@ describe('offline draft privacy', () => {
       sanitizeDraftForStorage({ id: 'draft-2', notes: '  tabby  ', risk: 'unknown' }),
     ).toEqual({
       id: 'draft-2',
-      photoUri: null,
       notes: 'tabby',
       risk: 'normal',
     });

@@ -17,6 +17,8 @@ export type RenderedMedia = Readonly<{
   width: number;
   height: number;
   byteLength: number;
+  recipeVersion: string;
+  detectorVersions: Readonly<Record<string, string>>;
 }>;
 
 export type ReviewReceipt = Readonly<{

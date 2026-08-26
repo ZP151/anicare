@@ -43,6 +43,8 @@ async function openDraftDatabase() {
       risk TEXT NOT NULL CHECK (risk IN ('normal', 'sensitive', 'critical')),
       updated_at TEXT NOT NULL
     );
+    -- Clear any selected source URI left by the legacy schema before use.
+    UPDATE sighting_drafts SET photo_uri = NULL;
   `);
   return database;
 }
@@ -56,15 +58,13 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
   const draft = sanitizeDraftForStorage(input);
   const database = await getDatabase();
   await database.runAsync(
-    `INSERT INTO sighting_drafts (id, photo_uri, notes, risk, updated_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO sighting_drafts (id, notes, risk, updated_at)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
-       photo_uri = excluded.photo_uri,
        notes = excluded.notes,
        risk = excluded.risk,
        updated_at = excluded.updated_at`,
     draft.id,
-    draft.photoUri,
     draft.notes,
     draft.risk,
     new Date().toISOString(),
@@ -76,13 +76,11 @@ export async function listOfflineDrafts(): Promise<StoredDraft[]> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<{
     id: string;
-    photo_uri: string | null;
     notes: string;
     risk: StoredDraft['risk'];
-  }>('SELECT id, photo_uri, notes, risk FROM sighting_drafts ORDER BY updated_at DESC');
+  }>('SELECT id, notes, risk FROM sighting_drafts ORDER BY updated_at DESC');
   return rows.map((row) => ({
     id: row.id,
-    photoUri: row.photo_uri,
     notes: row.notes,
     risk: row.risk,
   }));
