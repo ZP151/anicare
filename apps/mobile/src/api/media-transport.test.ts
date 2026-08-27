@@ -143,6 +143,27 @@ describe('private media transport', () => {
     });
   });
 
+  it.each([
+    ['an empty unauthorized response', 401, null],
+    ['a malformed conflict response', 409, '{malformed-error-body'],
+    ['an oversized unavailable response', 503, 'oversized-error-body-'.repeat(4 * 1024)],
+  ])('retains the HTTP status for %s without serializing its body', async (_name, status, body) => {
+    const fetchMock = jest.fn(async () => new Response(body, { status }));
+
+    try {
+      await reserveMediaUpload({
+        sightingId: 'sighting-123456', mediaId: 'media-123456', receipt, accessToken,
+      }, dependencies(fetchMock as unknown as typeof fetch));
+      throw new Error('expected transport failure');
+    } catch (error) {
+      expect(error).toEqual({
+        stage: 'reserve', kind: 'http', status, code: 'media_transport_failed',
+      });
+      expect(JSON.stringify(error)).not.toContain(body ?? 'empty-response-body');
+      expect(Object.keys(error as object).sort()).toEqual(['code', 'kind', 'stage', 'status']);
+    }
+  });
+
   it('reconstructs the signed PUT URL and sends the scoped artifact backing ArrayBuffer without auth headers', async () => {
     const fetchMock = jest.fn(async () => new Response(null, { status: 200 }));
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);

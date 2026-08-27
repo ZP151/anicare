@@ -141,16 +141,22 @@ async function postEdgeJson(
   } catch {
     throw failure(stage, 'network', null, 'network_error');
   }
+  if (!response.ok) {
+    let code: MediaTransportFailureCode = 'media_transport_failed';
+    try {
+      code = edgeErrorCode(await readBoundedJson(response));
+    } catch {
+      // Error payloads are optional. Preserve the HTTP result while retaining no body.
+    }
+    throw failure(stage, 'http', response.status, code);
+  }
   if (response.redirected) throw failure(stage, 'invalid_response', null, 'invalid_response');
 
-  let responseBody: unknown;
   try {
-    responseBody = await readBoundedJson(response);
+    return await readBoundedJson(response);
   } catch {
     throw failure(stage, 'invalid_response', null, 'invalid_response');
   }
-  if (!response.ok) throw failure(stage, 'http', response.status, edgeErrorCode(responseBody));
-  return responseBody;
 }
 
 export function parseMediaFinalizationResponse(value: unknown): MediaFinalizationResponse {
