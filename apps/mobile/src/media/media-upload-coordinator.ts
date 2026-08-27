@@ -340,13 +340,6 @@ async function readAndPut(
           await untilAbort(putOperation, signal);
         } catch (error) {
           // A completed PUT is remote truth: preserve it locally as finalizing before settling cancellation.
-          if (dependencies.cancellationSignal?.aborted) {
-            try {
-              await putOperation;
-            } catch {
-              throw error;
-            }
-          }
           if (!putSucceeded) throw error;
         }
         return { putConflict: false, accessToken: activeToken };

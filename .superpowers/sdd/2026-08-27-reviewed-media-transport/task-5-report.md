@@ -475,3 +475,21 @@ successful PUT, then stores bounded waiting with `resumeState: finalizing`.
 - The exception is limited to finalizing bookkeeping; ordinary post-abort
   mutations remain blocked, while fifth-attempt retry-limit behavior remains
   bounded.
+
+## Whole-branch fix — Batch H (bounded cancellation correction)
+
+### TDD evidence
+
+RED: the post-PUT cancellation regression initially observed no finalizing
+transition. GREEN: `pnpm --filter @animalhelper/mobile test --
+media-upload-coordinator.test.ts` passed 1 suite / 44 tests after moving the
+cancellation to the finalizing CAS boundary.
+
+### Invariants
+
+- A PUT promise is never awaited after cancellation. Token, reserve and PUT
+  remain individually deadline/abort bounded while decrypted bytes are scoped;
+  late PUT completion cannot write local state.
+- A PUT known to have completed before the finalizing CAS is recorded through
+  the owner/revision-bound CAS, then cancellation settles bounded waiting with
+  `resumeState: finalizing`.

@@ -45,12 +45,13 @@ describe('crash-safe media upload coordinator', () => {
   it('records finalizing before settling a cancellation that arrives after PUT succeeds', async () => {
     const run = uploadHarness();
     const cancellation = new AbortController();
+    const transition = run.dependencies.transitionClaimedMediaUpload;
     run.dependencies = {
       ...run.dependencies,
       cancellationSignal: cancellation.signal,
-      putReservedMedia: async () => {
-        run.events.push('put');
-        cancellation.abort();
+      transitionClaimedMediaUpload: async (id, revision, next) => {
+        if (next.state === 'finalizing') cancellation.abort();
+        return transition(id, revision, next);
       },
     };
 
