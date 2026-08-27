@@ -7,6 +7,7 @@ export type ProcessorCacheLifecycle = Readonly<{
   beginAsyncWork(): void;
   endAsyncWork(): Promise<void>;
   requestCleanup(): Promise<void>;
+  reactivate(): void;
   abandonAll(): Promise<void>;
   ownedUris(): readonly string[];
   cleanupOwned(uris: readonly string[]): Promise<void>;
@@ -115,6 +116,12 @@ export function createProcessorCacheLifecycle(cleanup: ProcessorCacheCleanup): P
       cleanupRequested = true;
       await flushRequestedCleanup();
       await waitForCleanup();
+    },
+    reactivate() {
+      cleanupRequested = false;
+      const waiters = cleanupWaiters;
+      cleanupWaiters = [];
+      for (const resolve of waiters) resolve();
     },
     async abandonAll() {
       currentToken = null;

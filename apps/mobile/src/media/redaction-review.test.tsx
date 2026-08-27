@@ -81,4 +81,14 @@ describe('private redaction review screen', () => {
     await waitFor(() => expect(cleanupProcessorCacheUris).toHaveBeenCalledWith([canonical.uri]));
     expect(view.getByText('The photo could not be prepared safely. Nothing was staged.')).toBeTruthy();
   });
+
+  it('keeps the review UI intact when the picker is cancelled', async () => {
+    jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: true, assets: [] } as never);
+    const view = await render(<RedactionReviewScreen />);
+
+    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
+
+    expect(view.getByText('Choose photo for private review')).toBeTruthy();
+    expect(cleanupProcessorCacheUris).not.toHaveBeenCalled();
+  });
 });

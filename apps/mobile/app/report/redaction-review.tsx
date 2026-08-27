@@ -61,6 +61,7 @@ export default function RedactionReviewScreen() {
 
   useEffect(() => {
     mountedRef.current = true;
+    cacheLifecycle.reactivate();
     return () => {
       mountedRef.current = false;
       renderCoordinator.cancel();
@@ -74,8 +75,6 @@ export default function RedactionReviewScreen() {
     setBusy(true);
     setStatus('Preparing a private review copy…');
     try {
-      await cacheLifecycle.startSelection(operation.token);
-      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       const selected = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
@@ -83,6 +82,11 @@ export default function RedactionReviewScreen() {
         quality: 1,
       });
       if (selected.canceled || !selected.assets[0]?.uri || !renderCoordinator.isCurrent(operation.token)) return;
+      if (!mountedRef.current) return;
+      setCanonical(null);
+      setReview(EMPTY_REVIEW);
+      await cacheLifecycle.startSelection(operation.token);
+      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       const sourceUri = selected.assets[0].uri;
       const prepared = await prepareCanonical(sourceUri);
       await cacheLifecycle.adopt(operation.token, prepared.uri);

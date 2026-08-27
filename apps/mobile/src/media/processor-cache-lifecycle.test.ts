@@ -37,6 +37,20 @@ describe('processor cache lifecycle', () => {
     ]);
   });
 
+  it('keeps the current review owned while a replacement picker is pending or cancelled', async () => {
+    const { cleaned, lifecycle } = setup();
+    await lifecycle.startSelection(1);
+    await lifecycle.adopt(1, 'file:///cache/animalhelper-reviewed-current.jpg');
+
+    // A coordinator token can be reserved while the picker is open. The
+    // lifecycle is not replaced until a source is actually selected.
+    expect(lifecycle.ownedUris()).toEqual(['file:///cache/animalhelper-reviewed-current.jpg']);
+    expect(cleaned).toEqual([]);
+
+    await lifecycle.startSelection(2);
+    expect(cleaned).toEqual([['file:///cache/animalhelper-reviewed-current.jpg']]);
+  });
+
   it('defers unmount cleanup until in-flight processing has stopped', async () => {
     const { cleaned, lifecycle } = setup();
     await lifecycle.startSelection(1);
@@ -68,5 +82,25 @@ describe('processor cache lifecycle', () => {
     expect(cleaned).toEqual([[
       'file:///cache/animalhelper-reviewed-current.jpg',
     ]]);
+  });
+
+  it('reactivates only through an explicit mount transition, while late abandoned output is still deleted', async () => {
+    const { cleaned, lifecycle } = setup();
+    await lifecycle.startSelection(1);
+    await lifecycle.adopt(1, 'file:///cache/animalhelper-reviewed-old.jpg');
+    await lifecycle.requestCleanup();
+
+    lifecycle.reactivate();
+    await lifecycle.startSelection(2);
+    lifecycle.beginAsyncWork();
+    await lifecycle.adopt(2, 'file:///cache/animalhelper-reviewed-new.jpg');
+    await lifecycle.adopt(1, 'file:///cache/animalhelper-reviewed-late.jpg');
+    await lifecycle.endAsyncWork();
+
+    expect(cleaned).toEqual([
+      ['file:///cache/animalhelper-reviewed-old.jpg'],
+      ['file:///cache/animalhelper-reviewed-late.jpg'],
+    ]);
+    expect(lifecycle.ownedUris()).toEqual(['file:///cache/animalhelper-reviewed-new.jpg']);
   });
 });
