@@ -96,10 +96,17 @@ class CallbackStore:
             return self._states[event.job_id]
 
         current = self._states.get(event.job_id)
-        if current is not None:
+        if current is None:
+            if event.status != "queued":
+                raise ValueError("first callback state must be queued")
+        else:
             if event.attempt < current.attempt:
+                # Keep an idempotency ledger entry for a stale delivery, but
+                # never treat it as an accepted/current state transition.
                 self._events[key] = event
                 return current
+            if event.emitted_at < current.updated_at:
+                raise ValueError("state-changing callback timestamp moved backwards")
             if current.status in TerminalStatus:
                 raise ValueError("terminal job state is immutable")
             valid = {

@@ -25,7 +25,7 @@ def assess_identity_crop(
     face_count: int | None,
     quality: float,
     padding: float,
-    exif_present: bool = False,
+    exif_present: bool | None = None,
     metadata_present: bool | None = None,
     redaction_confirmed: bool,
     config: CropPolicyConfig | None = None,
@@ -36,6 +36,14 @@ def assess_identity_crop(
     exists here; unavailable/unknown count therefore yields ``needs_review``.
     Metadata presence and unconfirmed redaction always reject.
     """
+    if type(redaction_confirmed) is not bool:
+        raise TypeError("redaction_confirmed must be an explicit boolean")
+    if exif_present is not None and type(exif_present) is not bool:
+        raise TypeError("exif_present must be an explicit boolean when supplied")
+    if metadata_present is not None and type(metadata_present) is not bool:
+        raise TypeError("metadata_present must be an explicit boolean when supplied")
+    if face_count is not None and (type(face_count) is not int or face_count < 0):
+        raise TypeError("face_count must be a non-negative integer or None")
     policy = config or CropPolicyConfig()
     reasons: list[str] = []
     if box is not None:
@@ -45,10 +53,12 @@ def assess_identity_crop(
         width, height = 0.0, 0.0
     if not redaction_confirmed:
         reasons.append("redaction_unconfirmed")
-    if exif_present or metadata_present is True:
+    if exif_present is not False or metadata_present is not False:
         reasons.append("metadata_present")
     if (
-        not isinstance(width, (int, float))
+        type(width) is bool
+        or type(height) is bool
+        or not isinstance(width, (int, float))
         or not isinstance(height, (int, float))
         or not isfinite(width)
         or not isfinite(height)
@@ -60,9 +70,22 @@ def assess_identity_crop(
         reasons.append("out_of_bounds")
     elif width < policy.min_dimension or height < policy.min_dimension:
         reasons.append("tiny_crop")
-    if not isinstance(quality, (int, float)) or not isfinite(quality) or quality < policy.min_quality:
+    if (
+        type(quality) is bool
+        or not isinstance(quality, (int, float))
+        or not isfinite(quality)
+        or quality < policy.min_quality
+        or quality > 1
+    ):
         reasons.append("low_quality")
-    if not isinstance(padding, (int, float)) or not isfinite(padding) or padding > policy.max_padding:
+    if (
+        type(padding) is bool
+        or not isinstance(padding, (int, float))
+        or not isfinite(padding)
+        or padding < 0
+        or padding > policy.max_padding
+        or padding > 1
+    ):
         reasons.append("excess_padding")
     if face_count is None:
         reasons.append("detector_unavailable")

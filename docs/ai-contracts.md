@@ -29,8 +29,9 @@ are a bounded code list and bounded text.
 
 ## Embeddings (`embedding.v1`)
 
-An `EmbeddingRequest` binds a crop ID, exact model version, preprocessing
-version, and dimension `384`. A provider must return exactly 384 finite values
+An `EmbeddingRequest` and `EmbeddingVector` carry the exact wire field
+`contractVersion: "embedding.v1"`, binding a crop ID, exact model version,
+preprocessing version, and dimension `384`. A provider must return exactly 384 finite values
 with L2 norm within `1e-3` of one and the same binding metadata. Comparisons
 reject mixed model versions, preprocessing versions, dimensions, or bindings.
 `UnavailableEmbeddingProvider` fails closed. `SyntheticEmbeddingProvider` is
@@ -45,15 +46,23 @@ a server timestamp. Candidates are tentative suggestions only: AI never
 confirms identity. Independent human review in `match_reviews` is authoritative.
 
 The compatibility adapter accepts the existing `/v1/identify` evidence shape,
-validates it through the strict typed request, and emits only the allow-listed
-result fields.
+including numeric similarity evidence, only at a trusted internal adapter
+boundary. It validates that evidence through the strict typed request and emits
+only the allow-listed result fields. This score-bearing compatibility shape is
+not the public/untrusted API contract; external callers must not send image
+paths, bytes, vectors, locations, or arbitrary fields, and no numeric evidence
+is ever returned.
 
 ## Job callbacks (`identify-callback.v1`)
 
-Lifecycle is `queued -> running -> succeeded|failed|cancelled`. A callback is
+Lifecycle is `queued -> running -> succeeded|failed|cancelled`; the first
+accepted event must be `queued`. A callback is
 idempotent by `(jobId,eventId)`: an exact duplicate returns the same state and a
 conflicting reuse is rejected. Attempts are bounded integers and nondecreasing;
-stale attempts cannot replace a newer state. Terminal states are immutable.
+stale attempts cannot replace a newer state. State-changing event timestamps
+must be nondecreasing; equal timestamps are accepted in arrival order.
+Terminal states are immutable, and invalid transitions/timestamp rollback are
+not recorded as accepted state.
 Succeeded events require a bounded `JobResult`; failed events require only a
 bounded error code. Result and error are mutually exclusive by status. The
 in-memory `CallbackStore` is a pure reducer contract test double: no queue

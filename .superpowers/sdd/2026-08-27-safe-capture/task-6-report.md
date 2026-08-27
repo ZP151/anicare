@@ -66,3 +66,14 @@ Ruff import/annotation/timezone findings, and construct typed
 - `.venv\\Scripts\\python -m mypy services/ai/src` — clean.
 - `.venv\\Scripts\\python -m compileall -q services/ai/src services/ai/tests` — passed.
 - `git diff --check` — passed.
+
+## Review follow-up
+
+The callback reducer now requires an initial `queued` event, rejects timestamp
+rollback while accepting equal timestamps in arrival order, and keeps stale
+attempts out of current state. Crop policy inputs are runtime-checked so
+malformed booleans, unknown metadata, nonfinite values, and out-of-range
+quality/padding cannot be accepted. Embedding request/vector wire payloads now
+carry `contractVersion: "embedding.v1"`, and compatibility checks include it.
+The compatibility documentation identifies score-bearing evidence as a
+trusted internal adapter boundary and distinguishes it from the public API.

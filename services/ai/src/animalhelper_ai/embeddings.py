@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import random
-from typing import Annotated, Protocol
+from typing import Annotated, Literal, Protocol
 
 from pydantic import Field, FiniteFloat, field_validator
 
@@ -17,6 +17,9 @@ _Version = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0
 
 
 class EmbeddingRequest(StrictModel):
+    contract_version: Literal["embedding.v1"] = Field(
+        default="embedding.v1", alias="contractVersion"
+    )
     dimension: int = Field(default=EMBEDDING_DIMENSION, ge=EMBEDDING_DIMENSION, le=EMBEDDING_DIMENSION)
     crop_id: _Id = Field(alias="cropId")
     model_version: _Version = Field(alias="modelVersion")
@@ -24,6 +27,9 @@ class EmbeddingRequest(StrictModel):
 
 
 class EmbeddingVector(StrictModel):
+    contract_version: Literal["embedding.v1"] = Field(
+        default="embedding.v1", alias="contractVersion"
+    )
     dimension: int = Field(default=EMBEDDING_DIMENSION, ge=EMBEDDING_DIMENSION, le=EMBEDDING_DIMENSION)
     values: list[FiniteFloat] = Field(min_length=EMBEDDING_DIMENSION, max_length=EMBEDDING_DIMENSION)
     model_version: _Version = Field(alias="modelVersion")
@@ -52,6 +58,7 @@ class SyntheticEmbeddingProvider:
         values = [generator.gauss(0.0, 1.0) for _ in range(EMBEDDING_DIMENSION)]
         norm = math.sqrt(sum(item * item for item in values))
         return EmbeddingVector(
+            contractVersion=request.contract_version,
             dimension=EMBEDDING_DIMENSION,
             values=[item / norm for item in values],
             modelVersion=request.model_version,
@@ -71,6 +78,8 @@ class UnavailableEmbeddingProvider:
 
 def ensure_compatible(vector: EmbeddingVector, request: EmbeddingRequest) -> None:
     if (
+        vector.contract_version != request.contract_version
+        or
         vector.model_version != request.model_version
         or vector.preprocessing_version != request.preprocessing_version
         or vector.crop_id != request.crop_id
@@ -80,6 +89,8 @@ def ensure_compatible(vector: EmbeddingVector, request: EmbeddingRequest) -> Non
 
 def ensure_vectors_compatible(left: EmbeddingVector, right: EmbeddingVector) -> None:
     if (
+        left.contract_version != right.contract_version
+        or
         left.dimension != right.dimension
         or left.model_version != right.model_version
         or left.preprocessing_version != right.preprocessing_version
