@@ -3,6 +3,8 @@ import { MAX_REVIEWED_MEDIA_BYTES, type ReviewReceipt } from '../media/contracts
 import { isReviewedMediaReference } from '../media/media-reference';
 import type { UploadJob } from './upload-job';
 
+export const UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION = 'unsupported' as const;
+
 export type StoredDraft = {
   id: string;
   notes: string;
@@ -10,7 +12,7 @@ export type StoredDraft = {
   mediaId?: string;
   sightingId?: string;
   encryptedReviewedRef?: string;
-  encryptionVersion?: 'aes-256-gcm.v1';
+  encryptionVersion?: 'aes-256-gcm.v1' | typeof UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION;
   receipt?: ReviewReceipt;
   uploadJob?: UploadJob;
 };

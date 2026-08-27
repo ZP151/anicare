@@ -10,6 +10,8 @@ import {
   saveReviewedMediaJournalWithDependencies,
 } from './draft-store.native';
 import { selectReviewedMediaSweepTargets } from '../media/media-reference';
+import { recoverPendingReviewedDrafts } from '../media/reviewed-draft';
+import { UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION } from './draft-policy';
 
 describe('native draft storage privacy boundary', () => {
   it('never writes or reads photo_uri and clears legacy values', () => {
@@ -130,10 +132,48 @@ describe('native draft storage privacy boundary', () => {
     ]);
     expect(drafts).toHaveLength(2);
     expect(drafts[0].encryptedReviewedRef).toBe('reviewed-media/media-12345678.commit-12345678.agcm');
+    expect(drafts[0].encryptionVersion).toBe('aes-256-gcm.v1');
     expect(drafts[1]).toEqual({ id: 'draft-87654321', notes: 'corrupt receipt', risk: 'sensitive' });
     expect(selectReviewedMediaSweepTargets([
       'reviewed-media/media-87654321.commit-87654321.agcm',
     ])).toEqual([]);
+  });
+
+  it.each([null, 'aes-256-gcm.v2'])('keeps a persisted %s version row recoverable as needs_user/version_mismatch', async (encryptionVersion) => {
+    const receipt = JSON.stringify({
+      sanitizedSha256: 'a'.repeat(64),
+      recipeVersion: 'jpeg-srgb-2048-q88.v1',
+      detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+      width: 100,
+      height: 100,
+      byteLength: 100,
+      confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+    });
+    const drafts = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'preserved', risk: 'sensitive', media_id: 'media-12345678',
+      sighting_id: 'sighting-12345678', reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: encryptionVersion, review_receipt_json: receipt,
+      upload_state: 'upload_pending', upload_attempts: 2, next_attempt_at: null, last_error: null,
+    }]);
+    expect(drafts).toEqual([expect.objectContaining({
+      id: 'draft-12345678',
+      notes: 'preserved',
+      risk: 'sensitive',
+      mediaId: 'media-12345678',
+      sightingId: 'sighting-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
+    })]);
+
+    const events: string[] = [];
+    await recoverPendingReviewedDrafts(drafts, {
+      cleanupStaleProcessorCaches: async () => undefined,
+      inspectArtifact: async () => { events.push('inspect'); return 'valid'; },
+      finalizeJournal: async () => { events.push('finalize'); },
+      markNeedsUser: async (_journal, error) => { events.push(`needs_user:${error}`); },
+      sweepArtifacts: async () => undefined,
+    });
+    expect(events).toEqual(['needs_user:version_mismatch']);
   });
 
   it.each([

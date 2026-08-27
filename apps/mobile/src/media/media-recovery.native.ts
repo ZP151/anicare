@@ -1,4 +1,4 @@
-import { listOfflineDrafts, saveOfflineDraft } from '../offline/draft-store';
+import { listOfflineDrafts, markReviewedMediaVersionMismatch, saveOfflineDraft } from '../offline/draft-store';
 import type { StoredDraft } from '../offline/draft-policy';
 import { sweepOwnedProcessorCaches, sweepOwnedReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { recoverPendingReviewedDrafts, type ReviewedMediaJournal } from './reviewed-draft';
@@ -27,6 +27,10 @@ export async function recoverPendingMediaDrafts(): Promise<void> {
       await saveOfflineDraft(mediaDraftUpdate(draft, journal, 'upload_pending', null));
     },
     markNeedsUser: async (journal, error) => {
+      if (error === 'version_mismatch') {
+        await markReviewedMediaVersionMismatch(journal.draftId);
+        return;
+      }
       const draft = byId.get(journal.draftId);
       if (!draft) return;
       await saveOfflineDraft(mediaDraftUpdate(draft, journal, 'needs_user', error));

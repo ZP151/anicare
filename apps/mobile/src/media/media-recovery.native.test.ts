@@ -1,5 +1,6 @@
 jest.mock('../offline/draft-store', () => ({
   listOfflineDrafts: jest.fn(),
+  markReviewedMediaVersionMismatch: jest.fn(),
   saveOfflineDraft: jest.fn(),
 }));
 jest.mock('./draft-media', () => ({
@@ -8,8 +9,8 @@ jest.mock('./draft-media', () => ({
   verifyReviewedMedia: jest.fn(),
 }));
 
-import { listOfflineDrafts } from '../offline/draft-store';
-import { sweepOwnedProcessorCaches } from './draft-media';
+import { listOfflineDrafts, markReviewedMediaVersionMismatch, saveOfflineDraft } from '../offline/draft-store';
+import { sweepOwnedProcessorCaches, sweepOwnedReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { recoverPendingMediaDrafts } from './media-recovery.native';
 
 describe('native startup media recovery order', () => {
@@ -23,5 +24,28 @@ describe('native startup media recovery order', () => {
 
     await expect(recoverPendingMediaDrafts()).rejects.toThrow('secure_store_locked');
     expect(events).toEqual(['cache_cleanup', 'list_drafts']);
+  });
+
+  it('persists a deserialized unsupported version as needs_user/version_mismatch without artifact inspection', async () => {
+    jest.mocked(listOfflineDrafts).mockResolvedValue([{
+      id: 'draft-12345678', notes: 'preserved', risk: 'sensitive', mediaId: 'media-12345678',
+      sightingId: 'sighting-12345678', encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'unsupported' as never,
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+      uploadJob: { state: 'upload_pending', attempts: 2, nextAttemptAt: null, lastError: null },
+    }]);
+    jest.mocked(sweepOwnedProcessorCaches).mockResolvedValue(undefined);
+    jest.mocked(sweepOwnedReviewedMedia).mockResolvedValue(undefined);
+    jest.mocked(markReviewedMediaVersionMismatch).mockResolvedValue(undefined);
+
+    await recoverPendingMediaDrafts();
+
+    expect(markReviewedMediaVersionMismatch).toHaveBeenCalledWith('draft-12345678');
+    expect(verifyReviewedMedia).not.toHaveBeenCalled();
+    expect(saveOfflineDraft).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,10 @@ import type { MediaReviewState, ReviewReceipt } from './contracts';
 import type { ReviewedMediaArtifactStatus } from './draft-media';
 import { createReviewedMediaReference, isReviewedMediaReference, isStableMediaId } from './media-reference';
 import { canStageMedia } from './review-policy';
-import type { StoredDraft } from '../offline/draft-policy';
+import {
+  UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
+  type StoredDraft,
+} from '../offline/draft-policy';
 import type { UploadJobState } from '../offline/upload-job';
 
 export type ReviewedMediaJournal = Readonly<{
@@ -173,8 +176,19 @@ export async function recoverPendingReviewedDrafts(
   await dependencies.cleanupStaleProcessorCaches().catch(() => undefined);
   try {
     for (const draft of drafts) {
-      if (draft.uploadJob?.state !== 'local_persisting' || !draft.mediaId || !draft.encryptedReviewedRef ||
-          !draft.encryptionVersion || !draft.receipt) continue;
+      if (!draft.mediaId || !draft.encryptedReviewedRef || !draft.encryptionVersion || !draft.receipt) continue;
+      if (draft.encryptionVersion === UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION) {
+        if (draft.uploadJob?.state === 'needs_user' && draft.uploadJob.lastError === 'version_mismatch') continue;
+        await recoverReviewedDraft({
+          draftId: draft.id,
+          mediaId: draft.mediaId,
+          encryptedReviewedRef: draft.encryptedReviewedRef,
+          encryptionVersion: draft.encryptionVersion as never,
+          receipt: draft.receipt,
+        }, dependencies);
+        continue;
+      }
+      if (draft.uploadJob?.state !== 'local_persisting') continue;
       await recoverReviewedDraft({
         draftId: draft.id,
         mediaId: draft.mediaId,

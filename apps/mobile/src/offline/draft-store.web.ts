@@ -21,6 +21,10 @@ export async function saveReviewedMediaJournal(
   return unavailable();
 }
 
+export async function markReviewedMediaVersionMismatch(_id: string): Promise<void> {
+  return unavailable();
+}
+
 export async function deleteOfflineDraft(_id: string): Promise<void> {
   return unavailable();
 }

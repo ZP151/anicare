@@ -6,6 +6,7 @@ import {
   resumeReviewedDraftCommit,
   type ReviewedMediaJournal,
 } from './reviewed-draft';
+import { UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION } from '../offline/draft-policy';
 
 const receipt = {
   sanitizedSha256: 'a'.repeat(64),
@@ -211,6 +212,24 @@ describe('process-restart recovery', () => {
       'finalize',
       'sweep_temps',
     ]);
+  });
+
+  it('does not rewrite an unsupported-version row already persisted as needs_user/version_mismatch', async () => {
+    const events: string[] = [];
+    await recoverPendingReviewedDrafts([{
+      id: journal.draftId, notes: '', risk: 'normal', mediaId: journal.mediaId,
+      encryptedReviewedRef: journal.encryptedReviewedRef,
+      encryptionVersion: UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
+      receipt,
+      uploadJob: { state: 'needs_user', attempts: 2, nextAttemptAt: null, lastError: 'version_mismatch' },
+    }], {
+      cleanupStaleProcessorCaches: async () => { events.push('cleanup'); },
+      inspectArtifact: async () => { events.push('inspect'); return 'valid'; },
+      finalizeJournal: async () => { events.push('finalize'); },
+      markNeedsUser: async () => { events.push('needs_user'); },
+      sweepArtifacts: async () => { events.push('sweep'); },
+    });
+    expect(events).toEqual(['cleanup', 'sweep']);
   });
 
   it('selects fail-closed recovery without treating existence as validity', () => {

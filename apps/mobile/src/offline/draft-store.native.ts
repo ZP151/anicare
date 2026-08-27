@@ -6,7 +6,11 @@ import { Platform } from 'react-native';
 import { deleteReviewedMediaReference } from '../media/draft-media';
 import { isReviewedMediaReference } from '../media/media-reference';
 import type { ReviewedMediaJournal } from '../media/reviewed-draft';
-import { sanitizeDraftForStorage, type StoredDraft } from './draft-policy';
+import {
+  sanitizeDraftForStorage,
+  UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
+  type StoredDraft,
+} from './draft-policy';
 
 const DATABASE_KEY_NAME = 'animalhelper.offline-drafts.v1';
 const DATABASE_NAME = 'animalhelper-drafts.db';
@@ -46,6 +50,12 @@ export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   next_attempt_at = ?,
   last_error = ?
   WHERE id = ?`;
+export const MEDIA_VERSION_MISMATCH_SQL = `UPDATE sighting_drafts SET
+  upload_state = 'needs_user',
+  next_attempt_at = NULL,
+  last_error = 'version_mismatch'
+  WHERE id = ? AND reviewed_media_ref IS NOT NULL
+    AND (encryption_version IS NULL OR encryption_version <> 'aes-256-gcm.v1')`;
 const ENSURE_DRAFT_ROW_SQL = `INSERT OR IGNORE INTO sighting_drafts
   (id, notes, risk, updated_at) VALUES (?, '', 'normal', ?)`;
 
@@ -193,7 +203,7 @@ export async function saveReviewedMediaJournalWithDependencies(
     receipt: journal.receipt,
     uploadJob: { state, attempts: 0, nextAttemptAt: null, lastError: error },
   });
-  if (!validated.mediaId || !validated.encryptedReviewedRef || !validated.encryptionVersion ||
+  if (!validated.mediaId || !validated.encryptedReviewedRef || validated.encryptionVersion !== 'aes-256-gcm.v1' ||
       !validated.receipt || !validated.uploadJob) {
     throw new Error('invalid_reviewed_media_journal');
   }
@@ -253,6 +263,13 @@ export async function listOfflineDrafts(): Promise<StoredDraft[]> {
   return deserializeDraftRows(await database.getAllAsync<DraftRow>(DRAFT_LIST_SQL));
 }
 
+export async function markReviewedMediaVersionMismatch(id: string): Promise<void> {
+  const validated = sanitizeDraftForStorage({ id });
+  const database = await getDatabase();
+  const result = await database.runAsync(MEDIA_VERSION_MISMATCH_SQL, validated.id);
+  if (result.changes !== 1) throw new Error('missing_version_mismatched_media_journal');
+}
+
 export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
   const drafts: StoredDraft[] = [];
   for (const row of rows) {
@@ -267,14 +284,14 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
       continue;
     }
     try {
-      drafts.push(sanitizeDraftForStorage({
+      const otherwiseValid = sanitizeDraftForStorage({
         id: row.id,
         notes: row.notes,
         risk: row.risk,
         mediaId: row.media_id,
         sightingId: row.sighting_id ?? undefined,
         encryptedReviewedRef: row.reviewed_media_ref,
-        encryptionVersion: row.encryption_version,
+        encryptionVersion: 'aes-256-gcm.v1',
         receipt: JSON.parse(row.review_receipt_json),
         uploadJob: {
           state: row.upload_state,
@@ -282,7 +299,10 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
           nextAttemptAt: row.next_attempt_at,
           lastError: row.last_error,
         },
-      }));
+      });
+      drafts.push(row.encryption_version === 'aes-256-gcm.v1'
+        ? otherwiseValid
+        : { ...otherwiseValid, encryptionVersion: UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION });
     } catch {
       drafts.push(textOnly);
     }
