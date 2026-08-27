@@ -16,13 +16,15 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
 ## Sprint 2–3 — safe capture foundations (implemented, not pilot-ready)
 
 - Manual opaque-mask review, canonical JPEG re-rendering, metadata stripping,
-  receipt-bound private staging, retry policy and encrypted reviewed-media
-  recovery are implemented.
+  local receipt/journal boundaries, retry policy and encrypted reviewed-media
+  recovery are implemented. This does not include authenticated media transport.
 - Automatic person, licence-plate and cat detection are explicitly unavailable;
   native-device execution has not been completed.
-- Private Supabase staging/quarantine, cleanup contracts and strict JPEG
-  validation are implemented. Local migration, pgTAP, Deno/Edge and Storage
-  runtime execution has not run in this workspace.
+- Backend private Supabase staging/quarantine, cleanup contracts, strict JPEG
+  validation and mobile request/response contracts are implemented. The
+  authenticated artifact reader and reserve-to-signed-upload-to-finalize wiring
+  are intentionally absent; this is a blocking release gate. Local migration,
+  pgTAP, Deno/Edge and Storage runtime execution has not run in this workspace.
 - Narrow public feed/report/block and authenticated audited-admin contracts are
   implemented. Database runtime and two-session concurrency checks remain
   blocking gates.
@@ -30,9 +32,11 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
   trusted server residual validation exists; manual quarantine is not public
   publication.
 
-Exit gate: run the required Docker/Supabase/Deno checks, native-device review
-flow, adversarial redaction tests, public-projection tests and two-session
-concurrency checks. Do not label the branch pilot-ready before those checks.
+Exit gate: implement and test the authenticated artifact reader plus the
+reserve-to-signed-upload-to-finalize mobile flow; then run the required
+Docker/Supabase/Deno checks, native-device review flow, adversarial redaction
+tests, public-projection tests and two-session concurrency checks. Do not label
+the branch pilot-ready before those checks.
 
 ## Sprint 4–5 — AI identity alpha contracts (implemented skeleton)
 

@@ -14,11 +14,14 @@ names remain compatible technical identifiers.
   reviewed-media recovery. Automatic person, licence-plate and cat detectors,
   and native-device execution, are not implemented release gates.
 - SQLCipher offline report drafts whose stored form excludes coordinates and
-  access tokens; a reviewed source image is staged only after its receipt is
-  confirmed.
-- Private Supabase staging/quarantine, cleanup contracts and strict JPEG marker
-  validation. No media is promoted to public storage: only private staging and
-  manual quarantine are implemented.
+  access tokens, plus local reviewed-media receipt/journal boundaries. This is
+  not an authenticated media-upload transport.
+- Backend private Supabase staging/quarantine, cleanup contracts and strict JPEG
+  marker validation, plus mobile request/response contracts, are implemented.
+  The authenticated artifact reader and reserve-to-signed-upload-to-finalize
+  wiring are intentionally absent and block release. No media is promoted to
+  public storage: private staging is a backend contract, not an end-to-end
+  mobile flow.
 - Narrow public-feed/report/block contracts and an authenticated, audited admin
   contract. Database runtime verification and two-session concurrency remain
   required gates.
@@ -92,6 +95,9 @@ completed and evidenced:
   licence and adversarial-corpus gates pass.
 - Keep public media promotion disabled until trusted server-side residual checks
   are implemented and verified. Client attestation alone never permits it.
+- Implement and test the authenticated artifact reader and the complete
+  reserve-to-signed-upload-to-finalize mobile transport. Until then, private
+  staging/quarantine is not an end-to-end media flow.
 - Use a qualified, consented labelled dataset before evaluating Recall@3 at
   least 85%, unknown rejection at least 80%, and likely false matches on unknown
   cats at most 5%. Current evaluation is synthetic only and establishes no

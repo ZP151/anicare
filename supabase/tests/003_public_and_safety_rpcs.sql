@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(57);
+select plan(65);
 
 select has_function(
   'public', 'list_public_sighting_feed', array['uuid', 'integer'],
@@ -416,13 +416,73 @@ select throws_ok(
   'P0001', 'target_not_available',
   'self-block fails with the generic unavailable-target response'
 );
-select throws_ok(
-  $$select public.block_user(
-      '00000000-0000-4000-8000-000000009999',
-      '00000000-0000-4000-8000-000000000909'
-    )$$,
-  'P0001', 'target_not_available',
-  'nonexistent block targets do not reveal account state'
+select is(
+  public.block_user(
+    '00000000-0000-4000-8000-000000009999',
+    '00000000-0000-4000-8000-000000000909'
+  ),
+  true,
+  'a nonexistent block target has the same successful no-op result'
+);
+select is(
+  public.block_user(
+    '00000000-0000-4000-8000-000000009999',
+    '00000000-0000-4000-8000-000000000909'
+  ),
+  true,
+  'a nonexistent block target retains idempotent retry semantics'
+);
+select is_empty(
+  $$select 1 from public.user_blocks
+      where blocker_id = '00000000-0000-4000-8000-000000000111'
+        and blocked_id = '00000000-0000-4000-8000-000000009999'$$,
+  'a nonexistent block target never reaches the foreign-key-backed block table'
+);
+select is(
+  (select count(*) from private.safety_requests
+    where actor_id = '00000000-0000-4000-8000-000000000111'
+      and request_id = '00000000-0000-4000-8000-000000000909'
+      and operation = 'block'),
+  1::bigint,
+  'a nonexistent block target records one idempotency outcome'
+);
+select is(
+  (select count(*) from audit.access_audit
+    where actor_id = '00000000-0000-4000-8000-000000000111'
+      and action = 'block_user'
+      and request_id = '00000000-0000-4000-8000-000000000909'),
+  1::bigint,
+  'a nonexistent block target appends one audit outcome'
+);
+select is(
+  public.unblock_user(
+    '00000000-0000-4000-8000-000000009999',
+    '00000000-0000-4000-8000-000000000916'
+  ),
+  true,
+  'a nonexistent unblock target has the same successful no-op result'
+);
+select is_empty(
+  $$select 1 from public.user_blocks
+      where blocker_id = '00000000-0000-4000-8000-000000000111'
+        and blocked_id = '00000000-0000-4000-8000-000000009999'$$,
+  'a nonexistent unblock target never reaches the foreign-key-backed block table'
+);
+select is(
+  (select count(*) from private.safety_requests
+    where actor_id = '00000000-0000-4000-8000-000000000111'
+      and request_id = '00000000-0000-4000-8000-000000000916'
+      and operation = 'unblock'),
+  1::bigint,
+  'a nonexistent unblock target records one idempotency outcome'
+);
+select is(
+  (select count(*) from audit.access_audit
+    where actor_id = '00000000-0000-4000-8000-000000000111'
+      and action = 'unblock_user'
+      and request_id = '00000000-0000-4000-8000-000000000916'),
+  1::bigint,
+  'a nonexistent unblock target appends one audit outcome'
 );
 select throws_ok(
   $$delete from public.user_blocks
