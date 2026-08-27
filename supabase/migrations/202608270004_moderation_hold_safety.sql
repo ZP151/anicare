@@ -19,6 +19,14 @@ alter table private.sighting_restore_holds
     or (source_type in ('legal', 'safety', 'legacy_moderation') and source_report_id is null)
   );
 
+-- Expired rows are not active holds. Mark them released before creating the
+-- partial source key so historical expiry can never block a later activation.
+update private.sighting_restore_holds
+set released_at = pg_catalog.now()
+where released_at is null
+  and expires_at is not null
+  and expires_at <= pg_catalog.now();
+
 -- The former generic model permitted duplicate legal/safety rows. One active
 -- source-owned hold is sufficient to preserve the restrictive outcome; retire
 -- redundant legacy rows before installing the source key.
@@ -30,6 +38,7 @@ with duplicate_active_holds as (
     ) as duplicate_rank
   from private.sighting_restore_holds
   where released_at is null
+    and (expires_at is null or expires_at > pg_catalog.now())
 )
 update private.sighting_restore_holds hold
 set released_at = pg_catalog.now()
@@ -68,6 +77,17 @@ where report.content_type = 'sighting'
   and report.content_id is not null
 on conflict do nothing;
 
+create table private.service_sighting_hold_requests (
+  request_id uuid primary key,
+  sighting_id uuid not null references public.sightings(id) on delete restrict,
+  hold_type text not null check (hold_type in ('legal', 'safety')),
+  active boolean not null,
+  created_at timestamptz not null default pg_catalog.now()
+);
+
+alter table private.service_sighting_hold_requests enable row level security;
+revoke all on table private.service_sighting_hold_requests from public, anon, authenticated;
+
 create or replace function public.set_sighting_restore_hold(
   p_sighting_id uuid,
   p_hold_type text,
@@ -80,13 +100,31 @@ volatile
 security definer
 set search_path = pg_catalog
 as $$
+declare
+  prior private.service_sighting_hold_requests%rowtype;
 begin
   if p_sighting_id is null or p_request_id is null or p_hold_type is null or p_hold_type not in ('legal', 'safety') or p_active is null then
     raise exception 'invalid_sighting_restore_hold' using errcode = '22023';
   end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('sighting_restore_hold:' || p_request_id::text, 0));
+  select * into prior from private.service_sighting_hold_requests request
+  where request.request_id = p_request_id;
+  if found then
+    if prior.sighting_id is distinct from p_sighting_id or prior.hold_type is distinct from p_hold_type or prior.active is distinct from p_active then
+      raise exception 'idempotency_conflict' using errcode = 'P0001';
+    end if;
+    return true;
+  end if;
   perform 1 from public.sightings where id = p_sighting_id for update;
   if not found then raise exception 'moderation_target_not_available' using errcode = 'P0001'; end if;
 
+  update private.sighting_restore_holds
+     set released_at = pg_catalog.now()
+   where sighting_id = p_sighting_id
+     and source_type = p_hold_type
+     and released_at is null
+     and expires_at is not null
+     and expires_at <= pg_catalog.now();
   if p_active then
     insert into private.sighting_restore_holds (sighting_id, hold_type, source_type)
     values (p_sighting_id, p_hold_type, p_hold_type)
@@ -98,6 +136,8 @@ begin
        and source_type = p_hold_type
        and released_at is null;
   end if;
+  insert into private.service_sighting_hold_requests (request_id, sighting_id, hold_type, active)
+  values (p_request_id, p_sighting_id, p_hold_type, p_active);
   insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, request_id)
   values (auth.uid(), 'set_sighting_restore_hold', 'sighting', p_sighting_id, 'moderation_hold', p_request_id::text);
   return true;
@@ -185,5 +225,6 @@ grant execute on function public.set_sighting_restore_hold(uuid, text, boolean, 
 
 comment on function public.set_sighting_restore_hold(uuid, text, boolean, uuid) is 'Service-role-only legal and safety hold path. It has no admin UI surface and writes an audit event.';
 comment on table private.sighting_restore_holds is 'Durable source-owned moderation, legal, and safety visibility holds. Admin restore can release only its own auto-hide report hold.';
+comment on table private.service_sighting_hold_requests is 'Private idempotency ledger for trusted legal and safety hold operations.';
 
 commit;

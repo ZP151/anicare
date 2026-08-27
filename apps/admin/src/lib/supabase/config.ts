@@ -27,3 +27,7 @@ export function getAdminAppUrl(environment: Environment = process.env): string |
   if (!url || url.username || url.password || url.search || url.hash || (url.pathname !== '/' && url.pathname !== '')) return null;
   return url.origin;
 }
+
+export function isAdminLoginConfigured(environment: Environment = process.env): boolean {
+  return getAdminPublicSupabaseConfig(environment) !== null && getAdminAppUrl(environment) !== null;
+}

@@ -52,3 +52,26 @@ No deployment was performed.
 ### Review-fix database-runtime gate
 
 The local SQL runner remains unavailable: no Supabase CLI, PostgreSQL client/pgTAP runner, Docker daemon, or provisioned database is present. The new migration and pgTAP suites have therefore not executed here; they remain a required pre-deployment database gate. No deployment was performed.
+
+## Review-fix round 2
+
+- Reworked the Next 16 proxy to follow the Supabase SSR same-request cookie pattern: rotate request cookies first, recreate `NextResponse.next({ request })`, then copy the rotation to the browser response. A behavioural unit test now verifies both `Set-Cookie` and `x-middleware-request-cookie` carry the rotated value.
+- Made the session gate accept an unauthenticated outcome only for the exact plain-object `{ data: { user: null }, error: null }` shape. Missing, undefined, malformed, or extra result/data fields now fail closed as unavailable.
+- Tightened login availability: the page renders no form unless both the public Supabase configuration and canonical `ADMIN_APP_URL` are valid; unavailable configuration or client construction redirects the submit action to a generic unavailable state rather than falsely reporting a magic-link send.
+- Fixed hold expiry and service idempotency. The migration releases expired holds before the active source index, only deduplicates nonexpired active holds, retires expired rows before a new legal/safety activation, and records service request IDs in a private ledger. Exact retries return once without a duplicate audit; conflicting payload reuse fails closed.
+- Expanded pgTAP coverage for service idempotency, an expired legal activation, valid historical `created_at`/`expires_at` fixtures, public and archived visibility guards, and expiry-aware restoration. Current plan/assertion counts are 43 in `004_moderation_actions.sql` and 28 in `005_moderation_hold_safety.sql`.
+- Confirmed the lockfile remains surgically based on `13172a1`: it retains only the Supabase SSR/JS/cookie graph and explicit `server-only` importer, while the unrelated Next, Turbo, and Node type resolutions remain at the baseline values.
+
+### Review-fix round 2 verification
+
+- RED/GREEN: the proxy behavioural test initially observed `x-middleware-request-cookie=...stale`; after the response-recreation fix it passed.
+- RED/GREEN: malformed `getUser()` shape cases initially fell through to unauthenticated; exact plain-object/own-key validation now passes all cases.
+- RED/GREEN: missing admin login configuration initially lacked the availability guard; the pure configuration and page-source assertions now pass.
+- `pnpm --filter @animalhelper/admin test` — passed: 39 tests.
+- `pnpm --filter @animalhelper/admin typecheck` and `pnpm --filter @animalhelper/admin build` — passed.
+- `pnpm install --lockfile-only --offline --frozen-lockfile` — passed.
+- `pnpm verify` and `git diff --check` — passed.
+
+### Review-fix round 2 database-runtime gate
+
+There is still no local `supabase`, `psql`, `pg_prove`, Docker, or provisioned database runner. The revised migration and pgTAP coverage were not executable here and remain a required pre-deployment database gate. No deployment was performed.

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { getAdminSession } from './admin-session.js';
-import { getAdminAppUrl, getAdminPublicSupabaseConfig } from './supabase/config.js';
+import { getAdminAppUrl, getAdminPublicSupabaseConfig, isAdminLoginConfigured } from './supabase/config.js';
 import {
   getModerationReport,
   listModerationQueue,
@@ -38,6 +38,26 @@ describe('admin session gate', () => {
   it('classifies a malformed getUser payload as unavailable', async () => {
     const client = {
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 42 } }, error: null }) },
+      rpc: vi.fn(),
+    };
+
+    await expect(getAdminSession(async () => client as never)).resolves.toEqual({ state: 'unavailable' });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a missing result', undefined],
+    ['a missing error property', { data: { user: null } }],
+    ['an undefined error property', { data: { user: null }, error: undefined }],
+    ['a missing data property', { error: null }],
+    ['a non-object data value', { data: null, error: null }],
+    ['a missing user property', { data: {}, error: null }],
+    ['an undefined user property', { data: { user: undefined }, error: null }],
+    ['an unexpected result property', { data: { user: null }, error: null, session: null }],
+    ['an unexpected data property', { data: { user: null, session: null }, error: null }],
+  ])('classifies %s from getUser as unavailable', async (_label, payload) => {
+    const client = {
+      auth: { getUser: vi.fn().mockResolvedValue(payload) },
       rpc: vi.fn(),
     };
 
@@ -210,6 +230,15 @@ describe('admin public configuration', () => {
     expect(getAdminAppUrl({ ADMIN_APP_URL: 'https://admin.example.test/' })).toBe('https://admin.example.test');
     expect(getAdminAppUrl({ ADMIN_APP_URL: 'http://localhost:3000/' })).toBe('http://localhost:3000');
     expect(getAdminAppUrl({ ADMIN_APP_URL: 'http://admin.example.test' })).toBeNull();
+    expect(isAdminLoginConfigured({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    })).toBe(false);
+    expect(isAdminLoginConfigured({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+      ADMIN_APP_URL: 'https://admin.example.test',
+    })).toBe(true);
   });
 });
 

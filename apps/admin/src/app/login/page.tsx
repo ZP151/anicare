@@ -1,23 +1,38 @@
 import { redirect } from 'next/navigation';
 
-import { getAdminAppUrl } from '../../lib/supabase/config';
+import { getAdminAppUrl, isAdminLoginConfigured } from '../../lib/supabase/config';
 import { createAdminServerClient, createWritableAdminServerClient } from '../../lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; sent?: string }> }) {
-  const client = await createAdminServerClient();
+  const configured = isAdminLoginConfigured();
+  let client = null;
+  if (configured) {
+    try {
+      client = await createAdminServerClient();
+    } catch {
+      client = null;
+    }
+  }
   const parameters = await searchParams;
 
   async function requestSignIn(formData: FormData): Promise<void> {
     'use server';
 
+    const appUrl = getAdminAppUrl();
+    if (!isAdminLoginConfigured() || !appUrl) redirect('/login?error=unavailable');
+    let currentClient;
+    try {
+      currentClient = await createWritableAdminServerClient();
+    } catch {
+      redirect('/login?error=unavailable');
+    }
+    if (!currentClient) redirect('/login?error=unavailable');
     try {
       const email = formData.get('email');
-      const currentClient = await createWritableAdminServerClient();
-      const appUrl = getAdminAppUrl();
-      if (typeof email === 'string' && appUrl && currentClient) {
+      if (typeof email === 'string') {
         const callback = new URL('/auth/callback?next=/', appUrl);
         await currentClient.auth.signInWithOtp({
           email,
@@ -37,7 +52,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h1>Sign in</h1>
         {parameters.error ? <p role="alert">We could not complete that sign-in. Request a new link.</p> : null}
         {parameters.sent ? <p role="status">If an account can receive this email, a sign-in link has been sent.</p> : null}
-        {!client ? <p role="alert">The operations console is unavailable because its public connection is not configured.</p> : (
+        {!configured || !client ? <p role="alert">The operations console is unavailable because its required configuration is not available.</p> : (
           <form action={requestSignIn}>
             <label htmlFor="email">Email</label>
             <input id="email" name="email" type="email" autoComplete="email" required />
