@@ -37,8 +37,20 @@ export type SightingSubmission = CreateSightingSubmission | RecoverSightingSubmi
 export type StoredSightingSubmission = z.infer<typeof storedSightingSubmissionSchema>;
 export type SightingSubmissionResponse = z.infer<typeof sightingSubmissionResponseSchema>;
 
+export type SightingSubmissionHandlers<T> = Readonly<{
+  recover: (submission: RecoverSightingSubmission) => Promise<T>;
+  create: (submission: CreateSightingSubmission) => Promise<T>;
+}>;
+
 export function parseSightingSubmission(value: unknown): SightingSubmission {
   return z.union([createSubmissionSchema, recoverySubmissionSchema]).parse(value);
+}
+
+export function executeSightingSubmission<T>(
+  submission: SightingSubmission,
+  handlers: SightingSubmissionHandlers<T>,
+): Promise<T> {
+  return 'recoverExisting' in submission ? handlers.recover(submission) : handlers.create(submission);
 }
 
 export function parseStoredSightingSubmission(value: unknown): StoredSightingSubmission {
@@ -66,7 +78,7 @@ export function toSightingSubmissionResponse(
 }
 
 export function strictBearerToken(request: Request): string | null {
-  const match = request.headers.get('authorization')?.match(/^Bearer\s+([^\s]{1,8192})$/i);
+  const match = request.headers.get('authorization')?.match(/^Bearer +([^\s]{1,8192})$/i);
   return match?.[1] ?? null;
 }
 

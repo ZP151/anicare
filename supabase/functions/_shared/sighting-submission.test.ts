@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  executeSightingSubmission,
   ownedStoredSightingSubmission,
   parseSightingSubmission,
   parseStoredSightingSubmission,
+  strictBearerToken,
   toSightingSubmissionResponse,
 } from './sighting-submission.js';
 
@@ -33,6 +35,28 @@ describe('sighting submission contract', () => {
       ...createSubmission,
       recoverExisting: true,
     })).toThrow();
+  });
+
+  it('accepts only ASCII spaces between the bearer scheme and token', () => {
+    expect(strictBearerToken(new Request('https://example.invalid', {
+      headers: { authorization: 'Bearer access-token' },
+    }))).toBe('access-token');
+    expect(strictBearerToken(new Request('https://example.invalid', {
+      headers: { authorization: 'Bearer\taccess-token' },
+    }))).toBeNull();
+  });
+
+  it('returns a recovery miss without invoking the creation dependency', async () => {
+    const recover = vi.fn(async () => ({ kind: 'not_found' }));
+    const create = vi.fn(async () => ({ kind: 'created' }));
+
+    await expect(executeSightingSubmission({
+      clientDedupeKey: 'draft-12345678',
+      recoverExisting: true,
+    }, { recover, create })).resolves.toEqual({ kind: 'not_found' });
+
+    expect(recover).toHaveBeenCalledWith({ clientDedupeKey: 'draft-12345678', recoverExisting: true });
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('does not turn a different actor\'s stored sighting into a recovery response', () => {

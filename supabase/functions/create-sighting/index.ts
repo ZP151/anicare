@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { encryptPreciseLocation } from '../_shared/encryption.ts';
 import { prepareSightingRecord } from '../_shared/sighting-policy.ts';
 import {
+  executeSightingSubmission,
   ownedStoredSightingSubmission,
   parseSightingSubmission,
   readBoundedSightingSubmissionJson,
@@ -63,83 +64,86 @@ Deno.serve(async (request) => {
   if (userError || !userData.user) return json({ error: 'authentication_required' }, 401);
 
   const requestId = crypto.randomUUID();
-  if ('recoverExisting' in payload) {
-    const { data: stored, error: recoveryError } = await admin
-      .from('sightings')
-      .select('id, reporter_id, visibility, visible_at')
-      .eq('reporter_id', userData.user.id)
-      .eq('client_dedupe_key', payload.clientDedupeKey)
-      .maybeSingle();
-    if (recoveryError) return json({ error: 'submission_failed', requestId }, 500);
-    if (!stored) return json({ error: 'sighting_submission_not_found' }, 404);
+  return executeSightingSubmission(payload, {
+    recover: async (recovery) => {
+      const { data: stored, error: recoveryError } = await admin
+        .from('sightings')
+        .select('id, reporter_id, visibility, visible_at')
+        .eq('reporter_id', userData.user.id)
+        .eq('client_dedupe_key', recovery.clientDedupeKey)
+        .maybeSingle();
+      if (recoveryError) return json({ error: 'submission_failed', requestId }, 500);
+      if (!stored) return json({ error: 'sighting_submission_not_found' }, 404);
 
-    try {
-      const owned = ownedStoredSightingSubmission(stored, userData.user.id);
-      if (!owned) return json({ error: 'sighting_submission_not_found' }, 404);
-      return json(toSightingSubmissionResponse(owned, requestId), 200);
-    } catch {
-      return json({ error: 'submission_failed', requestId }, 500);
-    }
-  }
-
-  const encryptionKey = Deno.env.get('PRECISE_LOCATION_ENCRYPTION_KEY');
-  if (!encryptionKey) {
-    console.error('create-sighting is missing required server configuration');
-    return json({ error: 'service_unavailable' }, 503);
-  }
-  const keyBytes = decodeBase64Key(encryptionKey);
-  if (keyBytes.byteLength !== 32) {
-    console.error('PRECISE_LOCATION_ENCRYPTION_KEY must decode to 32 bytes');
-    return json({ error: 'service_unavailable' }, 503);
-  }
-
-  const publicRecord = prepareSightingRecord(payload);
-  const encrypted = await encryptPreciseLocation(
-    { latitude: payload.latitude, longitude: payload.longitude },
-    keyBytes,
-  );
-
-  const { data: sightingId, error: insertError } = await admin.rpc(
-    'create_sighting_with_location',
-    {
-      p_reporter_id: userData.user.id,
-      p_occurred_at: payload.occurredAt,
-      p_public_cell_id: publicRecord.publicCellId,
-      p_time_bucket: publicRecord.timeBucket,
-      p_risk: payload.risk,
-      p_visibility: publicRecord.visibility,
-      p_visible_at: publicRecord.visibleAt,
-      p_traits: payload.traits,
-      p_notes: payload.notes,
-      p_client_dedupe_key: payload.clientDedupeKey,
-      p_ciphertext: toPostgresBytea(encrypted.ciphertext),
-      p_nonce: toPostgresBytea(encrypted.nonce),
-      p_request_id: requestId,
+      try {
+        const owned = ownedStoredSightingSubmission(stored, userData.user.id);
+        if (!owned) return json({ error: 'sighting_submission_not_found' }, 404);
+        return json(toSightingSubmissionResponse(owned, requestId), 200);
+      } catch {
+        return json({ error: 'submission_failed', requestId }, 500);
+      }
     },
-  );
+    create: async (creation) => {
+      const encryptionKey = Deno.env.get('PRECISE_LOCATION_ENCRYPTION_KEY');
+      if (!encryptionKey) {
+        console.error('create-sighting is missing required server configuration');
+        return json({ error: 'service_unavailable' }, 503);
+      }
+      const keyBytes = decodeBase64Key(encryptionKey);
+      if (keyBytes.byteLength !== 32) {
+        console.error('PRECISE_LOCATION_ENCRYPTION_KEY must decode to 32 bytes');
+        return json({ error: 'service_unavailable' }, 503);
+      }
 
-  if (insertError) {
-    console.error('create_sighting_with_location failed', {
-      requestId,
-      code: insertError.code,
-    });
-    const conflict = insertError.code === '23505';
-    return json({ error: conflict ? 'duplicate_submission' : 'submission_failed', requestId }, conflict ? 409 : 500);
-  }
+      const publicRecord = prepareSightingRecord(creation);
+      const encrypted = await encryptPreciseLocation(
+        { latitude: creation.latitude, longitude: creation.longitude },
+        keyBytes,
+      );
 
-  const { data: stored, error: storedError } = await admin
-    .from('sightings')
-    .select('id, reporter_id, visibility, visible_at')
-    .eq('id', sightingId)
-    .eq('reporter_id', userData.user.id)
-    .maybeSingle();
-  if (storedError || !stored) return json({ error: 'submission_failed', requestId }, 500);
+      const { data: sightingId, error: insertError } = await admin.rpc(
+        'create_sighting_with_location',
+        {
+          p_reporter_id: userData.user.id,
+          p_occurred_at: creation.occurredAt,
+          p_public_cell_id: publicRecord.publicCellId,
+          p_time_bucket: publicRecord.timeBucket,
+          p_risk: creation.risk,
+          p_visibility: publicRecord.visibility,
+          p_visible_at: publicRecord.visibleAt,
+          p_traits: creation.traits,
+          p_notes: creation.notes,
+          p_client_dedupe_key: creation.clientDedupeKey,
+          p_ciphertext: toPostgresBytea(encrypted.ciphertext),
+          p_nonce: toPostgresBytea(encrypted.nonce),
+          p_request_id: requestId,
+        },
+      );
 
-  try {
-    const owned = ownedStoredSightingSubmission(stored, userData.user.id);
-    if (!owned) return json({ error: 'submission_failed', requestId }, 500);
-    return json(toSightingSubmissionResponse(owned, requestId), 201);
-  } catch {
-    return json({ error: 'submission_failed', requestId }, 500);
-  }
+      if (insertError) {
+        console.error('create_sighting_with_location failed', {
+          requestId,
+          code: insertError.code,
+        });
+        const conflict = insertError.code === '23505';
+        return json({ error: conflict ? 'duplicate_submission' : 'submission_failed', requestId }, conflict ? 409 : 500);
+      }
+
+      const { data: stored, error: storedError } = await admin
+        .from('sightings')
+        .select('id, reporter_id, visibility, visible_at')
+        .eq('id', sightingId)
+        .eq('reporter_id', userData.user.id)
+        .maybeSingle();
+      if (storedError || !stored) return json({ error: 'submission_failed', requestId }, 500);
+
+      try {
+        const owned = ownedStoredSightingSubmission(stored, userData.user.id);
+        if (!owned) return json({ error: 'submission_failed', requestId }, 500);
+        return json(toSightingSubmissionResponse(owned, requestId), 201);
+      } catch {
+        return json({ error: 'submission_failed', requestId }, 500);
+      }
+    },
+  });
 });
