@@ -23,8 +23,8 @@ class ImageQualityTests(unittest.TestCase):
                 exif_present=False, redaction_confirmed=True,
             )
             self.assertEqual(result.status, "rejected")
-            self.assertIn(reason, result.reasonCodes)
-        self.assertNotIn("detected", result.reasonText.lower())
+            self.assertIn(reason, result.reason_codes)
+        self.assertNotIn("detected", result.reason_text.lower())
 
     def test_policy_fails_closed_for_metadata_redaction_and_low_quality(self) -> None:
         result = assess_identity_crop(
@@ -32,7 +32,7 @@ class ImageQualityTests(unittest.TestCase):
             exif_present=True, redaction_confirmed=False,
         )
         self.assertEqual(result.status, "rejected")
-        self.assertTrue({"tiny_crop", "low_quality", "excess_padding", "metadata_present", "redaction_unconfirmed"}.issubset(result.reasonCodes))
+        self.assertTrue({"tiny_crop", "low_quality", "excess_padding", "metadata_present", "redaction_unconfirmed"}.issubset(result.reason_codes))
 
 
 if __name__ == "__main__":

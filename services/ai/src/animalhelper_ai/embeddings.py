@@ -11,7 +11,6 @@ from pydantic import Field, FiniteFloat, field_validator
 
 from .contracts import StrictModel, _Id
 
-
 EMBEDDING_DIMENSION = 384
 NORMALIZATION_TOLERANCE = 1e-3
 _Version = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")]

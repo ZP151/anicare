@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
@@ -41,7 +41,7 @@ class ContractTests(unittest.TestCase):
                 jobId="job-1",
                 candidates=[],
                 newCatRecommended=True,
-                generatedAt=datetime.now(),
+                generatedAt=datetime.now(UTC).replace(tzinfo=None),
             )
 
     def test_public_result_has_only_tentative_allowlisted_fields(self) -> None:
@@ -52,7 +52,7 @@ class ContractTests(unittest.TestCase):
                 IdentifyCandidate(animalId="cat-a", confidenceBand="possible", reasons=["coat"])
             ],
             newCatRecommended=False,
-            generatedAt=datetime.now(timezone.utc),
+            generatedAt=datetime.now(UTC),
         )
         serialized = result.model_dump(by_alias=True)
         self.assertNotIn("internalScore", serialized)

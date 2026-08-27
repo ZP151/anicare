@@ -52,3 +52,17 @@ Install the declared AI dependencies in a supported Python 3.12/3.13 runtime,
 then rerun `pnpm --filter @animalhelper/ai test` and the full `pnpm verify`.
 There is no production recognition or automatic publication claim from the
 synthetic fixture gate.
+
+## Follow-up verification
+
+The supported `.venv` (Python 3.12.13 with declared development dependencies)
+was used to correct Python-side Pydantic alias access in quality tests, clean
+Ruff import/annotation/timezone findings, and construct typed
+`IdentifyCandidate` values in the handler. The follow-up checks passed:
+
+- `.venv\\Scripts\\python -m pytest -q` — 21 passed.
+- `.venv\\Scripts\\python -m unittest discover -s services/ai/tests -v` — 21 passed.
+- `.venv\\Scripts\\python -m ruff check services/ai/src services/ai/tests` — clean.
+- `.venv\\Scripts\\python -m mypy services/ai/src` — clean.
+- `.venv\\Scripts\\python -m compileall -q services/ai/src services/ai/tests` — passed.
+- `git diff --check` — passed.

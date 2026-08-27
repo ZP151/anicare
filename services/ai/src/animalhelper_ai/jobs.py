@@ -6,14 +6,12 @@ network callback implementation.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic.types import AwareDatetime
 
 from .contracts import ConfidenceBand, IdentifyRequest, StrictModel, _Id, _Reason
-
 
 CallbackStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
 TerminalStatus = ("succeeded", "failed", "cancelled")
@@ -27,7 +25,7 @@ class JobResult(StrictModel):
     new_cat_recommended: bool = Field(alias="newCatRecommended")
 
     @model_validator(mode="after")
-    def matching_lengths_and_unique_ids(self) -> "JobResult":
+    def matching_lengths_and_unique_ids(self) -> JobResult:
         if len(self.candidate_ids) != len(self.confidence_bands):
             raise ValueError("candidate IDs and confidence bands must have matching lengths")
         if len(self.candidate_ids) != len(set(self.candidate_ids)):
@@ -60,7 +58,7 @@ class CallbackEvent(StrictModel):
     error: FailedError | None = None
 
     @model_validator(mode="after")
-    def status_payload(self) -> "CallbackEvent":
+    def status_payload(self) -> CallbackEvent:
         if self.status == "succeeded" and self.result is None:
             raise ValueError("succeeded callback requires result")
         if self.status == "failed" and self.error is None:

@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
@@ -8,7 +8,7 @@ from animalhelper_ai.jobs import CallbackEvent, CallbackStore, JobResult
 
 class JobTests(unittest.TestCase):
     def _event(self, event_id: str, status: str, attempt: int, **kwargs: object) -> CallbackEvent:
-        emitted_at = kwargs.pop("emittedAt", datetime.now(timezone.utc))
+        emitted_at = kwargs.pop("emittedAt", datetime.now(UTC))
         return CallbackEvent(
             jobId="job-1", eventId=event_id, status=status, attempt=attempt,
             emittedAt=emitted_at, **kwargs
@@ -44,7 +44,7 @@ class JobTests(unittest.TestCase):
 
     def test_callback_requires_timezone_and_status_specific_payload(self) -> None:
         with self.assertRaises(ValidationError):
-            self._event("evt-naive", "running", 1, emittedAt=datetime.now())
+            self._event("evt-naive", "running", 1, emittedAt=datetime.now(UTC).replace(tzinfo=None))
         with self.assertRaises(ValidationError):
             self._event("evt-bad", "running", 1, result=JobResult(
                 candidateIds=[], confidenceBands=[], reasons=["tentative"], newCatRecommended=True

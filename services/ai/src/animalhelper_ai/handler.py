@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .candidate_ranker import CandidateEvidence, rank_candidates
-from .contracts import IdentifyRequest, IdentifyResult
+from .contracts import IdentifyCandidate, IdentifyRequest, IdentifyResult
 
 
 def handle_identify(payload: dict[str, Any]) -> dict[str, Any]:
@@ -22,13 +22,13 @@ def handle_identify(payload: dict[str, Any]) -> dict[str, Any]:
         contractVersion="identify.v1",
         jobId=request.job_id,
         newCatRecommended=result.new_cat_recommended,
-        generatedAt=datetime.now(timezone.utc),
+        generatedAt=datetime.now(UTC),
         candidates=[
-            {
-                "animalId": candidate.animal_id,
-                "confidenceBand": candidate.confidence_band,
-                "reasons": list(candidate.reasons),
-            }
+            IdentifyCandidate(
+                animalId=candidate.animal_id,
+                confidenceBand=candidate.confidence_band,
+                reasons=list(candidate.reasons),
+            )
             for candidate in result.candidates
         ],
     )

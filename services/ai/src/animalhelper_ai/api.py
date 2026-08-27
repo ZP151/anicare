@@ -4,7 +4,6 @@ from mangum import Mangum
 from .contracts import IdentifyRequest
 from .handler import handle_identify
 
-
 app = FastAPI(title="WhiskerCommons AI", version="0.1.0")
 
 

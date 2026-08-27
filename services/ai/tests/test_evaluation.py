@@ -1,5 +1,5 @@
-import unittest
 import json
+import unittest
 from pathlib import Path
 
 from animalhelper_ai.evaluation import evaluate_open_set

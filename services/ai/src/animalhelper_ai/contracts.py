@@ -12,7 +12,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 from pydantic.types import AwareDatetime
 
-
 CONTRACT_VERSIONS = ("crop.v1", "embedding.v1", "identify.v1", "identify-callback.v1")
 ConfidenceBand = Literal["likely", "possible", "weak"]
 CropStatus = Literal["accepted", "needs_review", "rejected"]
@@ -42,7 +41,7 @@ class CropBox(StrictModel):
     height: Annotated[FiniteFloat, Field(gt=0.0, le=1.0)]
 
     @model_validator(mode="after")
-    def stays_in_frame(self) -> "CropBox":
+    def stays_in_frame(self) -> CropBox:
         if self.x + self.width > 1.0 or self.y + self.height > 1.0:
             raise ValueError("crop box overflows normalized frame")
         return self
@@ -109,7 +108,7 @@ class CropAssessment(StrictModel):
     reason_text: _Reason = Field(alias="reasonText")
 
     @model_validator(mode="after")
-    def forbid_direct_acceptance(self) -> "CropAssessment":
+    def forbid_direct_acceptance(self) -> CropAssessment:
         # Policy-created accepted assessments use model_construct through the
         # private factory below.  A caller cannot forge accepted via validation.
         if self.status == "accepted":
@@ -119,7 +118,7 @@ class CropAssessment(StrictModel):
     @classmethod
     def _from_policy(
         cls, status: CropStatus, reason_codes: list[str], reason_text: str
-    ) -> "CropAssessment":
+    ) -> CropAssessment:
         return cls.model_construct(
             contract_version="crop.v1", status=status,
             reason_codes=reason_codes[:8], reason_text=reason_text[:160]
