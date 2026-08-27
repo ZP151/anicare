@@ -1,0 +1,16 @@
+{
+  "known": [
+    {"expected": "synthetic-cat-001", "candidates": ["synthetic-cat-001", "synthetic-cat-002", "synthetic-cat-003"]},
+    {"expected": "synthetic-cat-002", "candidates": ["synthetic-cat-003", "synthetic-cat-002", "synthetic-cat-001"]},
+    {"expected": "synthetic-cat-003", "candidates": ["synthetic-cat-004", "synthetic-cat-001", "synthetic-cat-003"]},
+    {"expected": "synthetic-cat-004", "candidates": ["synthetic-cat-004", "synthetic-cat-002", "synthetic-cat-003"]},
+    {"expected": "synthetic-cat-005", "candidates": ["synthetic-cat-001", "synthetic-cat-005", "synthetic-cat-004"]},
+    {"expected": "synthetic-cat-006", "candidates": ["synthetic-cat-006", "synthetic-cat-004", "synthetic-cat-002"]},
+    {"expected": "synthetic-cat-007", "candidates": ["synthetic-cat-002", "synthetic-cat-007", "synthetic-cat-005"]},
+    {"expected": "synthetic-cat-008", "candidates": ["synthetic-cat-008", "synthetic-cat-006", "synthetic-cat-001"]},
+    {"expected": "synthetic-cat-009", "candidates": ["synthetic-cat-009", "synthetic-cat-003", "synthetic-cat-002"]},
+    {"expected": "synthetic-cat-010", "candidates": ["synthetic-cat-004", "synthetic-cat-010", "synthetic-cat-001"]}
+  ],
+  "unknown_rejected": [true, true, true, true, true, true, true, true, true, false],
+  "unknown_likely_match": [false, false, false, false, false, false, false, false, false, false]
+}

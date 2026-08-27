@@ -63,7 +63,7 @@ def _reasons(evidence: CandidateEvidence) -> tuple[str, ...]:
 
 
 def rank_candidates(evidence: list[CandidateEvidence]) -> RankingResult:
-    ranked = sorted(
+    ranked_candidates = sorted(
         (
             RankedCandidate(
                 animal_id=item.animal_id,
@@ -75,7 +75,15 @@ def rank_candidates(evidence: list[CandidateEvidence]) -> RankingResult:
         ),
         key=lambda candidate: candidate.internal_score,
         reverse=True,
-    )[:3]
+    )
+    ranked: list[RankedCandidate] = []
+    seen_ids: set[str] = set()
+    for candidate in ranked_candidates:
+        if candidate.animal_id in seen_ids:
+            continue
+        seen_ids.add(candidate.animal_id)
+        ranked.append(candidate)
+        if len(ranked) == 3:
+            break
     top_score = ranked[0].internal_score if ranked else 0.0
     return RankingResult(candidates=tuple(ranked), new_cat_recommended=top_score < 0.65)
-

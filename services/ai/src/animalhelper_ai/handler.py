@@ -1,33 +1,29 @@
+from datetime import datetime, timezone
 from typing import Any
 
 from .candidate_ranker import CandidateEvidence, rank_candidates
+from .contracts import IdentifyRequest, IdentifyResult
 
 
 def handle_identify(payload: dict[str, Any]) -> dict[str, Any]:
-    job_id = payload.get("jobId")
-    if not isinstance(job_id, str) or not job_id:
-        raise ValueError("jobId is required")
-
-    raw_candidates = payload.get("candidates")
-    if not isinstance(raw_candidates, list):
-        raise ValueError("candidates must be a list")
-
+    request = IdentifyRequest.model_validate(payload)
     evidence = [
         CandidateEvidence(
-            animal_id=str(candidate["animalId"]),
-            visual_similarity=float(candidate["visualSimilarity"]),
-            trait_similarity=float(candidate["traitSimilarity"]),
-            same_public_cell=bool(candidate["samePublicCell"]),
-            time_similarity=float(candidate["timeSimilarity"]),
+            animal_id=candidate.animal_id,
+            visual_similarity=candidate.visual_similarity,
+            trait_similarity=candidate.trait_similarity,
+            same_public_cell=candidate.same_public_cell,
+            time_similarity=candidate.time_similarity,
         )
-        for candidate in raw_candidates
+        for candidate in request.candidates
     ]
     result = rank_candidates(evidence)
-
-    return {
-        "jobId": job_id,
-        "newCatRecommended": result.new_cat_recommended,
-        "candidates": [
+    public_result = IdentifyResult(
+        contractVersion="identify.v1",
+        jobId=request.job_id,
+        newCatRecommended=result.new_cat_recommended,
+        generatedAt=datetime.now(timezone.utc),
+        candidates=[
             {
                 "animalId": candidate.animal_id,
                 "confidenceBand": candidate.confidence_band,
@@ -35,5 +31,5 @@ def handle_identify(payload: dict[str, Any]) -> dict[str, Any]:
             }
             for candidate in result.candidates
         ],
-    }
-
+    )
+    return public_result.model_dump(by_alias=True)

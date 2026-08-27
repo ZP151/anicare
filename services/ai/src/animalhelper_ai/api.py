@@ -1,8 +1,7 @@
-from typing import Any
-
 from fastapi import FastAPI, HTTPException
 from mangum import Mangum
 
+from .contracts import IdentifyRequest
 from .handler import handle_identify
 
 
@@ -15,9 +14,9 @@ def health() -> dict[str, str]:
 
 
 @app.post("/v1/identify")
-def identify(payload: dict[str, Any]) -> dict[str, Any]:
+def identify(payload: IdentifyRequest) -> dict[str, object]:
     try:
-        return handle_identify(payload)
+        return handle_identify(payload.model_dump(by_alias=True))
     except (KeyError, TypeError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
