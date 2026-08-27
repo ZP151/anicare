@@ -77,3 +77,28 @@ quality/padding cannot be accepted. Embedding request/vector wire payloads now
 carry `contractVersion: "embedding.v1"`, and compatibility checks include it.
 The compatibility documentation identifies score-bearing evidence as a
 trusted internal adapter boundary and distinguishes it from the public API.
+
+## Closeout follow-up
+
+The private `/v1/identify` route now fails closed without a strong
+`WHISKER_INTERNAL_AI_TOKEN` server secret and requires the exact
+`X-Whisker-Internal-Token` header with constant-time comparison. Missing or
+malformed server configuration is unavailable; missing or wrong caller
+credentials are unauthorized. HTTP-layer tests cover both branches and token
+non-leakage. Crop documentation/tests now make the exact guarantee explicit:
+validated wire/model input cannot set `accepted`, while the trusted in-process
+policy path uses Pydantic's `model_construct` escape hatch that is never
+transport-exposed.
+
+## Closeout authentication follow-up
+
+The private `/v1/identify` FastAPI route now requires the bounded
+`WHISKER_INTERNAL_AI_TOKEN` server secret (minimum 32 characters) and the exact
+`X-Whisker-Internal-Token` header, using constant-time comparison. Missing or
+malformed server configuration is unavailable; missing or incorrect caller
+credentials are unauthorized; neither the secret nor internal scores appear
+in responses. HTTP-layer tests cover these cases and strict request validation.
+Crop comments/docs/tests now state the precise guarantee: validated wire/model
+input cannot set `accepted`; the deterministic policy may emit it through the
+trusted in-process `model_construct` escape hatch, which is never transport
+exposed.

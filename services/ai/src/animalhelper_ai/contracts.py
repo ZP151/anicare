@@ -109,20 +109,12 @@ class CropAssessment(StrictModel):
 
     @model_validator(mode="after")
     def forbid_direct_acceptance(self) -> CropAssessment:
-        # Policy-created accepted assessments use model_construct through the
-        # private factory below.  A caller cannot forge accepted via validation.
+        # Validated wire/model input cannot set accepted. The policy module
+        # emits accepted through a trusted in-process model_construct escape
+        # hatch; that bypass is never transport-safe or caller-controlled.
         if self.status == "accepted":
             raise ValueError("accepted is issued only by the deterministic crop policy")
         return self
-
-    @classmethod
-    def _from_policy(
-        cls, status: CropStatus, reason_codes: list[str], reason_text: str
-    ) -> CropAssessment:
-        return cls.model_construct(
-            contract_version="crop.v1", status=status,
-            reason_codes=reason_codes[:8], reason_text=reason_text[:160]
-        )
 
 
 def require_aware_datetime(value: datetime) -> datetime:
@@ -134,3 +126,13 @@ def require_aware_datetime(value: datetime) -> datetime:
 
 # Names used by early alpha callers; aliases retain one canonical schema.
 NormalizedRect = CropBox
+
+
+def _policy_assessment(
+    status: CropStatus, reason_codes: list[str], reason_text: str
+) -> CropAssessment:
+    """Trusted in-process policy emission; never call with transport data."""
+    return CropAssessment.model_construct(
+        contract_version="crop.v1", status=status,
+        reason_codes=reason_codes[:8], reason_text=reason_text[:160]
+    )

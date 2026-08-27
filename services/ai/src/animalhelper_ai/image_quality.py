@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 
-from .contracts import CropAssessment, CropBox
+from .contracts import CropAssessment, CropBox, _policy_assessment
 
 
 class CropPolicyConfig(BaseModel):
@@ -98,8 +98,8 @@ def assess_identity_crop(
         status: Literal["needs_review", "rejected"] = (
             "needs_review" if reasons == ["detector_unavailable"] else "rejected"
         )
-        return CropAssessment._from_policy(status, reasons, "; ".join(reasons))
-    return CropAssessment._from_policy("accepted", ["policy_passed"], "deterministic policy passed")
+        return _policy_assessment(status, reasons, "; ".join(reasons))
+    return _policy_assessment("accepted", ["policy_passed"], "deterministic policy passed")
 
 
 assess_crop = assess_identity_crop

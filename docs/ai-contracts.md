@@ -15,6 +15,16 @@ or embedding vector. The existing compatibility request is a bounded,
 trusted-internal adapter shape that may carry numeric evidence for ranking;
 those scores are never returned publicly.
 
+The `/v1/identify` route is a private alpha boundary. It is unavailable unless
+the server has `WHISKER_INTERNAL_AI_TOKEN` configured as a nonblank secret of
+at least 32 characters, and it accepts callers only through the exact
+`X-Whisker-Internal-Token` header using constant-time comparison. Missing or
+malformed server configuration returns unavailable; missing or incorrect caller
+credentials return unauthorized. The token is never logged or serialized.
+Deployment must provision this secret through the runtime secret manager and
+verify the private caller path before enabling the route; this contract does
+not create or embed production credentials.
+
 ## Crop quality (`crop.v1`)
 
 `CropBox` uses finite normalized `x`, `y`, `width`, and `height` values in
@@ -26,9 +36,11 @@ person, licence-plate, or cat detector. The detector boundary is represented by
 The default policy requires a minimum crop dimension of `0.08`, quality of at
 least `0.55`, and padding no greater than `0.35`. Zero or multiple faces,
 out-of-bounds/tiny crops, low quality, excess padding, any metadata/EXIF, and
-unconfirmed redaction are rejected. Accepted status is issued only by the
-policy factory and cannot be forged by constructing a transport model. Reasons
-are a bounded code list and bounded text.
+unconfirmed redaction are rejected. Validated wire/model input cannot set
+`accepted`; the trusted deterministic policy path emits accepted values using
+an in-process Pydantic `model_construct` escape hatch. That bypass is an
+explicit internal trust boundary, is not transport-safe, and is never exposed
+to callers. Reasons are a bounded code list and bounded text.
 
 ## Embeddings (`embedding.v1`)
 

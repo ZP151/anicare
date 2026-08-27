@@ -60,6 +60,17 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("location", serialized)
         self.assertNotIn("storagePath", serialized)
 
+    def test_validated_wire_input_cannot_set_accepted_status(self) -> None:
+        from animalhelper_ai.contracts import CropAssessment
+
+        with self.assertRaises(ValidationError):
+            CropAssessment(
+                contractVersion="crop.v1",
+                status="accepted",
+                reasonCodes=["policy_passed"],
+                reasonText="policy passed",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
