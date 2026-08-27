@@ -1,6 +1,8 @@
 import { createMediaUploadRuntime } from './media-upload-runtime.native';
 import { retryRecoverableMediaDrafts as retryOnWeb, uploadDraftMediaNow as uploadOnWeb } from './media-upload-runtime.web';
 import type { MediaUploadClaim } from '../offline/draft-store';
+import type { MediaUploadRuntimeResult as DeclaredMediaUploadRuntimeResult } from './media-upload-runtime';
+import type { UploadJobState } from '../offline/upload-job';
 
 const receipt = {
   sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1' as const,
@@ -8,7 +10,7 @@ const receipt = {
   width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
 };
 
-function draft(id: string, state: 'upload_pending' | 'waiting' | 'uploading' | 'finalizing' | 'needs_user' = 'upload_pending', overrides: Record<string, unknown> = {}) {
+function draft(id: string, state: UploadJobState = 'upload_pending', overrides: Record<string, unknown> = {}) {
   const active = state === 'uploading' || state === 'finalizing';
   return {
     id, notes: '', risk: 'normal' as const, mediaId: `media-${id.slice('draft-'.length)}`,
@@ -98,6 +100,18 @@ describe('native media upload runtime', () => {
 
     await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('upload_pending');
 
+    expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
+  });
+
+  it('returns the stored local-persisting state when a concurrent CAS runner wins the claim', async () => {
+    const run = runtimeHarness({
+      drafts: [draft('draft-12345678', 'local_persisting')],
+      claimAttempt: jest.fn(async () => null),
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    const declared: DeclaredMediaUploadRuntimeResult = 'local_persisting';
+
+    await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe(declared);
     expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
   });
 

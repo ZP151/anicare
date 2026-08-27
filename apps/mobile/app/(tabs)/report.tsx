@@ -18,8 +18,9 @@ import {
 import { uploadDraftMediaNow } from '../../src/media/media-upload-runtime';
 import {
   persistReportDraftBeforeReview,
+  reportSubmissionFailureStatus,
+  reportSubmissionStatus,
   submitReportWithMedia,
-  type ReportSubmissionOutcome,
 } from '../../src/report/report-submission';
 
 export default function ReportScreen() {
@@ -91,11 +92,9 @@ export default function ReportScreen() {
         uploadMedia: uploadDraftMediaNow,
         deleteDraft: deleteOfflineDraft,
       });
-      setStatus(submissionStatus(result));
+      setStatus(reportSubmissionStatus(result));
     } catch (error) {
-      setStatus(error instanceof Error && error.message === 'authentication_required'
-        ? 'Sign in from Profile before contributing. Anonymous browsing remains available.'
-        : 'Submission could not be completed. Your durable draft remains available for recovery.');
+      setStatus(reportSubmissionFailureStatus(error));
     } finally {
       setSubmitting(false);
     }
@@ -147,37 +146,6 @@ export default function ReportScreen() {
       {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </ScreenScaffold>
   );
-}
-
-function submissionStatus(result: ReportSubmissionOutcome): string {
-  switch (result.state) {
-    case 'submitted_text_only':
-      return result.visibility === 'hidden'
-        ? 'Submitted for private safety review.'
-        : 'Submitted. The public update will appear after its safety delay.';
-    case 'quarantined':
-      return 'Reviewed media is in private quarantine. It is not publicly available.';
-    case 'upload_pending':
-      return 'Reviewed media is queued for a private upload and remains on this device.';
-    case 'uploading':
-      return 'Reviewed media is uploading privately. It is not publicly available.';
-    case 'finalizing':
-      return 'Reviewed media is awaiting private quarantine confirmation.';
-    case 'waiting':
-      return 'Private media upload retry is scheduled. It is not publicly available.';
-    case 'needs_user':
-      return 'The encrypted media needs review or recapture before it can be retried.';
-    case 'recovery_miss':
-      return 'No prior submission was found. Choose a location to submit this draft again, or recapture and re-review if its media cannot be recovered.';
-    case 'not_ready':
-      return 'Private media remains on this device until an authenticated upload can run.';
-    case 'unavailable':
-      return 'Secure media transport is unavailable on this platform. Nothing was uploaded.';
-    case 'stale':
-      return 'Another recovery run owns this media state. It remains private and will be rechecked.';
-    default:
-      return 'Your durable report state is awaiting safe recovery.';
-  }
 }
 
 const styles = StyleSheet.create({

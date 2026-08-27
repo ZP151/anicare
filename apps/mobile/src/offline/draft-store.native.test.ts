@@ -305,8 +305,23 @@ describe('native draft storage privacy boundary', () => {
       .toEqual([]);
   });
 
+  it('round-trips an attached sighting-only native row as a text-only draft', () => {
+    const drafts = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'saved text', risk: 'sensitive', media_id: null,
+      sighting_id: '12345678-1234-1234-1234-123456789abc', reviewed_media_ref: null,
+      encryption_version: null, review_receipt_json: null, upload_state: null,
+      upload_attempts: null, next_attempt_at: null, last_error: null,
+      upload_resume_state: null, upload_attempt_started_at: null, revision: 4,
+    }]);
+
+    expect(drafts).toEqual([{
+      id: 'draft-12345678', notes: 'saved text', risk: 'sensitive',
+      sightingId: '12345678-1234-1234-1234-123456789abc', revision: 4,
+    }]);
+  });
+
   it.each([
-    ['sighting_id', 'sighting-12345678'],
+    ['sighting_id', 'bad'],
     ['upload_state', 'upload_pending'],
     ['upload_attempts', 0],
     ['next_attempt_at', '2026-08-27T00:00:10.000Z'],
@@ -324,6 +339,22 @@ describe('native draft storage privacy boundary', () => {
     };
     expect(deserializeDraftRows([row])).toEqual([expect.objectContaining({
       id: 'draft-12345678', revision: 3, mediaFailure: 'local_media_corrupt',
+      uploadJob: expect.objectContaining({ state: 'needs_user', lastError: 'local_media_corrupt' }),
+    })]);
+  });
+
+  it('fails closed when an attached sighting row also retains upload workflow residue', () => {
+    const drafts = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'residual', risk: 'normal', media_id: null,
+      sighting_id: '12345678-1234-1234-1234-123456789abc', reviewed_media_ref: null,
+      encryption_version: null, review_receipt_json: null, upload_state: 'upload_pending',
+      upload_attempts: 0, next_attempt_at: null, last_error: null,
+      upload_resume_state: null, upload_attempt_started_at: null, revision: 3,
+    }]);
+
+    expect(drafts).toEqual([expect.objectContaining({
+      sightingId: '12345678-1234-1234-1234-123456789abc',
+      mediaFailure: 'local_media_corrupt',
       uploadJob: expect.objectContaining({ state: 'needs_user', lastError: 'local_media_corrupt' }),
     })]);
   });

@@ -36,6 +36,13 @@ export type ReportSubmissionDependencies = Readonly<{
   deleteDraft(draftId: string): Promise<void>;
 }>;
 
+export class ReportDraftPersistenceError extends Error {
+  constructor() {
+    super('draft_persistence_failed');
+    this.name = 'ReportDraftPersistenceError';
+  }
+}
+
 export async function persistReportDraftBeforeReview(
   input: Readonly<{ draftId: string; notes: string; risk: SightingRisk }>,
   dependencies: Pick<ReportSubmissionDependencies, 'saveDraft'>,
@@ -90,7 +97,11 @@ export async function submitReportWithMedia(
   input: SubmitReportWithMediaInput,
   dependencies: ReportSubmissionDependencies,
 ): Promise<ReportSubmissionOutcome> {
-  await persistReportDraftBeforeReview(input, dependencies);
+  try {
+    await persistReportDraftBeforeReview(input, dependencies);
+  } catch {
+    throw new ReportDraftPersistenceError();
+  }
   const draft = await dependencies.getDraft(input.draftId);
   if (!draft) throw new Error('missing_durable_draft');
 
@@ -123,4 +134,45 @@ export async function submitReportWithMedia(
     visibility: resolved.sighting.visibility,
     state,
   };
+}
+
+export function reportSubmissionStatus(result: ReportSubmissionOutcome): string {
+  switch (result.state) {
+    case 'submitted_text_only':
+      if (result.visibility === 'hidden') return 'Submitted for private safety review.';
+      if (result.visibility === 'public') return 'Submitted. The public update will appear after its safety delay.';
+      return 'Submitted. Visibility is being confirmed; it is not public availability.';
+    case 'quarantined':
+      return 'Reviewed media is in private quarantine. It is not publicly available.';
+    case 'upload_pending':
+      return 'Reviewed media is queued for a private upload and remains on this device.';
+    case 'uploading':
+      return 'Reviewed media is uploading privately. It is not publicly available.';
+    case 'finalizing':
+      return 'Reviewed media is awaiting private quarantine confirmation.';
+    case 'waiting':
+      return 'Private media upload retry is scheduled. It is not publicly available.';
+    case 'needs_user':
+      return 'The encrypted media needs review or recapture before it can be retried.';
+    case 'recovery_miss':
+      return 'No prior submission was found. Choose a location to submit this draft again, or recapture and re-review if its media cannot be recovered.';
+    case 'not_ready':
+      return 'Private media remains on this device until an authenticated upload can run.';
+    case 'unavailable':
+      return 'Secure media transport is unavailable on this platform. Nothing was uploaded.';
+    case 'stale':
+      return 'Another recovery run owns this media state. It remains private and will be rechecked.';
+    default:
+      return 'Your durable report state is awaiting safe recovery.';
+  }
+}
+
+export function reportSubmissionFailureStatus(error: unknown): string {
+  if (error instanceof ReportDraftPersistenceError) {
+    return 'Submission could not safely start. Review the report and try again.';
+  }
+  if (error instanceof Error && error.message === 'authentication_required') {
+    return 'Sign in from Profile before contributing. Anonymous browsing remains available.';
+  }
+  return 'Submission could not be completed. Your durable draft remains available for recovery.';
 }

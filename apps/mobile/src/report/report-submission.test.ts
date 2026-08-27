@@ -1,5 +1,8 @@
 import {
   persistReportDraftBeforeReview,
+  ReportDraftPersistenceError,
+  reportSubmissionFailureStatus,
+  reportSubmissionStatus,
   submitReportWithMedia,
   type ReportSubmissionDependencies,
 } from './report-submission';
@@ -54,7 +57,10 @@ function harness(overrides: Record<string, unknown> = {}) {
       current = { ...current, sightingId };
       return true;
     }),
-    uploadMedia: jest.fn(async () => 'quarantined' as const),
+    uploadMedia: jest.fn(async (draftId: string) => {
+      calls.push(`upload:${draftId}`);
+      return 'quarantined' as const;
+    }),
     deleteDraft: jest.fn(async () => { calls.push('delete'); current = null; }),
     ...overrides,
   };
@@ -69,6 +75,36 @@ describe('report submission lifecycle', () => {
     });
 
     expect(calls).toEqual(['save:ear tip:critical']);
+  });
+
+  it('does not claim a durable recovery path when the initial draft save fails', async () => {
+    const run = harness({ saveDraft: jest.fn(async () => { throw new Error('database_locked'); }) });
+
+    await expect(submitReportWithMedia({
+      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal',
+      coordinates: { latitude: 1.3, longitude: 103.8 }, occurredAt: new Date('2026-08-27T00:00:00.000Z'),
+    }, run.dependencies)).rejects.toBeInstanceOf(ReportDraftPersistenceError);
+
+    expect(run.dependencies.recoverSighting).not.toHaveBeenCalled();
+    expect(run.dependencies.createSighting).not.toHaveBeenCalled();
+    expect(run.dependencies.attachSighting).not.toHaveBeenCalled();
+    expect(run.dependencies.uploadMedia).not.toHaveBeenCalled();
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
+    expect(reportSubmissionFailureStatus(new ReportDraftPersistenceError())).toBe(
+      'Submission could not safely start. Review the report and try again.',
+    );
+  });
+
+  it('uses neutral visibility copy until the server explicitly reports a public state', () => {
+    expect(reportSubmissionStatus({
+      sightingId: response.sightingId, visibility: null, state: 'submitted_text_only',
+    })).toBe('Submitted. Visibility is being confirmed; it is not public availability.');
+    expect(reportSubmissionStatus({
+      sightingId: response.sightingId, visibility: 'hidden', state: 'submitted_text_only',
+    })).toBe('Submitted for private safety review.');
+    expect(reportSubmissionStatus({
+      sightingId: response.sightingId, visibility: 'public', state: 'submitted_text_only',
+    })).toBe('Submitted. The public update will appear after its safety delay.');
   });
 
   it('recovers a lost creation response by the stable draft id before creating again', async () => {
@@ -89,8 +125,12 @@ describe('report submission lifecycle', () => {
 
     expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678');
     expect(run.dependencies.createSighting).toHaveBeenCalledTimes(1);
-    expect(run.calls).toContain(`attach:${response.sightingId}`);
-    expect(run.dependencies.uploadMedia).toHaveBeenCalledWith('draft-12345678');
+    expect(run.calls).toEqual([
+      'save:tabby:normal',
+      'save:tabby:normal',
+      `attach:${response.sightingId}`,
+      'upload:draft-12345678',
+    ]);
   });
 
   it('uses an already durable sighting without retaining or requiring coordinates on retry', async () => {

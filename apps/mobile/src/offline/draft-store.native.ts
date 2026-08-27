@@ -656,12 +656,17 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
     } catch {
       continue;
     }
-    const mediaBearing = row.media_id !== null || row.reviewed_media_ref !== null ||
-      row.review_receipt_json !== null || row.encryption_version !== null || row.sighting_id !== null ||
-      row.upload_state !== null || row.upload_attempts !== null || row.next_attempt_at !== null ||
-      row.last_error !== null || row.upload_resume_state !== null || row.upload_attempt_started_at !== null;
-    if (!mediaBearing) {
+    const hasMediaTuple = row.media_id !== null || row.reviewed_media_ref !== null ||
+      row.review_receipt_json !== null || row.encryption_version !== null;
+    const hasUploadWorkflow = row.upload_state !== null || row.upload_attempts !== null ||
+      row.next_attempt_at !== null || row.last_error !== null || row.upload_resume_state !== null ||
+      row.upload_attempt_started_at !== null;
+    if (!hasMediaTuple && !hasUploadWorkflow && row.sighting_id === null) {
       drafts.push(textOnly);
+      continue;
+    }
+    if (!hasMediaTuple && !hasUploadWorkflow && row.sighting_id && isStableMediaId(row.sighting_id)) {
+      drafts.push({ ...textOnly, sightingId: row.sighting_id });
       continue;
     }
     try {
