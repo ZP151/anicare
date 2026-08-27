@@ -37,9 +37,10 @@ function runtimeHarness(overrides: Record<string, unknown> = {}) {
     getOwnerSubject: jest.fn(async () => 'owner-12345678'),
     listDrafts: jest.fn(async () => [...drafts.values()]),
     getDraft: jest.fn(async (id: string) => drafts.get(id) ?? null),
-    claimAttempt: jest.fn(async (id: string) => ({ draftId: id } as MediaUploadClaim)),
+    claimAttempt: jest.fn(async (id: string) => ({ draftId: id, ownerSubject: 'owner-12345678' } as MediaUploadClaim)),
     runAttempt: jest.fn(async (claim: MediaUploadClaim) => { calls.push(`run:${claim.draftId}`); return 'quarantined' as const; }),
     deleteCiphertext: jest.fn(async (reference: string) => { calls.push(`ciphertext:${reference}`); }),
+    drainPendingCleanup: jest.fn(async () => undefined),
     cleanupQuarantined: jest.fn(async (id: string, revision: number) => { calls.push(`row:${id}:${revision}`); }),
     now: () => new Date('2026-08-27T00:01:00.000Z'),
     leaseMs: 60_000,
@@ -74,6 +75,27 @@ describe('native media upload runtime', () => {
     expect(run.dependencies.claimAttempt).not.toHaveBeenCalled();
     expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
     expect(run.dependencies.getAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('does not claim when the account changes between the owner read and CAS claim', async () => {
+    const run = runtimeHarness({
+      getOwnerSubject: jest.fn().mockResolvedValueOnce('owner-12345678').mockResolvedValueOnce('owner-87654321'),
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('stale');
+    expect(run.dependencies.claimAttempt).not.toHaveBeenCalled();
+    expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
+  });
+
+  it('reports durable local cleanup as queued work rather than claiming a replacement outbox row', async () => {
+    const run = runtimeHarness({
+      drafts: [draft('draft-12345678', 'upload_pending', {
+        pendingMediaCleanupRef: 'reviewed-media/media-87654321.commit-87654321.agcm',
+      })],
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('upload_pending');
+    expect(run.dependencies.claimAttempt).not.toHaveBeenCalled();
   });
 
   it('claims only due or expired media rows and processes a bounded sequential batch', async () => {
@@ -150,6 +172,22 @@ describe('native media upload runtime', () => {
       'ciphertext:reviewed-media/media-12345678.commit-12345678.agcm',
       'row:draft-12345678:7',
     ]);
+  });
+
+  it('retains a quarantined row and active ciphertext when its pending outbox delete fails', async () => {
+    const pending = draft('draft-12345678', 'upload_pending', {
+      revision: 7,
+      pendingMediaCleanupRef: 'reviewed-media/media-87654321.commit-87654321.agcm',
+      uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null },
+    });
+    const run = runtimeHarness({
+      drafts: [pending],
+      drainPendingCleanup: jest.fn(async () => { throw new Error('disk_failure'); }),
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('quarantined');
+    expect(run.dependencies.deleteCiphertext).not.toHaveBeenCalled();
+    expect(run.dependencies.cleanupQuarantined).not.toHaveBeenCalled();
   });
 });
 

@@ -21,7 +21,7 @@ export type MediaUploadClaim = Readonly<{
 export function saveOfflineDraft(input: Record<string, unknown>): Promise<StoredDraft>;
 export function listOfflineDrafts(): Promise<StoredDraft[]>;
 export function getOfflineDraft(id: string): Promise<StoredDraft | null>;
-export function claimMediaUploadAttempt(id: string, now: Date, leaseMs: number): Promise<MediaUploadClaim | null>;
+export function claimMediaUploadAttempt(id: string, now: Date, leaseMs: number, expectedOwnerSubject: string): Promise<MediaUploadClaim | null>;
 export function transitionClaimedMediaUpload(
   id: string,
   expectedRevision: number,
@@ -31,6 +31,7 @@ export function attachSightingToDraft(id: string, sightingId: string, ownerSubje
 export function cleanupQuarantinedMedia(id: string, revision: number): Promise<void>;
 export function deleteOfflineDraft(id: string): Promise<void>;
 export function cleanupPendingReviewedMediaReferences(): Promise<void>;
+export function cleanupPendingReviewedMediaForDraft(draftId: string): Promise<void>;
 export function getPendingReviewedMediaVersionMismatch(draft: StoredDraft): Readonly<{
   expectedRevision: number;
   expectedState: UploadJobState;
@@ -44,4 +45,5 @@ export function saveReviewedMediaJournal(
   journal: ReviewedMediaJournal,
   state: 'local_persisting' | 'upload_pending' | 'needs_user',
   error: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null,
+  ownerSubject: string,
 ): Promise<void>;

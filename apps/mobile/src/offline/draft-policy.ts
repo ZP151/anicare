@@ -12,6 +12,7 @@ export type StoredDraft = {
   mediaId?: string;
   sightingId?: string;
   ownerSubject?: string;
+  pendingMediaCleanupRef?: string;
   encryptedReviewedRef?: string;
   encryptionVersion?: 'aes-256-gcm.v1' | typeof UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION;
   receipt?: ReviewReceipt;
@@ -104,6 +105,8 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     ...draft,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),
     ...(stableId(input.ownerSubject) ? { ownerSubject: input.ownerSubject } : {}),
+    ...(typeof input.pendingMediaCleanupRef === 'string' && isReviewedMediaReference(input.pendingMediaCleanupRef)
+      ? { pendingMediaCleanupRef: input.pendingMediaCleanupRef } : {}),
   };
 
   if (!stableId(input.mediaId) || !isReviewedMediaReference(input.encryptedReviewedRef, input.mediaId) ||
@@ -127,5 +130,7 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     uploadJob,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),
     ...(stableId(input.ownerSubject) ? { ownerSubject: input.ownerSubject } : {}),
+    ...(typeof input.pendingMediaCleanupRef === 'string' && isReviewedMediaReference(input.pendingMediaCleanupRef)
+      ? { pendingMediaCleanupRef: input.pendingMediaCleanupRef } : {}),
   };
 }

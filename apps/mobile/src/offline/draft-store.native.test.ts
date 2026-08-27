@@ -205,7 +205,8 @@ describe('native draft storage privacy boundary', () => {
       expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain(preserved);
     }
     expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain('sighting_id =');
-    expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain('owner_subject =');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain('owner_subject = COALESCE(owner_subject, ?)');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain('owner_subject = ? OR');
     expect(MEDIA_JOURNAL_SAVE_SQL).toContain("upload_state = 'local_persisting'");
     expect(MEDIA_JOURNAL_SAVE_SQL).toContain('media_id IS NULL');
     expect(MEDIA_JOURNAL_SAVE_SQL).toContain('media_id = ?');
@@ -233,7 +234,7 @@ describe('native draft storage privacy boundary', () => {
         confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
     };
-    await saveReviewedMediaJournalWithDependencies(journal, 'local_persisting', null, {
+    await saveReviewedMediaJournalWithDependencies(journal, 'local_persisting', null, 'owner-12345678', {
       commitMediaSnapshot: async (snapshot) => {
         events.push(`commit:${snapshot.mediaId}:${snapshot.uploadJob.state}`);
       },
@@ -247,6 +248,24 @@ describe('native draft storage privacy boundary', () => {
     ]);
   });
 
+  it('binds the authenticated owner in the first durable media journal snapshot', async () => {
+    let storedOwner: string | undefined;
+    await saveReviewedMediaJournalWithDependencies(reviewedJournal(), 'local_persisting', null, 'owner-12345678', {
+      commitMediaSnapshot: async (snapshot: { ownerSubject: string }) => { storedOwner = snapshot.ownerSubject; },
+      cleanupPendingMedia: async () => undefined,
+    } as never);
+    expect(storedOwner).toBe('owner-12345678');
+  });
+
+  it('fails truthfully before creating an ownerless media journal while signed out', async () => {
+    const commitMediaSnapshot = jest.fn(async () => undefined);
+    await expect(saveReviewedMediaJournalWithDependencies(reviewedJournal(), 'local_persisting', null, '', {
+      commitMediaSnapshot,
+      cleanupPendingMedia: async () => undefined,
+    } as never)).rejects.toThrow('authentication_required');
+    expect(commitMediaSnapshot).not.toHaveBeenCalled();
+  });
+
   it('treats replay of the same immutable journal snapshot as idempotent', async () => {
     const reference = 'reviewed-media/media-12345678.commit-12345678.agcm';
     await saveReviewedMediaJournalWithDependencies({
@@ -257,7 +276,7 @@ describe('native draft storage privacy boundary', () => {
         detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
         width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
-    }, 'local_persisting', null, {
+    }, 'local_persisting', null, 'owner-12345678', {
       commitMediaSnapshot: async () => undefined,
       cleanupPendingMedia: async () => undefined,
     });
@@ -275,7 +294,7 @@ describe('native draft storage privacy boundary', () => {
         width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
     };
-    await expect(saveReviewedMediaJournalWithDependencies(journal, 'upload_pending', null, {
+    await expect(saveReviewedMediaJournalWithDependencies(journal, 'upload_pending', null, 'owner-12345678', {
       commitMediaSnapshot: async () => { throw new Error('database_locked'); },
       cleanupPendingMedia: async () => { throw new Error('must_not_run'); },
     })).rejects.toThrow('database_locked');
@@ -283,7 +302,7 @@ describe('native draft storage privacy boundary', () => {
 
   it('does not report a durable journal failure when post-commit cleanup must retry at startup', async () => {
     const events: string[] = [];
-    await expect(saveReviewedMediaJournalWithDependencies(reviewedJournal(), 'upload_pending', null, {
+    await expect(saveReviewedMediaJournalWithDependencies(reviewedJournal(), 'upload_pending', null, 'owner-12345678', {
       commitMediaSnapshot: async () => { events.push('commit'); },
       cleanupPendingMedia: async () => { events.push('cleanup'); throw new Error('crash_before_delete'); },
     })).resolves.toBeUndefined();
@@ -355,7 +374,7 @@ describe('native draft storage privacy boundary', () => {
     for (const forbidden of ['source_uri', 'photo_uri', 'access_token', 'canonical_uri']) {
       expect(PENDING_MEDIA_CLEANUP_LIST_SQL).not.toContain(forbidden);
     }
-    expect(DRAFT_LIST_SQL).not.toContain('pending_media_cleanup_ref');
+    expect(DRAFT_LIST_SQL).toContain('pending_media_cleanup_ref');
   });
 
   it('replaces the complete retry snapshot for media updates so stale errors and delays can clear', () => {
@@ -390,6 +409,23 @@ describe('native draft storage privacy boundary', () => {
     expect(MEDIA_UPLOAD_CAS_SQL).toContain('revision = revision + 1');
     expect(MEDIA_UPLOAD_CAS_SQL).toContain("upload_state IN ('upload_pending', 'uploading', 'finalizing', 'waiting')");
     expect(MEDIA_UPLOAD_CAS_SQL).not.toContain('review_receipt_json =');
+  });
+
+  it('will not claim a media row while its durable replacement-cleanup outbox remains', async () => {
+    const current = {
+      id: 'draft-12345678', notes: '', risk: 'normal' as const,
+      mediaId: 'media-12345678', sightingId: 'sighting-12345678', ownerSubject: 'owner-12345678', revision: 4,
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm', encryptionVersion: 'aes-256-gcm.v1' as const,
+      receipt: reviewedJournal().receipt,
+      uploadJob: { state: 'upload_pending' as const, attempts: 0, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null },
+      pendingMediaCleanupRef: 'reviewed-media/media-87654321.commit-87654321.agcm',
+    };
+    const compareAndSwapUploadJob = jest.fn(async () => true);
+    await expect(claimMediaUploadAttemptWithDependencies(
+      current.id, new Date('2026-08-27T00:00:00.000Z'), 60_000, 'owner-12345678',
+      { getOfflineDraft: async () => current, compareAndSwapUploadJob },
+    )).resolves.toBeNull();
+    expect(compareAndSwapUploadJob).not.toHaveBeenCalled();
   });
 
   it('clears the whole lease snapshot and advances revision for version failure', () => {
@@ -619,10 +655,10 @@ describe('native draft storage privacy boundary', () => {
     const store = mediaUploadCasStore();
     const [left, right] = await Promise.all([
       claimMediaUploadAttemptWithDependencies(
-        'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, store.dependencies,
+        'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
       ),
       claimMediaUploadAttemptWithDependencies(
-        'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, store.dependencies,
+        'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
       ),
     ]);
     expect([left, right].filter(Boolean)).toHaveLength(1);
@@ -635,14 +671,14 @@ describe('native draft storage privacy boundary', () => {
   it('blocks a fresh lease, reclaims an expired lease, and refuses attempt six', async () => {
     const store = mediaUploadCasStore();
     const first = await claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
     );
     expect(first).not.toBeNull();
     await expect(claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:00:30.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:00:30.000Z'), 60_000, 'owner-12345678', store.dependencies,
     )).resolves.toBeNull();
     const reclaimed = await claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:01:01.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:01:01.000Z'), 60_000, 'owner-12345678', store.dependencies,
     );
     expect(reclaimed).toMatchObject({ revision: 2, recovering: true, uploadJob: { attempts: 2 } });
     store.current = {
@@ -653,7 +689,7 @@ describe('native draft storage privacy boundary', () => {
       },
     };
     await expect(claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:03:00.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:03:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
     )).resolves.toBeNull();
   });
 
@@ -667,7 +703,7 @@ describe('native draft storage privacy boundary', () => {
       },
     };
     const recovery = await claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:02:00.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:02:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
     );
     expect(recovery).toMatchObject({
       revision: 13, recovering: true, recoveryOnly: true,
@@ -679,7 +715,7 @@ describe('native draft storage privacy boundary', () => {
   it('rejects stale revisions from moving finalizing or quarantined backward', async () => {
     const store = mediaUploadCasStore();
     const claim = await claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
     );
     expect(claim).not.toBeNull();
     const finalizing = {
@@ -711,7 +747,7 @@ describe('native draft storage privacy boundary', () => {
   it('rejects a transition whose hostile error would be normalized before persistence', async () => {
     const store = mediaUploadCasStore();
     const claim = await claimMediaUploadAttemptWithDependencies(
-      'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, store.dependencies,
+      'draft-12345678', new Date('2026-08-27T00:00:00.000Z'), 60_000, 'owner-12345678', store.dependencies,
     );
     await expect(transitionClaimedMediaUploadWithDependencies(
       claim!.draftId,

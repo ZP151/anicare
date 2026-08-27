@@ -29,12 +29,16 @@ jest.mock('../../src/media/draft-media', () => ({
 jest.mock('../../src/offline/draft-store', () => ({
   saveReviewedMediaJournal: jest.fn(),
 }));
+jest.mock('../../src/api/supabase', () => ({
+  getSupabaseClient: jest.fn(),
+}));
 
 import RedactionReviewScreen from '../../app/report/redaction-review';
 import { launchImageLibraryAsync } from 'expo-image-picker';
 import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { prepareCanonical, renderOpaqueMasks } from './processor';
 import { saveReviewedMediaJournal } from '../offline/draft-store';
+import { getSupabaseClient } from '../api/supabase';
 
 const canonical = {
   uri: 'file:///cache/animalhelper-canonical-12345678.jpg',
@@ -54,6 +58,9 @@ beforeEach(() => {
     mediaId: 'media-12345678',
   });
   jest.mocked(saveReviewedMediaJournal).mockResolvedValue(undefined);
+  jest.mocked(getSupabaseClient).mockReturnValue({
+    auth: { getSession: jest.fn(async () => ({ data: { session: { user: { id: 'owner-12345678' } } } })) },
+  } as never);
 });
 
 describe('private redaction review screen', () => {
@@ -125,5 +132,20 @@ describe('private redaction review screen', () => {
     await waitFor(() => expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(2));
     expect(events).toEqual(['durable']);
     expect(deleteReviewedMediaReference).not.toHaveBeenCalled();
+  });
+
+  it('does not create an ownerless media journal when review persistence is signed out', async () => {
+    jest.mocked(getSupabaseClient).mockReturnValue({
+      auth: { getSession: jest.fn(async () => ({ data: { session: null } })) },
+    } as never);
+    jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);
+    jest.mocked(prepareCanonical).mockResolvedValue(canonical);
+    jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
+    const view = await render(<RedactionReviewScreen />);
+    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
+    await waitFor(() => expect(view.getByText(/Tap anywhere on the image/)).toBeTruthy());
+    await act(async () => { fireEvent.press(view.getByText('Confirm exact pixels and encrypt')); });
+    expect(saveReviewedMediaJournal).not.toHaveBeenCalled();
+    expect(view.getByText('Sign in again before saving reviewed media. No media was staged.')).toBeTruthy();
   });
 });

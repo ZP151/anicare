@@ -500,6 +500,7 @@ function uploadHarness(options: Readonly<{
       events.push('delete_ciphertext');
       if (deleteFailures-- > 0) throw new Error('disk path secret');
     },
+    drainPendingCleanup: async () => undefined,
     cleanupQuarantinedMedia: async () => {
       events.push('cleanup_row');
       if (cleanupFailures-- > 0) throw new Error('database path secret');
@@ -518,7 +519,7 @@ function uploadHarness(options: Readonly<{
     clearDeadlineTimer: (handle) => deadlines.clear(handle),
   };
   run.claim = async (now = '2026-08-27T00:00:00.000Z') =>
-    claimMediaUploadAttemptWithDependencies(run.current!.id, new Date(now), 10_000, run.cas);
+    claimMediaUploadAttemptWithDependencies(run.current!.id, new Date(now), 10_000, 'owner-12345678', run.cas);
   run.claimAndRun = async (now) => {
     const claim = await run.claim(now);
     if (!claim) throw new Error('claim_failed');

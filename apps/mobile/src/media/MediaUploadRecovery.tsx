@@ -7,7 +7,7 @@ import { retryRecoverableMediaDrafts } from './media-upload-runtime';
 
 export type MediaUploadRecoveryDependencies = Readonly<{
   recoverLocalJournal(): Promise<void>;
-  retryMedia(): Promise<unknown>;
+  retryMedia(signal?: AbortSignal): Promise<unknown>;
   hasSession(): Promise<boolean>;
   onAuthChange(listener: (signedIn: boolean) => void): () => void;
   onForegroundChange(listener: (active: boolean) => void): () => void;
@@ -51,10 +51,12 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
   let cancelScheduled: (() => void) | null = null;
   let unsubscribeAuth: (() => void) | null = null;
   let unsubscribeForeground: (() => void) | null = null;
+  let activeAbort: AbortController | null = null;
 
   async function run(): Promise<void> {
     if (stopped || running) return;
     running = true;
+    activeAbort = new AbortController();
     try {
       do {
         rerun = false;
@@ -66,11 +68,12 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
           localJournalReady = false;
         }
         if (localJournalReady && !stopped && await dependencies.hasSession().catch(() => false)) {
-          await dependencies.retryMedia().catch(() => undefined);
+          await dependencies.retryMedia(activeAbort.signal).catch(() => undefined);
         }
       } while (!stopped && rerun);
     } finally {
       running = false;
+      activeAbort = null;
     }
   }
 
@@ -95,6 +98,7 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
       if (signedIn) requestRun();
       else {
         rerun = false;
+        activeAbort?.abort();
         cancelScheduled?.();
         cancelScheduled = null;
         scheduled = false;
@@ -108,6 +112,7 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
 
   function stop(): void {
     stopped = true;
+    activeAbort?.abort();
     cancelScheduled?.();
     cancelScheduled = null;
     unsubscribeAuth?.();

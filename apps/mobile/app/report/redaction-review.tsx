@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
+import { getSupabaseClient } from '../../src/api/supabase';
 import { colors, radii } from '../../src/design/theme';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
 import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
@@ -223,11 +224,13 @@ export default function RedactionReviewScreen() {
       setPending(null);
       setStatus('Encrypted reviewed media saved privately. It has not been uploaded or published.');
       router.back();
-    } catch {
+    } catch (error) {
       await cacheLifecycle.abandonAll();
       if (mountedRef.current) {
         if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
-        setStatus('Private encrypted storage failed. The media was not staged.');
+        setStatus(error instanceof Error && error.message === 'authentication_required'
+          ? 'Sign in again before saving reviewed media. No media was staged.'
+          : 'Private encrypted storage failed. The media was not staged.');
       }
     } finally {
       await cacheLifecycle.endAsyncWork();
@@ -240,7 +243,11 @@ export default function RedactionReviewScreen() {
     state: 'local_persisting' | 'upload_pending' | 'needs_user',
     lastError: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null,
   ) {
-    await saveReviewedMediaJournal(journal, state, lastError);
+    const supabase = getSupabaseClient();
+    const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+    const ownerSubject = data.session?.user.id;
+    if (!ownerSubject) throw new Error('authentication_required');
+    await saveReviewedMediaJournal(journal, state, lastError, ownerSubject);
   }
 
   function rememberPreviewSize(event: LayoutChangeEvent) {

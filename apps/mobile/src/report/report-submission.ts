@@ -47,6 +47,15 @@ export function nextReportDraftIdAfterSubmission(
     : currentDraftId;
 }
 
+export function nextReportFormAfterSubmission(
+  currentDraftId: string,
+  result: ReportSubmissionOutcome,
+  nextDraftId: string,
+): Readonly<{ draftId: string; resetForm: boolean; keepConfirmation: boolean }> {
+  const resetForm = nextReportDraftIdAfterSubmission(currentDraftId, result, nextDraftId) !== currentDraftId;
+  return { draftId: resetForm ? nextDraftId : currentDraftId, resetForm, keepConfirmation: resetForm };
+}
+
 export class ReportDraftPersistenceError extends Error {
   constructor() {
     super('draft_persistence_failed');

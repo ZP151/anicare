@@ -25,6 +25,31 @@ describe('MediaUploadRecovery', () => {
     await settle();
     expect(retryMedia).not.toHaveBeenCalled();
   });
+
+  it('actively aborts an in-flight transport trigger when the account signs out', async () => {
+    let authListener: ((signedIn: boolean) => void) | undefined;
+    let signal: AbortSignal | undefined;
+    const queued: Array<() => void> = [];
+    let release!: () => void;
+    const controller = createMediaUploadRecoveryController({
+      recoverLocalJournal: async () => undefined,
+      retryMedia: async (activeSignal) => {
+        signal = activeSignal;
+        await new Promise<void>((resolve) => { release = resolve; });
+      },
+      hasSession: async () => true,
+      onAuthChange: (listener) => { authListener = listener; return () => undefined; },
+      onForegroundChange: () => () => undefined,
+      schedule: (work) => { queued.push(work); return () => undefined; },
+    });
+    controller.start();
+    queued.shift()?.();
+    await settle();
+    authListener?.(false);
+    expect(signal?.aborted).toBe(true);
+    release();
+    await settle();
+  });
   it('runs journal recovery before one coalesced authenticated transport batch', async () => {
     const events: string[] = [];
     const queued: Array<() => void> = [];

@@ -63,14 +63,15 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
        updated_at = excluded.updated_at`;
 export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-  upload_resume_state, upload_attempt_started_at, revision
+  upload_resume_state, upload_attempt_started_at, pending_media_cleanup_ref, revision
   FROM sighting_drafts ORDER BY updated_at DESC`;
 export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-  upload_resume_state, upload_attempt_started_at, revision
+  upload_resume_state, upload_attempt_started_at, pending_media_cleanup_ref, revision
   FROM sighting_drafts WHERE id = ?`;
 export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   media_id = ?,
+  owner_subject = COALESCE(owner_subject, ?),
   reviewed_media_ref = ?,
   encryption_version = ?,
   review_receipt_json = ?,
@@ -84,7 +85,8 @@ export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
     WHEN reviewed_media_ref IS NOT NULL AND reviewed_media_ref <> ? THEN reviewed_media_ref
     ELSE pending_media_cleanup_ref END,
   revision = revision + 1
-  WHERE id = ? AND (pending_media_cleanup_ref IS NULL OR reviewed_media_ref = ?) AND (
+  WHERE id = ? AND (owner_subject = ? OR (owner_subject IS NULL AND media_id IS NULL AND reviewed_media_ref IS NULL))
+    AND (pending_media_cleanup_ref IS NULL OR reviewed_media_ref = ?) AND (
     (media_id IS NULL AND reviewed_media_ref IS NULL AND encryption_version IS NULL
       AND review_receipt_json IS NULL AND upload_state IS NULL)
     OR
@@ -113,7 +115,8 @@ export const MEDIA_UPLOAD_CAS_SQL = `UPDATE sighting_drafts SET
   upload_resume_state = ?,
   upload_attempt_started_at = ?,
   revision = revision + 1
-  WHERE id = ? AND revision = ? AND upload_state = ?
+  WHERE id = ? AND revision = ? AND upload_state = ? AND owner_subject = ?
+    AND pending_media_cleanup_ref IS NULL
     AND upload_state IN ('upload_pending', 'uploading', 'finalizing', 'waiting')`;
 export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
   sighting_id = ?,
@@ -306,6 +309,7 @@ export type ReviewedMediaJournalState = 'local_persisting' | 'upload_pending' | 
 export type ReviewedMediaJournalError = 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null;
 export type ReviewedMediaJournalSnapshot = Readonly<{
   draftId: string;
+  ownerSubject: string;
   mediaId: string;
   encryptedReviewedRef: string;
   encryptionVersion: 'aes-256-gcm.v1';
@@ -328,8 +332,10 @@ export async function saveReviewedMediaJournalWithDependencies(
   journal: ReviewedMediaJournal,
   state: ReviewedMediaJournalState,
   error: ReviewedMediaJournalError,
+  ownerSubject: string,
   dependencies: SaveReviewedMediaJournalDependencies,
 ): Promise<void> {
+  if (!isStableMediaId(ownerSubject)) throw new Error('authentication_required');
   const validated = sanitizeDraftForStorage({
     id: journal.draftId,
     mediaId: journal.mediaId,
@@ -347,6 +353,7 @@ export async function saveReviewedMediaJournalWithDependencies(
   }
   const snapshot: ReviewedMediaJournalSnapshot = {
     draftId: validated.id,
+    ownerSubject,
     mediaId: validated.mediaId,
     encryptedReviewedRef: validated.encryptedReviewedRef,
     encryptionVersion: validated.encryptionVersion,
@@ -386,9 +393,10 @@ export async function saveReviewedMediaJournal(
   journal: ReviewedMediaJournal,
   state: ReviewedMediaJournalState,
   error: ReviewedMediaJournalError,
+  ownerSubject: string,
 ): Promise<void> {
   const database = await getDatabase();
-  return saveReviewedMediaJournalWithDependencies(journal, state, error, {
+  return saveReviewedMediaJournalWithDependencies(journal, state, error, ownerSubject, {
     commitMediaSnapshot: async (snapshot) => {
       await database.withExclusiveTransactionAsync(async (transaction) => {
         const current = await transaction.getFirstAsync<{
@@ -407,6 +415,7 @@ export async function saveReviewedMediaJournal(
         const result = await transaction.runAsync(
           MEDIA_JOURNAL_SAVE_SQL,
           snapshot.mediaId,
+          snapshot.ownerSubject,
           snapshot.encryptedReviewedRef,
           snapshot.encryptionVersion,
           JSON.stringify(snapshot.receipt),
@@ -418,6 +427,7 @@ export async function saveReviewedMediaJournal(
           snapshot.uploadJob.attemptStartedAt,
           snapshot.encryptedReviewedRef,
           snapshot.draftId,
+          snapshot.ownerSubject,
           snapshot.encryptedReviewedRef,
           snapshot.mediaId,
           snapshot.encryptedReviewedRef,
@@ -493,7 +503,7 @@ function databasePendingCleanupDependencies(
   };
 }
 
-async function cleanupPendingReviewedMediaForDraft(draftId: string): Promise<void> {
+export async function cleanupPendingReviewedMediaForDraft(draftId: string): Promise<void> {
   const database = await getDatabase();
   await cleanupPendingReviewedMediaReferencesWithDependencies(
     databasePendingCleanupDependencies(database, draftId),
@@ -549,6 +559,7 @@ export type MediaUploadCasDependencies = Readonly<{
     expectedRevision: number,
     expectedState: UploadJobState,
     next: UploadJob,
+    expectedOwnerSubject?: string,
   ): Promise<boolean>;
 }>;
 
@@ -557,7 +568,7 @@ function claimableMedia(draft: StoredDraft): draft is StoredDraft & Required<Pic
   'mediaId' | 'sightingId' | 'ownerSubject' | 'encryptedReviewedRef' | 'encryptionVersion' | 'receipt' | 'uploadJob' | 'revision'
 >> & Readonly<{ encryptionVersion: 'aes-256-gcm.v1' }> {
   return isStableMediaId(draft.mediaId) && isStableMediaId(draft.sightingId) && isStableMediaId(draft.ownerSubject) &&
-    isReviewedMediaReference(draft.encryptedReviewedRef, draft.mediaId) &&
+    isReviewedMediaReference(draft.encryptedReviewedRef, draft.mediaId) && !draft.pendingMediaCleanupRef &&
     draft.encryptionVersion === 'aes-256-gcm.v1' && !!draft.receipt && !!draft.uploadJob &&
     Number.isInteger(draft.revision) && draft.revision! >= 0 && !draft.mediaFailure;
 }
@@ -610,18 +621,19 @@ export async function claimMediaUploadAttemptWithDependencies(
   id: string,
   now: Date,
   leaseMs: number,
+  expectedOwnerSubject: string,
   dependencies: MediaUploadCasDependencies,
 ): Promise<MediaUploadClaim | null> {
   if (!isStableMediaId(id) || !(now instanceof Date) || !Number.isFinite(now.getTime()) ||
-      !Number.isFinite(leaseMs) || leaseMs <= 0 || leaseMs > 24 * 60 * 60 * 1000) {
+      !Number.isFinite(leaseMs) || leaseMs <= 0 || leaseMs > 24 * 60 * 60 * 1000 || !isStableMediaId(expectedOwnerSubject)) {
     throw new Error('invalid_media_upload_claim');
   }
   const current = await dependencies.getOfflineDraft(id);
-  if (!current || !claimableMedia(current)) return null;
+  if (!current || !claimableMedia(current) || current.ownerSubject !== expectedOwnerSubject) return null;
   const claimed = claimedJob(current.uploadJob, now, leaseMs);
   if (!claimed) return null;
   const won = await dependencies.compareAndSwapUploadJob(
-    id, current.revision, current.uploadJob.state, claimed.job,
+    id, current.revision, current.uploadJob.state, claimed.job, current.ownerSubject,
   );
   if (!won) return null;
   return {
@@ -676,7 +688,8 @@ export async function transitionClaimedMediaUploadWithDependencies(
   } catch {
     return false;
   }
-  return dependencies.compareAndSwapUploadJob(id, expectedRevision, current.uploadJob.state, next);
+  if (!isStableMediaId(current.ownerSubject)) return false;
+  return dependencies.compareAndSwapUploadJob(id, expectedRevision, current.uploadJob.state, next, current.ownerSubject);
 }
 
 function databaseCasDependencies(database: SQLite.SQLiteDatabase): MediaUploadCasDependencies {
@@ -685,7 +698,8 @@ function databaseCasDependencies(database: SQLite.SQLiteDatabase): MediaUploadCa
       const row = await database.getFirstAsync<DraftRow>(DRAFT_GET_SQL, id);
       return row ? deserializeDraftRows([row])[0] ?? null : null;
     },
-    compareAndSwapUploadJob: async (id, expectedRevision, expectedState, next) => {
+    compareAndSwapUploadJob: async (id, expectedRevision, expectedState, next, expectedOwnerSubject) => {
+      if (!isStableMediaId(expectedOwnerSubject)) return false;
       const result = await database.runAsync(
         MEDIA_UPLOAD_CAS_SQL,
         next.state,
@@ -697,6 +711,7 @@ function databaseCasDependencies(database: SQLite.SQLiteDatabase): MediaUploadCa
         id,
         expectedRevision,
         expectedState,
+        expectedOwnerSubject,
       );
       return result.changes === 1;
     },
@@ -784,9 +799,10 @@ export async function claimMediaUploadAttempt(
   id: string,
   now: Date,
   leaseMs: number,
+  expectedOwnerSubject: string,
 ): Promise<MediaUploadClaim | null> {
   const database = await getDatabase();
-  return claimMediaUploadAttemptWithDependencies(id, now, leaseMs, databaseCasDependencies(database));
+  return claimMediaUploadAttemptWithDependencies(id, now, leaseMs, expectedOwnerSubject, databaseCasDependencies(database));
 }
 
 export async function transitionClaimedMediaUpload(
@@ -846,7 +862,15 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
           attemptStartedAt: row.upload_attempt_started_at,
         },
       });
-      if (!isStableMediaId(row.owner_subject)) {
+      const pendingCleanup = row.pending_media_cleanup_ref === null || row.pending_media_cleanup_ref === undefined
+        ? undefined
+        : isReviewedMediaReference(row.pending_media_cleanup_ref) && row.pending_media_cleanup_ref !== row.reviewed_media_ref
+          ? row.pending_media_cleanup_ref
+          : null;
+      if (pendingCleanup === null) {
+        drafts.push({ ...otherwiseValid, revision: textOnly.revision, mediaFailure: 'local_media_corrupt',
+          uploadJob: failedMediaJob(row.upload_attempts, 'local_media_corrupt') });
+      } else if (!isStableMediaId(row.owner_subject)) {
         drafts.push({
           ...otherwiseValid,
           revision: textOnly.revision,
@@ -854,7 +878,8 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
           uploadJob: failedMediaJob(row.upload_attempts, 'auth_ownership'),
         });
       } else if (row.encryption_version === 'aes-256-gcm.v1') {
-        drafts.push({ ...otherwiseValid, revision: textOnly.revision });
+        drafts.push({ ...otherwiseValid, revision: textOnly.revision,
+          ...(pendingCleanup ? { pendingMediaCleanupRef: pendingCleanup } : {}) });
       } else {
         const versionMismatch: StoredDraft = {
           ...otherwiseValid,

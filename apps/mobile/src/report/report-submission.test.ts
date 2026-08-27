@@ -1,6 +1,7 @@
 import {
   persistReportDraftBeforeReview,
   nextReportDraftIdAfterSubmission,
+  nextReportFormAfterSubmission,
   ReportDraftPersistenceError,
   reportSubmissionFailureStatus,
   reportSubmissionStatus,
@@ -83,6 +84,17 @@ describe('report submission lifecycle', () => {
         sightingId: response.sightingId, visibility: null, state,
       }, 'draft-87654321')).toBe('draft-12345678');
     }
+  });
+
+  it('keeps the terminal safety confirmation visible while preparing the next fresh report', () => {
+    const terminal = nextReportFormAfterSubmission('draft-12345678', {
+      sightingId: response.sightingId, visibility: 'hidden', state: 'quarantined',
+    }, 'draft-87654321');
+    expect(terminal).toEqual({ draftId: 'draft-87654321', resetForm: true, keepConfirmation: true });
+    const queued = nextReportFormAfterSubmission('draft-12345678', {
+      sightingId: response.sightingId, visibility: null, state: 'upload_pending',
+    }, 'draft-87654321');
+    expect(queued).toEqual({ draftId: 'draft-12345678', resetForm: false, keepConfirmation: false });
   });
 
   it('keeps consecutive terminal reports on distinct dedupe and sighting identities', async () => {

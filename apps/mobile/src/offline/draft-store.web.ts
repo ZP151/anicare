@@ -18,6 +18,7 @@ export async function saveReviewedMediaJournal(
   _journal: ReviewedMediaJournal,
   _state: 'local_persisting' | 'upload_pending' | 'needs_user',
   _error: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null,
+  _ownerSubject: string,
 ): Promise<void> {
   return unavailable();
 }

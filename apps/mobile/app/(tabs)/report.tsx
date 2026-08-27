@@ -19,7 +19,7 @@ import {
 import { uploadDraftMediaNow } from '../../src/media/media-upload-runtime';
 import {
   persistReportDraftBeforeReview,
-  nextReportDraftIdAfterSubmission,
+  nextReportFormAfterSubmission,
   reportSubmissionFailureStatus,
   reportSubmissionStatus,
   submitReportWithMedia,
@@ -102,13 +102,13 @@ export default function ReportScreen() {
         uploadMedia: uploadDraftMediaNow,
         deleteDraft: deleteOfflineDraft,
       });
-      const nextDraftId = nextReportDraftIdAfterSubmission(draftId, result, Crypto.randomUUID());
-      if (nextDraftId !== draftId) {
-        setDraftId(nextDraftId);
+      const next = nextReportFormAfterSubmission(draftId, result, Crypto.randomUUID());
+      if (next.resetForm) {
+        setDraftId(next.draftId);
         setNotes('');
         setRisk('normal');
         setCoordinates(null);
-        setStatus(null);
+        setStatus(reportSubmissionStatus(result));
       } else {
         setStatus(reportSubmissionStatus(result));
       }
@@ -137,7 +137,7 @@ export default function ReportScreen() {
       <TextInput
         accessibilityLabel="Sighting notes"
         multiline
-        onChangeText={setNotes}
+        onChangeText={(value) => { setNotes(value); setStatus(null); }}
         placeholder="Coat, ear tip, markings and condition"
         placeholderTextColor={colors.muted}
         style={styles.input}
@@ -147,7 +147,7 @@ export default function ReportScreen() {
         <Text style={styles.label}>Safety sensitivity</Text>
         <View style={styles.row}>
           {(['normal', 'sensitive', 'critical'] as const).map((option) => (
-            <Pressable key={option} onPress={() => setRisk(option)} style={[styles.choice, risk === option && styles.selected]}>
+            <Pressable key={option} onPress={() => { setRisk(option); setStatus(null); }} style={[styles.choice, risk === option && styles.selected]}>
               <Text>{option}</Text>
             </Pressable>
           ))}

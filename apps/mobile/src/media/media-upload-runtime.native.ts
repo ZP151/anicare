@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../api/supabase';
 import {
   claimMediaUploadAttempt,
   cleanupQuarantinedMedia,
+  cleanupPendingReviewedMediaForDraft,
   getOfflineDraft,
   listOfflineDrafts,
   transitionClaimedMediaUpload,
@@ -29,16 +30,17 @@ export type MediaUploadRuntimeDependencies = Readonly<{
   getOwnerSubject(): Promise<string | null>;
   listDrafts(): Promise<readonly StoredDraft[]>;
   getDraft(id: string): Promise<StoredDraft | null>;
-  claimAttempt(id: string, now: Date, leaseMs: number): Promise<MediaUploadClaim | null>;
-  runAttempt(claim: MediaUploadClaim): Promise<MediaUploadRunResult>;
+  claimAttempt(id: string, now: Date, leaseMs: number, expectedOwnerSubject: string): Promise<MediaUploadClaim | null>;
+  runAttempt(claim: MediaUploadClaim, signal?: AbortSignal): Promise<MediaUploadRunResult>;
   deleteCiphertext(reference: string): Promise<void>;
+  drainPendingCleanup(draftId: string): Promise<void>;
   cleanupQuarantined(id: string, revision: number): Promise<void>;
   now(): Date;
   leaseMs: number;
 }>;
 
 function isRetryCandidate(draft: StoredDraft, now: Date, leaseMs: number): boolean {
-  if (draft.mediaFailure || !draft.mediaId || !draft.sightingId || !draft.encryptedReviewedRef ||
+  if (draft.mediaFailure || draft.pendingMediaCleanupRef || !draft.mediaId || !draft.sightingId || !draft.encryptedReviewedRef ||
       draft.encryptionVersion !== 'aes-256-gcm.v1' || !draft.receipt || !draft.uploadJob) return false;
   const job = draft.uploadJob;
   if (job.state === 'upload_pending' || job.state === 'quarantined') return true;
@@ -54,8 +56,9 @@ function isRetryCandidate(draft: StoredDraft, now: Date, leaseMs: number): boole
 }
 
 export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDependencies) {
-  async function uploadDraftMediaNow(draftId: string): Promise<MediaUploadRuntimeResult> {
+  async function uploadDraftMediaNow(draftId: string, signal?: AbortSignal): Promise<MediaUploadRuntimeResult> {
     // Check auth before the CAS claim, because claiming increments attempts.
+    if (signal?.aborted) return 'stale';
     const ownerSubject = await dependencies.getOwnerSubject();
     if (!ownerSubject) return 'not_ready';
     const current = await dependencies.getDraft(draftId);
@@ -63,13 +66,22 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
     if (current?.mediaFailure || current?.uploadJob?.state === 'needs_user') return 'needs_user';
     if (!await dependencies.getAccessToken()) return 'not_ready';
     if (current?.uploadJob?.state === 'quarantined') {
-      const revision = current.revision;
-      if (!current.encryptedReviewedRef || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return 'needs_user';
+      try {
+        await dependencies.drainPendingCleanup(current.id);
+      } catch {
+        return 'quarantined';
+      }
+      const drained = await dependencies.getDraft(draftId);
+      if (!drained || drained.ownerSubject !== ownerSubject || drained.pendingMediaCleanupRef ||
+          drained.uploadJob?.state !== 'quarantined') return 'quarantined';
+      const revision = drained.revision;
+      if (!drained.encryptedReviewedRef || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return 'needs_user';
       // Quarantine is already the durable success boundary. Resume only its ordered local cleanup.
-      await dependencies.deleteCiphertext(current.encryptedReviewedRef);
-      await dependencies.cleanupQuarantined(current.id, revision);
+      await dependencies.deleteCiphertext(drained.encryptedReviewedRef);
+      await dependencies.cleanupQuarantined(drained.id, revision);
       return 'quarantined';
     }
+    if (current?.pendingMediaCleanupRef) return current.uploadJob?.state ?? 'local_persisting';
     if (current?.uploadJob?.state === 'waiting') {
       const due = current.uploadJob.nextAttemptAt ? Date.parse(current.uploadJob.nextAttemptAt) : Number.NaN;
       if (!Number.isFinite(due) || due > dependencies.now().getTime()) return 'waiting';
@@ -80,15 +92,17 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
         return current.uploadJob.state;
       }
     }
-    const claim = await dependencies.claimAttempt(draftId, dependencies.now(), dependencies.leaseMs);
+    if (signal?.aborted || await dependencies.getOwnerSubject() !== ownerSubject) return 'stale';
+    const claim = await dependencies.claimAttempt(draftId, dependencies.now(), dependencies.leaseMs, ownerSubject);
     if (!claim) {
       const latest = await dependencies.getDraft(draftId);
       return latest?.mediaFailure ? 'needs_user' : latest?.uploadJob?.state ?? 'not_ready';
     }
-    return dependencies.runAttempt(claim);
+    if (await dependencies.getOwnerSubject() !== claim.ownerSubject) return 'stale';
+    return dependencies.runAttempt(claim, signal);
   }
 
-  async function retryRecoverableMediaDrafts(): Promise<MediaUploadRuntimeResult[]> {
+  async function retryRecoverableMediaDrafts(signal?: AbortSignal): Promise<MediaUploadRuntimeResult[]> {
     if (!await dependencies.getOwnerSubject()) return [];
     const now = dependencies.now();
     const candidates = (await dependencies.listDrafts())
@@ -96,7 +110,10 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
       .slice(0, RECOVERY_BATCH_LIMIT);
     const results: MediaUploadRuntimeResult[] = [];
     // Intentionally sequential: Task 4 CAS owns cross-trigger concurrency.
-    for (const draft of candidates) results.push(await uploadDraftMediaNow(draft.id));
+    for (const draft of candidates) {
+      if (signal?.aborted) break;
+      results.push(await uploadDraftMediaNow(draft.id, signal));
+    }
     return results;
   }
 
@@ -137,7 +154,7 @@ const nativeRuntime = createMediaUploadRuntime({
   listDrafts: listOfflineDrafts,
   getDraft: getOfflineDraft,
   claimAttempt: claimMediaUploadAttempt,
-  runAttempt: (claim) => runMediaUploadAttempt(claim, {
+  runAttempt: (claim, signal) => runMediaUploadAttempt(claim, {
     getOfflineDraft,
     transitionClaimedMediaUpload,
     getOwnerSubject: currentOwnerSubject,
@@ -151,6 +168,7 @@ const nativeRuntime = createMediaUploadRuntime({
     putReservedMedia: (input) => putReservedMedia(input, strictTransportDependencies),
     finalizeMediaUpload: (input) => finalizeMediaUpload(input, strictTransportDependencies),
     deleteReviewedMediaReference,
+    drainPendingCleanup: cleanupPendingReviewedMediaForDraft,
     cleanupQuarantinedMedia,
     now: () => new Date(),
     random: Math.random,
@@ -158,8 +176,10 @@ const nativeRuntime = createMediaUploadRuntime({
     createAbortController: () => new AbortController(),
     setDeadlineTimer: (callback, delayMs) => setTimeout(callback, delayMs),
     clearDeadlineTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    cancellationSignal: signal,
   }),
   deleteCiphertext: deleteReviewedMediaReference,
+  drainPendingCleanup: cleanupPendingReviewedMediaForDraft,
   cleanupQuarantined: cleanupQuarantinedMedia,
   now: () => new Date(),
   leaseMs: CLAIM_LEASE_MS,

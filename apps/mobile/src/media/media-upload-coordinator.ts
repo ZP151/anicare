@@ -42,6 +42,7 @@ export type MediaUploadCoordinatorDependencies = Readonly<{
     signal?: AbortSignal;
   }>): Promise<MediaFinalizationResponse>;
   deleteReviewedMediaReference(reference: string): Promise<void>;
+  drainPendingCleanup(draftId: string): Promise<void>;
   cleanupQuarantinedMedia(draftId: string, expectedRevision: number): Promise<void>;
   now(): Date;
   random(): number;
@@ -50,6 +51,7 @@ export type MediaUploadCoordinatorDependencies = Readonly<{
   createAbortController(): AbortController;
   setDeadlineTimer(callback: () => void, delayMs: number): unknown;
   clearDeadlineTimer(handle: unknown): void;
+  cancellationSignal?: AbortSignal;
 }>;
 
 type MutableAttempt = {
@@ -168,11 +170,15 @@ async function withAttemptDeadline<T>(
     throw new Error('media_upload_timeout');
   }
   const controller = dependencies.createAbortController();
+  const abortOnCancellation = () => controller.abort();
+  if (dependencies.cancellationSignal?.aborted) controller.abort();
+  dependencies.cancellationSignal?.addEventListener('abort', abortOnCancellation, { once: true });
   const timer = dependencies.setDeadlineTimer(() => controller.abort(), dependencies.plaintextDeadlineMs);
   try {
     return await untilAbort(operation(controller.signal), controller.signal);
   } finally {
     dependencies.clearDeadlineTimer(timer);
+    dependencies.cancellationSignal?.removeEventListener('abort', abortOnCancellation);
   }
 }
 
@@ -215,11 +221,18 @@ async function cleanupTerminal(
   draftId: string,
   reference: string,
   revision: number,
+  ownerSubject: string,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<'quarantined'> {
   try {
+    await dependencies.drainPendingCleanup(draftId);
+    const current = await dependencies.getOfflineDraft(draftId);
+    if (!current || current.ownerSubject !== ownerSubject || current.pendingMediaCleanupRef ||
+        current.uploadJob?.state !== 'quarantined' || current.encryptedReviewedRef !== reference) {
+      throw new Error('terminal_cleanup_conflict');
+    }
     await dependencies.deleteReviewedMediaReference(reference);
-    await dependencies.cleanupQuarantinedMedia(draftId, revision);
+    await dependencies.cleanupQuarantinedMedia(draftId, current.revision ?? revision);
     return 'quarantined';
   } catch {
     throw new Error('terminal_cleanup_failed');
@@ -247,7 +260,7 @@ async function persistQuarantined(
   const result = await persistOutcome(attempt, { kind: 'quarantined' }, dependencies);
   if (result !== 'quarantined') return result;
   return cleanupTerminal(
-    attempt.claim.draftId, attempt.claim.encryptedReviewedRef, attempt.revision, dependencies,
+    attempt.claim.draftId, attempt.claim.encryptedReviewedRef, attempt.revision, attempt.claim.ownerSubject, dependencies,
   );
 }
 
@@ -411,10 +424,13 @@ async function runInternal(
   }
   if (!current || current.ownerSubject !== await dependencies.getOwnerSubject()) return 'stale';
   if (current.uploadJob?.state === 'quarantined' && current.encryptedReviewedRef) {
-    return cleanupTerminal(current.id, current.encryptedReviewedRef, current.revision ?? claim.revision, dependencies);
+    return cleanupTerminal(current.id, current.encryptedReviewedRef, current.revision ?? claim.revision, claim.ownerSubject, dependencies);
   }
   if (!currentMatchesClaim(current, claim)) return 'stale';
   const attempt: MutableAttempt = { claim, revision: claim.revision, job: claim.uploadJob };
+  if (dependencies.cancellationSignal?.aborted) {
+    return persistOutcome(attempt, { kind: 'network' }, dependencies);
+  }
   return claim.recovering ? runRecovering(attempt, dependencies) : runFresh(attempt, dependencies);
 }
 

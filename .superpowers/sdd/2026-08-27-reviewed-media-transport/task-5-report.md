@@ -40,6 +40,15 @@ PASS: 32 suites, 306 tests.
 pnpm --filter @animalhelper/mobile typecheck
 PASS: tsc --noEmit.
 
+pnpm --filter @animalhelper/mobile test
+PASS: 32 suites, 374 tests.
+
+pnpm --filter @animalhelper/edge-functions test
+PASS: 6 files, 48 tests.
+
+pnpm --filter @animalhelper/mobile build
+PASS: Expo web export completed.
+
 pnpm --filter @animalhelper/mobile build
 PASS: Expo web export completed.
 
@@ -281,3 +290,64 @@ PASS: no whitespace errors (Git only emitted CRLF conversion warnings).
   SQLite/SecureStore/Crypto behavior, background/foreground/device races and
   residual detection remain release gates. Public promotion and residual
   auto-detection remain disabled.
+
+## Whole-branch fix — Batch D (owner and terminal outbox)
+
+### TDD evidence
+
+#### RED
+
+```text
+pnpm --filter @animalhelper/mobile test -- draft-store.native.test.ts
+FAIL: 3 failures. First journal snapshot had ownerSubject undefined; signed-out
+review persistence resolved and created a durable row; an otherwise-valid row
+with pendingMediaCleanupRef was still claimable.
+
+pnpm --filter @animalhelper/mobile test -- report-submission.test.ts
+FAIL: nextReportFormAfterSubmission was absent, so a terminal reset had no
+way to preserve a truthful confirmation while rotating the draft identity.
+```
+
+#### GREEN
+
+```text
+pnpm --filter @animalhelper/mobile test -- media-upload-runtime.test.ts media-upload-coordinator.test.ts MediaUploadRecovery.test.tsx report-submission.test.ts redaction-review.test.tsx draft-store.native.test.ts
+PASS: 6 suites, 130 tests.
+
+pnpm --filter @animalhelper/mobile typecheck
+PASS: tsc --noEmit.
+
+pnpm --filter @animalhelper/mobile test
+PASS: 32 suites, 374 tests.
+
+pnpm --filter @animalhelper/edge-functions test
+PASS: 6 files, 48 tests.
+
+pnpm --filter @animalhelper/mobile build
+PASS: Expo web export completed.
+```
+
+### Batch D invariants and self-review
+
+- The first media journal transaction now requires a live stable owner and
+  writes `owner_subject` atomically with its immutable media tuple. A missing
+  session fails before the journal commit; replacement only admits that same
+  owner. Submission rejects an owner mismatch before recovery/create/network.
+- Claim reads require the matching owner and no pending cleanup; the SQLite CAS
+  predicate binds owner, revision, source state and `pending_media_cleanup_ref
+  IS NULL` in one mutation. Legacy ownerless media remains needs-user.
+- Recovery creates an in-memory AbortController for active transport and aborts
+  it on signout/stop. Runtime rechecks owner before claim and after a claim;
+  coordinator cancellation maps a claimed attempt through bounded retry state
+  before decrypt/transport. No token, owner, capability, URL or plaintext is
+  persisted or logged.
+- Terminal cleanup drains the pending outbox first, rereads the durable row and
+  revision, then deletes active ciphertext and finally guarded row state. A
+  pending-delete failure retains both references and the row; a pending outbox
+  prevents a normal upload claim. Web remains fail-closed.
+- Terminal report reset rotates/form-clears but keeps the truthful private
+  confirmation visible until the user edits the fresh form.
+- Reviewed journal SQL binding order (19 placeholders), owner/pending claim
+  predicates, native/web/declaration signatures, cancellation listener cleanup
+  and the absence of late-promise rejections. Real Supabase/Storage/Deno and
+  native device lifecycle/race validation remain release gates.
