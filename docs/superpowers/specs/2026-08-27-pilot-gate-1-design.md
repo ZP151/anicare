@@ -15,8 +15,9 @@ The reviewed-media branch currently passes the repository's unit, type, lint and
 3. The native SQLite singleton permanently caches a rejected initialization promise, and an existing SecureStore database key is interpolated into `PRAGMA key` without format validation.
 4. CI validates UUID literals in only one of nine pgTAP files and does not type-check the six Edge handler entrypoints in Deno.
 5. There is no committed EAS internal-distribution profile or executable native-configuration attestation.
+6. GitHub Actions run `33079257029` proves the general `verify` job passes, but the ephemeral Supabase local stack in Docker cannot apply the first migration: PostgreSQL 17 rejects `captured_at + interval '12 months'` in a stored generated column because the underlying `timestamptz_pl_interval` function is `STABLE`, not `IMMUTABLE`.
 
-Real Docker/Supabase, signed Storage, two-session concurrency, iOS/Android device behavior, signing, hosted staging and operational/legal drills remain explicit downstream gates.
+Hosted Supabase, signed Storage, two-session concurrency, iOS/Android device behavior, signing, hosted staging and operational/legal drills remain explicit downstream gates.
 
 ## Safety invariants
 
@@ -86,6 +87,8 @@ Atomic schema migration, SQLCipher integrity checks, wrong-key behavior, backup/
 
 Strengthen the existing CI workflow rather than creating a parallel pipeline:
 
+- repair the first migration without weakening the automatic retention deadline: compute `coarsen_after` as twelve calendar months after the UTC wall-clock form of `captured_at`, then convert that result back with an explicit UTC zone; the generated expression therefore uses only immutable built-ins and cannot vary with the database session `TimeZone`;
+- add pgTAP coverage that inserts representative timestamps, including a leap-day value, changes the session time zone, and proves the stored deadline remains the same UTC instant and cannot be supplied or overridden by callers;
 - loop over every `supabase/tests/*.sql` file with the UUID-literal validator;
 - keep Supabase CLI pinned to `2.84.2` for `supabase start`, `supabase test db` and warning-level database lint;
 - install Deno `2.9.5` with the official setup action;
@@ -124,10 +127,11 @@ Before sharing any internal build, the Expo project setting for unauthenticated 
 
 Every behavior change follows red-green-refactor:
 
-1. Native-config fixtures first fail on the current audio/camera permissions, and the real-config adapter proves the current composed output fails for the same bounded codes.
-2. Database tests first reproduce the poisoned singleton and malformed-key paths.
-3. CI script tests first prove all nine SQL files and all six handlers are enumerated; the workflow then consumes those deterministic scripts.
-4. Configuration changes make the focused tests green.
+1. GitHub Actions run `33079257029` is the initial fresh-stack red evidence. Add the pgTAP retention contract alongside the smallest immutable fixed-UTC migration repair; the next fresh PostgreSQL 17 Supabase run must both apply the migration and prove the UTC calendar-month and caller-control invariants.
+2. Native-config fixtures first fail on the current audio/camera permissions, and the real-config adapter proves the current composed output fails for the same bounded codes.
+3. Database tests first reproduce the poisoned singleton and malformed-key paths.
+4. CI script tests first prove every SQL file and all six handlers are enumerated; the workflow then consumes those deterministic scripts.
+5. Configuration changes make the focused tests green.
 
 Fresh final verification for this gate must include:
 
@@ -153,10 +157,11 @@ On GitHub Actions, the mandatory database job must additionally prove all migrat
 ## Acceptance criteria
 
 - Expo compatibility check exits zero with no recommended-version mismatch.
+- A fresh Supabase stack applies every migration; `coarsen_after` is generated as the same UTC instant in different session time zones, follows twelve-calendar-month behavior for leap-day input, and cannot be overridden by an insert.
 - Normalized public-plus-introspected Expo evidence contains no camera or microphone permission while retaining photo library, location, scheme, bundle/package and SQLCipher requirements.
 - Transient SecureStore/SQLite initialization failures are retryable without losing single-flight behavior.
 - Invalid stored database keys fail closed without regeneration, overwrite or database open.
-- CI deterministically enumerates nine pgTAP files and six Edge handlers; future additions cannot silently escape the gate.
+- CI deterministically enumerates every pgTAP file and all six current Edge handlers; future additions cannot silently escape the gate.
 - Deno dependency resolution is locked and the handler check refuses an out-of-date lockfile.
 - A committed internal `pilot` EAS profile exists without secrets and requires committed source.
 - All existing privacy, upload, admin and AI contract suites remain green.
@@ -164,6 +169,6 @@ On GitHub Actions, the mandatory database job must additionally prove all migrat
 
 ## Rollout and rollback
 
-Land the gate as reviewable commits in this order: compatibility/permissions, database initialization, CI, then EAS/documentation. Each commit must independently pass its focused tests. If a compatibility upgrade breaks behavior, revert only that compatibility commit; do not weaken the config or privacy assertions. No database format or server schema changes are introduced by this gate.
+Land the gate as reviewable commits in this order: retention migration repair, compatibility/permissions, database initialization, CI, then EAS/documentation. Each commit must independently pass its focused tests. If a compatibility upgrade breaks behavior, revert only that compatibility commit; do not weaken the config or privacy assertions. The retention expression repair is the only server-schema change and edits the unreleased initial migration rather than creating a false forward-migration history for a schema that has never applied successfully.
 
 Promotion to Pilot Gate 2 requires the CI database job to pass on the pushed branch and a reviewed plan for the two-user real Storage integration harness. Promotion to physical-device testing additionally requires EAS authentication, controlled credentials, registered devices and an approved test-data protocol.
