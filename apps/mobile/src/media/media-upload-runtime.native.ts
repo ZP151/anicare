@@ -66,6 +66,7 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
     if (current?.mediaFailure || current?.uploadJob?.state === 'needs_user') return 'needs_user';
     if (!await dependencies.getAccessToken()) return 'not_ready';
     if (current?.uploadJob?.state === 'quarantined') {
+      if (signal?.aborted) return 'stale';
       try {
         await dependencies.drainPendingCleanup(current.id);
       } catch {
@@ -76,8 +77,10 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
           drained.uploadJob?.state !== 'quarantined') return 'quarantined';
       const revision = drained.revision;
       if (!drained.encryptedReviewedRef || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return 'needs_user';
+      if (signal?.aborted || await dependencies.getOwnerSubject() !== ownerSubject) return 'stale';
       // Quarantine is already the durable success boundary. Resume only its ordered local cleanup.
       await dependencies.deleteCiphertext(drained.encryptedReviewedRef);
+      if (signal?.aborted || await dependencies.getOwnerSubject() !== ownerSubject) return 'stale';
       await dependencies.cleanupQuarantined(drained.id, revision);
       return 'quarantined';
     }

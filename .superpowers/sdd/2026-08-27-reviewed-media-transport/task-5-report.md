@@ -351,3 +351,54 @@ PASS: Expo web export completed.
   predicates, native/web/declaration signatures, cancellation listener cleanup
   and the absence of late-promise rejections. Real Supabase/Storage/Deno and
   native device lifecycle/race validation remain release gates.
+
+## Whole-branch fix — Batch E (auth-switch epoch)
+
+### TDD evidence
+
+#### RED
+
+```text
+pnpm --filter @animalhelper/mobile test -- MediaUploadRecovery.test.tsx
+FAIL: same-subject auth refresh queued two recovery runs. Earlier owner-attach
+and direct A-to-B tests exposed the boolean auth listener’s inability to abort
+an active A run before scheduling B.
+```
+
+#### GREEN
+
+```text
+pnpm --filter @animalhelper/mobile test -- MediaUploadRecovery.test.tsx draft-store.native.test.ts media-upload-coordinator.test.ts media-upload-runtime.test.ts report-submission.test.ts redaction-review.test.tsx
+PASS: 6 suites, 133 tests.
+
+pnpm --filter @animalhelper/mobile typecheck
+PASS: tsc --noEmit.
+
+pnpm --filter @animalhelper/mobile test
+PASS: 32 suites, 377 tests.
+
+pnpm --filter @animalhelper/edge-functions test
+PASS: 6 files, 48 tests.
+
+pnpm --filter @animalhelper/mobile build
+PASS: Expo web export completed.
+```
+
+### Batch E invariants and self-review
+
+- Recovery now carries a nullable authenticated subject rather than a boolean.
+  A subject change, including direct A-to-B, aborts the active epoch, cancels
+  queued work and schedules exactly one fresh epoch after A settles. Same-owner
+  refreshes coalesce without a duplicate claim; signout still aborts/cancels.
+- The external signal reaches runtime, token/deadline work, reserve, PUT and
+  finalize, including finalizing-first recovery. Cancellation is checked before
+  local cleanup, transport and CAS transitions; an already claimed A row can
+  only transition through its own owner-bound CAS to bounded waiting.
+- The first sighting attach cannot replace a pre-existing media owner: both the
+  dependency guard and SQL first-attach branch require its owner, while a truly
+  unowned text-only row may bind. Web declarations/signatures now match native
+  owner, pending-cleanup and optional-signal APIs while remaining fail-closed.
+- Rechecked cancellation race windows: an abort after remote commit but before
+  local terminal persistence becomes waiting/finalizing-first recovery, never
+  stale success; cleanup-only quarantine checks subject/signal between effects.
+  Owner/token/capability/plaintext remain unlogged and unpersisted.

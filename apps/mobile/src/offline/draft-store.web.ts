@@ -39,7 +39,7 @@ export async function getOfflineDraft(_id: string): Promise<StoredDraft | null> 
   return unavailable();
 }
 
-export async function claimMediaUploadAttempt(_id: string, _now: Date, _leaseMs: number): Promise<never> {
+export async function claimMediaUploadAttempt(_id: string, _now: Date, _leaseMs: number, _ownerSubject: string): Promise<never> {
   return unavailable();
 }
 
@@ -60,5 +60,9 @@ export async function deleteOfflineDraft(_id: string): Promise<void> {
 }
 
 export async function cleanupPendingReviewedMediaReferences(): Promise<void> {
+  return unavailable();
+}
+
+export async function cleanupPendingReviewedMediaForDraft(_draftId: string): Promise<void> {
   return unavailable();
 }

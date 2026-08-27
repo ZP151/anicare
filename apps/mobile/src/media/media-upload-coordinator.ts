@@ -116,6 +116,7 @@ function isAbortFailure(value: unknown): boolean {
 
 function transportOutcome(value: unknown): UploadAttemptResult {
   if (isAbortFailure(value)) return { kind: 'network' };
+  if (value instanceof Error && value.message === 'media_upload_cancelled') return { kind: 'network' };
   if (!isTransportFailure(value)) return { kind: 'upload_error' };
   if (value.code === 'authentication_required') return { kind: 'authentication_required' };
   if (value.kind === 'network') return { kind: 'network' };
@@ -126,6 +127,7 @@ function transportOutcome(value: unknown): UploadAttemptResult {
 function localOutcome(value: unknown): UploadAttemptResult {
   if (isAbortFailure(value)) return { kind: 'network' };
   const message = value instanceof Error ? value.message : '';
+  if (message === 'media_upload_cancelled') return { kind: 'network' };
   if (message === 'media_upload_timeout') return { kind: 'network' };
   if (message === 'authentication_required') return { kind: 'authentication_required' };
   if (message === 'local_media_unavailable' || message === 'secure_media_processing_unavailable') {
@@ -194,6 +196,9 @@ async function move(
   next: UploadJob,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<boolean> {
+  if (dependencies.cancellationSignal?.aborted && next.state !== 'waiting') {
+    throw new Error('media_upload_cancelled');
+  }
   try {
     const changed = await dependencies.transitionClaimedMediaUpload(
       attempt.claim.draftId, attempt.revision, next,
@@ -225,6 +230,7 @@ async function cleanupTerminal(
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<'quarantined'> {
   try {
+    if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
     await dependencies.drainPendingCleanup(draftId);
     const current = await dependencies.getOfflineDraft(draftId);
     if (!current || current.ownerSubject !== ownerSubject || current.pendingMediaCleanupRef ||
@@ -269,11 +275,13 @@ async function finalize(
   accessToken: string,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<void> {
+  if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
   await dependencies.finalizeMediaUpload({
     sightingId: attempt.claim.sightingId,
     mediaId: attempt.claim.mediaId,
     sha256: attempt.claim.receipt.sanitizedSha256,
     accessToken,
+    signal: dependencies.cancellationSignal,
   });
 }
 
@@ -283,12 +291,13 @@ async function reserve(
   dependencies: MediaUploadCoordinatorDependencies,
   signal?: AbortSignal,
 ): Promise<ValidatedUploadCapability> {
+  if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
   return dependencies.reserveMediaUpload({
     sightingId: attempt.claim.sightingId,
     mediaId: attempt.claim.mediaId,
     receipt: attempt.claim.receipt,
     accessToken,
-    signal,
+    signal: signal ?? dependencies.cancellationSignal,
   });
 }
 
@@ -306,9 +315,11 @@ async function readAndPut(
       throw new Error('metadata_mismatch');
     }
     return withAttemptDeadline(dependencies, async (signal) => {
+      if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
       const activeToken = accessToken ?? await untilAbort(dependencies.getAccessToken(signal), signal);
       const activeCapability = capability ?? await untilAbort(reserve(attempt, activeToken, dependencies, signal), signal);
       try {
+        if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
         await untilAbort(dependencies.putReservedMedia({ capability: activeCapability, artifact, signal }), signal);
         return { putConflict: false, accessToken: activeToken };
       } catch (error) {
@@ -416,6 +427,10 @@ async function runInternal(
   claim: MediaUploadClaim,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<MediaUploadRunResult> {
+  if (dependencies.cancellationSignal?.aborted) {
+    const attempt: MutableAttempt = { claim, revision: claim.revision, job: claim.uploadJob };
+    return persistOutcome(attempt, { kind: 'network' }, dependencies);
+  }
   let current: StoredDraft | null;
   try {
     current = await dependencies.getOfflineDraft(claim.draftId);

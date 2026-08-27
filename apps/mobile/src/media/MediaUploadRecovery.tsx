@@ -8,8 +8,8 @@ import { retryRecoverableMediaDrafts } from './media-upload-runtime';
 export type MediaUploadRecoveryDependencies = Readonly<{
   recoverLocalJournal(): Promise<void>;
   retryMedia(signal?: AbortSignal): Promise<unknown>;
-  hasSession(): Promise<boolean>;
-  onAuthChange(listener: (signedIn: boolean) => void): () => void;
+  currentSubject(): Promise<string | null>;
+  onAuthChange(listener: (subject: string | null) => void): () => void;
   onForegroundChange(listener: (active: boolean) => void): () => void;
   schedule(work: () => void): () => void;
 }>;
@@ -23,16 +23,16 @@ function defaultDependencies(): MediaUploadRecoveryDependencies {
   return {
     recoverLocalJournal: recoverPendingMediaDrafts,
     retryMedia: retryRecoverableMediaDrafts,
-    hasSession: async () => {
+    currentSubject: async () => {
       const supabase = getSupabaseClient();
-      if (!supabase) return false;
+      if (!supabase) return null;
       const { data } = await supabase.auth.getSession();
-      return !!data.session;
+      return data.session?.user.id ?? null;
     },
     onAuthChange: (listener) => {
       const supabase = getSupabaseClient();
       if (!supabase) return () => undefined;
-      const { data } = supabase.auth.onAuthStateChange((_event, session) => listener(!!session));
+      const { data } = supabase.auth.onAuthStateChange((_event, session) => listener(session?.user.id ?? null));
       return () => data.subscription.unsubscribe();
     },
     onForegroundChange: (listener) => {
@@ -52,6 +52,8 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
   let unsubscribeAuth: (() => void) | null = null;
   let unsubscribeForeground: (() => void) | null = null;
   let activeAbort: AbortController | null = null;
+  let subject: string | null | undefined;
+  let restartAfterAbort = false;
 
   async function run(): Promise<void> {
     if (stopped || running) return;
@@ -67,13 +69,21 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
         } catch {
           localJournalReady = false;
         }
-        if (localJournalReady && !stopped && await dependencies.hasSession().catch(() => false)) {
+        const activeSubject = localJournalReady && !stopped
+          ? await dependencies.currentSubject().catch(() => null)
+          : null;
+        if (subject === undefined) subject = activeSubject;
+        if (activeSubject && subject === activeSubject) {
           await dependencies.retryMedia(activeAbort.signal).catch(() => undefined);
         }
       } while (!stopped && rerun);
     } finally {
       running = false;
       activeAbort = null;
+      if (restartAfterAbort && !stopped) {
+        restartAfterAbort = false;
+        requestRun();
+      }
     }
   }
 
@@ -94,14 +104,24 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
 
   function start(): void {
     if (stopped || unsubscribeAuth || unsubscribeForeground) return;
-    unsubscribeAuth = dependencies.onAuthChange((signedIn) => {
-      if (signedIn) requestRun();
-      else {
-        rerun = false;
-        activeAbort?.abort();
-        cancelScheduled?.();
-        cancelScheduled = null;
-        scheduled = false;
+    unsubscribeAuth = dependencies.onAuthChange((nextSubject) => {
+      if (subject === undefined) {
+        subject = nextSubject;
+        if (scheduled || running) return;
+        if (nextSubject) requestRun();
+        return;
+      }
+      const changed = subject !== nextSubject;
+      subject = nextSubject;
+      if (!changed) return;
+      rerun = false;
+      activeAbort?.abort();
+      cancelScheduled?.();
+      cancelScheduled = null;
+      scheduled = false;
+      if (nextSubject) {
+        if (running) restartAfterAbort = true;
+        else requestRun();
       }
     });
     unsubscribeForeground = dependencies.onForegroundChange((active) => {

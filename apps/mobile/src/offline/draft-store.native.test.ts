@@ -85,6 +85,20 @@ describe('native draft storage privacy boundary', () => {
     expect(attachSightingId).not.toHaveBeenCalled();
   });
 
+  it('never lets B attach a first sighting to media already owned by A', async () => {
+    const current = {
+      id: 'draft-12345678', notes: '', risk: 'normal' as const, mediaId: 'media-12345678',
+      ownerSubject: 'owner-12345678', encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+    };
+    const attachSightingId = jest.fn(async () => true);
+    await expect(attachSightingToDraftWithDependencies(
+      current.id, '12345678-1234-1234-1234-123456789abc', 'owner-87654321',
+      { getOfflineDraft: async () => current, attachSightingId },
+    )).resolves.toBe(false);
+    expect(attachSightingId).not.toHaveBeenCalled();
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).toContain('owner_subject = ? OR');
+  });
+
   it('removes a media row only after the coordinator has durably persisted quarantine', async () => {
     const deleted = jest.fn(async () => true);
     await expect(cleanupQuarantinedMediaWithDependencies('draft-12345678', 4, {

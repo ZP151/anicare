@@ -123,7 +123,11 @@ export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
   owner_subject = ?,
   revision = revision + 1,
   updated_at = ?
-  WHERE id = ? AND (sighting_id IS NULL OR (sighting_id = ? AND owner_subject = ?))`;
+  WHERE id = ? AND (
+    (sighting_id IS NULL AND (owner_subject = ? OR
+      (owner_subject IS NULL AND media_id IS NULL AND reviewed_media_ref IS NULL)))
+    OR (sighting_id = ? AND owner_subject = ?)
+  )`;
 export const QUARANTINED_MEDIA_CLEANUP_SQL = `DELETE FROM sighting_drafts
   WHERE id = ? AND revision = ? AND upload_state = 'quarantined'`;
 export const PENDING_MEDIA_CLEANUP_LIST_SQL = `SELECT id, reviewed_media_ref,
@@ -742,6 +746,8 @@ export async function attachSightingToDraftWithDependencies(
   if (!isStableMediaId(id) || !isStableMediaId(sightingId) || !isStableMediaId(ownerSubject)) return false;
   const current = await dependencies.getOfflineDraft(id);
   if (!current) return false;
+  if (current.ownerSubject !== undefined && current.ownerSubject !== ownerSubject) return false;
+  if (current.mediaId !== undefined && current.ownerSubject !== ownerSubject) return false;
   if (current.sightingId !== undefined) return current.sightingId === sightingId && current.ownerSubject === ownerSubject;
   if (await dependencies.attachSightingId(id, sightingId, ownerSubject)) return true;
   const after = await dependencies.getOfflineDraft(id);
@@ -759,6 +765,7 @@ export async function attachSightingToDraft(id: string, sightingId: string, owne
         attachedOwnerSubject,
         new Date().toISOString(),
         draftId,
+        attachedOwnerSubject,
         attachedSightingId,
         attachedOwnerSubject,
       );
