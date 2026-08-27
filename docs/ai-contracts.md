@@ -9,8 +9,11 @@ is WhiskerCommons.
 The exact versions are `crop.v1`, `embedding.v1`, `identify.v1`, and
 `identify-callback.v1`. Every Pydantic transport model is strict and forbids
 unknown fields. IDs are bounded stable identifiers. Timestamps are timezone
-aware. No request or response carries image bytes, source URI/path, ciphertext,
-exact location, EXIF/metadata, numeric similarity score, or embedding vector.
+aware. Public/untrusted requests and all responses carry no image bytes, source
+URI/path, ciphertext, exact location, EXIF/metadata, numeric similarity score,
+or embedding vector. The existing compatibility request is a bounded,
+trusted-internal adapter shape that may carry numeric evidence for ranking;
+those scores are never returned publicly.
 
 ## Crop quality (`crop.v1`)
 
