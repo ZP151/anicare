@@ -4,6 +4,7 @@ import {
   DRAFT_LIST_SQL,
   DRAFT_SAVE_SQL,
   ENCRYPTION_VERSION_BACKFILL_SQL,
+  ensureDraftTransportSchemaWithDependencies,
   LEGACY_REVIEWED_PATH_CLEAR_SQL,
   LEGACY_URI_CLEAR_SQL,
   MEDIA_JOURNAL_SAVE_SQL,
@@ -50,16 +51,60 @@ describe('native draft storage privacy boundary', () => {
     expect(ENCRYPTION_VERSION_BACKFILL_SQL).toContain('encryption_version IS NULL');
   });
 
-  it('updates only the complete media journal snapshot and never overwrites report or later upload fields', () => {
-    for (const field of ['media_id', 'reviewed_media_ref', 'encryption_version', 'review_receipt_json', 'upload_state', 'upload_attempts', 'next_attempt_at', 'last_error']) {
-      expect(MEDIA_JOURNAL_SAVE_SQL).toContain(field);
-    }
-    for (const preserved of ['notes', 'risk', 'sighting_id', 'upload_resume_state', 'upload_attempt_started_at', 'revision']) {
-      expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain(preserved);
-    }
+  it('executes migration/backfill invariants against an injected state model', async () => {
+    const columns = new Set([
+      'id', 'notes', 'risk', 'reviewed_media_ref', 'encryption_version', 'updated_at', 'reviewed_media_path',
+    ]);
+    const row = {
+      reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: null as string | null,
+      reviewed_media_path: 'file:///legacy/private/path.agcm' as string | null,
+      revision: undefined as number | undefined,
+    };
+    await ensureDraftTransportSchemaWithDependencies({
+      listColumns: async () => [...columns],
+      addColumn: async (name, _type) => {
+        columns.add(name);
+        if (name === 'revision') row.revision = 0;
+      },
+      backfillEncryptionVersion: async () => {
+        if (row.reviewed_media_ref && row.encryption_version === null) row.encryption_version = 'aes-256-gcm.v1';
+      },
+      clearLegacyReviewedPath: async () => { row.reviewed_media_path = null; },
+    });
+    expect(columns.has('upload_resume_state')).toBe(true);
+    expect(columns.has('upload_attempt_started_at')).toBe(true);
+    expect(columns.has('revision')).toBe(true);
+    expect(row).toEqual({
+      reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: 'aes-256-gcm.v1',
+      reviewed_media_path: null,
+      revision: 0,
+    });
   });
 
-  it('exposes a previous owned reference only after the replacement snapshot commits durably', async () => {
+  it('atomically writes a complete journal/lease snapshot and advances revision', () => {
+    for (const field of [
+      'media_id', 'reviewed_media_ref', 'encryption_version', 'review_receipt_json',
+      'upload_state', 'upload_attempts', 'next_attempt_at', 'last_error',
+      'upload_resume_state', 'upload_attempt_started_at', 'revision = revision + 1',
+    ]) {
+      expect(MEDIA_JOURNAL_SAVE_SQL).toContain(field);
+    }
+    for (const preserved of ['notes', 'risk']) {
+      expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain(preserved);
+    }
+    expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain('sighting_id =');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain("upload_state = 'local_persisting'");
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain('media_id IS NULL');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain('media_id = ?');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain('sighting_id IS NULL');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain('upload_attempts = 0');
+    expect(MEDIA_JOURNAL_SAVE_SQL).toContain("upload_state IN ('local_persisting', 'upload_pending', 'needs_user')");
+    expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain("upload_state IN ('uploading', 'finalizing', 'waiting')");
+  });
+
+  it('exposes a prior owned reference only after a safe pre-upload replacement commits', async () => {
     const events: string[] = [];
     const previous = 'reviewed-media/media-87654321.commit-87654321.agcm';
     const journal = {
@@ -89,6 +134,22 @@ describe('native draft storage privacy boundary', () => {
       'commit:media-12345678:local_persisting',
       `cleanup:${previous}`,
     ]);
+  });
+
+  it('treats replay of the same immutable journal snapshot as idempotent', async () => {
+    const reference = 'reviewed-media/media-12345678.commit-12345678.agcm';
+    const result = await saveReviewedMediaJournalWithDependencies({
+      draftId: 'draft-12345678', mediaId: 'media-12345678', encryptedReviewedRef: reference,
+      encryptionVersion: 'aes-256-gcm.v1',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+    }, 'local_persisting', null, {
+      commitMediaSnapshot: async () => reference,
+    });
+    expect(result).toBeNull();
   });
 
   it('does not expose the previous reference when the new journal snapshot fails to commit', async () => {
@@ -188,6 +249,29 @@ describe('native draft storage privacy boundary', () => {
       .toEqual([]);
   });
 
+  it.each([
+    ['sighting_id', 'sighting-12345678'],
+    ['upload_state', 'upload_pending'],
+    ['upload_attempts', 0],
+    ['next_attempt_at', '2026-08-27T00:00:10.000Z'],
+    ['last_error', 'network'],
+    ['upload_resume_state', 'uploading'],
+    ['upload_attempt_started_at', '2026-08-27T00:00:00.000Z'],
+  ] as const)('classifies residual %s workflow state as explicit media corruption', (field, value) => {
+    const row = {
+      id: 'draft-12345678', notes: 'residual', risk: 'normal' as const,
+      media_id: null, sighting_id: null, reviewed_media_ref: null, encryption_version: null,
+      review_receipt_json: null, upload_state: null, upload_attempts: null,
+      next_attempt_at: null, last_error: null, upload_resume_state: null,
+      upload_attempt_started_at: null, revision: 3,
+      [field]: value,
+    };
+    expect(deserializeDraftRows([row])).toEqual([expect.objectContaining({
+      id: 'draft-12345678', revision: 3, mediaFailure: 'local_media_corrupt',
+      uploadJob: expect.objectContaining({ state: 'needs_user', lastError: 'local_media_corrupt' }),
+    })]);
+  });
+
   it.each([null, 'aes-256-gcm.v2'])('keeps a persisted %s version row recoverable as needs_user/version_mismatch', async (encryptionVersion) => {
     const receipt = JSON.stringify({
       sanitizedSha256: 'a'.repeat(64),
@@ -282,6 +366,25 @@ describe('native draft storage privacy boundary', () => {
     await expect(claimMediaUploadAttemptWithDependencies(
       'draft-12345678', new Date('2026-08-27T00:03:00.000Z'), 60_000, store.dependencies,
     )).resolves.toBeNull();
+  });
+
+  it('renews an expired fifth active claim without consuming attempt six', async () => {
+    const store = mediaUploadCasStore();
+    store.current = {
+      ...store.current!, revision: 12,
+      uploadJob: {
+        state: 'finalizing', attempts: 5, nextAttemptAt: null, lastError: null,
+        resumeState: null, attemptStartedAt: '2026-08-27T00:00:00.000Z',
+      },
+    };
+    const recovery = await claimMediaUploadAttemptWithDependencies(
+      'draft-12345678', new Date('2026-08-27T00:02:00.000Z'), 60_000, store.dependencies,
+    );
+    expect(recovery).toMatchObject({
+      revision: 13, recovering: true, recoveryOnly: true,
+      uploadJob: { state: 'finalizing', attempts: 5, attemptStartedAt: '2026-08-27T00:02:00.000Z' },
+    });
+    expect(store.current?.uploadJob?.attempts).toBe(5);
   });
 
   it('rejects stale revisions from moving finalizing or quarantined backward', async () => {

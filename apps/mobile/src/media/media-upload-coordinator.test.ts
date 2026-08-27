@@ -121,10 +121,21 @@ describe('crash-safe media upload coordinator', () => {
       expect(run.events).not.toContain('reserve');
       expect(run.events).not.toContain('put');
       expect(run.events).not.toContain('finalize');
+      expect(run.accessTokenRequests()).toBe(0);
       expect(run.current?.uploadJob?.lastError).toMatch(/^(local_media_corrupt|version_mismatch|upload_error)$/);
       expect(JSON.stringify(run.current)).not.toContain('token=abc');
     },
   );
+
+  it('rejects callback-level hash mismatch before requesting a token or starting transport', async () => {
+    const run = uploadHarness({ artifactHash: 'b'.repeat(64) });
+    await expect(run.claimAndRun()).resolves.toBe('needs_user');
+    expect(run.accessTokenRequests()).toBe(0);
+    expect(run.events).not.toContain('reserve');
+    expect(run.events).not.toContain('put');
+    expect(run.events).not.toContain('finalize');
+    expect(run.current?.uploadJob?.lastError).toBe('local_media_corrupt');
+  });
 
   it('never retransmits when ciphertext or row cleanup crashes after quarantined persistence', async () => {
     const run = uploadHarness({ deleteFailures: 1, cleanupFailures: 1 });
@@ -136,6 +147,31 @@ describe('crash-safe media upload coordinator', () => {
     await expect(runMediaUploadAttempt(claim!, run.dependencies)).rejects.toThrow('terminal_cleanup_failed');
     await expect(runMediaUploadAttempt(claim!, run.dependencies)).resolves.toBe('quarantined');
     expect(networkEffects()).toEqual(before);
+  });
+
+  it.each(['uploading', 'finalizing'] as const)(
+    'recovers an expired fifth %s claim after an uncertain remote commit without retransmission',
+    async (state) => {
+      const run = uploadHarness({ fifthActiveState: state, finalize: ['success'] });
+      const claim = await run.claim('2026-08-27T00:01:00.000Z');
+      expect(claim).toMatchObject({ recoveryOnly: true, uploadJob: { attempts: 5 } });
+      await expect(runMediaUploadAttempt(claim!, run.dependencies)).resolves.toBe('quarantined');
+      expect(run.events).not.toContain('decrypt');
+      expect(run.events).not.toContain('put');
+      expect(run.events).not.toContain('reserve');
+    },
+  );
+
+  it('durably stops an expired fifth claim after renewal still proves the object missing', async () => {
+    const run = uploadHarness({ fifthActiveState: 'finalizing', finalize: ['missing', 'missing'] });
+    const claim = await run.claim('2026-08-27T00:01:00.000Z');
+    await expect(runMediaUploadAttempt(claim!, run.dependencies)).resolves.toBe('needs_user');
+    expect(run.current?.uploadJob).toMatchObject({
+      state: 'needs_user', attempts: 5, lastError: 'upload_error',
+    });
+    expect(run.events.filter((event) => event === 'reserve')).toHaveLength(1);
+    expect(run.events).not.toContain('decrypt');
+    expect(run.events).not.toContain('put');
   });
 
   it('uses per-draft single-flight only as a second concurrency barrier', async () => {
@@ -150,6 +186,65 @@ describe('crash-safe media upload coordinator', () => {
   });
 });
 
+describe('stateful remote fault convergence', () => {
+  it('converges when reservation commits before its response is lost', async () => {
+    const run = statefulRemoteHarness({ loseResponseOnce: 'reserve' });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.remote).toMatchObject({ reservationGeneration: 1, reservationActive: true, object: 'missing' });
+    await expect(run.claimAndRun('2026-08-27T00:01:00.000Z')).resolves.toBe('quarantined');
+    expect(run.remote).toMatchObject({ reservationGeneration: 1, object: 'valid', finalized: true });
+    expect(run.remote.calls).toMatchObject({ reserve: 2, put: 1, finalize: 3 });
+    expect(new Set(run.remote.reserveIdentities).size).toBe(1);
+  });
+
+  it('converges without a second PUT when object creation commits before response loss', async () => {
+    const run = statefulRemoteHarness({ loseResponseOnce: 'put' });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.remote.object).toBe('valid');
+    await expect(run.claimAndRun('2026-08-27T00:01:00.000Z')).resolves.toBe('quarantined');
+    expect(run.remote.finalized).toBe(true);
+    expect(run.remote.calls.put).toBe(1);
+  });
+
+  it('converges when finalization commits before its response is lost', async () => {
+    const run = statefulRemoteHarness({ loseResponseOnce: 'finalize' });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.remote.finalized).toBe(true);
+    const effects = { reserve: run.remote.calls.reserve, put: run.remote.calls.put };
+    await expect(run.claimAndRun('2026-08-27T00:01:00.000Z')).resolves.toBe('quarantined');
+    expect(run.remote.calls).toMatchObject(effects);
+  });
+
+  it('renews an expired reservation and finalizes an existing object without PUT', async () => {
+    const run = statefulRemoteHarness({ failFinalizeBeforeCommitOnce: true });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.remote).toMatchObject({ reservationGeneration: 1, object: 'valid', finalized: false });
+    run.remote.expired = true;
+    await expect(run.claimAndRun('2026-08-27T00:01:00.000Z')).resolves.toBe('quarantined');
+    expect(run.remote).toMatchObject({ reservationGeneration: 2, object: 'valid', finalized: true });
+    expect(run.remote.calls.put).toBe(1);
+  });
+
+  it('rereads and reuploads after cleanup deletes the previously committed object', async () => {
+    const run = statefulRemoteHarness({ failFinalizeBeforeCommitOnce: true });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.remote.object).toBe('valid');
+    run.remote.object = 'missing';
+    await expect(run.claimAndRun('2026-08-27T00:01:00.000Z')).resolves.toBe('quarantined');
+    expect(run.remote).toMatchObject({ object: 'valid', finalized: true });
+    expect(run.remote.calls.put).toBe(2);
+    expect(run.remote.calls.finalize).toBe(4);
+  });
+
+  it('stops on a corrupt existing object instead of reserving or PUTting forever', async () => {
+    const run = statefulRemoteHarness({ initialObject: 'corrupt' });
+    await expect(run.claimAndRun()).resolves.toBe('needs_user');
+    expect(run.remote).toMatchObject({ object: 'corrupt', finalized: false });
+    expect(run.remote.calls).toEqual({ reserve: 1, put: 1, finalize: 1 });
+    expect(run.current?.uploadJob).toMatchObject({ state: 'needs_user', lastError: 'upload_error' });
+  });
+});
+
 type ScriptedFailure = 'success' | 'network' | 'missing' | 'conflict' | MediaTransportFailure;
 
 function uploadHarness(options: Readonly<{
@@ -157,9 +252,11 @@ function uploadHarness(options: Readonly<{
   put?: readonly ScriptedFailure[];
   finalize?: readonly ScriptedFailure[];
   artifactError?: string;
+  artifactHash?: string;
   deleteFailures?: number;
   cleanupFailures?: number;
   recoveringFinalizing?: boolean;
+  fifthActiveState?: 'uploading' | 'finalizing';
 }> = {}) {
   const events: string[] = [];
   const reserveInputs: unknown[] = [];
@@ -174,15 +271,19 @@ function uploadHarness(options: Readonly<{
     cas: MediaUploadCasDependencies;
     events: string[];
     reserveInputs: unknown[];
+    accessTokenRequests(): number;
     claim(now?: string): Promise<MediaUploadClaim | null>;
     claimAndRun(now?: string): Promise<string>;
     runCurrentClaim(): Promise<string>;
   } = {
-    current: options.recoveringFinalizing ? activeDraft('finalizing', 2, 5) : pendingDraft(),
+    current: options.fifthActiveState
+      ? activeDraft(options.fifthActiveState, 5, 12)
+      : options.recoveringFinalizing ? activeDraft('finalizing', 2, 5) : pendingDraft(),
     dependencies: undefined as never,
     cas: undefined as never,
     events,
     reserveInputs,
+    accessTokenRequests: () => tokenRequests,
     claim: async () => null,
     claimAndRun: async () => '',
     runCurrentClaim: async () => '',
@@ -196,6 +297,7 @@ function uploadHarness(options: Readonly<{
       return true;
     },
   };
+  let tokenRequests = 0;
   run.dependencies = {
     getOfflineDraft: run.cas.getOfflineDraft,
     transitionClaimedMediaUpload: async (id, revision, next) => {
@@ -203,11 +305,15 @@ function uploadHarness(options: Readonly<{
       if (!current || current.id !== id || current.revision !== revision || !current.uploadJob) return false;
       return run.cas.compareAndSwapUploadJob(id, revision, current.uploadJob.state, next);
     },
-    getAccessToken: async () => 'access-secret',
+    getAccessToken: async () => { tokenRequests += 1; return 'access-secret'; },
     withDecryptedReviewedJpeg: async (_input, consume) => {
       events.push('decrypt');
       if (options.artifactError) throw new Error(options.artifactError);
-      return consume({ bytes: new Uint8Array([1, 2, 3, 4]), sha256: receipt.sanitizedSha256, byteLength: 4 });
+      return consume({
+        bytes: new Uint8Array([1, 2, 3, 4]),
+        sha256: options.artifactHash ?? receipt.sanitizedSha256,
+        byteLength: 4,
+      });
     },
     reserveMediaUpload: async (input) => {
       events.push('reserve');
@@ -260,10 +366,88 @@ function uploadHarness(options: Readonly<{
       uploadJob: current.uploadJob as MediaUploadClaim['uploadJob'],
       revision: current.revision!,
       recovering: true,
+      recoveryOnly: false,
     };
     return runMediaUploadAttempt(claim, run.dependencies);
   };
   return run;
+}
+
+function statefulRemoteHarness(options: Readonly<{
+  loseResponseOnce?: 'reserve' | 'put' | 'finalize';
+  failFinalizeBeforeCommitOnce?: boolean;
+  initialObject?: 'missing' | 'valid' | 'corrupt';
+}> = {}) {
+  const run = uploadHarness();
+  let lostResponse = false;
+  let failedFinalizeBeforeCommit = false;
+  const remote = {
+    reservationGeneration: 0,
+    reservationActive: false,
+    expired: false,
+    object: options.initialObject ?? 'missing' as 'missing' | 'valid' | 'corrupt',
+    finalized: false,
+    calls: { reserve: 0, put: 0, finalize: 0 },
+    reserveIdentities: [] as string[],
+  };
+  run.dependencies = {
+    ...run.dependencies,
+    reserveMediaUpload: async (input) => {
+      remote.calls.reserve += 1;
+      remote.reserveIdentities.push(JSON.stringify({
+        sightingId: input.sightingId,
+        mediaId: input.mediaId,
+        sha256: input.receipt.sanitizedSha256,
+        byteLength: input.receipt.byteLength,
+      }));
+      if (!remote.reservationActive || remote.expired) {
+        remote.reservationGeneration += 1;
+        remote.reservationActive = true;
+        remote.expired = false;
+      }
+      if (options.loseResponseOnce === 'reserve' && !lostResponse) {
+        lostResponse = true;
+        throw transportFailure('reserve', 'network', null, 'network_error');
+      }
+      return {
+        jobId: `job-${String(remote.reservationGeneration).padStart(8, '0')}`,
+        path: `jobs/job-${String(remote.reservationGeneration).padStart(8, '0')}.jpg`,
+        token: `upload-token-${remote.reservationGeneration}`,
+        usableUntil: '2026-08-27T01:00:00.000Z',
+      };
+    },
+    putReservedMedia: async () => {
+      remote.calls.put += 1;
+      if (remote.object !== 'missing') {
+        throw transportFailure('upload', 'http', 409, 'storage_upload_failed');
+      }
+      remote.object = 'valid';
+      if (options.loseResponseOnce === 'put' && !lostResponse) {
+        lostResponse = true;
+        throw transportFailure('upload', 'network', null, 'network_error');
+      }
+    },
+    finalizeMediaUpload: async () => {
+      remote.calls.finalize += 1;
+      if (remote.finalized) {
+        return { mediaAssetId: '12345678-1234-1234-1234-123456789abc', status: 'quarantined' as const };
+      }
+      if (options.failFinalizeBeforeCommitOnce && !failedFinalizeBeforeCommit) {
+        failedFinalizeBeforeCommit = true;
+        throw transportFailure('finalize', 'network', null, 'network_error');
+      }
+      if (!remote.reservationActive || remote.expired || remote.object !== 'valid') {
+        throw transportFailure('finalize', 'http', 409, 'media_finalization_conflict');
+      }
+      remote.finalized = true;
+      if (options.loseResponseOnce === 'finalize' && !lostResponse) {
+        lostResponse = true;
+        throw transportFailure('finalize', 'network', null, 'network_error');
+      }
+      return { mediaAssetId: '12345678-1234-1234-1234-123456789abc', status: 'quarantined' as const };
+    },
+  };
+  return Object.assign(run, { remote });
 }
 
 function pendingDraft(): StoredDraft {

@@ -76,8 +76,22 @@ export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   upload_state = ?,
   upload_attempts = ?,
   next_attempt_at = ?,
-  last_error = ?
-  WHERE id = ?`;
+  last_error = ?,
+  upload_resume_state = ?,
+  upload_attempt_started_at = ?,
+  revision = revision + 1
+  WHERE id = ? AND (
+    (media_id IS NULL AND reviewed_media_ref IS NULL AND encryption_version IS NULL
+      AND review_receipt_json IS NULL AND upload_state IS NULL)
+    OR
+    (upload_state = 'local_persisting' AND media_id = ? AND reviewed_media_ref = ?
+      AND encryption_version = ? AND review_receipt_json = ?)
+    OR
+    (sighting_id IS NULL AND upload_attempts = 0
+      AND upload_state IN ('local_persisting', 'upload_pending', 'needs_user')
+      AND upload_resume_state IS NULL AND upload_attempt_started_at IS NULL
+      AND next_attempt_at IS NULL)
+  )`;
 export const MEDIA_VERSION_MISMATCH_SQL = `UPDATE sighting_drafts SET
   upload_state = 'needs_user',
   next_attempt_at = NULL,
@@ -133,6 +147,26 @@ const SCHEMA_V2_COLUMNS = {
   revision: 'INTEGER NOT NULL DEFAULT 0',
 } as const;
 
+export type DraftTransportSchemaDependencies = Readonly<{
+  listColumns(): Promise<readonly string[]>;
+  addColumn(name: keyof typeof SCHEMA_V2_COLUMNS, type: string): Promise<void>;
+  backfillEncryptionVersion(): Promise<void>;
+  clearLegacyReviewedPath(): Promise<void>;
+}>;
+
+export async function ensureDraftTransportSchemaWithDependencies(
+  dependencies: DraftTransportSchemaDependencies,
+): Promise<void> {
+  const existing = new Set(await dependencies.listColumns());
+  for (const [name, type] of Object.entries(SCHEMA_V2_COLUMNS) as Array<
+    [keyof typeof SCHEMA_V2_COLUMNS, string]
+  >) {
+    if (!existing.has(name)) await dependencies.addColumn(name, type);
+  }
+  await dependencies.backfillEncryptionVersion();
+  if (existing.has('reviewed_media_path')) await dependencies.clearLegacyReviewedPath();
+}
+
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function bytesToHex(bytes: Uint8Array) {
@@ -183,13 +217,15 @@ async function openDraftDatabase() {
     -- Clear any selected source URI left by the legacy schema before use.
     ${LEGACY_URI_CLEAR_SQL}
   `);
-  const columns = await database.getAllAsync<{ name: string }>('PRAGMA table_info(sighting_drafts)');
-  const existing = new Set(columns.map(({ name }) => name));
-  for (const [name, type] of Object.entries(SCHEMA_V2_COLUMNS)) {
-    if (!existing.has(name)) await database.execAsync(`ALTER TABLE sighting_drafts ADD COLUMN ${name} ${type};`);
-  }
-  await database.execAsync(ENCRYPTION_VERSION_BACKFILL_SQL);
-  if (existing.has('reviewed_media_path')) await database.execAsync(LEGACY_REVIEWED_PATH_CLEAR_SQL);
+  await ensureDraftTransportSchemaWithDependencies({
+    listColumns: async () => (await database.getAllAsync<{ name: string }>('PRAGMA table_info(sighting_drafts)'))
+      .map(({ name }) => name),
+    addColumn: async (name, type) => {
+      await database.execAsync(`ALTER TABLE sighting_drafts ADD COLUMN ${name} ${type};`);
+    },
+    backfillEncryptionVersion: async () => { await database.execAsync(ENCRYPTION_VERSION_BACKFILL_SQL); },
+    clearLegacyReviewedPath: async () => { await database.execAsync(LEGACY_REVIEWED_PATH_CLEAR_SQL); },
+  });
   return database;
 }
 
@@ -308,7 +344,13 @@ export async function saveReviewedMediaJournal(
           snapshot.uploadJob.attempts,
           snapshot.uploadJob.nextAttemptAt,
           snapshot.uploadJob.lastError,
+          snapshot.uploadJob.resumeState,
+          snapshot.uploadJob.attemptStartedAt,
           snapshot.draftId,
+          snapshot.mediaId,
+          snapshot.encryptedReviewedRef,
+          snapshot.encryptionVersion,
+          JSON.stringify(snapshot.receipt),
         );
         if (result.changes !== 1) throw new Error('missing_durable_media_journal');
       });
@@ -339,6 +381,7 @@ export type MediaUploadClaim = Readonly<{
   uploadJob: UploadJob & Readonly<{ state: UploadResumeState }>;
   revision: number;
   recovering: boolean;
+  recoveryOnly: boolean;
 }>;
 
 export type MediaUploadCasDependencies = Readonly<{
@@ -365,8 +408,14 @@ function claimedJob(
   current: UploadJob,
   now: Date,
   leaseMs: number,
-): { job: UploadJob & Readonly<{ state: UploadResumeState }>; recovering: boolean } | null {
-  if (current.attempts >= 5) return null;
+): {
+  job: UploadJob & Readonly<{ state: UploadResumeState }>;
+  recovering: boolean;
+  recoveryOnly: boolean;
+} | null {
+  if (current.attempts > 5) return null;
+  const recoveryOnly = current.attempts === 5;
+  if (recoveryOnly && current.state !== 'uploading' && current.state !== 'finalizing') return null;
   let state: UploadResumeState;
   let recovering = true;
   if (current.state === 'upload_pending') {
@@ -387,9 +436,10 @@ function claimedJob(
   }
   return {
     recovering,
+    recoveryOnly,
     job: {
       state,
-      attempts: current.attempts + 1,
+      attempts: recoveryOnly ? current.attempts : current.attempts + 1,
       nextAttemptAt: null,
       lastError: null,
       resumeState: null,
@@ -426,6 +476,7 @@ export async function claimMediaUploadAttemptWithDependencies(
     uploadJob: claimed.job,
     revision: current.revision + 1,
     recovering: claimed.recovering,
+    recoveryOnly: claimed.recoveryOnly,
   };
 }
 
@@ -532,7 +583,9 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
       continue;
     }
     const mediaBearing = row.media_id !== null || row.reviewed_media_ref !== null ||
-      row.review_receipt_json !== null || row.encryption_version !== null;
+      row.review_receipt_json !== null || row.encryption_version !== null || row.sighting_id !== null ||
+      row.upload_state !== null || row.upload_attempts !== null || row.next_attempt_at !== null ||
+      row.last_error !== null || row.upload_resume_state !== null || row.upload_attempt_started_at !== null;
     if (!mediaBearing) {
       drafts.push(textOnly);
       continue;

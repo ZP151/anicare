@@ -13,6 +13,7 @@ export type MediaUploadClaim = Readonly<{
   uploadJob: UploadJob & Readonly<{ state: 'uploading' | 'finalizing' }>;
   revision: number;
   recovering: boolean;
+  recoveryOnly: boolean;
 }>;
 
 export function saveOfflineDraft(input: Record<string, unknown>): Promise<StoredDraft>;

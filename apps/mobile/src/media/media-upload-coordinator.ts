@@ -213,9 +213,9 @@ async function reserve(
 async function readAndPut(
   attempt: MutableAttempt,
   capability: ValidatedUploadCapability | null,
-  accessToken: string,
+  accessToken: string | null,
   dependencies: MediaUploadCoordinatorDependencies,
-): Promise<{ putConflict: boolean }> {
+): Promise<{ putConflict: boolean; accessToken: string }> {
   return dependencies.withDecryptedReviewedJpeg(mediaInput(attempt.claim), async (artifact) => {
     if (artifact.sha256.toLowerCase() !== attempt.claim.receipt.sanitizedSha256.toLowerCase()) {
       throw new Error('hash_mismatch');
@@ -223,12 +223,13 @@ async function readAndPut(
     if (artifact.byteLength !== attempt.claim.receipt.byteLength || artifact.bytes.byteLength !== artifact.byteLength) {
       throw new Error('metadata_mismatch');
     }
-    const activeCapability = capability ?? await reserve(attempt, accessToken, dependencies);
+    const activeToken = accessToken ?? await dependencies.getAccessToken();
+    const activeCapability = capability ?? await reserve(attempt, activeToken, dependencies);
     try {
       await dependencies.putReservedMedia({ capability: activeCapability, artifact });
-      return { putConflict: false };
+      return { putConflict: false, accessToken: activeToken };
     } catch (error) {
-      if (isPutConflict(error)) return { putConflict: true };
+      if (isPutConflict(error)) return { putConflict: true, accessToken: activeToken };
       throw error;
     }
   });
@@ -281,7 +282,11 @@ async function recoverAfterMissing(
     }
   }
 
-  let putResult: { putConflict: boolean };
+  if (attempt.claim.recoveryOnly) {
+    return persistOutcome(attempt, { kind: 'upload_error' }, dependencies);
+  }
+
+  let putResult: { putConflict: boolean; accessToken: string };
   try {
     putResult = await readAndPut(attempt, capability, accessToken, dependencies);
   } catch (error) {
@@ -294,19 +299,13 @@ async function runFresh(
   attempt: MutableAttempt,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<MediaUploadRunResult> {
-  let accessToken: string;
+  let putResult: { putConflict: boolean; accessToken: string };
   try {
-    accessToken = await dependencies.getAccessToken();
-  } catch {
-    return persistOutcome(attempt, { kind: 'upload_error' }, dependencies);
-  }
-  let putResult: { putConflict: boolean };
-  try {
-    putResult = await readAndPut(attempt, null, accessToken, dependencies);
+    putResult = await readAndPut(attempt, null, null, dependencies);
   } catch (error) {
     return handleFailure(attempt, error, !isTransportFailure(error), dependencies);
   }
-  return finishAfterPut(attempt, accessToken, putResult.putConflict, true, dependencies);
+  return finishAfterPut(attempt, putResult.accessToken, putResult.putConflict, true, dependencies);
 }
 
 async function runRecovering(
