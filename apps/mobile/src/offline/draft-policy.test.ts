@@ -49,7 +49,10 @@ describe('offline draft privacy', () => {
         byteLength: 50_000,
         confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
-      uploadJob: { state: 'waiting', attempts: 2, nextAttemptAt: '2026-08-27T00:00:02.000Z', lastError: 'network' },
+      uploadJob: {
+        state: 'waiting', attempts: 2, nextAttemptAt: '2026-08-27T00:00:02.000Z', lastError: 'network',
+        resumeState: 'uploading', attemptStartedAt: null,
+      },
       sightingId: 'sighting-12345678',
       sourceUri: 'file:///raw.heic',
       canonicalUri: 'file:///cache/canonical.jpg',
@@ -155,8 +158,56 @@ describe('offline draft privacy', () => {
         byteLength: 100,
         confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
-      uploadJob: { state: 'waiting', attempts: 1, nextAttemptAt, lastError: 'network' },
+      uploadJob: {
+        state: 'waiting', attempts: 1, nextAttemptAt, lastError: 'network',
+        resumeState: 'uploading', attemptStartedAt: null,
+      },
     })).toThrow('invalid_reviewed_media_draft');
+  });
+
+  it.each([undefined, null, 'upload_pending', 'hostile'])('rejects waiting without a valid resume phase: %s', (resumeState) => {
+    expect(() => sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+      uploadJob: {
+        state: 'waiting', attempts: 1, nextAttemptAt: '2026-08-27T00:00:10.000Z', lastError: 'network',
+        resumeState, attemptStartedAt: null,
+      },
+    })).toThrow('invalid_reviewed_media_draft');
+  });
+
+  it('requires an attempt lease timestamp for uploading and finalizing', () => {
+    const media = {
+      id: 'draft-12345678', mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
+    };
+    expect(() => sanitizeDraftForStorage({
+      ...media,
+      uploadJob: {
+        state: 'finalizing', attempts: 1, nextAttemptAt: null, lastError: null,
+        resumeState: null, attemptStartedAt: null,
+      },
+    })).toThrow('invalid_reviewed_media_draft');
+    expect(sanitizeDraftForStorage({
+      ...media,
+      uploadJob: {
+        state: 'finalizing', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null,
+        attemptStartedAt: '2026-08-27T00:00:00.000Z',
+      },
+    }).uploadJob).toMatchObject({ state: 'finalizing', attemptStartedAt: '2026-08-27T00:00:00.000Z' });
   });
 
   it('clears a schedule from non-waiting states', () => {

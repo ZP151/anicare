@@ -4,13 +4,14 @@ import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 
 import { deleteReviewedMediaReference } from '../media/draft-media';
-import { isReviewedMediaReference } from '../media/media-reference';
+import { isReviewedMediaReference, isStableMediaId } from '../media/media-reference';
 import type { ReviewedMediaJournal } from '../media/reviewed-draft';
 import {
   sanitizeDraftForStorage,
   UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
   type StoredDraft,
 } from './draft-policy';
+import type { UploadJob, UploadJobState, UploadResumeState } from './upload-job';
 
 const DATABASE_KEY_NAME = 'animalhelper.offline-drafts.v1';
 const DATABASE_NAME = 'animalhelper-drafts.db';
@@ -22,24 +23,51 @@ export const ENCRYPTION_VERSION_BACKFILL_SQL = `UPDATE sighting_drafts
   WHERE reviewed_media_ref IS NOT NULL AND encryption_version IS NULL;`;
 export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
      (id, notes, risk, media_id, sighting_id, reviewed_media_ref, encryption_version,
-      review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
+      upload_resume_state, upload_attempt_started_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        notes = excluded.notes,
        risk = excluded.risk,
-       media_id = COALESCE(excluded.media_id, sighting_drafts.media_id),
-       sighting_id = COALESCE(excluded.sighting_id, sighting_drafts.sighting_id),
-       reviewed_media_ref = COALESCE(excluded.reviewed_media_ref, sighting_drafts.reviewed_media_ref),
-       encryption_version = COALESCE(excluded.encryption_version, sighting_drafts.encryption_version),
-       review_receipt_json = COALESCE(excluded.review_receipt_json, sighting_drafts.review_receipt_json),
-       upload_state = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.upload_state ELSE sighting_drafts.upload_state END,
-       upload_attempts = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.upload_attempts ELSE sighting_drafts.upload_attempts END,
-       next_attempt_at = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.next_attempt_at ELSE sighting_drafts.next_attempt_at END,
-       last_error = CASE WHEN excluded.media_id IS NOT NULL THEN excluded.last_error ELSE sighting_drafts.last_error END,
+       media_id = COALESCE(sighting_drafts.media_id, excluded.media_id),
+       sighting_id = COALESCE(sighting_drafts.sighting_id, excluded.sighting_id),
+       reviewed_media_ref = COALESCE(sighting_drafts.reviewed_media_ref, excluded.reviewed_media_ref),
+       encryption_version = COALESCE(sighting_drafts.encryption_version, excluded.encryption_version),
+       review_receipt_json = COALESCE(sighting_drafts.review_receipt_json, excluded.review_receipt_json),
+       upload_state = CASE WHEN excluded.media_id IS NOT NULL AND
+         (sighting_drafts.media_id IS NULL OR
+          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         THEN excluded.upload_state ELSE sighting_drafts.upload_state END,
+       upload_attempts = CASE WHEN excluded.media_id IS NOT NULL AND
+         (sighting_drafts.media_id IS NULL OR
+          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         THEN excluded.upload_attempts ELSE sighting_drafts.upload_attempts END,
+       next_attempt_at = CASE WHEN excluded.media_id IS NOT NULL AND
+         (sighting_drafts.media_id IS NULL OR
+          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         THEN excluded.next_attempt_at ELSE sighting_drafts.next_attempt_at END,
+       last_error = CASE WHEN excluded.media_id IS NOT NULL AND
+         (sighting_drafts.media_id IS NULL OR
+          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         THEN excluded.last_error ELSE sighting_drafts.last_error END,
+       upload_resume_state = CASE WHEN excluded.media_id IS NOT NULL AND
+         (sighting_drafts.media_id IS NULL OR
+          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         THEN excluded.upload_resume_state ELSE sighting_drafts.upload_resume_state END,
+       upload_attempt_started_at = CASE WHEN excluded.media_id IS NOT NULL AND
+         (sighting_drafts.media_id IS NULL OR
+          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         THEN excluded.upload_attempt_started_at ELSE sighting_drafts.upload_attempt_started_at END,
+       revision = sighting_drafts.revision + 1,
        updated_at = excluded.updated_at`;
 export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_ref,
-  encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error
+  encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
+  upload_resume_state, upload_attempt_started_at, revision
   FROM sighting_drafts ORDER BY updated_at DESC`;
+export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_ref,
+  encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
+  upload_resume_state, upload_attempt_started_at, revision
+  FROM sighting_drafts WHERE id = ?`;
 export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   media_id = ?,
   reviewed_media_ref = ?,
@@ -53,9 +81,22 @@ export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
 export const MEDIA_VERSION_MISMATCH_SQL = `UPDATE sighting_drafts SET
   upload_state = 'needs_user',
   next_attempt_at = NULL,
-  last_error = 'version_mismatch'
+  last_error = 'version_mismatch',
+  upload_resume_state = NULL,
+  upload_attempt_started_at = NULL,
+  revision = revision + 1
   WHERE id = ? AND reviewed_media_ref IS NOT NULL
     AND (encryption_version IS NULL OR encryption_version <> 'aes-256-gcm.v1')`;
+export const MEDIA_UPLOAD_CAS_SQL = `UPDATE sighting_drafts SET
+  upload_state = ?,
+  upload_attempts = ?,
+  next_attempt_at = ?,
+  last_error = ?,
+  upload_resume_state = ?,
+  upload_attempt_started_at = ?,
+  revision = revision + 1
+  WHERE id = ? AND revision = ? AND upload_state = ?
+    AND upload_state IN ('upload_pending', 'uploading', 'finalizing', 'waiting')`;
 const ENSURE_DRAFT_ROW_SQL = `INSERT OR IGNORE INTO sighting_drafts
   (id, notes, risk, updated_at) VALUES (?, '', 'normal', ?)`;
 
@@ -72,6 +113,9 @@ type DraftRow = {
   upload_attempts: number | null;
   next_attempt_at: string | null;
   last_error: string | null;
+  upload_resume_state: string | null;
+  upload_attempt_started_at: string | null;
+  revision: number;
 };
 
 const SCHEMA_V2_COLUMNS = {
@@ -84,6 +128,9 @@ const SCHEMA_V2_COLUMNS = {
   upload_attempts: 'INTEGER',
   next_attempt_at: 'TEXT',
   last_error: 'TEXT',
+  upload_resume_state: 'TEXT',
+  upload_attempt_started_at: 'TEXT',
+  revision: 'INTEGER NOT NULL DEFAULT 0',
 } as const;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -128,6 +175,9 @@ async function openDraftDatabase() {
       upload_attempts INTEGER,
       next_attempt_at TEXT,
       last_error TEXT,
+      upload_resume_state TEXT,
+      upload_attempt_started_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
     -- Clear any selected source URI left by the legacy schema before use.
@@ -165,6 +215,8 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
     draft.uploadJob?.attempts ?? null,
     draft.uploadJob?.nextAttemptAt ?? null,
     draft.uploadJob?.lastError ?? null,
+    draft.uploadJob?.resumeState ?? null,
+    draft.uploadJob?.attemptStartedAt ?? null,
     new Date().toISOString(),
   );
   return draft;
@@ -183,6 +235,8 @@ export type ReviewedMediaJournalSnapshot = Readonly<{
     attempts: 0;
     nextAttemptAt: null;
     lastError: ReviewedMediaJournalError;
+    resumeState: null;
+    attemptStartedAt: null;
   }>;
 }>;
 export type SaveReviewedMediaJournalDependencies = Readonly<{
@@ -201,7 +255,10 @@ export async function saveReviewedMediaJournalWithDependencies(
     encryptedReviewedRef: journal.encryptedReviewedRef,
     encryptionVersion: journal.encryptionVersion,
     receipt: journal.receipt,
-    uploadJob: { state, attempts: 0, nextAttemptAt: null, lastError: error },
+    uploadJob: {
+      state, attempts: 0, nextAttemptAt: null, lastError: error,
+      resumeState: null, attemptStartedAt: null,
+    },
   });
   if (!validated.mediaId || !validated.encryptedReviewedRef || validated.encryptionVersion !== 'aes-256-gcm.v1' ||
       !validated.receipt || !validated.uploadJob) {
@@ -218,6 +275,8 @@ export async function saveReviewedMediaJournalWithDependencies(
       attempts: 0,
       nextAttemptAt: null,
       lastError: error,
+      resumeState: null,
+      attemptStartedAt: null,
     },
   };
   const previous = await dependencies.commitMediaSnapshot(snapshot);
@@ -270,16 +329,211 @@ export async function markReviewedMediaVersionMismatch(id: string): Promise<void
   if (result.changes !== 1) throw new Error('missing_version_mismatched_media_journal');
 }
 
+export type MediaUploadClaim = Readonly<{
+  draftId: string;
+  mediaId: string;
+  sightingId: string;
+  encryptedReviewedRef: string;
+  encryptionVersion: 'aes-256-gcm.v1';
+  receipt: NonNullable<StoredDraft['receipt']>;
+  uploadJob: UploadJob & Readonly<{ state: UploadResumeState }>;
+  revision: number;
+  recovering: boolean;
+}>;
+
+export type MediaUploadCasDependencies = Readonly<{
+  getOfflineDraft(id: string): Promise<StoredDraft | null>;
+  compareAndSwapUploadJob(
+    id: string,
+    expectedRevision: number,
+    expectedState: UploadJobState,
+    next: UploadJob,
+  ): Promise<boolean>;
+}>;
+
+function claimableMedia(draft: StoredDraft): draft is StoredDraft & Required<Pick<
+  StoredDraft,
+  'mediaId' | 'sightingId' | 'encryptedReviewedRef' | 'encryptionVersion' | 'receipt' | 'uploadJob' | 'revision'
+>> & Readonly<{ encryptionVersion: 'aes-256-gcm.v1' }> {
+  return isStableMediaId(draft.mediaId) && isStableMediaId(draft.sightingId) &&
+    isReviewedMediaReference(draft.encryptedReviewedRef, draft.mediaId) &&
+    draft.encryptionVersion === 'aes-256-gcm.v1' && !!draft.receipt && !!draft.uploadJob &&
+    Number.isInteger(draft.revision) && draft.revision! >= 0 && !draft.mediaFailure;
+}
+
+function claimedJob(
+  current: UploadJob,
+  now: Date,
+  leaseMs: number,
+): { job: UploadJob & Readonly<{ state: UploadResumeState }>; recovering: boolean } | null {
+  if (current.attempts >= 5) return null;
+  let state: UploadResumeState;
+  let recovering = true;
+  if (current.state === 'upload_pending') {
+    state = 'uploading';
+    recovering = false;
+  } else if (current.state === 'waiting') {
+    const due = current.nextAttemptAt === null ? Number.NaN : Date.parse(current.nextAttemptAt);
+    if (!current.resumeState || !Number.isFinite(due) || due > now.getTime()) return null;
+    state = current.resumeState;
+  } else if (current.state === 'uploading' || current.state === 'finalizing') {
+    const started = typeof current.attemptStartedAt === 'string'
+      ? Date.parse(current.attemptStartedAt)
+      : Number.NaN;
+    if (!Number.isFinite(started) || started + leaseMs > now.getTime()) return null;
+    state = current.state;
+  } else {
+    return null;
+  }
+  return {
+    recovering,
+    job: {
+      state,
+      attempts: current.attempts + 1,
+      nextAttemptAt: null,
+      lastError: null,
+      resumeState: null,
+      attemptStartedAt: now.toISOString(),
+    },
+  };
+}
+
+export async function claimMediaUploadAttemptWithDependencies(
+  id: string,
+  now: Date,
+  leaseMs: number,
+  dependencies: MediaUploadCasDependencies,
+): Promise<MediaUploadClaim | null> {
+  if (!isStableMediaId(id) || !(now instanceof Date) || !Number.isFinite(now.getTime()) ||
+      !Number.isFinite(leaseMs) || leaseMs <= 0 || leaseMs > 24 * 60 * 60 * 1000) {
+    throw new Error('invalid_media_upload_claim');
+  }
+  const current = await dependencies.getOfflineDraft(id);
+  if (!current || !claimableMedia(current)) return null;
+  const claimed = claimedJob(current.uploadJob, now, leaseMs);
+  if (!claimed) return null;
+  const won = await dependencies.compareAndSwapUploadJob(
+    id, current.revision, current.uploadJob.state, claimed.job,
+  );
+  if (!won) return null;
+  return {
+    draftId: current.id,
+    mediaId: current.mediaId,
+    sightingId: current.sightingId,
+    encryptedReviewedRef: current.encryptedReviewedRef,
+    encryptionVersion: current.encryptionVersion,
+    receipt: current.receipt,
+    uploadJob: claimed.job,
+    revision: current.revision + 1,
+    recovering: claimed.recovering,
+  };
+}
+
+function validTransition(current: UploadJob, next: UploadJob): boolean {
+  if (next.attempts !== current.attempts) return false;
+  if (current.state === 'uploading') {
+    if (next.state === 'finalizing') {
+      return next.attemptStartedAt === current.attemptStartedAt && next.resumeState === null &&
+        next.nextAttemptAt === null && next.lastError === null;
+    }
+    if (next.state === 'waiting') return next.resumeState === 'uploading';
+    return next.state === 'needs_user';
+  }
+  if (current.state === 'finalizing') {
+    if (next.state === 'waiting') return next.resumeState === 'finalizing';
+    return next.state === 'needs_user' || next.state === 'quarantined';
+  }
+  return false;
+}
+
+export async function transitionClaimedMediaUploadWithDependencies(
+  id: string,
+  expectedRevision: number,
+  next: UploadJob,
+  dependencies: MediaUploadCasDependencies,
+): Promise<boolean> {
+  if (!isStableMediaId(id) || !Number.isInteger(expectedRevision) || expectedRevision < 0) return false;
+  const current = await dependencies.getOfflineDraft(id);
+  if (!current || current.revision !== expectedRevision || !current.uploadJob ||
+      !validTransition(current.uploadJob, next)) return false;
+  try {
+    const normalized = sanitizeDraftForStorage({ ...current, uploadJob: next }).uploadJob;
+    if (!normalized || normalized.state !== next.state || normalized.attempts !== next.attempts ||
+        normalized.nextAttemptAt !== next.nextAttemptAt || normalized.lastError !== next.lastError ||
+        normalized.resumeState !== next.resumeState || normalized.attemptStartedAt !== next.attemptStartedAt) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return dependencies.compareAndSwapUploadJob(id, expectedRevision, current.uploadJob.state, next);
+}
+
+function databaseCasDependencies(database: SQLite.SQLiteDatabase): MediaUploadCasDependencies {
+  return {
+    getOfflineDraft: async (id) => {
+      const row = await database.getFirstAsync<DraftRow>(DRAFT_GET_SQL, id);
+      return row ? deserializeDraftRows([row])[0] ?? null : null;
+    },
+    compareAndSwapUploadJob: async (id, expectedRevision, expectedState, next) => {
+      const result = await database.runAsync(
+        MEDIA_UPLOAD_CAS_SQL,
+        next.state,
+        next.attempts,
+        next.nextAttemptAt,
+        next.lastError,
+        next.resumeState ?? null,
+        next.attemptStartedAt ?? null,
+        id,
+        expectedRevision,
+        expectedState,
+      );
+      return result.changes === 1;
+    },
+  };
+}
+
+export async function getOfflineDraft(id: string): Promise<StoredDraft | null> {
+  if (!isStableMediaId(id)) throw new Error('invalid_draft_id');
+  const database = await getDatabase();
+  return databaseCasDependencies(database).getOfflineDraft(id);
+}
+
+export async function claimMediaUploadAttempt(
+  id: string,
+  now: Date,
+  leaseMs: number,
+): Promise<MediaUploadClaim | null> {
+  const database = await getDatabase();
+  return claimMediaUploadAttemptWithDependencies(id, now, leaseMs, databaseCasDependencies(database));
+}
+
+export async function transitionClaimedMediaUpload(
+  id: string,
+  expectedRevision: number,
+  next: UploadJob,
+): Promise<boolean> {
+  const database = await getDatabase();
+  return transitionClaimedMediaUploadWithDependencies(
+    id, expectedRevision, next, databaseCasDependencies(database),
+  );
+}
+
 export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
   const drafts: StoredDraft[] = [];
   for (const row of rows) {
     let textOnly: StoredDraft;
     try {
-      textOnly = sanitizeDraftForStorage({ id: row.id, notes: row.notes, risk: row.risk });
+      textOnly = {
+        ...sanitizeDraftForStorage({ id: row.id, notes: row.notes, risk: row.risk }),
+        revision: Number.isInteger(row.revision) && row.revision >= 0 ? row.revision : 0,
+      };
     } catch {
       continue;
     }
-    if (!row.media_id || !row.reviewed_media_ref || !row.review_receipt_json) {
+    const mediaBearing = row.media_id !== null || row.reviewed_media_ref !== null ||
+      row.review_receipt_json !== null || row.encryption_version !== null;
+    if (!mediaBearing) {
       drafts.push(textOnly);
       continue;
     }
@@ -292,22 +546,60 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
         sightingId: row.sighting_id ?? undefined,
         encryptedReviewedRef: row.reviewed_media_ref,
         encryptionVersion: 'aes-256-gcm.v1',
-        receipt: JSON.parse(row.review_receipt_json),
+        receipt: JSON.parse(row.review_receipt_json ?? ''),
         uploadJob: {
           state: row.upload_state,
           attempts: row.upload_attempts,
           nextAttemptAt: row.next_attempt_at,
           lastError: row.last_error,
+          resumeState: row.upload_resume_state,
+          attemptStartedAt: row.upload_attempt_started_at,
         },
       });
-      drafts.push(row.encryption_version === 'aes-256-gcm.v1'
-        ? otherwiseValid
-        : { ...otherwiseValid, encryptionVersion: UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION });
+      if (row.encryption_version === 'aes-256-gcm.v1') {
+        drafts.push({ ...otherwiseValid, revision: textOnly.revision });
+      } else {
+        drafts.push({
+          ...otherwiseValid,
+          revision: textOnly.revision,
+          encryptionVersion: UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
+          mediaFailure: 'version_mismatch',
+          uploadJob: failedMediaJob(row.upload_attempts, 'version_mismatch'),
+        });
+      }
     } catch {
-      drafts.push(textOnly);
+      const safeMediaId = isStableMediaId(row.media_id) ? row.media_id : undefined;
+      const safeReference = safeMediaId && isReviewedMediaReference(row.reviewed_media_ref, safeMediaId)
+        ? row.reviewed_media_ref
+        : undefined;
+      drafts.push({
+        ...textOnly,
+        ...(safeMediaId ? { mediaId: safeMediaId } : {}),
+        ...(safeReference ? { encryptedReviewedRef: safeReference } : {}),
+        ...(isStableMediaId(row.sighting_id) ? { sightingId: row.sighting_id } : {}),
+        ...(safeReference && row.encryption_version === 'aes-256-gcm.v1'
+          ? { encryptionVersion: 'aes-256-gcm.v1' as const }
+          : {}),
+        mediaFailure: 'local_media_corrupt',
+        uploadJob: failedMediaJob(row.upload_attempts, 'local_media_corrupt'),
+      });
     }
   }
   return drafts;
+}
+
+function failedMediaJob(
+  attempts: number | null,
+  lastError: 'local_media_corrupt' | 'version_mismatch',
+): UploadJob {
+  return {
+    state: 'needs_user',
+    attempts: Number.isInteger(attempts) && attempts! >= 0 && attempts! <= 5 ? attempts! : 0,
+    nextAttemptAt: null,
+    lastError,
+    resumeState: null,
+    attemptStartedAt: null,
+  };
 }
 
 export type DeleteDraftDependencies = Readonly<{

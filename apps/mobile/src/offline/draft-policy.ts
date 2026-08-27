@@ -1,7 +1,7 @@
 import type { SightingRisk } from '../api/sightings';
 import { MAX_REVIEWED_MEDIA_BYTES, type ReviewReceipt } from '../media/contracts';
 import { isReviewedMediaReference } from '../media/media-reference';
-import type { UploadJob } from './upload-job';
+import type { UploadJob, UploadResumeState } from './upload-job';
 
 export const UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION = 'unsupported' as const;
 
@@ -15,10 +15,15 @@ export type StoredDraft = {
   encryptionVersion?: 'aes-256-gcm.v1' | typeof UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION;
   receipt?: ReviewReceipt;
   uploadJob?: UploadJob;
+  revision?: number;
+  mediaFailure?: 'local_media_corrupt' | 'version_mismatch';
 };
 
 const risks = new Set<SightingRisk>(['normal', 'sensitive', 'critical']);
-const uploadStates = new Set<UploadJob['state']>(['local_persisting', 'upload_pending', 'uploading', 'waiting', 'needs_user', 'quarantined', 'complete']);
+const uploadStates = new Set<UploadJob['state']>([
+  'local_persisting', 'upload_pending', 'uploading', 'finalizing', 'waiting', 'needs_user', 'quarantined', 'complete',
+]);
+const resumeStates = new Set<UploadResumeState>(['uploading', 'finalizing']);
 
 function stableId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/.test(value);
@@ -50,13 +55,34 @@ function sanitizeUploadJob(value: unknown): UploadJob | undefined {
   }
   const validNextAttemptAt = typeof job.nextAttemptAt === 'string' && job.nextAttemptAt.length <= 40 &&
     Number.isFinite(Date.parse(job.nextAttemptAt));
-  if (job.state === 'waiting' && !validNextAttemptAt) throw new Error('invalid_reviewed_media_draft');
+  const validAttemptStartedAt = typeof job.attemptStartedAt === 'string' && job.attemptStartedAt.length <= 40 &&
+    Number.isFinite(Date.parse(job.attemptStartedAt));
+  const resumeState = typeof job.resumeState === 'string' && resumeStates.has(job.resumeState as UploadResumeState)
+    ? job.resumeState as UploadResumeState
+    : null;
+  if (job.state === 'waiting' && (!validNextAttemptAt || resumeState === null || job.attemptStartedAt !== null)) {
+    throw new Error('invalid_reviewed_media_draft');
+  }
+  if ((job.state === 'uploading' || job.state === 'finalizing') &&
+      (!validAttemptStartedAt || job.resumeState !== null || job.nextAttemptAt !== null || job.attempts! < 1)) {
+    throw new Error('invalid_reviewed_media_draft');
+  }
   const nextAttemptAt = job.state === 'waiting' ? job.nextAttemptAt as string : null;
+  const attemptStartedAt = job.state === 'uploading' || job.state === 'finalizing'
+    ? job.attemptStartedAt as string
+    : null;
   const lastError = typeof job.lastError === 'string' &&
     /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|retry_limit_reached|invalid_upload_attempt|local_media_missing|local_media_corrupt|upload_error)$/.test(job.lastError)
     ? job.lastError
     : null;
-  return { state: job.state, attempts: job.attempts!, nextAttemptAt, lastError };
+  return {
+    state: job.state,
+    attempts: job.attempts!,
+    nextAttemptAt,
+    lastError,
+    resumeState: job.state === 'waiting' ? resumeState : null,
+    attemptStartedAt,
+  };
 }
 
 export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredDraft {
@@ -84,6 +110,8 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     attempts: 0,
     nextAttemptAt: null,
     lastError: null,
+    resumeState: null,
+    attemptStartedAt: null,
   };
   return {
     ...draft,
