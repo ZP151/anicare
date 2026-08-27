@@ -99,6 +99,7 @@ completed and evidenced:
 - Provision a Singapore company and DPO; publish privacy notices, terms and
   community rules; complete DPIA and transfer assessment; finish app-store
   signing, incident operations and the required operational drills.
-- CI pins Supabase CLI to 2.84.2 and its database-contract job is mandatory;
-  migration, pgTAP, Deno/Edge and private Storage compatibility must still pass
-  in CI and in a local Docker/Supabase runtime before pilot readiness.
+- CI pins Supabase CLI to 2.84.2. Its mandatory database-contract job runs
+  `supabase start`, `supabase test db` (migrations/pgTAP), and warning-level DB
+  lint. Deno/Edge runtime, private Storage integration, local Docker/Supabase
+  and two-session checks remain separate release gates before pilot readiness.

@@ -64,9 +64,10 @@ Exit gate: critical moderation SLA drill under 24 hours; complete audit trace fo
 
 Additional blocking gates: establish the Singapore company and DPO, publish
 privacy notices/terms/community rules, complete DPIA and transfer assessment,
-finish app-store signing and rehearse incident operations. CI pins Supabase CLI
-to 2.84.2, but migration, pgTAP, Deno/Edge and private Storage compatibility
-must still pass in mandatory CI and a local Docker/Supabase runtime.
+finish app-store signing and rehearse incident operations. The mandatory CI
+database-contract job pins Supabase CLI to 2.84.2 and runs migrations/pgTAP and
+warning-level DB lint. Deno/Edge runtime, private Storage integration, local
+Docker/Supabase and two-session verification remain separate release gates.
 
 ## Prioritised next backlog
 
