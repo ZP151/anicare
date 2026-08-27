@@ -8,15 +8,19 @@ from unittest.mock import patch
 from animalhelper_ai.api import INTERNAL_TOKEN_ENV, INTERNAL_TOKEN_HEADER, app
 
 
-def invoke_identify(payload: dict[str, object], headers: dict[str, str]) -> tuple[int, str]:
+def invoke_http(
+    path: str,
+    headers: dict[str, str],
+    body: bytes = b"{}",
+    method: str = "POST",
+) -> tuple[int, str]:
     """Exercise FastAPI's ASGI HTTP boundary without a third-party client."""
     sent: list[dict[str, object]] = []
-    body = json.dumps(payload).encode()
     request_headers = {"content-type": "application/json", **headers}
     encoded_headers = [(key.lower().encode(), value.encode()) for key, value in request_headers.items()]
     scope: dict[str, object] = {
         "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
-        "method": "POST", "path": "/v1/identify", "raw_path": b"/v1/identify",
+        "method": method, "path": path, "raw_path": path.encode(),
         "query_string": b"", "headers": encoded_headers, "client": ("test", 0),
         "server": ("test", 80), "scheme": "http",
     }
@@ -35,6 +39,10 @@ def invoke_identify(payload: dict[str, object], headers: dict[str, str]) -> tupl
     return next(message["status"] for message in sent if message["type"] == "http.response.start"), response_body.decode()
 
 
+def invoke_identify(payload: dict[str, object], headers: dict[str, str]) -> tuple[int, str]:
+    return invoke_http("/v1/identify", headers, json.dumps(payload).encode())
+
+
 class ApiAuthTests(unittest.TestCase):
     payload: ClassVar[dict[str, object]] = {"jobId": "job-1", "candidates": []}
     token: ClassVar[str] = "t" * 32
@@ -44,7 +52,7 @@ class ApiAuthTests(unittest.TestCase):
             with self.subTest(configured=configured), patch.dict(os.environ, {}, clear=True):
                 if configured is not None:
                     os.environ[INTERNAL_TOKEN_ENV] = configured
-                status, body = invoke_identify(self.payload, {})
+                status, body = invoke_http("/v1/identify", {}, b"{malformed")
                 self.assertEqual(status, 503)
                 self.assertNotIn("short", body)
 
@@ -52,7 +60,7 @@ class ApiAuthTests(unittest.TestCase):
         with patch.dict(os.environ, {INTERNAL_TOKEN_ENV: self.token}, clear=True):
             for headers in ({}, {INTERNAL_TOKEN_HEADER: "w" * 32}):
                 with self.subTest(headers=headers):
-                    status, body = invoke_identify(self.payload, headers)
+                    status, body = invoke_http("/v1/identify", headers, b"{malformed")
                     self.assertEqual(status, 401)
                     self.assertNotIn(self.token, body)
 
@@ -72,6 +80,20 @@ class ApiAuthTests(unittest.TestCase):
             )
         self.assertEqual(status, 422)
         self.assertNotIn(self.token, body)
+
+    def test_correct_token_reaches_schema_validation_for_malformed_body(self) -> None:
+        with patch.dict(os.environ, {INTERNAL_TOKEN_ENV: self.token}, clear=True):
+            status, body = invoke_http("/v1/identify", {INTERNAL_TOKEN_HEADER: self.token}, b"{malformed")
+        self.assertEqual(status, 422)
+        self.assertNotIn(self.token, body)
+
+    def test_health_is_public_but_private_schema_routes_are_unavailable(self) -> None:
+        self.assertEqual(invoke_http("/health", {}, method="GET")[0], 200)
+        for path in ("/openapi.json", "/docs", "/redoc"):
+            with self.subTest(path=path):
+                status, body = invoke_http(path, {}, method="GET")
+                self.assertEqual(status, 404)
+                self.assertNotIn(self.token, body)
 
 
 if __name__ == "__main__":

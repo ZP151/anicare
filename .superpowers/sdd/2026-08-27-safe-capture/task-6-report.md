@@ -102,3 +102,13 @@ Crop comments/docs/tests now state the precise guarantee: validated wire/model
 input cannot set `accepted`; the deterministic policy may emit it through the
 trusted in-process `model_construct` escape hatch, which is never transport
 exposed.
+
+## Final auth-ordering follow-up
+
+Authentication for `POST /v1/identify` now runs in ASGI middleware before
+FastAPI parses the body: missing/weak configuration returns 503 and missing or
+wrong caller credentials return 401 even for malformed bodies; only an
+authenticated caller reaches strict 422 schema validation. OpenAPI, Swagger,
+and ReDoc routes are disabled while `/health` remains public. The policy
+documentation and tests explicitly distinguish validated model guarantees from
+the trusted in-process `model_construct` escape hatch.

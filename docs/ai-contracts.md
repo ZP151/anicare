@@ -15,7 +15,8 @@ or embedding vector. The existing compatibility request is a bounded,
 trusted-internal adapter shape that may carry numeric evidence for ranking;
 those scores are never returned publicly.
 
-The `/v1/identify` route is a private alpha boundary. It is unavailable unless
+The `/v1/identify` route is a private alpha boundary. Authentication runs at
+the ASGI boundary before request-body parsing. It is unavailable unless
 the server has `WHISKER_INTERNAL_AI_TOKEN` configured as a nonblank secret of
 at least 32 characters, and it accepts callers only through the exact
 `X-Whisker-Internal-Token` header using constant-time comparison. Missing or
@@ -23,7 +24,9 @@ malformed server configuration returns unavailable; missing or incorrect caller
 credentials return unauthorized. The token is never logged or serialized.
 Deployment must provision this secret through the runtime secret manager and
 verify the private caller path before enabling the route; this contract does
-not create or embed production credentials.
+not create or embed production credentials. Anonymous OpenAPI, Swagger, and
+ReDoc schema routes are disabled for this private alpha service; `/health`
+remains the only public route.
 
 ## Crop quality (`crop.v1`)
 
