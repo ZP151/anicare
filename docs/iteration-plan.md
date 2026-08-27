@@ -13,23 +13,38 @@ This sequence deliberately proves safety and identity quality before community g
 
 Exit gap: run database tests with Docker/Supabase CLI; provision real dev credentials; complete native device builds.
 
-## Sprint 2–3 — safe capture
+## Sprint 2–3 — safe capture foundations (implemented, not pilot-ready)
 
-- Implement camera capture, deterministic image re-encoding, EXIF stripping and on-device person/licence-plate redaction.
-- Add explicit redaction review, upload retry and encrypted offline draft recovery.
-- Connect Nearby/Map to the redacted public feed; add report/block flows.
-- Connect the admin console to authenticated Supabase data and audit every action.
+- Manual opaque-mask review, canonical JPEG re-rendering, metadata stripping,
+  receipt-bound private staging, retry policy and encrypted reviewed-media
+  recovery are implemented.
+- Automatic person, licence-plate and cat detection are explicitly unavailable;
+  native-device execution has not been completed.
+- Private Supabase staging/quarantine, cleanup contracts and strict JPEG
+  validation are implemented. Local migration, pgTAP, Deno/Edge and Storage
+  runtime execution has not run in this workspace.
+- Narrow public feed/report/block and authenticated audited-admin contracts are
+  implemented. Database runtime and two-session concurrency checks remain
+  blocking gates.
+- Media remains private and quarantined. Public promotion is disabled until
+  trusted server residual validation exists; manual quarantine is not public
+  publication.
 
-Exit gate: redaction adversarial test set passes; public/API payload tests find no exact coordinates or EXIF; UGC report/block paths pass App Store/Play checks.
+Exit gate: run the required Docker/Supabase/Deno checks, native-device review
+flow, adversarial redaction tests, public-projection tests and two-session
+concurrency checks. Do not label the branch pilot-ready before those checks.
 
-## Sprint 4–5 — AI identity alpha
+## Sprint 4–5 — AI identity alpha contracts (implemented skeleton)
 
-- Curate consented, independently labelled Singapore community-cat identities.
-- Add cat-face detection/crop quality assessment and versioned DINOv2-compatible embeddings.
-- Add approximate-nearest-neighbour retrieval, trait/time/cell fusion and async callback.
-- Build the candidate selection/new-cat UX and independent review queue.
+- Strict crop, embedding, callback and public-result contracts, synthetic
+  evaluation fixtures and a fail-closed internal identify route are implemented.
+- No model weights, labelled dataset, ANN, queue, real callback, automatic
+  detection or production identity/accuracy result exists. AI cannot confirm an
+  animal identity.
 
-Exit gate: held-out metrics meet the charter thresholds; otherwise ship manual search/new-cat only.
+Exit gate: use a consented independently labelled dataset and production-safe
+inference infrastructure before evaluating held-out metrics. Until then, any AI
+output remains synthetic-contract coverage only.
 
 ## Sprint 6–7 — care and governance
 
@@ -47,12 +62,21 @@ Exit gate: critical moderation SLA drill under 24 hours; complete audit trace fo
 - Complete App Store/Play review package, DPIA, transfer assessment and runbook.
 - Operate four weeks with weekly safety/model reviews before expanding geography.
 
+Additional blocking gates: establish the Singapore company and DPO, publish
+privacy notices/terms/community rules, complete DPIA and transfer assessment,
+finish app-store signing and rehearse incident operations. A CI Supabase CLI
+version must be reproducibly pinned after it is verified; no supported version
+is recorded in this repository today.
+
 ## Prioritised next backlog
 
-1. On-device media redaction and safe upload.
-2. Real Supabase dev environment plus locally passing RLS tests.
-3. Authenticated admin data access and moderation actions.
-4. Labelled cat dataset/model embedding pipeline.
-5. Candidate/new-cat mobile UX and async inference.
-6. Notifications, operational dashboards and pilot onboarding.
-
+1. Run real Supabase/Docker/Deno/Storage checks, migrations, pgTAP and
+   two-session concurrency verification.
+2. Complete supported native-device review/recovery testing and automatic
+   detector/residual-validation release work.
+3. Provision a real development environment and exercise the audited
+   admin/report/block contracts against it.
+4. Curate a consented labelled cat dataset and build a bounded inference/ANN/
+   callback pipeline behind the frozen contracts.
+5. Complete Singapore legal, privacy, app-store-signing and incident-operation
+   launch gates.

@@ -26,12 +26,11 @@ jobs:
           cache: pip
       - run: pnpm install --frozen-lockfile
       - run: python -m pip install -e "services/ai[dev]"
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      - run: pnpm peers check
       - run: python -m ruff check services/ai
       - run: python -m mypy services/ai/src
+      - run: pnpm verify
+      - run: git diff --check
 
   database-contracts:
     runs-on: ubuntu-latest
@@ -39,9 +38,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+        # No supported CLI version is recorded in this repository. Do not
+        # substitute an invented pin; selecting and verifying one is a release gate.
       - run: supabase start
       - run: supabase test db
       - run: supabase db lint --level warning
-

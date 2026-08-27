@@ -4,28 +4,39 @@ WhiskerCommons is a privacy-first, free community-cat identity and care record p
 
 ## Current implementation
 
-- Expo SDK 57 mobile app with Nearby, Map, Report, Following and Profile tabs.
-- Platform-adaptive Liquid Glass on supported iOS 26 devices, accessible blur/solid fallbacks elsewhere.
-- English and Simplified Chinese message catalogue.
-- Email, Apple and Google PKCE sign-in entry points with a native deep-link callback.
-- SQLCipher offline report drafts whose stored form excludes coordinates and access tokens.
-- Event-ledger domain model, H3 resolution 9 public cells, delayed exposure and 24-hour task grants.
-- Supabase schema with RLS, separate encrypted precise-location schema, moderation, appeals and audit records.
-- Audited Edge Function for atomic sighting plus AES-GCM location storage.
-- Retention/deletion functions that destroy 12-month precise-location ciphertext and clear image embeddings before object deletion.
-- Private Next.js operations console shell.
-- Python candidate-fusion service with Top-3/new-cat contracts and open-set beta metrics.
+WhiskerCommons is the display brand only. Existing package scopes, Python import
+path, OAuth scheme, bundle identifiers, database identifiers and offline-key
+names remain compatible technical identifiers.
 
-The UI contains synthetic placeholder content only. It is not connected to production data and must not be used to record real locations until the company, DPO, privacy documents and production secrets are in place.
+- Expo SDK 57 mobile app with Nearby, Map, Report, Following and Profile tabs,
+  bilingual navigation, and platform-adaptive Liquid Glass/fallbacks.
+- Manual opaque-mask review, canonical JPEG rendering and encrypted local
+  reviewed-media recovery. Automatic person, licence-plate and cat detectors,
+  and native-device execution, are not implemented release gates.
+- SQLCipher offline report drafts whose stored form excludes coordinates and
+  access tokens; a reviewed source image is staged only after its receipt is
+  confirmed.
+- Private Supabase staging/quarantine, cleanup contracts and strict JPEG marker
+  validation. No media is promoted to public storage: only private staging and
+  manual quarantine are implemented.
+- Narrow public-feed/report/block contracts and an authenticated, audited admin
+  contract. Database runtime verification and two-session concurrency remain
+  required gates.
+- Versioned, model-free AI contracts for crops, embeddings, callbacks and public
+  results, plus synthetic evaluation fixtures. The internal identify route
+  fails closed behind an ASGI token boundary. There are no model weights,
+  labelled dataset, ANN, queue, real callback, or production accuracy claim.
 
-This repository is the Sprint 0–1 implementation baseline, not a claim that the complete production rollout is finished. Real model weights and qualified cat-identity data, automated on-device bystander/plate redaction, production admin authentication/data wiring, push notifications, app-store signing and Singapore operational/legal setup remain release work.
+The UI contains synthetic placeholder content only. It is not connected to
+production data and must not be used to record real locations. This repository
+does not claim pilot readiness.
 
 ## Requirements
 
 - Node.js 22+
 - pnpm 11.19
 - Python 3.12–3.13 for the AI service
-- Docker Desktop and Supabase CLI for local database policy tests
+- Docker Desktop, Supabase CLI and Deno for local database/Edge contract checks
 
 ## Development
 
@@ -54,7 +65,9 @@ Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable th
 - Normal sightings appear after two hours, sensitive sightings after 24 hours, and critical sightings remain hidden for review.
 - Contributor AI selections remain tentative until an independent trusted review.
 - Public responses use confidence bands and reasons; internal numeric scores are not exposed.
-- Images must be re-encoded, stripped of EXIF and redacted on-device before the public bucket is used.
+- Selected source-image bytes are never uploaded. Only a newly rendered JPEG
+  tied to a valid review receipt may enter private staging; public media
+  promotion is disabled.
 - Offline drafts never persist coordinates; location is requested again only at explicit submission time.
 - Production precise-location access is task-specific, expires within 24 hours and is audited.
 
@@ -68,4 +81,24 @@ Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable th
 
 ## Release gates
 
-The closed beta requires all privacy/RLS tests to pass, zero unresolved critical location incidents, Recall@3 of at least 85% on qualified identities, unknown rejection of at least 80%, and likely false matches on unknown cats of at most 5%. AI stays behind a feature flag if it misses the gate.
+The branch cannot be labelled pilot-ready until all of the following are
+completed and evidenced:
+
+- Run migrations, pgTAP, Deno/Edge and private Storage checks against a real
+  local Supabase/Docker runtime; run the required two-session database
+  concurrency checks.
+- Build and test the manual review flow on supported native devices. Automatic
+  person, licence-plate and cat detection remain disabled until device, model,
+  licence and adversarial-corpus gates pass.
+- Keep public media promotion disabled until trusted server-side residual checks
+  are implemented and verified. Client attestation alone never permits it.
+- Use a qualified, consented labelled dataset before evaluating Recall@3 at
+  least 85%, unknown rejection at least 80%, and likely false matches on unknown
+  cats at most 5%. Current evaluation is synthetic only and establishes no
+  production accuracy result.
+- Provision a Singapore company and DPO; publish privacy notices, terms and
+  community rules; complete DPIA and transfer assessment; finish app-store
+  signing, incident operations and the required operational drills.
+- Select and verify a reproducible Supabase CLI version for CI. The repository
+  has no supported CLI version pin to justify today, so CI retains its mandatory
+  database-contract job without inventing one.
