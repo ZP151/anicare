@@ -57,6 +57,11 @@ function isRetryCandidate(draft: StoredDraft, now: Date, leaseMs: number): boole
 
 export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDependencies) {
   async function uploadDraftMediaNow(draftId: string, signal?: AbortSignal): Promise<MediaUploadRuntimeResult> {
+    const isLiveOwner = async (ownerSubject: string) => {
+      if (signal?.aborted) return false;
+      const liveOwner = await dependencies.getOwnerSubject();
+      return !signal?.aborted && liveOwner === ownerSubject;
+    };
     // Check auth before the CAS claim, because claiming increments attempts.
     if (signal?.aborted) return 'stale';
     const ownerSubject = await dependencies.getOwnerSubject();
@@ -77,10 +82,10 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
           drained.uploadJob?.state !== 'quarantined') return 'quarantined';
       const revision = drained.revision;
       if (!drained.encryptedReviewedRef || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return 'needs_user';
-      if (signal?.aborted || await dependencies.getOwnerSubject() !== ownerSubject) return 'stale';
+      if (!await isLiveOwner(ownerSubject)) return 'stale';
       // Quarantine is already the durable success boundary. Resume only its ordered local cleanup.
       await dependencies.deleteCiphertext(drained.encryptedReviewedRef);
-      if (signal?.aborted || await dependencies.getOwnerSubject() !== ownerSubject) return 'stale';
+      if (!await isLiveOwner(ownerSubject)) return 'stale';
       await dependencies.cleanupQuarantined(drained.id, revision);
       return 'quarantined';
     }
@@ -95,7 +100,7 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
         return current.uploadJob.state;
       }
     }
-    if (signal?.aborted || await dependencies.getOwnerSubject() !== ownerSubject) return 'stale';
+    if (!await isLiveOwner(ownerSubject)) return 'stale';
     const claim = await dependencies.claimAttempt(draftId, dependencies.now(), dependencies.leaseMs, ownerSubject);
     if (!claim) {
       const latest = await dependencies.getDraft(draftId);

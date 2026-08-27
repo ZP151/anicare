@@ -177,7 +177,7 @@ async function withAttemptDeadline<T>(
   dependencies.cancellationSignal?.addEventListener('abort', abortOnCancellation, { once: true });
   const timer = dependencies.setDeadlineTimer(() => controller.abort(), dependencies.plaintextDeadlineMs);
   try {
-    return await untilAbort(operation(controller.signal), controller.signal);
+    return await operation(controller.signal);
   } finally {
     dependencies.clearDeadlineTimer(timer);
     dependencies.cancellationSignal?.removeEventListener('abort', abortOnCancellation);
@@ -195,9 +195,11 @@ async function move(
   attempt: MutableAttempt,
   next: UploadJob,
   dependencies: MediaUploadCoordinatorDependencies,
+  allowCancelledFinalizing = false,
 ): Promise<boolean> {
   if (dependencies.cancellationSignal?.aborted && next.state !== 'waiting' &&
-      !(next.state === 'needs_user' && attempt.job.attempts >= 5)) {
+      !(next.state === 'needs_user' && attempt.job.attempts >= 5) &&
+      !(allowCancelledFinalizing && next.state === 'finalizing')) {
     throw new Error('media_upload_cancelled');
   }
   try {
@@ -231,23 +233,22 @@ async function cleanupTerminal(
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<'quarantined'> {
   try {
-    if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
+    const assertLiveOwner = async () => {
+      if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
+      const liveOwner = await dependencies.getOwnerSubject();
+      if (dependencies.cancellationSignal?.aborted || liveOwner !== ownerSubject) throw new Error('media_upload_cancelled');
+    };
+    await assertLiveOwner();
     await dependencies.drainPendingCleanup(draftId);
-    if (dependencies.cancellationSignal?.aborted || ownerSubject !== await dependencies.getOwnerSubject()) {
-      throw new Error('media_upload_cancelled');
-    }
+    await assertLiveOwner();
     const current = await dependencies.getOfflineDraft(draftId);
+    await assertLiveOwner();
     if (!current || current.ownerSubject !== ownerSubject || current.pendingMediaCleanupRef ||
         current.uploadJob?.state !== 'quarantined' || current.encryptedReviewedRef !== reference) {
       throw new Error('terminal_cleanup_conflict');
     }
-    if (dependencies.cancellationSignal?.aborted || ownerSubject !== await dependencies.getOwnerSubject()) {
-      throw new Error('media_upload_cancelled');
-    }
     await dependencies.deleteReviewedMediaReference(reference);
-    if (dependencies.cancellationSignal?.aborted || ownerSubject !== await dependencies.getOwnerSubject()) {
-      throw new Error('media_upload_cancelled');
-    }
+    await assertLiveOwner();
     await dependencies.cleanupQuarantinedMedia(draftId, current.revision ?? revision);
     return 'quarantined';
   } catch {
@@ -258,6 +259,7 @@ async function cleanupTerminal(
 async function persistFinalizing(
   attempt: MutableAttempt,
   dependencies: MediaUploadCoordinatorDependencies,
+  allowCancelledFinalizing = false,
 ): Promise<boolean> {
   if (attempt.job.state === 'finalizing') return true;
   return move(attempt, {
@@ -266,7 +268,7 @@ async function persistFinalizing(
     nextAttemptAt: null,
     lastError: null,
     resumeState: null,
-  }, dependencies);
+  }, dependencies, allowCancelledFinalizing);
 }
 
 async function persistQuarantined(
@@ -330,7 +332,23 @@ async function readAndPut(
       const activeCapability = capability ?? await untilAbort(reserve(attempt, activeToken, dependencies, signal), signal);
       try {
         if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
-        await untilAbort(dependencies.putReservedMedia({ capability: activeCapability, artifact, signal }), signal);
+        let putSucceeded = false;
+        const putOperation = dependencies.putReservedMedia({ capability: activeCapability, artifact, signal }).then(() => {
+          putSucceeded = true;
+        });
+        try {
+          await untilAbort(putOperation, signal);
+        } catch (error) {
+          // A completed PUT is remote truth: preserve it locally as finalizing before settling cancellation.
+          if (dependencies.cancellationSignal?.aborted) {
+            try {
+              await putOperation;
+            } catch {
+              throw error;
+            }
+          }
+          if (!putSucceeded) throw error;
+        }
         return { putConflict: false, accessToken: activeToken };
       } catch (error) {
         if (isPutConflict(error)) return { putConflict: true, accessToken: activeToken };
@@ -357,7 +375,7 @@ async function finishAfterPut(
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<MediaUploadRunResult> {
   try {
-    if (!await persistFinalizing(attempt, dependencies)) return 'stale';
+    if (!await persistFinalizing(attempt, dependencies, true)) return 'stale';
     await finalize(attempt, accessToken, dependencies);
     return persistQuarantined(attempt, dependencies);
   } catch (error) {

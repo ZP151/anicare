@@ -452,3 +452,26 @@ PASS: Expo web export completed.
 - Rechecked every cancellation await/state boundary and owner/pending CAS;
   deadlines, secret containment, web fail-closed behavior and durable cleanup
   ordering remain unchanged.
+
+## Whole-branch fix — Batch G (await-order cancellation convergence)
+
+### TDD evidence
+
+RED: `pnpm --filter @animalhelper/mobile test -- media-upload-coordinator.test.ts`
+failed the new post-PUT cancellation assertion: the durable `finalizing` CAS
+was absent and the job resumed as uploading.
+
+GREEN: the same focused command passed: 1 suite, 44 tests. The coordinator
+now permits only the owner/revision-bound finalizing bookkeeping after a known
+successful PUT, then stores bounded waiting with `resumeState: finalizing`.
+
+### Invariants and review
+
+- Owner reads are split from cancellation checks in terminal cleanup and the
+  native terminal path; destructive cleanup is preceded by a post-await
+  cancellation/owner check.
+- A completed PUT is never blindly repeated after cancellation: finalizing is
+  durably recorded first, then retry starts with finalization recovery.
+- The exception is limited to finalizing bookkeeping; ordinary post-abort
+  mutations remain blocked, while fifth-attempt retry-limit behavior remains
+  bounded.

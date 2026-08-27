@@ -42,6 +42,23 @@ describe('crash-safe media upload coordinator', () => {
     ]);
   });
 
+  it('records finalizing before settling a cancellation that arrives after PUT succeeds', async () => {
+    const run = uploadHarness();
+    const cancellation = new AbortController();
+    run.dependencies = {
+      ...run.dependencies,
+      cancellationSignal: cancellation.signal,
+      putReservedMedia: async () => {
+        run.events.push('put');
+        cancellation.abort();
+      },
+    };
+
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.events).toEqual(['persist:uploading:1', 'decrypt', 'reserve', 'put', 'persist:finalizing:1', 'persist:waiting:1']);
+    expect(run.current?.uploadJob).toMatchObject({ state: 'waiting', resumeState: 'finalizing', attempts: 1 });
+  });
+
   it('reuses immutable identities when reserve committed but its response was lost', async () => {
     const run = uploadHarness({
       reserve: ['network', 'success'],
