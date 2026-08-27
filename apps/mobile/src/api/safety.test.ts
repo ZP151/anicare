@@ -8,7 +8,7 @@ import {
 const contentId = '00000000-0000-4000-8000-000000000201';
 const blockedId = '00000000-0000-4000-8000-000000000202';
 const requestId = '00000000-0000-4000-8000-000000000203';
-const reportRequestOutcome = '00000000-0000-4000-8000-000000000204';
+const reportRequestOutcome = requestId;
 const unblockRequestId = '00000000-0000-4000-8000-000000000205';
 
 describe('community safety API payloads', () => {
@@ -65,6 +65,13 @@ describe('community safety API payloads', () => {
 
     await expect(reportContent(input, { rpc })).resolves.toBe(reportRequestOutcome);
     expect(rpc).toHaveBeenCalledWith('create_moderation_report', buildModerationReportRpcArgs(input));
+  });
+
+  it('rejects a different valid UUID because the report outcome must equal the request ID', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: '00000000-0000-4000-8000-000000000299', error: null });
+    const input = { contentType: 'user', contentId, reasonCode: 'spam', detail: null, requestId } as const;
+
+    await expect(reportContent(input, { rpc })).rejects.toThrow('invalid_moderation_report_outcome');
   });
 
   it('derives block actors server-side and sends only target plus stable request ID', async () => {

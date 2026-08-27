@@ -86,7 +86,7 @@ export async function reportContent(
   );
   if (error) throw new Error('safety_request_failed');
   // This is the caller's opaque idempotency outcome, never a moderation report ID.
-  if (!isUuid(data)) throw new Error('invalid_moderation_report_outcome');
+  if (!isUuid(data) || data !== input.requestId) throw new Error('invalid_moderation_report_outcome');
   return data;
 }
 
