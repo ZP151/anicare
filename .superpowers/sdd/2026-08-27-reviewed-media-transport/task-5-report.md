@@ -493,3 +493,13 @@ cancellation to the finalizing CAS boundary.
 - A PUT known to have completed before the finalizing CAS is recorded through
   the owner/revision-bound CAS, then cancellation settles bounded waiting with
   `resumeState: finalizing`.
+
+## Whole-branch fix — Batch H2 (direct cancellation regressions)
+
+Focused verification: `pnpm --filter @animalhelper/mobile test --
+media-upload-coordinator.test.ts media-upload-runtime.test.ts` passed 2 suites /
+63 tests. Added direct coverage for an externally-cancelled never-settling PUT,
+claimed fifth-attempt cancellation, coordinator terminal owner-await and
+post-delete cancellation, plus native terminal owner-await and post-delete
+row-retention paths. Each confirms no late destructive state effect and the
+durable terminal/waiting row remains recoverable.

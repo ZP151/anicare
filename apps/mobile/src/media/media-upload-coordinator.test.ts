@@ -60,6 +60,67 @@ describe('crash-safe media upload coordinator', () => {
     expect(run.current?.uploadJob).toMatchObject({ state: 'waiting', resumeState: 'finalizing', attempts: 1 });
   });
 
+  it('settles an externally cancelled never-settling PUT without accepting its late completion', async () => {
+    const run = uploadHarness({ stallStage: 'put' });
+    const cancellation = new AbortController();
+    run.dependencies = { ...run.dependencies, cancellationSignal: cancellation.signal };
+    const pending = run.claimAndRun();
+    for (let index = 0; index < 20 && !run.events.includes('put'); index += 1) await Promise.resolve();
+    cancellation.abort();
+    await expect(pending).resolves.toBe('waiting');
+    expect(run.current?.uploadJob).toMatchObject({ state: 'waiting', resumeState: 'uploading' });
+    expect(run.plaintextExits()).toBe(1);
+    expect(run.deadlines.activeCount()).toBe(0);
+    const effects = [...run.events];
+    run.releaseStall();
+    await Promise.resolve();
+    expect(run.events).toEqual(effects);
+  });
+
+  it('turns an already claimed fifth attempt cancelled before effects into retry-limit needs-user', async () => {
+    const run = uploadHarness({ pendingAttempts: 4 });
+    const cancellation = new AbortController();
+    const claim = await run.claim();
+    cancellation.abort();
+    run.dependencies = { ...run.dependencies, cancellationSignal: cancellation.signal };
+    await expect(runMediaUploadAttempt(claim!, run.dependencies)).resolves.toBe('needs_user');
+    expect(run.current?.uploadJob).toMatchObject({ state: 'needs_user', attempts: 5, lastError: 'retry_limit_reached' });
+    expect(run.events).not.toContain('decrypt');
+    expect(run.events).not.toContain('reserve');
+    expect(run.events).not.toContain('put');
+    expect(run.events).not.toContain('finalize');
+  });
+
+  it('does not delete terminal media when cancellation occurs during its owner lookup', async () => {
+    const run = uploadHarness();
+    const claim = await run.claim();
+    const controller = new AbortController();
+    const owner = deferred<string | null>();
+    run.current = { ...run.current!, uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } };
+    run.dependencies = { ...run.dependencies, cancellationSignal: controller.signal, getOwnerSubject: jest.fn()
+      .mockResolvedValueOnce('owner-12345678').mockImplementationOnce(async () => owner.promise) };
+    const quarantinedClaim = { ...claim!, revision: run.current.revision!, uploadJob: run.current.uploadJob! } as MediaUploadClaim;
+    const pending = runMediaUploadAttempt(quarantinedClaim, run.dependencies);
+    await Promise.resolve(); controller.abort(); owner.resolve('owner-12345678');
+    await expect(pending).rejects.toThrow('terminal_cleanup_failed');
+    expect(run.events).not.toContain('delete_ciphertext');
+    expect(run.events).not.toContain('cleanup_row');
+    expect(run.current?.uploadJob?.state).toBe('quarantined');
+  });
+
+  it('retains the terminal row when cancellation follows ciphertext deletion', async () => {
+    const run = uploadHarness();
+    const claim = await run.claim();
+    const controller = new AbortController();
+    run.current = { ...run.current!, uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } };
+    run.dependencies = { ...run.dependencies, cancellationSignal: controller.signal, deleteReviewedMediaReference: async () => { run.events.push('delete_ciphertext'); controller.abort(); } };
+    const quarantinedClaim = { ...claim!, revision: run.current.revision!, uploadJob: run.current.uploadJob! } as MediaUploadClaim;
+    await expect(runMediaUploadAttempt(quarantinedClaim, run.dependencies)).rejects.toThrow('terminal_cleanup_failed');
+    expect(run.events).toContain('delete_ciphertext');
+    expect(run.events).not.toContain('cleanup_row');
+    expect(run.current?.uploadJob?.state).toBe('quarantined');
+  });
+
   it('reuses immutable identities when reserve committed but its response was lost', async () => {
     const run = uploadHarness({
       reserve: ['network', 'success'],

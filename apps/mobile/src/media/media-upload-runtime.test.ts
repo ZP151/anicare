@@ -191,6 +191,33 @@ describe('native media upload runtime', () => {
     ]);
   });
 
+  it('does not delete native terminal media when cancellation wins its awaited owner lookup', async () => {
+    let releaseOwner!: (value: string) => void;
+    const owner = new Promise<string>((resolve) => { releaseOwner = resolve; });
+    const controller = new AbortController();
+    const run = runtimeHarness({
+      drafts: [draft('draft-12345678', 'upload_pending', { revision: 7, uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
+      getOwnerSubject: jest.fn().mockResolvedValueOnce('owner-12345678').mockImplementationOnce(async () => owner),
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    const pending = runtime.uploadDraftMediaNow('draft-12345678', controller.signal);
+    await Promise.resolve(); controller.abort(); releaseOwner('owner-12345678');
+    await expect(pending).resolves.toBe('stale');
+    expect(run.calls).toEqual([]);
+  });
+
+  it('does not remove the native terminal row when cancellation follows ciphertext deletion', async () => {
+    const controller = new AbortController();
+    const run = runtimeHarness({
+      drafts: [draft('draft-12345678', 'upload_pending', { revision: 7, uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
+      deleteCiphertext: jest.fn(async (reference: string) => { run.calls.push(`ciphertext:${reference}`); controller.abort(); }),
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    await expect(runtime.uploadDraftMediaNow('draft-12345678', controller.signal)).resolves.toBe('stale');
+    expect(run.calls).toHaveLength(1);
+    expect(run.calls[0]).toContain('ciphertext:');
+  });
+
   it('retains a quarantined row and active ciphertext when its pending outbox delete fails', async () => {
     const pending = draft('draft-12345678', 'upload_pending', {
       revision: 7,
