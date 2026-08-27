@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 import { getAdminSession } from './admin-session.js';
+import { getAdminAppUrl, getAdminPublicSupabaseConfig } from './supabase/config.js';
 import {
   getModerationReport,
   listModerationQueue,
@@ -30,6 +33,33 @@ describe('admin session gate', () => {
 
     await expect(getAdminSession(async () => client)).resolves.toEqual({ state: 'unauthenticated' });
     expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it('classifies a malformed getUser payload as unavailable', async () => {
+    const client = {
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 42 } }, error: null }) },
+      rpc: vi.fn(),
+    };
+
+    await expect(getAdminSession(async () => client as never)).resolves.toEqual({ state: 'unavailable' });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['client construction failure', async () => { throw new Error('network'); }],
+    ['getUser transport failure', async () => ({ auth: { getUser: async () => { throw new Error('network'); } }, rpc: vi.fn() })],
+    ['getUser Supabase error', async () => ({ auth: { getUser: async () => ({ data: { user: null }, error: new Error('network') }) }, rpc: vi.fn() })],
+  ])('classifies %s as unavailable', async (_label, createClient) => {
+    await expect(getAdminSession(createClient as never)).resolves.toEqual({ state: 'unavailable' });
+  });
+
+  it('classifies a capability RPC error as unavailable, not unauthorized', async () => {
+    const client = {
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: '00000000-0000-4000-8000-000000000003' } }, error: null }) },
+      rpc: vi.fn().mockResolvedValue({ data: null, error: new Error('network') }),
+    };
+
+    await expect(getAdminSession(async () => client)).resolves.toEqual({ state: 'unavailable' });
   });
 
   it('denies a signed-in user without the narrow active-admin grant', async () => {
@@ -142,6 +172,20 @@ describe('moderation RPC wrappers', () => {
     });
   });
 
+  it.each(['appealed', 'closed'])('accepts the database status %s in a narrow report response', async (status) => {
+    const client = rpcClient([{
+      reportId,
+      contentType: 'sighting',
+      reasonCode: 'animal_welfare',
+      risk: 'sensitive',
+      status,
+      dueAt: '2026-08-28T08:00:00.000Z',
+      createdAt: '2026-08-27T08:00:00.000Z',
+    }]);
+
+    await expect(getModerationReport(client, reportId, requestId)).resolves.toMatchObject({ status });
+  });
+
   it.each([
     [{ reportId, action: 'delete_sighting', rationale: 'A sufficiently long but unsupported moderation reason.' }],
     [{ reportId, action: 'hide_sighting', rationale: 'too short' }],
@@ -149,6 +193,23 @@ describe('moderation RPC wrappers', () => {
     [{ reportId, action: 'hide_sighting', rationale: 'A sufficiently long moderation rationale.', actorId: reportId }],
   ])('rejects unsafe resolution input %#', (input) => {
     expect(() => parseModerationResolution(input as never)).toThrow('invalid_moderation_resolution');
+  });
+});
+
+describe('admin public configuration', () => {
+  it('requires both public Supabase values and a canonical secure admin origin', () => {
+    expect(getAdminPublicSupabaseConfig({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
+    })).toEqual({ url: 'https://project.supabase.co', key: 'publishable-key' });
+    expect(getAdminPublicSupabaseConfig({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: '   ',
+    })).toBeNull();
+    expect(getAdminPublicSupabaseConfig({ NEXT_PUBLIC_SUPABASE_URL: 'not-a-url', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'key' })).toBeNull();
+    expect(getAdminAppUrl({ ADMIN_APP_URL: 'https://admin.example.test/' })).toBe('https://admin.example.test');
+    expect(getAdminAppUrl({ ADMIN_APP_URL: 'http://localhost:3000/' })).toBe('http://localhost:3000');
+    expect(getAdminAppUrl({ ADMIN_APP_URL: 'http://admin.example.test' })).toBeNull();
   });
 });
 

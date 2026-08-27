@@ -1,5 +1,5 @@
 begin;
-select plan(42);
+select plan(43);
 
 -- This file intentionally precedes the migration: these are the required security
 -- contracts for the operations console, not a record of the implementation.
@@ -38,16 +38,16 @@ insert into public.role_grants (user_id, role, provisional_until, revoked_at) va
   ('00000000-0000-4000-8000-000000000118', 'platform_admin', null, null);
 insert into public.sightings (id, reporter_id, occurred_at, public_cell_id, time_bucket, risk, visibility, client_dedupe_key) values
   ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000116', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'moderation-action-201'),
-  ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000116', now(), '8928308280fffff', 'morning', 'normal', 'public', 'moderation-action-202'),
+  ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000116', now(), '8928308280fffff', 'morning', 'normal', 'hidden', 'moderation-action-202'),
   ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000116', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'moderation-action-203'),
   ('00000000-0000-4000-8000-000000000204', '00000000-0000-4000-8000-000000000116', now(), '8928308280fffff', 'morning', 'normal', 'hidden', 'moderation-action-204');
 insert into public.moderation_reports (id, reporter_id, content_type, content_id, content_author_id, target_user_id, reason, risk, status, due_at) values
   ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000117', 'sighting', '00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000116', '00000000-0000-4000-8000-000000000118', 'animal_welfare', 'sensitive', 'open', now() + interval '1 day'),
-  ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000117', 'sighting', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000116', null, 'spam', 'normal', 'open', now() + interval '1 day'),
+  ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000117', 'sighting', '00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000116', null, 'spam', 'normal', 'auto_hidden', now() + interval '1 day'),
   ('00000000-0000-4000-8000-000000000303', '00000000-0000-4000-8000-000000000117', 'sighting', '00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000116', null, 'spam', 'normal', 'open', now() + interval '1 day'),
-  ('00000000-0000-4000-8000-000000000304', '00000000-0000-4000-8000-000000000117', 'sighting', '00000000-0000-4000-8000-000000000204', '00000000-0000-4000-8000-000000000116', null, 'spam', 'normal', 'open', now() + interval '1 day');
-insert into private.sighting_restore_holds (sighting_id, hold_type)
-values ('00000000-0000-4000-8000-000000000204', 'legal');
+  ('00000000-0000-4000-8000-000000000304', '00000000-0000-4000-8000-000000000117', 'sighting', '00000000-0000-4000-8000-000000000204', '00000000-0000-4000-8000-000000000116', null, 'spam', 'normal', 'auto_hidden', now() + interval '1 day');
+insert into private.sighting_restore_holds (sighting_id, hold_type, source_type)
+values ('00000000-0000-4000-8000-000000000204', 'legal', 'legal');
 
 set local role anon;
 select set_config('request.jwt.claim.role', 'anon', true);
@@ -105,26 +105,55 @@ select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110
 select is(public.admin_has_active_platform_admin(), true, 'active platform admin is accepted');
 select lives_ok($$select * from public.admin_list_moderation_queue('00000000-0000-4000-8000-000000000404')$$, 'platform admin can read narrow queue');
 select lives_ok($$select * from public.admin_list_moderation_queue('00000000-0000-4000-8000-000000000404')$$, 'matching queue read retry succeeds');
+reset role;
 select is(
   (select count(*) from audit.access_audit where action = 'admin_read_moderation_queue' and request_id = '00000000-0000-4000-8000-000000000404'),
   1::bigint, 'queue retry token creates one audit event'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
 select lives_ok($$select * from public.admin_get_moderation_report('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000405')$$, 'platform admin can read a narrow report projection');
+reset role;
 select is(
   (select count(*) from audit.access_audit where action = 'admin_read_moderation_report' and request_id = '00000000-0000-4000-8000-000000000405'),
   1::bigint, 'report read appends one audit event'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
 select lives_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000301', 'hide_sighting', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000406')$$, 'hide resolves a sighting report');
+reset role;
 select is((select visibility::text from public.sightings where id = '00000000-0000-4000-8000-000000000201'), 'hidden', 'hide changes target visibility only to hidden');
 select is((select count(*) from public.moderation_actions where request_id = '00000000-0000-4000-8000-000000000406'), 1::bigint, 'hide appends exactly one moderation action');
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
 select lives_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000301', 'hide_sighting', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000406')$$, 'matching resolution retry returns the original outcome');
+reset role;
 select is((select count(*) from audit.access_audit where action = 'admin_resolve_moderation_report' and request_id = '00000000-0000-4000-8000-000000000406'), 1::bigint, 'matching resolution retry appends one audit event');
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
 select throws_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000301', 'no_action', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000406')$$, 'P0001', 'idempotency_conflict', 'conflicting request reuse fails closed');
 select lives_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000302', 'restore_sighting', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000407')$$, 'restore resolves when no active hold exists');
+reset role;
 select is((select visibility::text from public.sightings where id = '00000000-0000-4000-8000-000000000202'), 'limited', 'restore stays limited and never directly republishes content');
-select throws_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000304', 'restore_sighting', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000454')$$, 'P0001', 'sighting_restore_blocked', 'restore cannot override an active legal or safety hold');
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
+select lives_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000304', 'restore_sighting', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000454')$$, 'restore releases only its own auto-hide hold when a legal hold remains');
+reset role;
+select is((select visibility::text from public.sightings where id = '00000000-0000-4000-8000-000000000204'), 'hidden', 'restore cannot override an active legal or safety hold');
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
 select lives_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000303', 'no_action', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000408')$$, 'no-action resolves without a visibility change');
+reset role;
 select is((select visibility::text from public.sightings where id = '00000000-0000-4000-8000-000000000203'), 'limited', 'no-action cannot mutate visibility');
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000110', true);
 select throws_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000303', 'delete_sighting', 'A sufficiently specific moderation rationale.', '00000000-0000-4000-8000-000000000409')$$, '22023', 'invalid_moderation_resolution', 'unsupported resolution action is rejected');
 select throws_ok($$select * from public.admin_resolve_moderation_report('00000000-0000-4000-8000-000000000303', 'hide_sighting', 'short', '00000000-0000-4000-8000-000000000410')$$, '22023', 'invalid_moderation_resolution', 'short rationale is rejected');
 reset role;

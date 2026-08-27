@@ -1,3 +1,5 @@
+import 'server-only';
+
 export interface AdminSessionClient {
   auth: {
     getUser(): Promise<{
@@ -17,14 +19,35 @@ export type AdminSession =
 export async function getAdminSession(
   createClient: () => Promise<AdminSessionClient | null>,
 ): Promise<AdminSession> {
-  const client = await createClient();
+  let client: AdminSessionClient | null;
+  try {
+    client = await createClient();
+  } catch {
+    return { state: 'unavailable' };
+  }
   if (!client) return { state: 'unavailable' };
 
-  const { data, error } = await client.auth.getUser();
-  if (error || !data.user || typeof data.user.id !== 'string') return { state: 'unauthenticated' };
+  let userResult: { data: { user: { id: string } | null }; error: unknown };
+  try {
+    userResult = await client.auth.getUser();
+    if (!userResult || !userResult.data) return { state: 'unavailable' };
+  } catch {
+    return { state: 'unavailable' };
+  }
+  const { data, error } = userResult;
+  if (error) return { state: 'unavailable' };
+  if (!data.user) return { state: 'unauthenticated' };
+  if (typeof data.user.id !== 'string' || !data.user.id) return { state: 'unavailable' };
 
-  const grant = await client.rpc('admin_has_active_platform_admin');
-  if (grant.error || grant.data !== true) return { state: 'unauthorised' };
+  let grant: { data: unknown; error: unknown };
+  try {
+    grant = await client.rpc('admin_has_active_platform_admin');
+    if (!grant) return { state: 'unavailable' };
+  } catch {
+    return { state: 'unavailable' };
+  }
+  if (grant.error || typeof grant.data !== 'boolean') return { state: 'unavailable' };
+  if (grant.data === false) return { state: 'unauthorised' };
 
   return { state: 'authorised', userId: data.user.id, client };
 }

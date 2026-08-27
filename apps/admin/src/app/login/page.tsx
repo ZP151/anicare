@@ -1,7 +1,7 @@
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { createAdminServerClient } from '../../lib/supabase/server';
+import { getAdminAppUrl } from '../../lib/supabase/config';
+import { createAdminServerClient, createWritableAdminServerClient } from '../../lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -15,11 +15,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
     try {
       const email = formData.get('email');
-      const currentClient = await createAdminServerClient();
-      const origin = (await headers()).get('origin');
-      if (typeof email === 'string' && origin && currentClient) {
-        const callback = new URL('/auth/callback?next=/', origin);
-        await currentClient.auth.signInWithOtp({ email, options: { emailRedirectTo: callback.toString() } });
+      const currentClient = await createWritableAdminServerClient();
+      const appUrl = getAdminAppUrl();
+      if (typeof email === 'string' && appUrl && currentClient) {
+        const callback = new URL('/auth/callback?next=/', appUrl);
+        await currentClient.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: callback.toString(), shouldCreateUser: false },
+        });
       }
     } catch {
       // Keep unknown, invalid, and delivery-failed addresses indistinguishable.

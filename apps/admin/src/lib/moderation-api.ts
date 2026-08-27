@@ -1,6 +1,8 @@
+import 'server-only';
+
 export type ModerationAction = 'hide_sighting' | 'restore_sighting' | 'no_action';
 export type ModerationRisk = 'normal' | 'sensitive' | 'critical';
-export type ModerationStatus = 'open' | 'auto_hidden' | 'under_review' | 'resolved';
+export type ModerationStatus = 'open' | 'auto_hidden' | 'under_review' | 'resolved' | 'appealed' | 'closed';
 export type SightingVisibility = 'limited' | 'public' | 'hidden' | 'archived';
 
 export interface NarrowRpcClient {
@@ -45,7 +47,7 @@ const REASON_CODES = new Set([
   'animal_in_immediate_danger',
 ]);
 const RISKS = new Set<ModerationRisk>(['normal', 'sensitive', 'critical']);
-const STATUSES = new Set<ModerationStatus>(['open', 'auto_hidden', 'under_review', 'resolved']);
+const STATUSES = new Set<ModerationStatus>(['open', 'auto_hidden', 'under_review', 'resolved', 'appealed', 'closed']);
 const ACTIONS = new Set<ModerationAction>(['hide_sighting', 'restore_sighting', 'no_action']);
 const VISIBILITIES = new Set<SightingVisibility>(['limited', 'public', 'hidden', 'archived']);
 

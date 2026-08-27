@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 
 import { getAdminSession } from '../../lib/admin-session';
 import { parseModerationResolution, resolveModerationReport, type ModerationResolution } from '../../lib/moderation-api';
-import { createAdminServerClient } from '../../lib/supabase/server';
+import { createWritableAdminServerClient } from '../../lib/supabase/server';
 
 function hasExactFormFields(formData: FormData, expected: readonly string[]): boolean {
   const actual = Array.from(formData.keys()).sort();
@@ -31,13 +31,22 @@ export function parseModerationResolutionForm(formData: FormData): ModerationRes
 export async function resolveModerationReportAction(formData: FormData): Promise<void> {
   'use server';
 
-  const input = parseModerationResolutionForm(formData);
-  const session = await getAdminSession(async () => (await createAdminServerClient()) as never);
+  let input: ModerationResolution;
+  try {
+    input = parseModerationResolutionForm(formData);
+  } catch {
+    redirect('/?error=moderation_failed');
+  }
+  const session = await getAdminSession(async () => (await createWritableAdminServerClient()) as never);
   if (session.state === 'unauthenticated') redirect('/login');
-  if (session.state !== 'authorised') throw new Error('moderation_unavailable');
+  if (session.state !== 'authorised') redirect('/?error=moderation_failed');
 
   const requestId = randomUUID();
-  await resolveModerationReport(session.client, input, requestId);
+  try {
+    await resolveModerationReport(session.client, input, requestId);
+  } catch {
+    redirect('/?error=moderation_failed');
+  }
   revalidatePath('/');
   redirect('/');
 }

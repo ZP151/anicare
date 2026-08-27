@@ -14,7 +14,7 @@ export default async function OperationsPage() {
   const session = await getAdminSession(async () => (await createAdminServerClient()) as never);
 
   if (session.state === 'unavailable') {
-    return <main><section className="panel"><h1>Operations console unavailable</h1><p>The public connection is not configured.</p></section></main>;
+    return <main><section className="panel"><h1>Operations console unavailable</h1><p>The console cannot securely reach its required services.</p></section></main>;
   }
   if (session.state === 'unauthenticated') redirect('/login');
   if (session.state === 'unauthorised') {
