@@ -1,19 +1,15 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
 
 import { AuthLinkHandler } from '../src/components/AuthLinkHandler';
 import { LocaleProvider } from '../src/i18n/LocaleContext';
-import { recoverPendingMediaDrafts } from '../src/media/media-recovery';
+import { MediaUploadRecovery } from '../src/media/MediaUploadRecovery';
 
 export default function RootLayout() {
-  useEffect(() => {
-    void recoverPendingMediaDrafts().catch(() => undefined);
-  }, []);
-
   return (
     <LocaleProvider>
       <AuthLinkHandler />
+      <MediaUploadRecovery />
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />

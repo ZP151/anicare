@@ -1,4 +1,8 @@
 import {
+  ATTACH_SIGHTING_TO_DRAFT_SQL,
+  QUARANTINED_MEDIA_CLEANUP_SQL,
+  attachSightingToDraftWithDependencies,
+  cleanupQuarantinedMediaWithDependencies,
   deleteOfflineDraftWithDependencies,
   deserializeDraftRows,
   DRAFT_LIST_SQL,
@@ -20,6 +24,58 @@ import { recoverPendingReviewedDrafts } from '../media/reviewed-draft';
 import { UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION } from './draft-policy';
 
 describe('native draft storage privacy boundary', () => {
+  it('attaches a recovered sighting through a narrow immutable update', async () => {
+    let current = { id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const };
+    const updates: Array<[string, string]> = [];
+
+    await expect(attachSightingToDraftWithDependencies(
+      'draft-12345678',
+      '12345678-1234-1234-1234-123456789abc',
+      {
+        getOfflineDraft: async () => current,
+        attachSightingId: async (id, sightingId) => {
+          updates.push([id, sightingId]);
+          current = { ...current, sightingId } as typeof current;
+          return true;
+        },
+      },
+    )).resolves.toBe(true);
+
+    expect(updates).toEqual([['draft-12345678', '12345678-1234-1234-1234-123456789abc']]);
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).toContain('sighting_id = ?');
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).not.toContain('notes =');
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).not.toContain('reviewed_media_ref =');
+  });
+
+  it('allows only the matching immutable sighting id to replay after a lost response', async () => {
+    const current = {
+      id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const,
+      sightingId: '12345678-1234-1234-1234-123456789abc',
+    };
+    const attachSightingId = jest.fn(async () => true);
+
+    await expect(attachSightingToDraftWithDependencies(
+      current.id, current.sightingId, { getOfflineDraft: async () => current, attachSightingId },
+    )).resolves.toBe(true);
+    await expect(attachSightingToDraftWithDependencies(
+      current.id, '87654321-1234-1234-1234-123456789abc', { getOfflineDraft: async () => current, attachSightingId },
+    )).resolves.toBe(false);
+    expect(attachSightingId).not.toHaveBeenCalled();
+  });
+
+  it('removes a media row only after the coordinator has durably persisted quarantine', async () => {
+    const deleted = jest.fn(async () => true);
+    await expect(cleanupQuarantinedMediaWithDependencies('draft-12345678', 4, {
+      deleteQuarantinedMedia: deleted,
+    })).resolves.toBeUndefined();
+    await expect(cleanupQuarantinedMediaWithDependencies('draft-12345678', 4, {
+      deleteQuarantinedMedia: async () => false,
+    })).rejects.toThrow('quarantined_media_cleanup_conflict');
+    expect(deleted).toHaveBeenCalledWith('draft-12345678', 4);
+    expect(QUARANTINED_MEDIA_CLEANUP_SQL).toContain("upload_state = 'quarantined'");
+    expect(QUARANTINED_MEDIA_CLEANUP_SQL).toContain('revision = ?');
+  });
+
   it('never writes or reads photo_uri and clears legacy values', () => {
     expect(DRAFT_SAVE_SQL).not.toContain('photo_uri');
     expect(DRAFT_LIST_SQL).not.toContain('photo_uri');

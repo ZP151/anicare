@@ -14,14 +14,16 @@ names remain compatible technical identifiers.
   reviewed-media recovery. Automatic person, licence-plate and cat detectors,
   and native-device execution, are not implemented release gates.
 - SQLCipher offline report drafts whose stored form excludes coordinates and
-  access tokens, plus local reviewed-media receipt/journal boundaries. This is
-  not an authenticated media-upload transport.
+  access tokens, plus local reviewed-media receipt/journal boundaries. Native
+  report submission now recovers a stable sighting by its draft ID, appends the
+  immutable sighting ID, and drives private media retry through the local CAS
+  coordinator; supported-device validation remains a release gate.
 - Backend private Supabase staging/quarantine, cleanup contracts and strict JPEG
-  marker validation, plus mobile request/response contracts, are implemented.
-  The authenticated artifact reader and reserve-to-signed-upload-to-finalize
-  wiring are intentionally absent and block release. No media is promoted to
-  public storage: private staging is a backend contract, not an end-to-end
-  mobile flow.
+  marker validation, plus authenticated native artifact access and the
+  reserve-to-signed-upload-to-finalize wiring, are implemented. Real
+  Supabase/Storage redirect, capability-expiry and cleanup-race validation is
+  still required before release. No media is promoted to public storage: a
+  durable `quarantined` result is private and is not public availability.
 - Narrow public-feed/report/block contracts and an authenticated, audited admin
   contract. Database runtime verification and two-session concurrency remain
   required gates.
@@ -95,9 +97,10 @@ completed and evidenced:
   licence and adversarial-corpus gates pass.
 - Keep public media promotion disabled until trusted server-side residual checks
   are implemented and verified. Client attestation alone never permits it.
-- Implement and test the authenticated artifact reader and the complete
-  reserve-to-signed-upload-to-finalize mobile transport. Until then, private
-  staging/quarantine is not an end-to-end media flow.
+- Exercise the authenticated artifact reader and complete
+  reserve-to-signed-upload-to-finalize mobile transport against real signed
+  Storage, including redirects, capability expiry and cleanup races. Local
+  unit coverage is not a substitute for that release gate.
 - Use a qualified, consented labelled dataset before evaluating Recall@3 at
   least 85%, unknown rejection at least 80%, and likely false matches on unknown
   cats at most 5%. Current evaluation is synthetic only and establishes no

@@ -25,6 +25,26 @@ export async function markReviewedMediaVersionMismatch(_id: string): Promise<voi
   return unavailable();
 }
 
+export async function getOfflineDraft(_id: string): Promise<StoredDraft | null> {
+  return unavailable();
+}
+
+export async function claimMediaUploadAttempt(_id: string, _now: Date, _leaseMs: number): Promise<never> {
+  return unavailable();
+}
+
+export async function transitionClaimedMediaUpload(_id: string, _revision: number, _next: unknown): Promise<never> {
+  return unavailable();
+}
+
+export async function attachSightingToDraft(_id: string, _sightingId: string): Promise<boolean> {
+  return unavailable();
+}
+
+export async function cleanupQuarantinedMedia(_id: string, _revision: number): Promise<void> {
+  return unavailable();
+}
+
 export async function deleteOfflineDraft(_id: string): Promise<void> {
   return unavailable();
 }

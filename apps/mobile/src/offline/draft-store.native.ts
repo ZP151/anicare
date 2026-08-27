@@ -111,6 +111,13 @@ export const MEDIA_UPLOAD_CAS_SQL = `UPDATE sighting_drafts SET
   revision = revision + 1
   WHERE id = ? AND revision = ? AND upload_state = ?
     AND upload_state IN ('upload_pending', 'uploading', 'finalizing', 'waiting')`;
+export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
+  sighting_id = ?,
+  revision = revision + 1,
+  updated_at = ?
+  WHERE id = ? AND sighting_id IS NULL`;
+export const QUARANTINED_MEDIA_CLEANUP_SQL = `DELETE FROM sighting_drafts
+  WHERE id = ? AND revision = ? AND upload_state = 'quarantined'`;
 const ENSURE_DRAFT_ROW_SQL = `INSERT OR IGNORE INTO sighting_drafts
   (id, notes, risk, updated_at) VALUES (?, '', 'normal', ?)`;
 
@@ -548,6 +555,73 @@ export async function getOfflineDraft(id: string): Promise<StoredDraft | null> {
   if (!isStableMediaId(id)) throw new Error('invalid_draft_id');
   const database = await getDatabase();
   return databaseCasDependencies(database).getOfflineDraft(id);
+}
+
+export type AttachSightingToDraftDependencies = Readonly<{
+  getOfflineDraft(id: string): Promise<StoredDraft | null>;
+  attachSightingId(id: string, sightingId: string): Promise<boolean>;
+}>;
+
+/**
+ * The sighting identifier is append-only. This is deliberately narrower than a
+ * generic draft save so a retry cannot replace a media tuple or CAS state.
+ */
+export async function attachSightingToDraftWithDependencies(
+  id: string,
+  sightingId: string,
+  dependencies: AttachSightingToDraftDependencies,
+): Promise<boolean> {
+  if (!isStableMediaId(id) || !isStableMediaId(sightingId)) return false;
+  const current = await dependencies.getOfflineDraft(id);
+  if (!current) return false;
+  if (current.sightingId !== undefined) return current.sightingId === sightingId;
+  if (await dependencies.attachSightingId(id, sightingId)) return true;
+  const after = await dependencies.getOfflineDraft(id);
+  return after?.sightingId === sightingId;
+}
+
+export async function attachSightingToDraft(id: string, sightingId: string): Promise<boolean> {
+  const database = await getDatabase();
+  return attachSightingToDraftWithDependencies(id, sightingId, {
+    getOfflineDraft: async (draftId) => databaseCasDependencies(database).getOfflineDraft(draftId),
+    attachSightingId: async (draftId, attachedSightingId) => {
+      const result = await database.runAsync(
+        ATTACH_SIGHTING_TO_DRAFT_SQL,
+        attachedSightingId,
+        new Date().toISOString(),
+        draftId,
+      );
+      return result.changes === 1;
+    },
+  });
+}
+
+export type CleanupQuarantinedMediaDependencies = Readonly<{
+  deleteQuarantinedMedia(id: string, revision: number): Promise<boolean>;
+}>;
+
+/** Called only after Task 4 has CAS-persisted the quarantined terminal state and removed ciphertext. */
+export async function cleanupQuarantinedMediaWithDependencies(
+  id: string,
+  revision: number,
+  dependencies: CleanupQuarantinedMediaDependencies,
+): Promise<void> {
+  if (!isStableMediaId(id) || !Number.isInteger(revision) || revision < 0) {
+    throw new Error('invalid_quarantined_media_cleanup');
+  }
+  if (!await dependencies.deleteQuarantinedMedia(id, revision)) {
+    throw new Error('quarantined_media_cleanup_conflict');
+  }
+}
+
+export async function cleanupQuarantinedMedia(id: string, revision: number): Promise<void> {
+  const database = await getDatabase();
+  return cleanupQuarantinedMediaWithDependencies(id, revision, {
+    deleteQuarantinedMedia: async (draftId, expectedRevision) => {
+      const result = await database.runAsync(QUARANTINED_MEDIA_CLEANUP_SQL, draftId, expectedRevision);
+      return result.changes === 1;
+    },
+  });
 }
 
 export async function claimMediaUploadAttempt(

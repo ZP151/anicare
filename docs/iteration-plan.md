@@ -17,14 +17,17 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
 
 - Manual opaque-mask review, canonical JPEG re-rendering, metadata stripping,
   local receipt/journal boundaries, retry policy and encrypted reviewed-media
-  recovery are implemented. This does not include authenticated media transport.
+  recovery are implemented. Native report submission now persists the stable
+  sighting ID before a CAS-coordinated authenticated media transport/retry run.
 - Automatic person, licence-plate and cat detection are explicitly unavailable;
   native-device execution has not been completed.
 - Backend private Supabase staging/quarantine, cleanup contracts, strict JPEG
-  validation and mobile request/response contracts are implemented. The
-  authenticated artifact reader and reserve-to-signed-upload-to-finalize wiring
-  are intentionally absent; this is a blocking release gate. Local migration,
-  pgTAP, Deno/Edge and Storage runtime execution has not run in this workspace.
+  validation, authenticated artifact reader and native
+  reserve-to-signed-upload-to-finalize wiring are implemented. A `quarantined`
+  result remains private and public promotion is disabled. Local migration,
+  pgTAP, Deno/Edge and signed Storage runtime execution has not run in this
+  workspace; redirect behavior, capability/expiry and cleanup races remain
+  blocking release gates.
 - Account erasure now records legacy `public-media` and `private-evidence`
   objects in a private, service-only deletion outbox before uploader ownership
   is cleared. The scheduler validates the bucket plus immutable owner-prefixed,
@@ -40,11 +43,12 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
   trusted server residual validation exists; manual quarantine is not public
   publication.
 
-Exit gate: implement and test the authenticated artifact reader plus the
-reserve-to-signed-upload-to-finalize mobile flow; then run the required
-Docker/Supabase/Deno checks, native-device review flow, adversarial redaction
-tests, public-projection tests and two-session concurrency checks. Do not label
-the branch pilot-ready before those checks.
+Exit gate: run the authenticated artifact reader and
+reserve-to-signed-upload-to-finalize mobile flow against real Docker/Supabase,
+Deno and signed Storage; then complete the native-device review/lifecycle,
+adversarial redaction, residual-detector/public-promotion, public-projection
+and two-session concurrency checks. Do not label the branch pilot-ready before
+those checks.
 
 ## Sprint 4–5 — AI identity alpha contracts (implemented skeleton)
 
