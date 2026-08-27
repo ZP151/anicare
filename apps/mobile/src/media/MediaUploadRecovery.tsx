@@ -88,6 +88,12 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
     if (stopped || unsubscribeAuth || unsubscribeForeground) return;
     unsubscribeAuth = dependencies.onAuthChange((signedIn) => {
       if (signedIn) requestRun();
+      else {
+        rerun = false;
+        cancelScheduled?.();
+        cancelScheduled = null;
+        scheduled = false;
+      }
     });
     unsubscribeForeground = dependencies.onForegroundChange((active) => {
       if (active) requestRun();

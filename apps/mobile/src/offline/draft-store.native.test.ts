@@ -31,11 +31,12 @@ describe('native draft storage privacy boundary', () => {
     await expect(attachSightingToDraftWithDependencies(
       'draft-12345678',
       '12345678-1234-1234-1234-123456789abc',
+      'owner-12345678',
       {
         getOfflineDraft: async () => current,
         attachSightingId: async (id, sightingId) => {
           updates.push([id, sightingId]);
-          current = { ...current, sightingId } as typeof current;
+          current = { ...current, sightingId, ownerSubject: 'owner-12345678' } as typeof current;
           return true;
         },
       },
@@ -51,14 +52,30 @@ describe('native draft storage privacy boundary', () => {
     const current = {
       id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const,
       sightingId: '12345678-1234-1234-1234-123456789abc',
+      ownerSubject: 'owner-12345678',
     };
     const attachSightingId = jest.fn(async () => true);
 
     await expect(attachSightingToDraftWithDependencies(
-      current.id, current.sightingId, { getOfflineDraft: async () => current, attachSightingId },
+      current.id, current.sightingId, 'owner-12345678', { getOfflineDraft: async () => current, attachSightingId },
     )).resolves.toBe(true);
     await expect(attachSightingToDraftWithDependencies(
-      current.id, '87654321-1234-1234-1234-123456789abc', { getOfflineDraft: async () => current, attachSightingId },
+      current.id, '87654321-1234-1234-1234-123456789abc', 'owner-12345678', { getOfflineDraft: async () => current, attachSightingId },
+    )).resolves.toBe(false);
+    expect(attachSightingId).not.toHaveBeenCalled();
+  });
+
+  it('binds an attached sighting to one immutable authenticated owner', async () => {
+    const current = {
+      id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const,
+      sightingId: '12345678-1234-1234-1234-123456789abc', ownerSubject: 'owner-12345678',
+    };
+    const attachSightingId = jest.fn(async () => true);
+    await expect(attachSightingToDraftWithDependencies(
+      current.id, current.sightingId, current.ownerSubject, { getOfflineDraft: async () => current, attachSightingId },
+    )).resolves.toBe(true);
+    await expect(attachSightingToDraftWithDependencies(
+      current.id, current.sightingId, 'owner-87654321', { getOfflineDraft: async () => current, attachSightingId },
     )).resolves.toBe(false);
     expect(attachSightingId).not.toHaveBeenCalled();
   });
@@ -305,6 +322,26 @@ describe('native draft storage privacy boundary', () => {
       .toEqual([]);
   });
 
+  it('fails closed for a legacy media row with no immutable owner subject', () => {
+    const receipt = JSON.stringify({
+      sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+      detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+      width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+    });
+    const [draft] = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'legacy', risk: 'normal', media_id: 'media-12345678',
+      sighting_id: 'sighting-12345678', owner_subject: null,
+      reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: 'aes-256-gcm.v1', review_receipt_json: receipt,
+      upload_state: 'upload_pending', upload_attempts: 0, next_attempt_at: null, last_error: null,
+      upload_resume_state: null, upload_attempt_started_at: null, revision: 2,
+    }]);
+    expect(draft).toEqual(expect.objectContaining({
+      mediaFailure: 'auth_ownership',
+      uploadJob: expect.objectContaining({ state: 'needs_user', lastError: 'auth_ownership' }),
+    }));
+  });
+
   it('round-trips an attached sighting-only native row as a text-only draft', () => {
     const drafts = deserializeDraftRows([{
       id: 'draft-12345678', notes: 'saved text', risk: 'sensitive', media_id: null,
@@ -371,7 +408,7 @@ describe('native draft storage privacy boundary', () => {
     });
     const drafts = deserializeDraftRows([{
       id: 'draft-12345678', notes: 'preserved', risk: 'sensitive', media_id: 'media-12345678',
-      sighting_id: 'sighting-12345678', reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      sighting_id: 'sighting-12345678', owner_subject: 'owner-12345678', reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
       encryption_version: encryptionVersion, review_receipt_json: receipt,
       upload_state: 'upload_pending', upload_attempts: 2, next_attempt_at: null, last_error: null,
       upload_resume_state: null, upload_attempt_started_at: null, revision: 2,
@@ -539,6 +576,7 @@ function mediaUploadCasStore() {
     current: {
       id: 'draft-12345678', notes: 'tabby', risk: 'normal', mediaId: 'media-12345678',
       sightingId: 'sighting-12345678',
+      ownerSubject: 'owner-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
       encryptionVersion: 'aes-256-gcm.v1', receipt, revision: 0,
       uploadJob: {

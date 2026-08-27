@@ -31,10 +31,21 @@ export type ReportSubmissionDependencies = Readonly<{
     notes: string | null;
     clientDedupeKey: string;
   }>): Promise<SightingSubmissionResponse>;
-  attachSighting(draftId: string, sightingId: string): Promise<boolean>;
+  currentOwnerSubject(): Promise<string>;
+  attachSighting(draftId: string, sightingId: string, ownerSubject: string): Promise<boolean>;
   uploadMedia(draftId: string): Promise<MediaSubmissionState>;
   deleteDraft(draftId: string): Promise<void>;
 }>;
+
+export function nextReportDraftIdAfterSubmission(
+  currentDraftId: string,
+  result: ReportSubmissionOutcome,
+  nextDraftId: string,
+): string {
+  return result.state === 'submitted_text_only' || result.state === 'quarantined'
+    ? nextDraftId
+    : currentDraftId;
+}
 
 export class ReportDraftPersistenceError extends Error {
   constructor() {
@@ -104,18 +115,20 @@ export async function submitReportWithMedia(
   }
   const draft = await dependencies.getDraft(input.draftId);
   if (!draft) throw new Error('missing_durable_draft');
+  const ownerSubject = await dependencies.currentOwnerSubject();
+  if (draft.ownerSubject !== undefined && draft.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
 
   const resolved = await recoverOrCreateSighting(input, draft, dependencies);
   if (resolved.recoveryMiss || !resolved.sighting) {
     return { sightingId: null, visibility: null, state: 'recovery_miss' };
   }
 
-  if (!draft.sightingId && !await dependencies.attachSighting(input.draftId, resolved.sighting.sightingId)) {
+  if (!draft.sightingId && !await dependencies.attachSighting(input.draftId, resolved.sighting.sightingId, ownerSubject)) {
     throw new Error('sighting_attachment_conflict');
   }
 
   const durable = await dependencies.getDraft(input.draftId);
-  if (!durable || durable.sightingId !== resolved.sighting.sightingId) {
+  if (!durable || durable.sightingId !== resolved.sighting.sightingId || durable.ownerSubject !== ownerSubject) {
     throw new Error('sighting_attachment_conflict');
   }
 

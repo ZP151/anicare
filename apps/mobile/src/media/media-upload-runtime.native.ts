@@ -1,4 +1,5 @@
 import { finalizeMediaUpload, putReservedMedia, reserveMediaUpload } from '../api/media-transport';
+import { developmentInsecureOrigins } from '../api/development-origin';
 import { getSupabaseClient } from '../api/supabase';
 import {
   claimMediaUploadAttempt,
@@ -15,11 +16,13 @@ import { runMediaUploadAttempt, type MediaUploadRunResult } from './media-upload
 
 const CLAIM_LEASE_MS = 60_000;
 const RECOVERY_BATCH_LIMIT = 4;
+export { developmentInsecureOrigins } from '../api/development-origin';
 
 export type MediaUploadRuntimeResult = MediaUploadRunResult | UploadJobState | 'not_ready';
 
 export type MediaUploadRuntimeDependencies = Readonly<{
   getAccessToken(): Promise<string | null>;
+  getOwnerSubject(): Promise<string | null>;
   listDrafts(): Promise<readonly StoredDraft[]>;
   getDraft(id: string): Promise<StoredDraft | null>;
   claimAttempt(id: string, now: Date, leaseMs: number): Promise<MediaUploadClaim | null>;
@@ -49,9 +52,12 @@ function isRetryCandidate(draft: StoredDraft, now: Date, leaseMs: number): boole
 export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDependencies) {
   async function uploadDraftMediaNow(draftId: string): Promise<MediaUploadRuntimeResult> {
     // Check auth before the CAS claim, because claiming increments attempts.
-    if (!await dependencies.getAccessToken()) return 'not_ready';
+    const ownerSubject = await dependencies.getOwnerSubject();
+    if (!ownerSubject) return 'not_ready';
     const current = await dependencies.getDraft(draftId);
+    if (current?.mediaId && current.ownerSubject !== ownerSubject) return 'needs_user';
     if (current?.mediaFailure || current?.uploadJob?.state === 'needs_user') return 'needs_user';
+    if (!await dependencies.getAccessToken()) return 'not_ready';
     if (current?.uploadJob?.state === 'quarantined') {
       const revision = current.revision;
       if (!current.encryptedReviewedRef || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) return 'needs_user';
@@ -79,7 +85,7 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
   }
 
   async function retryRecoverableMediaDrafts(): Promise<MediaUploadRuntimeResult[]> {
-    if (!await dependencies.getAccessToken()) return [];
+    if (!await dependencies.getOwnerSubject()) return [];
     const now = dependencies.now();
     const candidates = (await dependencies.listDrafts())
       .filter((draft) => isRetryCandidate(draft, now, dependencies.leaseMs))
@@ -100,22 +106,31 @@ async function currentAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+async function currentOwnerSubject(): Promise<string | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? null;
+}
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const strictTransportDependencies = {
   fetch: globalThis.fetch,
   supabaseUrl,
   now: () => new Date(),
-  insecureOrigins: [] as const,
+  insecureOrigins: developmentInsecureOrigins(supabaseUrl, process.env.NODE_ENV === 'production'),
 };
 
 const nativeRuntime = createMediaUploadRuntime({
   getAccessToken: currentAccessToken,
+  getOwnerSubject: currentOwnerSubject,
   listDrafts: listOfflineDrafts,
   getDraft: getOfflineDraft,
   claimAttempt: claimMediaUploadAttempt,
   runAttempt: (claim) => runMediaUploadAttempt(claim, {
     getOfflineDraft,
     transitionClaimedMediaUpload,
+    getOwnerSubject: currentOwnerSubject,
     getAccessToken: async () => {
       const token = await currentAccessToken();
       if (!token) throw new Error('authentication_required');

@@ -32,7 +32,7 @@ describe('buildSightingPayload', () => {
 });
 
 describe('sighting submission transport', () => {
-  const endpoint = 'https://example.invalid/functions/v1/create-sighting';
+  const supabaseUrl = 'https://example.invalid';
   const accessToken = 'access-token';
   const draft = {
     latitude: 1.3521,
@@ -63,7 +63,7 @@ describe('sighting submission transport', () => {
     }), { status: 201, headers: { 'Content-Type': 'application/json' } }));
 
     await expect(submitSighting({
-      endpoint,
+      supabaseUrl,
       accessToken,
       draft,
     })).resolves.toEqual({
@@ -72,7 +72,57 @@ describe('sighting submission transport', () => {
       visibleAt: '2026-08-27T10:00:00.123Z',
       requestId: '00000000-0000-4000-8000-000000000912',
     });
-    expect(fetchMock).toHaveBeenCalledWith(endpoint, expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith(`${supabaseUrl}/functions/v1/create-sighting`, expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('constructs the exact create-sighting endpoint from a trusted origin and rejects redirects', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(validResponse), { status: 201 }));
+    await expect(submitSighting({
+      supabaseUrl: 'https://example.invalid/', accessToken, draft,
+    } as never)).resolves.toEqual(validResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.invalid/functions/v1/create-sighting', {
+      method: 'POST', redirect: 'error', cache: 'no-store',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        latitude: 1.3521, longitude: 103.8198, occurredAt: '2026-08-27T08:00:00.000Z',
+        risk: 'normal', traits: {}, notes: null, clientDedupeKey: 'draft-12345678',
+      }),
+    });
+  });
+
+  it('allows only an explicitly injected local origin for development transport', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(validResponse), { status: 201 }));
+    await expect(submitSighting({
+      supabaseUrl: 'http://127.0.0.1:54321', insecureOrigins: ['http://127.0.0.1:54321'], accessToken, draft,
+    })).resolves.toEqual(validResponse);
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:54321/functions/v1/create-sighting', expect.anything());
+  });
+
+  it.each([
+    'https://example.invalid/functions/v1/other',
+    'https://user@example.invalid',
+    'https://example.invalid?redirect=attacker',
+    'https://example.invalid/#fragment',
+    'https://example.invalid/./',
+  ])('rejects a non-literal configured origin before sending coordinates: %s', async (supabaseUrl) => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network must not run'));
+    await expect(submitSighting({ supabaseUrl, accessToken, draft } as never))
+      .rejects.toThrow('invalid_sighting_submission_response');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    () => new Response('', { status: 307, headers: { Location: 'https://attacker.invalid' } }),
+    () => {
+      const response = new Response(JSON.stringify(validResponse), { status: 201 });
+      Object.defineProperty(response, 'redirected', { value: true });
+      return response;
+    },
+  ])('fails closed when the response redirects', async (createResponse) => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(createResponse());
+    await expect(submitSighting({ supabaseUrl: 'https://example.invalid', accessToken, draft } as never))
+      .rejects.toThrow('invalid_sighting_submission_response');
   });
 
   it('recovers only by the dedupe key and reports a not-found outcome without creating a sighting', async () => {
@@ -81,9 +131,9 @@ describe('sighting submission transport', () => {
       { status: 404, headers: { 'Content-Type': 'application/json' } },
     ));
 
-    await expect(recoverSightingSubmission({ endpoint, accessToken, clientDedupeKey: 'draft-12345678' }))
+    await expect(recoverSightingSubmission({ supabaseUrl, accessToken, clientDedupeKey: 'draft-12345678' }))
       .resolves.toEqual({ kind: 'not_found' });
-    expect(fetchMock).toHaveBeenCalledWith(endpoint, expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith(`${supabaseUrl}/functions/v1/create-sighting`, expect.objectContaining({
       body: JSON.stringify({ clientDedupeKey: 'draft-12345678', recoverExisting: true }),
     }));
   });
@@ -95,7 +145,7 @@ describe('sighting submission transport', () => {
     }));
 
     await expect(submitSighting({
-      endpoint,
+      supabaseUrl,
       accessToken,
       draft,
     })).rejects.toThrow('invalid_sighting_submission_response');
@@ -113,7 +163,7 @@ describe('sighting submission transport', () => {
       headers: { 'Content-Type': 'application/json' },
     }));
 
-    await expect(submitSighting({ endpoint, accessToken, draft }))
+    await expect(submitSighting({ supabaseUrl, accessToken, draft }))
       .rejects.toThrow('invalid_sighting_submission_response');
   });
 });

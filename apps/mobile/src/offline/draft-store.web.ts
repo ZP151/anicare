@@ -37,7 +37,7 @@ export async function transitionClaimedMediaUpload(_id: string, _revision: numbe
   return unavailable();
 }
 
-export async function attachSightingToDraft(_id: string, _sightingId: string): Promise<boolean> {
+export async function attachSightingToDraft(_id: string, _sightingId: string, _ownerSubject: string): Promise<boolean> {
   return unavailable();
 }
 

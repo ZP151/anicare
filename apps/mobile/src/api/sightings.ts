@@ -1,3 +1,5 @@
+import { parseTrustedSupabaseOrigin } from './media';
+
 export type SightingRisk = 'normal' | 'sensitive' | 'critical';
 
 export interface SightingDraftInput {
@@ -104,19 +106,34 @@ function serverErrorCode(body: unknown): string {
     : 'submission_failed';
 }
 
+function sightingEndpoint(supabaseUrl: string, insecureOrigins: readonly string[] = []): string {
+  try {
+    return `${parseTrustedSupabaseOrigin(supabaseUrl, insecureOrigins)}/functions/v1/create-sighting`;
+  } catch {
+    throw new Error('invalid_sighting_submission_response');
+  }
+}
+
 async function sendSightingSubmission(
-  endpoint: string,
+  supabaseUrl: string,
   accessToken: string,
   body: Record<string, unknown>,
+  insecureOrigins?: readonly string[],
 ): Promise<{ response: Response; body: unknown }> {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(sightingEndpoint(supabaseUrl, insecureOrigins), {
+      method: 'POST', redirect: 'error', cache: 'no-store',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'invalid_sighting_submission_response') throw error;
+    throw new Error('submission_failed');
+  }
+  if (response.redirected || response.status === 307 || response.status === 308) {
+    throw new Error('invalid_sighting_submission_response');
+  }
   try {
     return { response, body: await readBoundedJson(response) };
   } catch {
@@ -137,14 +154,16 @@ export function buildSightingPayload(input: SightingDraftInput) {
 }
 
 export async function submitSighting(input: {
-  endpoint: string;
+  supabaseUrl: string;
   accessToken: string;
   draft: SightingDraftInput;
+  insecureOrigins?: readonly string[];
 }): Promise<SightingSubmissionResponse> {
   const { response, body } = await sendSightingSubmission(
-    input.endpoint,
+    input.supabaseUrl,
     input.accessToken,
     buildSightingPayload(input.draft),
+    input.insecureOrigins,
   );
   if (!response.ok) {
     throw new Error(serverErrorCode(body));
@@ -153,14 +172,15 @@ export async function submitSighting(input: {
 }
 
 export async function recoverSightingSubmission(input: {
-  endpoint: string;
+  supabaseUrl: string;
   accessToken: string;
   clientDedupeKey: string;
+  insecureOrigins?: readonly string[];
 }): Promise<SightingRecoveryOutcome> {
-  const { response, body } = await sendSightingSubmission(input.endpoint, input.accessToken, {
+  const { response, body } = await sendSightingSubmission(input.supabaseUrl, input.accessToken, {
     clientDedupeKey: input.clientDedupeKey,
     recoverExisting: true,
-  });
+  }, input.insecureOrigins);
   if (response.status === 404 && serverErrorCode(body) === 'sighting_submission_not_found') {
     return { kind: 'not_found' };
   }

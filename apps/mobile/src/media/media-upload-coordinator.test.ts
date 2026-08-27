@@ -24,6 +24,12 @@ const receipt = {
 };
 
 describe('crash-safe media upload coordinator', () => {
+  it('rejects a stale account before decrypting a previously claimed artifact', async () => {
+    const run = uploadHarness({ ownerSubject: 'owner-87654321' });
+    await expect(run.claimAndRun()).resolves.toBe('stale');
+    expect(run.events).not.toContain('decrypt');
+    expect(run.accessTokenRequests()).toBe(0);
+  });
   it('persists uploading before effects, finalizing before finalize, and quarantined before cleanup', async () => {
     const run = uploadHarness();
     await expect(run.claimAndRun()).resolves.toBe('quarantined');
@@ -257,6 +263,7 @@ function uploadHarness(options: Readonly<{
   cleanupFailures?: number;
   recoveringFinalizing?: boolean;
   fifthActiveState?: 'uploading' | 'finalizing';
+  ownerSubject?: string | null;
 }> = {}) {
   const events: string[] = [];
   const reserveInputs: unknown[] = [];
@@ -305,6 +312,7 @@ function uploadHarness(options: Readonly<{
       if (!current || current.id !== id || current.revision !== revision || !current.uploadJob) return false;
       return run.cas.compareAndSwapUploadJob(id, revision, current.uploadJob.state, next);
     },
+    getOwnerSubject: async () => options.ownerSubject ?? 'owner-12345678',
     getAccessToken: async () => { tokenRequests += 1; return 'access-secret'; },
     withDecryptedReviewedJpeg: async (_input, consume) => {
       events.push('decrypt');
@@ -360,6 +368,7 @@ function uploadHarness(options: Readonly<{
       draftId: current.id,
       mediaId: current.mediaId!,
       sightingId: current.sightingId!,
+      ownerSubject: current.ownerSubject!,
       encryptedReviewedRef: current.encryptedReviewedRef!,
       encryptionVersion: 'aes-256-gcm.v1',
       receipt: current.receipt!,
@@ -454,6 +463,7 @@ function pendingDraft(): StoredDraft {
   return {
     id: 'draft-12345678', notes: 'tabby', risk: 'normal', mediaId: 'media-12345678',
     sightingId: 'sighting-12345678',
+    ownerSubject: 'owner-12345678',
     encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
     encryptionVersion: 'aes-256-gcm.v1', receipt, revision: 0,
     uploadJob: {

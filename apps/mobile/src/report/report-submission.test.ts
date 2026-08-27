@@ -1,5 +1,6 @@
 import {
   persistReportDraftBeforeReview,
+  nextReportDraftIdAfterSubmission,
   ReportDraftPersistenceError,
   reportSubmissionFailureStatus,
   reportSubmissionStatus,
@@ -28,6 +29,7 @@ function mediaDraft(overrides: Record<string, unknown> = {}) {
   return {
     id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const,
     mediaId: 'media-12345678',
+    ownerSubject: 'owner-12345678',
     encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
     encryptionVersion: 'aes-256-gcm.v1' as const,
     receipt,
@@ -51,10 +53,11 @@ function harness(overrides: Record<string, unknown> = {}) {
     }),
     getDraft: jest.fn(async () => current),
     recoverSighting: jest.fn(async () => ({ kind: 'not_found' as const })),
+    currentOwnerSubject: jest.fn(async () => 'owner-12345678'),
     createSighting: jest.fn(async () => response),
-    attachSighting: jest.fn(async (_draftId: string, sightingId: string) => {
+    attachSighting: jest.fn(async (_draftId: string, sightingId: string, ownerSubject: string) => {
       calls.push(`attach:${sightingId}`);
-      current = { ...current, sightingId };
+      current = { ...current, sightingId, ownerSubject };
       return true;
     }),
     uploadMedia: jest.fn(async (draftId: string) => {
@@ -68,6 +71,45 @@ function harness(overrides: Record<string, unknown> = {}) {
 }
 
 describe('report submission lifecycle', () => {
+  it('rotates to a distinct draft identity only after terminal submission outcomes', () => {
+    expect(nextReportDraftIdAfterSubmission('draft-12345678', {
+      sightingId: response.sightingId, visibility: 'hidden', state: 'submitted_text_only',
+    }, 'draft-87654321')).toBe('draft-87654321');
+    expect(nextReportDraftIdAfterSubmission('draft-12345678', {
+      sightingId: response.sightingId, visibility: 'hidden', state: 'quarantined',
+    }, 'draft-87654321')).toBe('draft-87654321');
+    for (const state of ['upload_pending', 'uploading', 'finalizing', 'waiting', 'needs_user', 'recovery_miss'] as const) {
+      expect(nextReportDraftIdAfterSubmission('draft-12345678', {
+        sightingId: response.sightingId, visibility: null, state,
+      }, 'draft-87654321')).toBe('draft-12345678');
+    }
+  });
+
+  it('keeps consecutive terminal reports on distinct dedupe and sighting identities', async () => {
+    const sightingIds = ['12345678-1234-1234-1234-123456789abc', '87654321-1234-1234-1234-123456789abc'];
+    const created: string[] = [];
+    const submit = async (draftId: string, sightingId: string) => {
+      const run = harness({
+        current: { id: draftId, notes: 'tabby', risk: 'normal' },
+        createSighting: jest.fn(async (input) => {
+          created.push(input.clientDedupeKey);
+          return { ...response, sightingId };
+        }),
+      });
+      const result = await submitReportWithMedia({
+        draftId, notes: 'tabby', risk: 'normal', coordinates: { latitude: 1.3, longitude: 103.8 },
+        occurredAt: new Date('2026-08-27T00:00:00.000Z'),
+      }, run.dependencies);
+      return { result, calls: run.calls };
+    };
+    const first = await submit('draft-12345678', sightingIds[0]!);
+    const second = await submit('draft-87654321', sightingIds[1]!);
+
+    expect(created).toEqual(['draft-12345678', 'draft-87654321']);
+    expect(first.result.sightingId).toBe(sightingIds[0]);
+    expect(second.result.sightingId).toBe(sightingIds[1]);
+    expect(second.calls).not.toContain(`attach:${sightingIds[0]}`);
+  });
   it('persists the visible notes and risk before entering private media review', async () => {
     const calls: string[] = [];
     await persistReportDraftBeforeReview({ draftId: 'draft-12345678', notes: 'ear tip', risk: 'critical' }, {

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { getSupabaseClient } from '../../src/api/supabase';
+import { developmentInsecureOrigins } from '../../src/api/development-origin';
 import { recoverSightingSubmission, SightingRisk, submitSighting } from '../../src/api/sightings';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors, radii } from '../../src/design/theme';
@@ -18,6 +19,7 @@ import {
 import { uploadDraftMediaNow } from '../../src/media/media-upload-runtime';
 import {
   persistReportDraftBeforeReview,
+  nextReportDraftIdAfterSubmission,
   reportSubmissionFailureStatus,
   reportSubmissionStatus,
   submitReportWithMedia,
@@ -30,7 +32,7 @@ export default function ReportScreen() {
   const [risk, setRisk] = useState<SightingRisk>('normal');
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [draftId] = useState(() => Crypto.randomUUID());
+  const [draftId, setDraftId] = useState(() => Crypto.randomUUID());
 
   async function choosePhoto() {
     try {
@@ -65,11 +67,17 @@ export default function ReportScreen() {
 
     setSubmitting(true);
     try {
-      const endpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/create-sighting`;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+      const insecureOrigins = developmentInsecureOrigins(supabaseUrl, process.env.NODE_ENV === 'production');
       const withCurrentToken = async () => {
         const { data } = await supabase.auth.getSession();
         if (!data.session) throw new Error('authentication_required');
         return data.session.access_token;
+      };
+      const currentOwnerSubject = async () => {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session?.user.id) throw new Error('authentication_required');
+        return data.session.user.id;
       };
       const result = await submitReportWithMedia({
         draftId,
@@ -80,11 +88,13 @@ export default function ReportScreen() {
       }, {
         saveDraft: saveOfflineDraft,
         getDraft: getOfflineDraft,
+        currentOwnerSubject,
         recoverSighting: async (clientDedupeKey) => recoverSightingSubmission({
-          endpoint, accessToken: await withCurrentToken(), clientDedupeKey,
+          supabaseUrl, insecureOrigins, accessToken: await withCurrentToken(), clientDedupeKey,
         }),
         createSighting: async (draft) => submitSighting({
-          endpoint,
+          supabaseUrl,
+          insecureOrigins,
           accessToken: await withCurrentToken(),
           draft: { ...draft, traits: {} },
         }),
@@ -92,7 +102,16 @@ export default function ReportScreen() {
         uploadMedia: uploadDraftMediaNow,
         deleteDraft: deleteOfflineDraft,
       });
-      setStatus(reportSubmissionStatus(result));
+      const nextDraftId = nextReportDraftIdAfterSubmission(draftId, result, Crypto.randomUUID());
+      if (nextDraftId !== draftId) {
+        setDraftId(nextDraftId);
+        setNotes('');
+        setRisk('normal');
+        setCoordinates(null);
+        setStatus(null);
+      } else {
+        setStatus(reportSubmissionStatus(result));
+      }
     } catch (error) {
       setStatus(reportSubmissionFailureStatus(error));
     } finally {

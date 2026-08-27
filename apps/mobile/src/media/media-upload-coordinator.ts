@@ -10,6 +10,7 @@ export type MediaUploadRunResult = 'quarantined' | 'waiting' | 'needs_user' | 's
 export type MediaUploadCoordinatorDependencies = Readonly<{
   getOfflineDraft(id: string): Promise<StoredDraft | null>;
   transitionClaimedMediaUpload(id: string, expectedRevision: number, next: UploadJob): Promise<boolean>;
+  getOwnerSubject(): Promise<string | null>;
   getAccessToken(): Promise<string>;
   withDecryptedReviewedJpeg<T>(
     input: Readonly<{
@@ -62,7 +63,7 @@ function sameReceipt(left: MediaUploadClaim['receipt'], right: MediaUploadClaim[
 
 function currentMatchesClaim(current: StoredDraft, claim: MediaUploadClaim): boolean {
   return current.revision === claim.revision && current.id === claim.draftId &&
-    current.mediaId === claim.mediaId && current.sightingId === claim.sightingId &&
+    current.mediaId === claim.mediaId && current.sightingId === claim.sightingId && current.ownerSubject === claim.ownerSubject &&
     current.encryptedReviewedRef === claim.encryptedReviewedRef &&
     current.encryptionVersion === claim.encryptionVersion && !!current.receipt &&
     sameReceipt(current.receipt, claim.receipt) && current.uploadJob?.state === claim.uploadJob.state &&
@@ -334,10 +335,11 @@ async function runInternal(
   } catch {
     throw new Error('media_upload_state_unavailable');
   }
-  if (current?.uploadJob?.state === 'quarantined' && current.encryptedReviewedRef) {
+  if (!current || current.ownerSubject !== await dependencies.getOwnerSubject()) return 'stale';
+  if (current.uploadJob?.state === 'quarantined' && current.encryptedReviewedRef) {
     return cleanupTerminal(current.id, current.encryptedReviewedRef, current.revision ?? claim.revision, dependencies);
   }
-  if (!current || !currentMatchesClaim(current, claim)) return 'stale';
+  if (!currentMatchesClaim(current, claim)) return 'stale';
   const attempt: MutableAttempt = { claim, revision: claim.revision, job: claim.uploadJob };
   return claim.recovering ? runRecovering(attempt, dependencies) : runFresh(attempt, dependencies);
 }

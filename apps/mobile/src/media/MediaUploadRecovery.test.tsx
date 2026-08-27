@@ -7,6 +7,24 @@ async function settle(): Promise<void> {
 }
 
 describe('MediaUploadRecovery', () => {
+  it('cancels a queued recovery run when the session signs out', async () => {
+    let authListener: ((signedIn: boolean) => void) | undefined;
+    const retryMedia = jest.fn(async () => undefined);
+    const queued: Array<() => void> = [];
+    const controller = createMediaUploadRecoveryController({
+      recoverLocalJournal: async () => undefined,
+      retryMedia,
+      hasSession: async () => true,
+      onAuthChange: (listener) => { authListener = listener; return () => undefined; },
+      onForegroundChange: () => () => undefined,
+      schedule: (work) => { queued.push(work); return () => { queued.splice(queued.indexOf(work), 1); }; },
+    });
+    controller.start();
+    authListener?.(false);
+    queued.shift()?.();
+    await settle();
+    expect(retryMedia).not.toHaveBeenCalled();
+  });
   it('runs journal recovery before one coalesced authenticated transport batch', async () => {
     const events: string[] = [];
     const queued: Array<() => void> = [];

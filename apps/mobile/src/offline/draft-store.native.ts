@@ -22,15 +22,16 @@ export const ENCRYPTION_VERSION_BACKFILL_SQL = `UPDATE sighting_drafts
   SET encryption_version = 'aes-256-gcm.v1'
   WHERE reviewed_media_ref IS NOT NULL AND encryption_version IS NULL;`;
 export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
-     (id, notes, risk, media_id, sighting_id, reviewed_media_ref, encryption_version,
+     (id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref, encryption_version,
       review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
       upload_resume_state, upload_attempt_started_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        notes = excluded.notes,
        risk = excluded.risk,
        media_id = COALESCE(sighting_drafts.media_id, excluded.media_id),
        sighting_id = COALESCE(sighting_drafts.sighting_id, excluded.sighting_id),
+       owner_subject = COALESCE(sighting_drafts.owner_subject, excluded.owner_subject),
        reviewed_media_ref = COALESCE(sighting_drafts.reviewed_media_ref, excluded.reviewed_media_ref),
        encryption_version = COALESCE(sighting_drafts.encryption_version, excluded.encryption_version),
        review_receipt_json = COALESCE(sighting_drafts.review_receipt_json, excluded.review_receipt_json),
@@ -60,11 +61,11 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
          THEN excluded.upload_attempt_started_at ELSE sighting_drafts.upload_attempt_started_at END,
        revision = sighting_drafts.revision + 1,
        updated_at = excluded.updated_at`;
-export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_ref,
+export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
   upload_resume_state, upload_attempt_started_at, revision
   FROM sighting_drafts ORDER BY updated_at DESC`;
-export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, reviewed_media_ref,
+export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
   upload_resume_state, upload_attempt_started_at, revision
   FROM sighting_drafts WHERE id = ?`;
@@ -113,9 +114,10 @@ export const MEDIA_UPLOAD_CAS_SQL = `UPDATE sighting_drafts SET
     AND upload_state IN ('upload_pending', 'uploading', 'finalizing', 'waiting')`;
 export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
   sighting_id = ?,
+  owner_subject = ?,
   revision = revision + 1,
   updated_at = ?
-  WHERE id = ? AND sighting_id IS NULL`;
+  WHERE id = ? AND (sighting_id IS NULL OR (sighting_id = ? AND owner_subject = ?))`;
 export const QUARANTINED_MEDIA_CLEANUP_SQL = `DELETE FROM sighting_drafts
   WHERE id = ? AND revision = ? AND upload_state = 'quarantined'`;
 const ENSURE_DRAFT_ROW_SQL = `INSERT OR IGNORE INTO sighting_drafts
@@ -127,6 +129,7 @@ type DraftRow = {
   risk: StoredDraft['risk'];
   media_id: string | null;
   sighting_id: string | null;
+  owner_subject?: string | null;
   reviewed_media_ref: string | null;
   encryption_version: string | null;
   review_receipt_json: string | null;
@@ -142,6 +145,7 @@ type DraftRow = {
 const SCHEMA_V2_COLUMNS = {
   media_id: 'TEXT',
   sighting_id: 'TEXT',
+  owner_subject: 'TEXT',
   reviewed_media_ref: 'TEXT',
   encryption_version: 'TEXT',
   review_receipt_json: 'TEXT',
@@ -209,6 +213,7 @@ async function openDraftDatabase() {
       risk TEXT NOT NULL CHECK (risk IN ('normal', 'sensitive', 'critical')),
       media_id TEXT,
       sighting_id TEXT,
+      owner_subject TEXT,
       reviewed_media_ref TEXT,
       encryption_version TEXT,
       review_receipt_json TEXT,
@@ -251,6 +256,7 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
     draft.risk,
     draft.mediaId ?? null,
     draft.sightingId ?? null,
+    draft.ownerSubject ?? null,
     draft.encryptedReviewedRef ?? null,
     draft.encryptionVersion ?? null,
     draft.receipt ? JSON.stringify(draft.receipt) : null,
@@ -382,6 +388,7 @@ export type MediaUploadClaim = Readonly<{
   draftId: string;
   mediaId: string;
   sightingId: string;
+  ownerSubject: string;
   encryptedReviewedRef: string;
   encryptionVersion: 'aes-256-gcm.v1';
   receipt: NonNullable<StoredDraft['receipt']>;
@@ -403,9 +410,9 @@ export type MediaUploadCasDependencies = Readonly<{
 
 function claimableMedia(draft: StoredDraft): draft is StoredDraft & Required<Pick<
   StoredDraft,
-  'mediaId' | 'sightingId' | 'encryptedReviewedRef' | 'encryptionVersion' | 'receipt' | 'uploadJob' | 'revision'
+  'mediaId' | 'sightingId' | 'ownerSubject' | 'encryptedReviewedRef' | 'encryptionVersion' | 'receipt' | 'uploadJob' | 'revision'
 >> & Readonly<{ encryptionVersion: 'aes-256-gcm.v1' }> {
-  return isStableMediaId(draft.mediaId) && isStableMediaId(draft.sightingId) &&
+  return isStableMediaId(draft.mediaId) && isStableMediaId(draft.sightingId) && isStableMediaId(draft.ownerSubject) &&
     isReviewedMediaReference(draft.encryptedReviewedRef, draft.mediaId) &&
     draft.encryptionVersion === 'aes-256-gcm.v1' && !!draft.receipt && !!draft.uploadJob &&
     Number.isInteger(draft.revision) && draft.revision! >= 0 && !draft.mediaFailure;
@@ -477,6 +484,7 @@ export async function claimMediaUploadAttemptWithDependencies(
     draftId: current.id,
     mediaId: current.mediaId,
     sightingId: current.sightingId,
+    ownerSubject: current.ownerSubject,
     encryptedReviewedRef: current.encryptedReviewedRef,
     encryptionVersion: current.encryptionVersion,
     receipt: current.receipt,
@@ -559,7 +567,7 @@ export async function getOfflineDraft(id: string): Promise<StoredDraft | null> {
 
 export type AttachSightingToDraftDependencies = Readonly<{
   getOfflineDraft(id: string): Promise<StoredDraft | null>;
-  attachSightingId(id: string, sightingId: string): Promise<boolean>;
+  attachSightingId(id: string, sightingId: string, ownerSubject: string): Promise<boolean>;
 }>;
 
 /**
@@ -569,27 +577,31 @@ export type AttachSightingToDraftDependencies = Readonly<{
 export async function attachSightingToDraftWithDependencies(
   id: string,
   sightingId: string,
+  ownerSubject: string,
   dependencies: AttachSightingToDraftDependencies,
 ): Promise<boolean> {
-  if (!isStableMediaId(id) || !isStableMediaId(sightingId)) return false;
+  if (!isStableMediaId(id) || !isStableMediaId(sightingId) || !isStableMediaId(ownerSubject)) return false;
   const current = await dependencies.getOfflineDraft(id);
   if (!current) return false;
-  if (current.sightingId !== undefined) return current.sightingId === sightingId;
-  if (await dependencies.attachSightingId(id, sightingId)) return true;
+  if (current.sightingId !== undefined) return current.sightingId === sightingId && current.ownerSubject === ownerSubject;
+  if (await dependencies.attachSightingId(id, sightingId, ownerSubject)) return true;
   const after = await dependencies.getOfflineDraft(id);
-  return after?.sightingId === sightingId;
+  return after?.sightingId === sightingId && after.ownerSubject === ownerSubject;
 }
 
-export async function attachSightingToDraft(id: string, sightingId: string): Promise<boolean> {
+export async function attachSightingToDraft(id: string, sightingId: string, ownerSubject: string): Promise<boolean> {
   const database = await getDatabase();
-  return attachSightingToDraftWithDependencies(id, sightingId, {
+  return attachSightingToDraftWithDependencies(id, sightingId, ownerSubject, {
     getOfflineDraft: async (draftId) => databaseCasDependencies(database).getOfflineDraft(draftId),
-    attachSightingId: async (draftId, attachedSightingId) => {
+    attachSightingId: async (draftId, attachedSightingId, attachedOwnerSubject) => {
       const result = await database.runAsync(
         ATTACH_SIGHTING_TO_DRAFT_SQL,
         attachedSightingId,
+        attachedOwnerSubject,
         new Date().toISOString(),
         draftId,
+        attachedSightingId,
+        attachedOwnerSubject,
       );
       return result.changes === 1;
     },
@@ -666,7 +678,8 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
       continue;
     }
     if (!hasMediaTuple && !hasUploadWorkflow && row.sighting_id && isStableMediaId(row.sighting_id)) {
-      drafts.push({ ...textOnly, sightingId: row.sighting_id });
+      drafts.push({ ...textOnly, sightingId: row.sighting_id,
+        ...(isStableMediaId(row.owner_subject) ? { ownerSubject: row.owner_subject } : {}) });
       continue;
     }
     try {
@@ -676,6 +689,7 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
         risk: row.risk,
         mediaId: row.media_id,
         sightingId: row.sighting_id ?? undefined,
+        ownerSubject: row.owner_subject ?? undefined,
         encryptedReviewedRef: row.reviewed_media_ref,
         encryptionVersion: 'aes-256-gcm.v1',
         receipt: JSON.parse(row.review_receipt_json ?? ''),
@@ -688,7 +702,14 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
           attemptStartedAt: row.upload_attempt_started_at,
         },
       });
-      if (row.encryption_version === 'aes-256-gcm.v1') {
+      if (!isStableMediaId(row.owner_subject)) {
+        drafts.push({
+          ...otherwiseValid,
+          revision: textOnly.revision,
+          mediaFailure: 'auth_ownership',
+          uploadJob: failedMediaJob(row.upload_attempts, 'auth_ownership'),
+        });
+      } else if (row.encryption_version === 'aes-256-gcm.v1') {
         drafts.push({ ...otherwiseValid, revision: textOnly.revision });
       } else {
         drafts.push({
@@ -722,7 +743,7 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
 
 function failedMediaJob(
   attempts: number | null,
-  lastError: 'local_media_corrupt' | 'version_mismatch',
+  lastError: 'local_media_corrupt' | 'version_mismatch' | 'auth_ownership',
 ): UploadJob {
   return {
     state: 'needs_user',

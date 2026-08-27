@@ -7,6 +7,7 @@ export type MediaUploadClaim = Readonly<{
   draftId: string;
   mediaId: string;
   sightingId: string;
+  ownerSubject: string;
   encryptedReviewedRef: string;
   encryptionVersion: 'aes-256-gcm.v1';
   receipt: ReviewReceipt;
@@ -25,7 +26,7 @@ export function transitionClaimedMediaUpload(
   expectedRevision: number,
   next: UploadJob,
 ): Promise<boolean>;
-export function attachSightingToDraft(id: string, sightingId: string): Promise<boolean>;
+export function attachSightingToDraft(id: string, sightingId: string, ownerSubject: string): Promise<boolean>;
 export function cleanupQuarantinedMedia(id: string, revision: number): Promise<void>;
 export function deleteOfflineDraft(id: string): Promise<void>;
 export function markReviewedMediaVersionMismatch(id: string): Promise<void>;

@@ -11,12 +11,13 @@ export type StoredDraft = {
   risk: SightingRisk;
   mediaId?: string;
   sightingId?: string;
+  ownerSubject?: string;
   encryptedReviewedRef?: string;
   encryptionVersion?: 'aes-256-gcm.v1' | typeof UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION;
   receipt?: ReviewReceipt;
   uploadJob?: UploadJob;
   revision?: number;
-  mediaFailure?: 'local_media_corrupt' | 'version_mismatch';
+  mediaFailure?: 'local_media_corrupt' | 'version_mismatch' | 'auth_ownership';
 };
 
 const risks = new Set<SightingRisk>(['normal', 'sensitive', 'critical']);
@@ -72,7 +73,7 @@ function sanitizeUploadJob(value: unknown): UploadJob | undefined {
     ? job.attemptStartedAt as string
     : null;
   const lastError = typeof job.lastError === 'string' &&
-    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|retry_limit_reached|invalid_upload_attempt|local_media_missing|local_media_corrupt|upload_error)$/.test(job.lastError)
+    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|auth_ownership|retry_limit_reached|invalid_upload_attempt|local_media_missing|local_media_corrupt|upload_error)$/.test(job.lastError)
     ? job.lastError
     : null;
   return {
@@ -98,8 +99,12 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
   };
 
   const hasAnyMedia = input.mediaId !== undefined || input.encryptedReviewedRef !== undefined ||
-    input.encryptionVersion !== undefined || input.receipt !== undefined || input.uploadJob !== undefined || input.sightingId !== undefined;
-  if (!hasAnyMedia) return draft;
+    input.encryptionVersion !== undefined || input.receipt !== undefined || input.uploadJob !== undefined;
+  if (!hasAnyMedia) return {
+    ...draft,
+    ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),
+    ...(stableId(input.ownerSubject) ? { ownerSubject: input.ownerSubject } : {}),
+  };
 
   if (!stableId(input.mediaId) || !isReviewedMediaReference(input.encryptedReviewedRef, input.mediaId) ||
       input.encryptionVersion !== 'aes-256-gcm.v1' || !validReceipt(input.receipt)) {
@@ -121,5 +126,6 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     receipt: input.receipt,
     uploadJob,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),
+    ...(stableId(input.ownerSubject) ? { ownerSubject: input.ownerSubject } : {}),
   };
 }

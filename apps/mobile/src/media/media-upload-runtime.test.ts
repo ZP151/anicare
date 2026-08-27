@@ -1,4 +1,4 @@
-import { createMediaUploadRuntime } from './media-upload-runtime.native';
+import { createMediaUploadRuntime, developmentInsecureOrigins } from './media-upload-runtime.native';
 import { retryRecoverableMediaDrafts as retryOnWeb, uploadDraftMediaNow as uploadOnWeb } from './media-upload-runtime.web';
 import type { MediaUploadClaim } from '../offline/draft-store';
 import type { MediaUploadRuntimeResult as DeclaredMediaUploadRuntimeResult } from './media-upload-runtime';
@@ -15,6 +15,7 @@ function draft(id: string, state: UploadJobState = 'upload_pending', overrides: 
   return {
     id, notes: '', risk: 'normal' as const, mediaId: `media-${id.slice('draft-'.length)}`,
     sightingId: '12345678-1234-1234-1234-123456789abc',
+    ownerSubject: 'owner-12345678',
     encryptedReviewedRef: `reviewed-media/media-${id.slice('draft-'.length)}.commit-12345678.agcm`,
     encryptionVersion: 'aes-256-gcm.v1' as const, receipt, revision: 0,
     uploadJob: {
@@ -33,6 +34,7 @@ function runtimeHarness(overrides: Record<string, unknown> = {}) {
   for (const current of (overrides.drafts as any[] ?? [draft('draft-12345678')])) drafts.set(current.id, current);
   const dependencies = {
     getAccessToken: jest.fn(async () => 'current-access-token'),
+    getOwnerSubject: jest.fn(async () => 'owner-12345678'),
     listDrafts: jest.fn(async () => [...drafts.values()]),
     getDraft: jest.fn(async (id: string) => drafts.get(id) ?? null),
     claimAttempt: jest.fn(async (id: string) => ({ draftId: id } as MediaUploadClaim)),
@@ -47,14 +49,31 @@ function runtimeHarness(overrides: Record<string, unknown> = {}) {
 }
 
 describe('native media upload runtime', () => {
+  it('allows only exact local Supabase origins in development', () => {
+    expect(developmentInsecureOrigins('http://localhost:54321', false)).toEqual(['http://localhost:54321']);
+    expect(developmentInsecureOrigins('http://127.0.0.1:54321', false)).toEqual(['http://127.0.0.1:54321']);
+    expect(developmentInsecureOrigins('http://10.0.2.2:54321', false)).toEqual(['http://10.0.2.2:54321']);
+    expect(developmentInsecureOrigins('http://localhost:54321', true)).toEqual([]);
+    expect(developmentInsecureOrigins('http://192.168.1.4:54321', false)).toEqual([]);
+    expect(developmentInsecureOrigins('http://localhost.evil.invalid:54321', false)).toEqual([]);
+  });
   it('does not consume an attempt when there is no authenticated session', async () => {
-    const run = runtimeHarness({ getAccessToken: jest.fn(async () => null) });
+    const run = runtimeHarness({ getOwnerSubject: jest.fn(async () => null), getAccessToken: jest.fn(async () => null) });
     const runtime = createMediaUploadRuntime(run.dependencies);
 
     await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('not_ready');
 
     expect(run.dependencies.claimAttempt).not.toHaveBeenCalled();
     expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
+  });
+
+  it('never claims or decrypts media owned by a different signed-in account', async () => {
+    const run = runtimeHarness({ getOwnerSubject: jest.fn(async () => 'owner-87654321') });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('needs_user');
+    expect(run.dependencies.claimAttempt).not.toHaveBeenCalled();
+    expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
+    expect(run.dependencies.getAccessToken).not.toHaveBeenCalled();
   });
 
   it('claims only due or expired media rows and processes a bounded sequential batch', async () => {
