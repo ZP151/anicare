@@ -8,6 +8,7 @@ export type LegacyMediaDeletionJob = Readonly<{
   media_id: string;
   storage_bucket: string;
   storage_path: string;
+  expected_owner_id: string;
   cleanup_claim_id: string;
 }>;
 
@@ -37,13 +38,14 @@ function isLegacyBucket(value: string): value is LegacyMediaBucket {
   return (LEGACY_MEDIA_BUCKETS as readonly string[]).includes(value);
 }
 
-/** Storage object names are relative, bounded, and may not navigate directories. */
-export function isSafeLegacyStoragePath(value: string): boolean {
-  if (value.length < 1 || value.length > 512 || value !== value.trim() ||
-      value.startsWith('/') || value.endsWith('/') || value.includes('\\') ||
-      value.includes('\u0000') || value.includes('//')) return false;
-  return value.split('/').every((segment) =>
-    segment !== '.' && segment !== '..' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(segment));
+/** A legacy target is trusted only when it remains inside its erased owner's prefix. */
+export function isSafeLegacyStoragePath(expectedOwnerId: string, value: string): boolean {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expectedOwnerId) ||
+      Array.from(value).length < 1 || Array.from(value).length > 512 ||
+      value.includes('\\') || value.includes('\u0000')) return false;
+  const segments = value.split('/');
+  return segments.length >= 2 && segments[0] === expectedOwnerId &&
+    segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 
 export function isSafeLegacyMediaDeletionJob(value: unknown): value is SafeLegacyMediaDeletionJob {
@@ -51,14 +53,15 @@ export function isSafeLegacyMediaDeletionJob(value: unknown): value is SafeLegac
   const job = value as Partial<LegacyMediaDeletionJob>;
   return typeof job.job_id === 'string' && typeof job.media_id === 'string' &&
     typeof job.storage_bucket === 'string' && typeof job.storage_path === 'string' &&
+    typeof job.expected_owner_id === 'string' &&
     typeof job.cleanup_claim_id === 'string' && isLegacyBucket(job.storage_bucket) &&
-    isSafeLegacyStoragePath(job.storage_path);
+    isSafeLegacyStoragePath(job.expected_owner_id, job.storage_path);
 }
 
 function completionResult(error: StorageRemovalError | null): CompletionResult {
   if (error === null) return 'removed';
   const status = String(error.statusCode ?? error.status ?? '');
-  return status === '404' || /not[ _-]?found/i.test(error.message ?? '') ? 'missing' : 'retry';
+  return status === '404' ? 'missing' : 'retry';
 }
 
 export async function processLegacyMediaDeletionJobs(

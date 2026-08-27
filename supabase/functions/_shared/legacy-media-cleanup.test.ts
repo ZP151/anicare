@@ -9,7 +9,8 @@ const baseJob: LegacyMediaDeletionJob = {
   job_id: '00000000-0000-4000-8000-000000000801',
   media_id: '00000000-0000-4000-8000-000000000802',
   storage_bucket: 'public-media',
-  storage_path: 'legacy/00000000-0000-4000-8000-000000000802.jpg',
+  expected_owner_id: '00000000-0000-4000-8000-000000000801',
+  storage_path: '00000000-0000-4000-8000-000000000801/My photo 猫.jpg',
   cleanup_claim_id: '00000000-0000-4000-8000-000000000803',
 };
 
@@ -52,11 +53,21 @@ describe('legacy media deletion scheduler', () => {
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ p_result: 'retry' }));
   });
 
+  it('does not mistake an untyped not-found message for a successful deletion', async () => {
+    const remove = vi.fn().mockResolvedValue({ error: { message: 'Object not found while retrying gateway request' } });
+    const complete = vi.fn().mockResolvedValue({ error: null });
+
+    await expect(processLegacyMediaDeletionJobs([baseJob], { remove, complete }))
+      .resolves.toEqual({ processed: 1, removed: 0 });
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ p_result: 'retry' }));
+  });
+
   it.each([
     { ...baseJob, storage_bucket: 'media-staging' },
-    { ...baseJob, storage_path: '../other-account/photo.jpg' },
-    { ...baseJob, storage_path: '/absolute/path.jpg' },
-    { ...baseJob, storage_path: 'legacy//double-slash.jpg' },
+    { ...baseJob, storage_path: '00000000-0000-4000-8000-000000000899/other-owner.jpg' },
+    { ...baseJob, storage_path: '00000000-0000-4000-8000-000000000801/../other-owner.jpg' },
+    { ...baseJob, storage_path: '00000000-0000-4000-8000-000000000801//double-slash.jpg' },
+    { ...baseJob, storage_path: '00000000-0000-4000-8000-000000000801\\backslash.jpg' },
   ])('rejects an unsafe outbox target before any Storage call', async (unsafeJob) => {
     const remove = vi.fn();
     const complete = vi.fn();

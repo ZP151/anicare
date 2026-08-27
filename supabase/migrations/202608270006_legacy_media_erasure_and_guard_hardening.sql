@@ -10,16 +10,36 @@ set search_path = pg_catalog
 as $$
   select value is not null
     and char_length(value) between 1 and 512
-    and value = btrim(value)
-    and value ~ '^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
-    and value !~ '(^|/)[^/]{129}'::text;
+    and position(chr(92) in value) = 0
+    and not exists (
+      select 1
+      from unnest(string_to_array(value, '/')) as segment(value)
+      where segment.value in ('', '.', '..')
+    );
+$$;
+
+create or replace function private.is_safe_legacy_media_storage_target(
+  p_expected_owner_id uuid,
+  p_storage_path text
+)
+returns boolean
+language sql
+immutable
+set search_path = pg_catalog
+as $$
+  select p_expected_owner_id is not null
+    and private.is_safe_legacy_media_storage_path(p_storage_path)
+    and p_storage_path like p_expected_owner_id::text || '/%';
 $$;
 
 create table private.legacy_media_deletion_jobs (
   id uuid primary key default extensions.gen_random_uuid(),
   media_id uuid not null unique,
   storage_bucket text not null check (storage_bucket in ('public-media', 'private-evidence')),
-  storage_path text not null check (private.is_safe_legacy_media_storage_path(storage_path)),
+  -- Preserve unsafe historical metadata for manual review; only the trigger,
+  -- claim RPC and Edge worker may classify a path as safe to delete.
+  storage_path text not null,
+  expected_owner_id uuid not null,
   status private.legacy_media_deletion_status not null default 'pending',
   attempt_count integer not null default 0 check (attempt_count between 0 and 5),
   next_attempt_at timestamptz not null default pg_catalog.now(),
@@ -33,7 +53,7 @@ create table private.legacy_media_deletion_jobs (
   check (
     (status = 'pending' and completed_at is null and terminal_reason is null)
     or (status = 'completed' and completed_at is not null and terminal_reason is null)
-    or (status = 'terminal_failure' and completed_at is not null and terminal_reason = 'retry_limit_exhausted')
+    or (status = 'terminal_failure' and completed_at is not null and terminal_reason in ('retry_limit_exhausted', 'unsafe_legacy_storage_target'))
   )
 );
 
@@ -53,7 +73,8 @@ as $$
 begin
   if new.media_id is distinct from old.media_id
       or new.storage_bucket is distinct from old.storage_bucket
-      or new.storage_path is distinct from old.storage_path then
+      or new.storage_path is distinct from old.storage_path
+      or new.expected_owner_id is distinct from old.expected_owner_id then
     raise exception 'legacy_media_deletion_target_immutable' using errcode = '42501';
   end if;
   return new;
@@ -73,8 +94,26 @@ as $$
 begin
   -- Only legacy buckets without a staging cleanup record enter this outbox.
   -- The immutable target is captured while uploader ownership still exists.
-  insert into private.legacy_media_deletion_jobs (media_id, storage_bucket, storage_path)
-  select media.id, media.storage_bucket, media.storage_path
+  insert into private.legacy_media_deletion_jobs (
+    media_id, storage_bucket, storage_path, expected_owner_id, status, completed_at, terminal_reason
+  )
+  select
+    media.id,
+    media.storage_bucket,
+    media.storage_path,
+    old.id,
+    case when private.is_safe_legacy_media_storage_target(old.id, media.storage_path)
+      then 'pending'::private.legacy_media_deletion_status
+      else 'terminal_failure'::private.legacy_media_deletion_status
+    end,
+    case when private.is_safe_legacy_media_storage_target(old.id, media.storage_path)
+      then null
+      else pg_catalog.now()
+    end,
+    case when private.is_safe_legacy_media_storage_target(old.id, media.storage_path)
+      then null
+      else 'unsafe_legacy_storage_target'
+    end
   from public.media_assets media
   where media.uploader_id = old.id
     and media.storage_bucket in ('public-media', 'private-evidence')
@@ -93,7 +132,7 @@ before delete on public.user_profiles
 for each row execute function private.queue_legacy_media_deletion_before_profile_erasure();
 
 create or replace function public.claim_legacy_media_deletion_jobs(p_limit integer default 25)
-returns table (job_id uuid, media_id uuid, storage_bucket text, storage_path text, cleanup_claim_id uuid)
+returns table (job_id uuid, media_id uuid, storage_bucket text, storage_path text, expected_owner_id uuid, cleanup_claim_id uuid)
 language plpgsql
 security definer
 set search_path = pg_catalog
@@ -108,6 +147,7 @@ begin
     from private.legacy_media_deletion_jobs job
     where job.status = 'pending'
       and job.next_attempt_at <= pg_catalog.now()
+      and private.is_safe_legacy_media_storage_target(job.expected_owner_id, job.storage_path)
       and (job.cleanup_claimed_at is null or job.cleanup_claimed_at <= pg_catalog.now() - interval '5 minutes')
     order by job.next_attempt_at, job.id
     limit p_limit
@@ -121,7 +161,7 @@ begin
      where job.id = candidates.id
     returning job.*
   )
-  select claimed.id, claimed.media_id, claimed.storage_bucket, claimed.storage_path, claimed.cleanup_claim_id
+  select claimed.id, claimed.media_id, claimed.storage_bucket, claimed.storage_path, claimed.expected_owner_id, claimed.cleanup_claim_id
   from claimed;
 end;
 $$;
@@ -155,7 +195,8 @@ begin
   for update;
   if not found or job.media_id is distinct from p_media_id
       or job.storage_bucket is distinct from p_storage_bucket
-      or job.storage_path is distinct from p_storage_path then
+      or job.storage_path is distinct from p_storage_path
+      or not private.is_safe_legacy_media_storage_target(job.expected_owner_id, job.storage_path) then
     raise exception 'invalid_legacy_media_cleanup_claim' using errcode = 'P0001';
   end if;
 

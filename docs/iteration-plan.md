@@ -27,8 +27,11 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
   pgTAP, Deno/Edge and Storage runtime execution has not run in this workspace.
 - Account erasure now records legacy `public-media` and `private-evidence`
   objects in a private, service-only deletion outbox before uploader ownership
-  is cleared. The scheduler validates both bucket and relative path, treats a
+  is cleared. The scheduler validates the bucket plus immutable owner-prefixed,
+  bounded relative path (including legacy space/Unicode filenames), treats a
   missing object as success, and retains transient failures for bounded retry.
+  Unsafe historical keys remain durable manual-review rows and are never sent to
+  Storage, so they cannot abort account deletion.
   Real Storage integration remains a release gate.
 - Narrow public feed/report/block and authenticated audited-admin contracts are
   implemented. Database runtime and two-session concurrency checks remain

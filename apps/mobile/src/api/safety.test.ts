@@ -8,7 +8,7 @@ import {
 const contentId = '00000000-0000-4000-8000-000000000201';
 const blockedId = '00000000-0000-4000-8000-000000000202';
 const requestId = '00000000-0000-4000-8000-000000000203';
-const reportId = '00000000-0000-4000-8000-000000000204';
+const reportRequestOutcome = '00000000-0000-4000-8000-000000000204';
 const unblockRequestId = '00000000-0000-4000-8000-000000000205';
 
 describe('community safety API payloads', () => {
@@ -59,11 +59,11 @@ describe('community safety API payloads', () => {
       .toThrow('invalid_moderation_report_request');
   });
 
-  it('uses only the narrow report RPC and accepts only a UUID result', async () => {
-    const rpc = jest.fn().mockResolvedValue({ data: reportId, error: null });
+  it('uses only the narrow report RPC and accepts an opaque request outcome', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: reportRequestOutcome, error: null });
     const input = { contentType: 'sighting', contentId, reasonCode: 'spam', detail: null, requestId } as const;
 
-    await expect(reportContent(input, { rpc })).resolves.toBe(reportId);
+    await expect(reportContent(input, { rpc })).resolves.toBe(reportRequestOutcome);
     expect(rpc).toHaveBeenCalledWith('create_moderation_report', buildModerationReportRpcArgs(input));
   });
 
