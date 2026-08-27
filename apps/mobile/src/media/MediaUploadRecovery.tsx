@@ -59,8 +59,13 @@ export function createMediaUploadRecoveryController(dependencies: MediaUploadRec
       do {
         rerun = false;
         // Journal repair is independent of auth and always precedes transport.
-        await dependencies.recoverLocalJournal().catch(() => undefined);
-        if (!stopped && await dependencies.hasSession().catch(() => false)) {
+        let localJournalReady = true;
+        try {
+          await dependencies.recoverLocalJournal();
+        } catch {
+          localJournalReady = false;
+        }
+        if (localJournalReady && !stopped && await dependencies.hasSession().catch(() => false)) {
           await dependencies.retryMedia().catch(() => undefined);
         }
       } while (!stopped && rerun);

@@ -53,7 +53,7 @@ beforeEach(() => {
     encryptionVersion: 'aes-256-gcm.v1',
     mediaId: 'media-12345678',
   });
-  jest.mocked(saveReviewedMediaJournal).mockResolvedValue(null);
+  jest.mocked(saveReviewedMediaJournal).mockResolvedValue(undefined);
 });
 
 describe('private redaction review screen', () => {
@@ -104,8 +104,7 @@ describe('private redaction review screen', () => {
     expect(cleanupProcessorCacheUris).not.toHaveBeenCalled();
   });
 
-  it('deletes a replaced owned ciphertext only after the new journal is durable', async () => {
-    const previous = 'reviewed-media/media-87654321.commit-87654321.agcm';
+  it('leaves durable replacement cleanup inside the journal boundary', async () => {
     const events: string[] = [];
     jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);
     jest.mocked(prepareCanonical).mockResolvedValue(canonical);
@@ -114,8 +113,8 @@ describe('private redaction review screen', () => {
       .mockResolvedValueOnce('absent')
       .mockResolvedValueOnce('valid');
     jest.mocked(saveReviewedMediaJournal)
-      .mockImplementationOnce(async () => { events.push('durable'); return previous; })
-      .mockImplementationOnce(async () => null);
+      .mockImplementationOnce(async () => { events.push('durable'); })
+      .mockImplementationOnce(async () => undefined);
     jest.mocked(deleteReviewedMediaReference).mockImplementation(async (reference) => { events.push(`delete:${reference}`); });
     const view = await render(<RedactionReviewScreen />);
 
@@ -124,7 +123,7 @@ describe('private redaction review screen', () => {
     await act(async () => { fireEvent.press(view.getByText('Confirm exact pixels and encrypt')); });
 
     await waitFor(() => expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(2));
-    expect(events).toEqual(['durable', `delete:${previous}`]);
-    expect(deleteReviewedMediaReference).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(['durable']);
+    expect(deleteReviewedMediaReference).not.toHaveBeenCalled();
   });
 });

@@ -56,6 +56,23 @@ describe('MediaUploadRecovery', () => {
     controller.stop();
   });
 
+  it('does not start transport when durable local cleanup fails', async () => {
+    const queued: Array<() => void> = [];
+    const retryMedia = jest.fn(async () => undefined);
+    const controller = createMediaUploadRecoveryController({
+      recoverLocalJournal: async () => { throw new Error('pending_media_cleanup_conflict'); },
+      retryMedia,
+      hasSession: async () => true,
+      onAuthChange: () => () => undefined,
+      onForegroundChange: () => () => undefined,
+      schedule: (work) => { queued.push(work); return () => undefined; },
+    });
+    controller.start();
+    queued.shift()?.();
+    await settle();
+    expect(retryMedia).not.toHaveBeenCalled();
+  });
+
   it('removes lifecycle listeners and ignores queued work on unmount', async () => {
     const queued: Array<() => void> = [];
     const cleanup = { auth: 0, foreground: 0 };

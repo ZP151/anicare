@@ -15,7 +15,7 @@ import {
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors, radii } from '../../src/design/theme';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
-import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
+import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
 import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
 import { normalizePreviewTap } from '../../src/media/redaction-geometry';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
@@ -240,8 +240,7 @@ export default function RedactionReviewScreen() {
     state: 'local_persisting' | 'upload_pending' | 'needs_user',
     lastError: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null,
   ) {
-    const previous = await saveReviewedMediaJournal(journal, state, lastError);
-    if (previous) await deleteReviewedMediaReference(previous).catch(() => undefined);
+    await saveReviewedMediaJournal(journal, state, lastError);
   }
 
   function rememberPreviewSize(event: LayoutChangeEvent) {

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Product display name remains `WhiskerCommons`; package scopes, OAuth scheme, bundle IDs, database identifiers and local encryption-key names remain unchanged.
-- The tuple `(draftId, mediaId, sightingId, receipt.sanitizedSha256, receipt)` is immutable once each value exists; retries never generate replacement identities.
+- Explicit user re-review may replace the media identity/receipt tuple only before sighting attachment and before the first upload claim, through the narrow journal CAS plus durable old-reference cleanup outbox. Once owner+sighting is attached or any upload attempt exists, `(draftId, mediaId, sightingId, receipt.sanitizedSha256, receipt)` is immutable and retries never generate replacement identities.
 - Selected source bytes, raw/canonical URIs, coordinates, access tokens, signed URLs, signed-upload tokens and Storage paths are never persisted in offline drafts.
 - Only an AHM1 artifact whose envelope, AES-GCM AAD, encryption version, byte length and SHA-256 match the stored receipt may cross the upload boundary.
 - Read paths load an existing media key only. They never generate or persist a replacement key; a missing key fails closed without modifying SecureStore.

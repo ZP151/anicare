@@ -1,14 +1,18 @@
 import {
   ATTACH_SIGHTING_TO_DRAFT_SQL,
+  CLEAR_PENDING_MEDIA_CLEANUP_SQL,
+  PENDING_MEDIA_CLEANUP_LIST_SQL,
   QUARANTINED_MEDIA_CLEANUP_SQL,
   attachSightingToDraftWithDependencies,
   cleanupQuarantinedMediaWithDependencies,
+  cleanupPendingReviewedMediaReferencesWithDependencies,
   deleteOfflineDraftWithDependencies,
   deserializeDraftRows,
   DRAFT_LIST_SQL,
   DRAFT_SAVE_SQL,
   ENCRYPTION_VERSION_BACKFILL_SQL,
   ensureDraftTransportSchemaWithDependencies,
+  getPendingReviewedMediaVersionMismatch,
   LEGACY_REVIEWED_PATH_CLEAR_SQL,
   LEGACY_URI_CLEAR_SQL,
   MEDIA_JOURNAL_SAVE_SQL,
@@ -16,6 +20,7 @@ import {
   MEDIA_VERSION_MISMATCH_SQL,
   claimMediaUploadAttemptWithDependencies,
   saveReviewedMediaJournalWithDependencies,
+  selectPendingCleanupForReplacement,
   transitionClaimedMediaUploadWithDependencies,
   type MediaUploadCasDependencies,
 } from './draft-store.native';
@@ -133,12 +138,15 @@ describe('native draft storage privacy boundary', () => {
       encryption_version: null as string | null,
       reviewed_media_path: 'file:///legacy/private/path.agcm' as string | null,
       revision: undefined as number | undefined,
+      owner_subject: 'owner-12345678',
+      pending_media_cleanup_ref: undefined as string | null | undefined,
     };
     await ensureDraftTransportSchemaWithDependencies({
       listColumns: async () => [...columns],
       addColumn: async (name, _type) => {
         columns.add(name);
         if (name === 'revision') row.revision = 0;
+        if (name === 'pending_media_cleanup_ref') row.pending_media_cleanup_ref = null;
       },
       backfillEncryptionVersion: async () => {
         if (row.reviewed_media_ref && row.encryption_version === null) row.encryption_version = 'aes-256-gcm.v1';
@@ -148,12 +156,40 @@ describe('native draft storage privacy boundary', () => {
     expect(columns.has('upload_resume_state')).toBe(true);
     expect(columns.has('upload_attempt_started_at')).toBe(true);
     expect(columns.has('revision')).toBe(true);
+    expect(columns.has('pending_media_cleanup_ref')).toBe(true);
     expect(row).toEqual({
       reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
       encryption_version: 'aes-256-gcm.v1',
       reviewed_media_path: null,
       revision: 0,
+      owner_subject: 'owner-12345678',
+      pending_media_cleanup_ref: null,
     });
+  });
+
+  it('deserializes a valid legacy AHM1 row as v1 after the migration backfill', () => {
+    const row = {
+      id: 'draft-12345678', notes: 'legacy', risk: 'normal' as const,
+      media_id: 'media-12345678', sighting_id: 'sighting-12345678', owner_subject: 'owner-12345678',
+      reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: null as string | null,
+      review_receipt_json: JSON.stringify({
+        sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      }),
+      upload_state: 'upload_pending', upload_attempts: 0, next_attempt_at: null,
+      last_error: null, upload_resume_state: null, upload_attempt_started_at: null, revision: 0,
+    };
+    if (row.reviewed_media_ref && row.encryption_version === null) {
+      row.encryption_version = 'aes-256-gcm.v1';
+    }
+
+    const [draft] = deserializeDraftRows([row]);
+
+    expect(draft.encryptionVersion).toBe('aes-256-gcm.v1');
+    expect(draft.mediaFailure).toBeUndefined();
+    expect(getPendingReviewedMediaVersionMismatch(draft)).toBeUndefined();
   });
 
   it('atomically writes a complete journal/lease snapshot and advances revision', () => {
@@ -161,6 +197,7 @@ describe('native draft storage privacy boundary', () => {
       'media_id', 'reviewed_media_ref', 'encryption_version', 'review_receipt_json',
       'upload_state', 'upload_attempts', 'next_attempt_at', 'last_error',
       'upload_resume_state', 'upload_attempt_started_at', 'revision = revision + 1',
+      'pending_media_cleanup_ref',
     ]) {
       expect(MEDIA_JOURNAL_SAVE_SQL).toContain(field);
     }
@@ -168,6 +205,7 @@ describe('native draft storage privacy boundary', () => {
       expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain(preserved);
     }
     expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain('sighting_id =');
+    expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain('owner_subject =');
     expect(MEDIA_JOURNAL_SAVE_SQL).toContain("upload_state = 'local_persisting'");
     expect(MEDIA_JOURNAL_SAVE_SQL).toContain('media_id IS NULL');
     expect(MEDIA_JOURNAL_SAVE_SQL).toContain('media_id = ?');
@@ -177,7 +215,7 @@ describe('native draft storage privacy boundary', () => {
     expect(MEDIA_JOURNAL_SAVE_SQL).not.toContain("upload_state IN ('uploading', 'finalizing', 'waiting')");
   });
 
-  it('exposes a prior owned reference only after a safe pre-upload replacement commits', async () => {
+  it('cleans a prior owned reference only after its replacement commits durably', async () => {
     const events: string[] = [];
     const previous = 'reviewed-media/media-87654321.commit-87654321.agcm';
     const journal = {
@@ -195,23 +233,23 @@ describe('native draft storage privacy boundary', () => {
         confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
     };
-    const result = await saveReviewedMediaJournalWithDependencies(journal, 'local_persisting', null, {
+    await saveReviewedMediaJournalWithDependencies(journal, 'local_persisting', null, {
       commitMediaSnapshot: async (snapshot) => {
         events.push(`commit:${snapshot.mediaId}:${snapshot.uploadJob.state}`);
-        return previous;
+      },
+      cleanupPendingMedia: async (draftId) => {
+        events.push(`cleanup:${draftId}:${previous}`);
       },
     });
-    events.push(`cleanup:${result}`);
-    expect(result).toBe(previous);
     expect(events).toEqual([
       'commit:media-12345678:local_persisting',
-      `cleanup:${previous}`,
+      `cleanup:draft-12345678:${previous}`,
     ]);
   });
 
   it('treats replay of the same immutable journal snapshot as idempotent', async () => {
     const reference = 'reviewed-media/media-12345678.commit-12345678.agcm';
-    const result = await saveReviewedMediaJournalWithDependencies({
+    await saveReviewedMediaJournalWithDependencies({
       draftId: 'draft-12345678', mediaId: 'media-12345678', encryptedReviewedRef: reference,
       encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
@@ -220,9 +258,9 @@ describe('native draft storage privacy boundary', () => {
         width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
       },
     }, 'local_persisting', null, {
-      commitMediaSnapshot: async () => reference,
+      commitMediaSnapshot: async () => undefined,
+      cleanupPendingMedia: async () => undefined,
     });
-    expect(result).toBeNull();
   });
 
   it('does not expose the previous reference when the new journal snapshot fails to commit', async () => {
@@ -239,7 +277,85 @@ describe('native draft storage privacy boundary', () => {
     };
     await expect(saveReviewedMediaJournalWithDependencies(journal, 'upload_pending', null, {
       commitMediaSnapshot: async () => { throw new Error('database_locked'); },
+      cleanupPendingMedia: async () => { throw new Error('must_not_run'); },
     })).rejects.toThrow('database_locked');
+  });
+
+  it('does not report a durable journal failure when post-commit cleanup must retry at startup', async () => {
+    const events: string[] = [];
+    await expect(saveReviewedMediaJournalWithDependencies(reviewedJournal(), 'upload_pending', null, {
+      commitMediaSnapshot: async () => { events.push('commit'); },
+      cleanupPendingMedia: async () => { events.push('cleanup'); throw new Error('crash_before_delete'); },
+    })).resolves.toBeUndefined();
+    expect(events).toEqual(['commit', 'cleanup']);
+  });
+
+  it('rejects a second replacement until the prior pending cleanup is cleared', () => {
+    const active = 'reviewed-media/media-12345678.commit-12345678.agcm';
+    const pending = 'reviewed-media/media-87654321.commit-87654321.agcm';
+    expect(selectPendingCleanupForReplacement(active, pending, active)).toBe(pending);
+    expect(() => selectPendingCleanupForReplacement(
+      active, pending, 'reviewed-media/media-abcdefgh.commit-abcdefgh.agcm',
+    )).toThrow('pending_media_cleanup_conflict');
+    expect(selectPendingCleanupForReplacement(pending, null, active)).toBe(pending);
+  });
+
+  it('retries cleanup across delete and CAS-clear crash boundaries', async () => {
+    const pending = 'reviewed-media/media-87654321.commit-87654321.agcm';
+    const job = {
+      draftId: 'draft-12345678',
+      activeReference: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      pendingReference: pending,
+      revision: 7,
+    };
+    const deleted: string[] = [];
+    await expect(cleanupPendingReviewedMediaReferencesWithDependencies({
+      listPendingCleanup: async () => [job],
+      deleteOwnedReference: async () => { throw new Error('crash_before_delete'); },
+      clearPendingCleanup: async () => true,
+    })).rejects.toThrow('crash_before_delete');
+
+    await expect(cleanupPendingReviewedMediaReferencesWithDependencies({
+      listPendingCleanup: async () => [job],
+      deleteOwnedReference: async (reference) => { deleted.push(reference); },
+      clearPendingCleanup: async () => false,
+    })).rejects.toThrow('pending_media_cleanup_conflict');
+    await expect(cleanupPendingReviewedMediaReferencesWithDependencies({
+      listPendingCleanup: async () => [{ ...job, revision: 8 }],
+      deleteOwnedReference: async (reference) => { deleted.push(reference); },
+      clearPendingCleanup: async () => true,
+    })).resolves.toBeUndefined();
+    expect(deleted).toEqual([pending, pending]);
+    expect(CLEAR_PENDING_MEDIA_CLEANUP_SQL).toContain('revision = ?');
+    expect(CLEAR_PENDING_MEDIA_CLEANUP_SQL).toContain('reviewed_media_ref = ?');
+    expect(CLEAR_PENDING_MEDIA_CLEANUP_SQL).toContain('pending_media_cleanup_ref = ?');
+  });
+
+  it.each([
+    'file:///attacker/media.agcm',
+    'reviewed-media/../media-12345678.commit-12345678.agcm',
+    'reviewed-media/symlink.agcm',
+  ])('never deletes an unowned pending cleanup reference: %s', async (pendingReference) => {
+    const deleteOwnedReference = jest.fn(async () => undefined);
+    await expect(cleanupPendingReviewedMediaReferencesWithDependencies({
+      listPendingCleanup: async () => [{
+        draftId: 'draft-12345678',
+        activeReference: 'reviewed-media/media-12345678.commit-12345678.agcm',
+        pendingReference,
+        revision: 1,
+      }],
+      deleteOwnedReference,
+      clearPendingCleanup: async () => true,
+    })).rejects.toThrow('invalid_pending_media_cleanup');
+    expect(deleteOwnedReference).not.toHaveBeenCalled();
+  });
+
+  it('selects only durable pending final references and never source capabilities', () => {
+    expect(PENDING_MEDIA_CLEANUP_LIST_SQL).toContain('pending_media_cleanup_ref IS NOT NULL');
+    for (const forbidden of ['source_uri', 'photo_uri', 'access_token', 'canonical_uri']) {
+      expect(PENDING_MEDIA_CLEANUP_LIST_SQL).not.toContain(forbidden);
+    }
+    expect(DRAFT_LIST_SQL).not.toContain('pending_media_cleanup_ref');
   });
 
   it('replaces the complete retry snapshot for media updates so stale errors and delays can clear', () => {
@@ -280,6 +396,7 @@ describe('native draft storage privacy boundary', () => {
     expect(MEDIA_VERSION_MISMATCH_SQL).toContain('upload_resume_state = NULL');
     expect(MEDIA_VERSION_MISMATCH_SQL).toContain('upload_attempt_started_at = NULL');
     expect(MEDIA_VERSION_MISMATCH_SQL).toContain('revision = revision + 1');
+    expect(MEDIA_VERSION_MISMATCH_SQL).toContain('revision = ? AND upload_state = ?');
   });
 
   it('contains a corrupt receipt row instead of rejecting the entire draft list', () => {
@@ -424,6 +541,11 @@ describe('native draft storage privacy boundary', () => {
       mediaFailure: 'version_mismatch',
       uploadJob: expect.objectContaining({ state: 'needs_user', lastError: 'version_mismatch' }),
     })]);
+    expect(getPendingReviewedMediaVersionMismatch(drafts[0])).toEqual({
+      expectedRevision: 2,
+      expectedState: 'upload_pending',
+    });
+    expect(JSON.stringify(drafts[0])).not.toContain('aes-256-gcm.v2');
 
     const events: string[] = [];
     await recoverPendingReviewedDrafts(drafts, {
@@ -436,14 +558,57 @@ describe('native draft storage privacy boundary', () => {
     expect(events).toEqual([]);
   });
 
+  it('does not request another durable version marker for an already-marked row', () => {
+    const receipt = JSON.stringify({
+      sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+      detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+      width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+    });
+    const [draft] = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'marked', risk: 'normal', media_id: 'media-12345678',
+      sighting_id: 'sighting-12345678', owner_subject: 'owner-12345678',
+      reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: 'aes-256-gcm.v2', review_receipt_json: receipt,
+      upload_state: 'needs_user', upload_attempts: 2, next_attempt_at: null,
+      last_error: 'version_mismatch', upload_resume_state: null,
+      upload_attempt_started_at: null, revision: 3,
+    }]);
+
+    expect(getPendingReviewedMediaVersionMismatch(draft)).toBeUndefined();
+  });
+
+  it('repairs residual lease fields even when a version mismatch state/error was already written', () => {
+    const receipt = JSON.stringify({
+      sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+      detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+      width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+    });
+    const [draft] = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'residual', risk: 'normal', media_id: 'media-12345678',
+      sighting_id: 'sighting-12345678', owner_subject: 'owner-12345678',
+      reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: 'aes-256-gcm.v2', review_receipt_json: receipt,
+      upload_state: 'needs_user', upload_attempts: 2, next_attempt_at: '2026-08-27T00:01:00.000Z',
+      last_error: 'version_mismatch', upload_resume_state: 'uploading',
+      upload_attempt_started_at: null, revision: 5,
+    }]);
+
+    expect(getPendingReviewedMediaVersionMismatch(draft)).toEqual({
+      expectedRevision: 5,
+      expectedState: 'needs_user',
+    });
+  });
+
   it.each([
-    ['reviewed-media/media-12345678.commit-12345678.agcm', ['reviewed-media/media-12345678.commit-12345678.agcm']],
-    ['file:///attacker/reviewed-media/media-12345678.commit-12345678.agcm', []],
-    ['reviewed-media/../media-12345678.commit-12345678.agcm', []],
-  ] as const)('deletes only an anchored owned ciphertext after deleting its draft: %s', async (reference, expectedDeleted) => {
+    ['reviewed-media/media-12345678.commit-12345678.agcm', 'reviewed-media/media-87654321.commit-87654321.agcm', [
+      'reviewed-media/media-12345678.commit-12345678.agcm',
+      'reviewed-media/media-87654321.commit-87654321.agcm',
+    ]],
+    ['file:///attacker/reviewed-media/media-12345678.commit-12345678.agcm', 'reviewed-media/symlink.agcm', []],
+  ] as const)('deletes only anchored active and outbox ciphertext after deleting its draft: %s', async (reference, pending, expectedDeleted) => {
     const events: string[] = [];
     await deleteOfflineDraftWithDependencies('draft-12345678', {
-      loadReviewedReference: async () => reference,
+      loadReviewedReferences: async () => ({ active: reference, pending }),
       deleteRow: async () => { events.push('row'); },
       deleteOwnedReference: async (value) => { events.push(value); },
     });
@@ -560,6 +725,19 @@ describe('native draft storage privacy boundary', () => {
     expect(store.current?.uploadJob?.state).toBe('uploading');
   });
 });
+
+function reviewedJournal() {
+  return {
+    draftId: 'draft-12345678', mediaId: 'media-12345678',
+    encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+    encryptionVersion: 'aes-256-gcm.v1' as const,
+    receipt: {
+      sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1' as const,
+      detectorVersions: { cats: 'unavailable' as const, people: 'unavailable' as const, plates: 'unavailable' as const },
+      width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+    },
+  };
+}
 
 function mediaUploadCasStore() {
   const receipt = {

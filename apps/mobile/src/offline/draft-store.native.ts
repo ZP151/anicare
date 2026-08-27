@@ -80,8 +80,11 @@ export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   last_error = ?,
   upload_resume_state = ?,
   upload_attempt_started_at = ?,
+  pending_media_cleanup_ref = CASE
+    WHEN reviewed_media_ref IS NOT NULL AND reviewed_media_ref <> ? THEN reviewed_media_ref
+    ELSE pending_media_cleanup_ref END,
   revision = revision + 1
-  WHERE id = ? AND (
+  WHERE id = ? AND (pending_media_cleanup_ref IS NULL OR reviewed_media_ref = ?) AND (
     (media_id IS NULL AND reviewed_media_ref IS NULL AND encryption_version IS NULL
       AND review_receipt_json IS NULL AND upload_state IS NULL)
     OR
@@ -100,7 +103,7 @@ export const MEDIA_VERSION_MISMATCH_SQL = `UPDATE sighting_drafts SET
   upload_resume_state = NULL,
   upload_attempt_started_at = NULL,
   revision = revision + 1
-  WHERE id = ? AND reviewed_media_ref IS NOT NULL
+  WHERE id = ? AND revision = ? AND upload_state = ? AND reviewed_media_ref IS NOT NULL
     AND (encryption_version IS NULL OR encryption_version <> 'aes-256-gcm.v1')`;
 export const MEDIA_UPLOAD_CAS_SQL = `UPDATE sighting_drafts SET
   upload_state = ?,
@@ -120,6 +123,14 @@ export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
   WHERE id = ? AND (sighting_id IS NULL OR (sighting_id = ? AND owner_subject = ?))`;
 export const QUARANTINED_MEDIA_CLEANUP_SQL = `DELETE FROM sighting_drafts
   WHERE id = ? AND revision = ? AND upload_state = 'quarantined'`;
+export const PENDING_MEDIA_CLEANUP_LIST_SQL = `SELECT id, reviewed_media_ref,
+  pending_media_cleanup_ref, revision FROM sighting_drafts
+  WHERE pending_media_cleanup_ref IS NOT NULL ORDER BY updated_at ASC`;
+export const CLEAR_PENDING_MEDIA_CLEANUP_SQL = `UPDATE sighting_drafts SET
+  pending_media_cleanup_ref = NULL,
+  revision = revision + 1
+  WHERE id = ? AND revision = ? AND reviewed_media_ref = ?
+    AND pending_media_cleanup_ref = ?`;
 const ENSURE_DRAFT_ROW_SQL = `INSERT OR IGNORE INTO sighting_drafts
   (id, notes, risk, updated_at) VALUES (?, '', 'normal', ?)`;
 
@@ -139,8 +150,26 @@ type DraftRow = {
   last_error: string | null;
   upload_resume_state: string | null;
   upload_attempt_started_at: string | null;
+  pending_media_cleanup_ref?: string | null;
   revision: number;
 };
+
+type PendingReviewedMediaVersionMismatch = Readonly<{
+  expectedRevision: number;
+  expectedState: UploadJobState;
+}>;
+
+const pendingReviewedMediaVersionMismatches = new WeakMap<StoredDraft, PendingReviewedMediaVersionMismatch>();
+const versionMismatchSourceStates = new Set<UploadJobState>([
+  'local_persisting', 'upload_pending', 'uploading', 'finalizing', 'waiting',
+  'needs_user', 'quarantined', 'complete',
+]);
+
+export function getPendingReviewedMediaVersionMismatch(
+  draft: StoredDraft,
+): PendingReviewedMediaVersionMismatch | undefined {
+  return pendingReviewedMediaVersionMismatches.get(draft);
+}
 
 const SCHEMA_V2_COLUMNS = {
   media_id: 'TEXT',
@@ -155,6 +184,7 @@ const SCHEMA_V2_COLUMNS = {
   last_error: 'TEXT',
   upload_resume_state: 'TEXT',
   upload_attempt_started_at: 'TEXT',
+  pending_media_cleanup_ref: 'TEXT',
   revision: 'INTEGER NOT NULL DEFAULT 0',
 } as const;
 
@@ -223,6 +253,7 @@ async function openDraftDatabase() {
       last_error TEXT,
       upload_resume_state TEXT,
       upload_attempt_started_at TEXT,
+      pending_media_cleanup_ref TEXT,
       revision INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
@@ -289,7 +320,8 @@ export type ReviewedMediaJournalSnapshot = Readonly<{
   }>;
 }>;
 export type SaveReviewedMediaJournalDependencies = Readonly<{
-  commitMediaSnapshot(snapshot: ReviewedMediaJournalSnapshot): Promise<string | null>;
+  commitMediaSnapshot(snapshot: ReviewedMediaJournalSnapshot): Promise<void>;
+  cleanupPendingMedia(draftId: string): Promise<void>;
 }>;
 
 export async function saveReviewedMediaJournalWithDependencies(
@@ -297,7 +329,7 @@ export async function saveReviewedMediaJournalWithDependencies(
   state: ReviewedMediaJournalState,
   error: ReviewedMediaJournalError,
   dependencies: SaveReviewedMediaJournalDependencies,
-): Promise<string | null> {
+): Promise<void> {
   const validated = sanitizeDraftForStorage({
     id: journal.draftId,
     mediaId: journal.mediaId,
@@ -328,24 +360,49 @@ export async function saveReviewedMediaJournalWithDependencies(
       attemptStartedAt: null,
     },
   };
-  const previous = await dependencies.commitMediaSnapshot(snapshot);
-  return previous !== snapshot.encryptedReviewedRef && isReviewedMediaReference(previous) ? previous : null;
+  await dependencies.commitMediaSnapshot(snapshot);
+  await dependencies.cleanupPendingMedia(snapshot.draftId).catch(() => undefined);
+}
+
+export function selectPendingCleanupForReplacement(
+  activeReference: string | null,
+  pendingReference: string | null,
+  incomingReference: string,
+): string | null {
+  if (!isReviewedMediaReference(incomingReference)) throw new Error('invalid_reviewed_media_reference');
+  if (pendingReference !== null) {
+    if (!isReviewedMediaReference(pendingReference) || !isReviewedMediaReference(activeReference)) {
+      throw new Error('invalid_pending_media_cleanup');
+    }
+    if (activeReference !== incomingReference) throw new Error('pending_media_cleanup_conflict');
+    return pendingReference;
+  }
+  if (activeReference === null || activeReference === incomingReference) return null;
+  if (!isReviewedMediaReference(activeReference)) throw new Error('invalid_pending_media_cleanup');
+  return activeReference;
 }
 
 export async function saveReviewedMediaJournal(
   journal: ReviewedMediaJournal,
   state: ReviewedMediaJournalState,
   error: ReviewedMediaJournalError,
-): Promise<string | null> {
+): Promise<void> {
   const database = await getDatabase();
   return saveReviewedMediaJournalWithDependencies(journal, state, error, {
     commitMediaSnapshot: async (snapshot) => {
-      let previous: string | null = null;
       await database.withExclusiveTransactionAsync(async (transaction) => {
-        const current = await transaction.getFirstAsync<{ reviewed_media_ref: string | null }>(
-          'SELECT reviewed_media_ref FROM sighting_drafts WHERE id = ?', snapshot.draftId,
+        const current = await transaction.getFirstAsync<{
+          reviewed_media_ref: string | null;
+          pending_media_cleanup_ref: string | null;
+        }>(
+          `SELECT reviewed_media_ref, pending_media_cleanup_ref
+           FROM sighting_drafts WHERE id = ?`, snapshot.draftId,
         );
-        previous = current?.reviewed_media_ref ?? null;
+        selectPendingCleanupForReplacement(
+          current?.reviewed_media_ref ?? null,
+          current?.pending_media_cleanup_ref ?? null,
+          snapshot.encryptedReviewedRef,
+        );
         await transaction.runAsync(ENSURE_DRAFT_ROW_SQL, snapshot.draftId, new Date().toISOString());
         const result = await transaction.runAsync(
           MEDIA_JOURNAL_SAVE_SQL,
@@ -359,7 +416,9 @@ export async function saveReviewedMediaJournal(
           snapshot.uploadJob.lastError,
           snapshot.uploadJob.resumeState,
           snapshot.uploadJob.attemptStartedAt,
+          snapshot.encryptedReviewedRef,
           snapshot.draftId,
+          snapshot.encryptedReviewedRef,
           snapshot.mediaId,
           snapshot.encryptedReviewedRef,
           snapshot.encryptionVersion,
@@ -367,9 +426,83 @@ export async function saveReviewedMediaJournal(
         );
         if (result.changes !== 1) throw new Error('missing_durable_media_journal');
       });
-      return previous;
     },
+    cleanupPendingMedia: cleanupPendingReviewedMediaForDraft,
   });
+}
+
+export type PendingReviewedMediaCleanup = Readonly<{
+  draftId: string;
+  activeReference: string;
+  pendingReference: string;
+  revision: number;
+}>;
+
+export type CleanupPendingReviewedMediaDependencies = Readonly<{
+  listPendingCleanup(): Promise<readonly PendingReviewedMediaCleanup[]>;
+  deleteOwnedReference(reference: string): Promise<void>;
+  clearPendingCleanup(cleanup: PendingReviewedMediaCleanup): Promise<boolean>;
+}>;
+
+export async function cleanupPendingReviewedMediaReferencesWithDependencies(
+  dependencies: CleanupPendingReviewedMediaDependencies,
+): Promise<void> {
+  for (const cleanup of await dependencies.listPendingCleanup()) {
+    if (!isStableMediaId(cleanup.draftId) || !Number.isInteger(cleanup.revision) || cleanup.revision < 0 ||
+        !isReviewedMediaReference(cleanup.activeReference) ||
+        !isReviewedMediaReference(cleanup.pendingReference) ||
+        cleanup.activeReference === cleanup.pendingReference) {
+      throw new Error('invalid_pending_media_cleanup');
+    }
+    await dependencies.deleteOwnedReference(cleanup.pendingReference);
+    if (!await dependencies.clearPendingCleanup(cleanup)) {
+      throw new Error('pending_media_cleanup_conflict');
+    }
+  }
+}
+
+function databasePendingCleanupDependencies(
+  database: SQLite.SQLiteDatabase,
+  draftId?: string,
+): CleanupPendingReviewedMediaDependencies {
+  return {
+    listPendingCleanup: async () => {
+      const rows = draftId
+        ? await database.getAllAsync<DraftRow>(
+            `${PENDING_MEDIA_CLEANUP_LIST_SQL.replace(' ORDER BY updated_at ASC', '')} AND id = ?`, draftId,
+          )
+        : await database.getAllAsync<DraftRow>(PENDING_MEDIA_CLEANUP_LIST_SQL);
+      return rows.map((row) => ({
+        draftId: row.id,
+        activeReference: row.reviewed_media_ref ?? '',
+        pendingReference: row.pending_media_cleanup_ref ?? '',
+        revision: row.revision,
+      }));
+    },
+    deleteOwnedReference: deleteReviewedMediaReference,
+    clearPendingCleanup: async (cleanup) => {
+      const result = await database.runAsync(
+        CLEAR_PENDING_MEDIA_CLEANUP_SQL,
+        cleanup.draftId,
+        cleanup.revision,
+        cleanup.activeReference,
+        cleanup.pendingReference,
+      );
+      return result.changes === 1;
+    },
+  };
+}
+
+async function cleanupPendingReviewedMediaForDraft(draftId: string): Promise<void> {
+  const database = await getDatabase();
+  await cleanupPendingReviewedMediaReferencesWithDependencies(
+    databasePendingCleanupDependencies(database, draftId),
+  );
+}
+
+export async function cleanupPendingReviewedMediaReferences(): Promise<void> {
+  const database = await getDatabase();
+  await cleanupPendingReviewedMediaReferencesWithDependencies(databasePendingCleanupDependencies(database));
 }
 
 export async function listOfflineDrafts(): Promise<StoredDraft[]> {
@@ -377,11 +510,22 @@ export async function listOfflineDrafts(): Promise<StoredDraft[]> {
   return deserializeDraftRows(await database.getAllAsync<DraftRow>(DRAFT_LIST_SQL));
 }
 
-export async function markReviewedMediaVersionMismatch(id: string): Promise<void> {
+export async function markReviewedMediaVersionMismatch(
+  id: string,
+  expectedRevision: number,
+  expectedState: UploadJobState,
+): Promise<boolean> {
   const validated = sanitizeDraftForStorage({ id });
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0 ||
+      !versionMismatchSourceStates.has(expectedState)) return false;
   const database = await getDatabase();
-  const result = await database.runAsync(MEDIA_VERSION_MISMATCH_SQL, validated.id);
-  if (result.changes !== 1) throw new Error('missing_version_mismatched_media_journal');
+  const result = await database.runAsync(
+    MEDIA_VERSION_MISMATCH_SQL,
+    validated.id,
+    expectedRevision,
+    expectedState,
+  );
+  return result.changes === 1;
 }
 
 export type MediaUploadClaim = Readonly<{
@@ -712,13 +856,23 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
       } else if (row.encryption_version === 'aes-256-gcm.v1') {
         drafts.push({ ...otherwiseValid, revision: textOnly.revision });
       } else {
-        drafts.push({
+        const versionMismatch: StoredDraft = {
           ...otherwiseValid,
           revision: textOnly.revision,
           encryptionVersion: UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
           mediaFailure: 'version_mismatch',
           uploadJob: failedMediaJob(row.upload_attempts, 'version_mismatch'),
-        });
+        };
+        const durablyMarked = row.upload_state === 'needs_user' && row.last_error === 'version_mismatch' &&
+          row.next_attempt_at === null && row.upload_resume_state === null &&
+          row.upload_attempt_started_at === null;
+        if (!durablyMarked) {
+          pendingReviewedMediaVersionMismatches.set(versionMismatch, {
+            expectedRevision: textOnly.revision ?? 0,
+            expectedState: otherwiseValid.uploadJob!.state,
+          });
+        }
+        drafts.push(versionMismatch);
       }
     } catch {
       const safeMediaId = isStableMediaId(row.media_id) ? row.media_id : undefined;
@@ -756,25 +910,35 @@ function failedMediaJob(
 }
 
 export type DeleteDraftDependencies = Readonly<{
-  loadReviewedReference(id: string): Promise<string | null>;
+  loadReviewedReferences(id: string): Promise<Readonly<{ active: string | null; pending: string | null }>>;
   deleteRow(id: string): Promise<void>;
   deleteOwnedReference(reference: string): Promise<void>;
 }>;
 
 export async function deleteOfflineDraftWithDependencies(id: string, dependencies: DeleteDraftDependencies): Promise<void> {
-  const reference = await dependencies.loadReviewedReference(id);
+  const references = await dependencies.loadReviewedReferences(id);
   await dependencies.deleteRow(id);
-  if (isReviewedMediaReference(reference)) await dependencies.deleteOwnedReference(reference);
+  const owned = [...new Set([references.active, references.pending].filter(
+    (reference): reference is string => isReviewedMediaReference(reference),
+  ))];
+  for (const reference of owned) await dependencies.deleteOwnedReference(reference);
 }
 
 export async function deleteOfflineDraft(id: string) {
   const database = await getDatabase();
   await deleteOfflineDraftWithDependencies(id, {
-    loadReviewedReference: async (draftId) => {
-      const row = await database.getFirstAsync<{ reviewed_media_ref: string | null }>(
-        'SELECT reviewed_media_ref FROM sighting_drafts WHERE id = ?', draftId,
+    loadReviewedReferences: async (draftId) => {
+      const row = await database.getFirstAsync<{
+        reviewed_media_ref: string | null;
+        pending_media_cleanup_ref: string | null;
+      }>(
+        `SELECT reviewed_media_ref, pending_media_cleanup_ref
+         FROM sighting_drafts WHERE id = ?`, draftId,
       );
-      return row?.reviewed_media_ref ?? null;
+      return {
+        active: row?.reviewed_media_ref ?? null,
+        pending: row?.pending_media_cleanup_ref ?? null,
+      };
     },
     deleteRow: async (draftId) => { await database.runAsync('DELETE FROM sighting_drafts WHERE id = ?', draftId); },
     deleteOwnedReference: async (reference) => { await deleteReviewedMediaReference(reference).catch(() => undefined); },

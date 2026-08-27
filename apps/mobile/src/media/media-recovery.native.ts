@@ -1,4 +1,11 @@
-import { listOfflineDrafts, markReviewedMediaVersionMismatch, saveOfflineDraft } from '../offline/draft-store';
+import {
+  getOfflineDraft,
+  getPendingReviewedMediaVersionMismatch,
+  cleanupPendingReviewedMediaReferences,
+  listOfflineDrafts,
+  markReviewedMediaVersionMismatch,
+  saveOfflineDraft,
+} from '../offline/draft-store';
 import type { StoredDraft } from '../offline/draft-policy';
 import { sweepOwnedProcessorCaches, sweepOwnedReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { recoverPendingReviewedDrafts, type ReviewedMediaJournal } from './reviewed-draft';
@@ -16,7 +23,25 @@ function mediaDraftUpdate(draft: StoredDraft, journal: ReviewedMediaJournal, sta
 
 export async function recoverPendingMediaDrafts(): Promise<void> {
   await sweepOwnedProcessorCaches().catch(() => undefined);
-  const drafts = await listOfflineDrafts();
+  await cleanupPendingReviewedMediaReferences();
+  const drafts = [...await listOfflineDrafts()];
+  for (const [index, draft] of drafts.entries()) {
+    const pending = getPendingReviewedMediaVersionMismatch(draft);
+    if (!pending) continue;
+    const marked = await markReviewedMediaVersionMismatch(
+      draft.id,
+      pending.expectedRevision,
+      pending.expectedState,
+    );
+    if (marked) continue;
+    const current = await getOfflineDraft(draft.id);
+    if (!current || getPendingReviewedMediaVersionMismatch(current) ||
+        current.mediaFailure !== 'version_mismatch' || current.uploadJob?.state !== 'needs_user' ||
+        current.uploadJob.lastError !== 'version_mismatch') {
+      throw new Error('version_mismatch_marker_conflict');
+    }
+    drafts[index] = current;
+  }
   const byId = new Map(drafts.map((draft) => [draft.id, draft]));
   await recoverPendingReviewedDrafts(drafts, {
     cleanupStaleProcessorCaches: async () => undefined,
@@ -28,7 +53,11 @@ export async function recoverPendingMediaDrafts(): Promise<void> {
     },
     markNeedsUser: async (journal, error) => {
       if (error === 'version_mismatch') {
-        await markReviewedMediaVersionMismatch(journal.draftId);
+        const draft = byId.get(journal.draftId);
+        const pending = draft && getPendingReviewedMediaVersionMismatch(draft);
+        if (!pending || !await markReviewedMediaVersionMismatch(
+          journal.draftId, pending.expectedRevision, pending.expectedState,
+        )) throw new Error('version_mismatch_marker_conflict');
         return;
       }
       const draft = byId.get(journal.draftId);

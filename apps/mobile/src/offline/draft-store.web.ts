@@ -1,5 +1,6 @@
 import type { StoredDraft } from './draft-policy';
 import type { ReviewedMediaJournal } from '../media/reviewed-draft';
+import type { UploadJobState } from './upload-job';
 
 function unavailable(): never {
   throw new Error('secure_offline_storage_unavailable');
@@ -17,11 +18,19 @@ export async function saveReviewedMediaJournal(
   _journal: ReviewedMediaJournal,
   _state: 'local_persisting' | 'upload_pending' | 'needs_user',
   _error: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null,
-): Promise<string | null> {
+): Promise<void> {
   return unavailable();
 }
 
-export async function markReviewedMediaVersionMismatch(_id: string): Promise<void> {
+export function getPendingReviewedMediaVersionMismatch(_draft: StoredDraft): undefined {
+  return undefined;
+}
+
+export async function markReviewedMediaVersionMismatch(
+  _id: string,
+  _expectedRevision: number,
+  _expectedState: UploadJobState,
+): Promise<boolean> {
   return unavailable();
 }
 
@@ -46,5 +55,9 @@ export async function cleanupQuarantinedMedia(_id: string, _revision: number): P
 }
 
 export async function deleteOfflineDraft(_id: string): Promise<void> {
+  return unavailable();
+}
+
+export async function cleanupPendingReviewedMediaReferences(): Promise<void> {
   return unavailable();
 }
