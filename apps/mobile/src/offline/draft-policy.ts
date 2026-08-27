@@ -73,7 +73,7 @@ function sanitizeUploadJob(value: unknown): UploadJob | undefined {
     ? job.attemptStartedAt as string
     : null;
   const lastError = typeof job.lastError === 'string' &&
-    /^(network|http_[1-5][0-9]{2}|hash_mismatch|metadata_mismatch|version_mismatch|auth_ownership|retry_limit_reached|invalid_upload_attempt|local_media_missing|local_media_corrupt|upload_error)$/.test(job.lastError)
+    /^(network|http_[1-5][0-9]{2}|authentication_required|hash_mismatch|metadata_mismatch|version_mismatch|auth_ownership|retry_limit_reached|invalid_upload_attempt|local_media_missing|local_media_key_missing|local_media_unavailable|local_media_corrupt|upload_error)$/.test(job.lastError)
     ? job.lastError
     : null;
   return {

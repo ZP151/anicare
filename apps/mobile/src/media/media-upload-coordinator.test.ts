@@ -26,7 +26,10 @@ const receipt = {
 describe('crash-safe media upload coordinator', () => {
   it('rejects a stale account before decrypting a previously claimed artifact', async () => {
     const run = uploadHarness({ ownerSubject: 'owner-87654321' });
-    await expect(run.claimAndRun()).resolves.toBe('stale');
+    const claim = await run.claim();
+    const before = run.current;
+    await expect(runMediaUploadAttempt(claim!, run.dependencies)).resolves.toBe('stale');
+    expect(run.current).toBe(before);
     expect(run.events).not.toContain('decrypt');
     expect(run.accessTokenRequests()).toBe(0);
   });
@@ -119,16 +122,87 @@ describe('crash-safe media upload coordinator', () => {
     });
   });
 
-  it.each(['local_media_key_missing', 'version_mismatch', 'local_media_corrupt', 'hostile secret token=abc'])(
-    'makes no network call and stores only an allow-listed failure for %s',
-    async (error) => {
+  it('returns a token loss after claim to waiting in the same phase', async () => {
+    const run = uploadHarness({ tokenError: 'authentication_required' });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    expect(run.current?.uploadJob).toMatchObject({
+      state: 'waiting', attempts: 1, resumeState: 'uploading', lastError: 'authentication_required',
+    });
+    expect(run.events).toContain('decrypt');
+    expect(run.events).not.toContain('reserve');
+    expect(run.events).not.toContain('put');
+  });
+
+  it.each(['local_media_unavailable', 'secure_media_processing_unavailable'])(
+    'returns transient local prerequisite %s to waiting without transport',
+    async (artifactError) => {
+      const run = uploadHarness({ artifactError });
+      await expect(run.claimAndRun()).resolves.toBe('waiting');
+      expect(run.current?.uploadJob).toMatchObject({
+        state: 'waiting', attempts: 1, resumeState: 'uploading', lastError: 'local_media_unavailable',
+      });
+      expect(run.accessTokenRequests()).toBe(0);
+      expect(run.events).not.toContain('reserve');
+    },
+  );
+
+  it('converges after a transient local prerequisite becomes available', async () => {
+    const run = uploadHarness({
+      artifactErrors: ['local_media_unavailable', null],
+      finalize: ['missing', 'missing', 'success'],
+    });
+    await expect(run.claimAndRun()).resolves.toBe('waiting');
+    await expect(run.claimAndRun('2026-08-27T00:01:00.000Z')).resolves.toBe('quarantined');
+    expect(run.events.filter((event) => event === 'put')).toHaveLength(1);
+  });
+
+  it('maps an authenticated 401 after claim to retryable authentication_required', async () => {
+    const run = uploadHarness({
+      recoveringFinalizing: true,
+      finalize: [transportFailure('finalize', 'http', 401, 'authentication_required')],
+    });
+    await expect(run.runCurrentClaim()).resolves.toBe('waiting');
+    expect(run.current?.uploadJob).toMatchObject({
+      state: 'waiting', attempts: 2, resumeState: 'finalizing', lastError: 'authentication_required',
+    });
+  });
+
+  it.each(['token', 'finalize'] as const)('maps an explicit %s abort after claim to retryable network', async (stage) => {
+    const aborted = Object.assign(new Error('cancelled without secrets'), { name: 'AbortError' });
+    const run = stage === 'token'
+      ? uploadHarness({ tokenFailure: aborted })
+      : uploadHarness({ recoveringFinalizing: true, finalize: [aborted] });
+    await expect(stage === 'token' ? run.claimAndRun() : run.runCurrentClaim()).resolves.toBe('waiting');
+    expect(run.current?.uploadJob).toMatchObject({
+      state: 'waiting', resumeState: stage === 'token' ? 'uploading' : 'finalizing', lastError: 'network',
+    });
+    expect(JSON.stringify(run.current)).not.toContain('cancelled without secrets');
+  });
+
+  it('does not schedule attempt six when transient local availability fails on claim five', async () => {
+    const run = uploadHarness({ pendingAttempts: 4, artifactError: 'local_media_unavailable' });
+    await expect(run.claimAndRun()).resolves.toBe('needs_user');
+    expect(run.current?.uploadJob).toMatchObject({
+      state: 'needs_user', attempts: 5, lastError: 'retry_limit_reached',
+    });
+  });
+
+  it.each([
+    ['local_media_key_missing', 'local_media_key_missing'],
+    ['local_media_missing', 'local_media_missing'],
+    ['version_mismatch', 'version_mismatch'],
+    ['local_media_corrupt', 'local_media_corrupt'],
+    ['hostile secret token=abc', 'upload_error'],
+  ] as const)(
+    'makes no network call and stores only bounded terminal %s',
+    async (error, lastError) => {
       const run = uploadHarness({ artifactError: error });
       await expect(run.claimAndRun()).resolves.toBe('needs_user');
       expect(run.events).not.toContain('reserve');
       expect(run.events).not.toContain('put');
       expect(run.events).not.toContain('finalize');
       expect(run.accessTokenRequests()).toBe(0);
-      expect(run.current?.uploadJob?.lastError).toMatch(/^(local_media_corrupt|version_mismatch|upload_error)$/);
+      expect(run.current?.uploadJob?.lastError).toBe(lastError);
       expect(JSON.stringify(run.current)).not.toContain('token=abc');
     },
   );
@@ -141,6 +215,58 @@ describe('crash-safe media upload coordinator', () => {
     expect(run.events).not.toContain('put');
     expect(run.events).not.toContain('finalize');
     expect(run.current?.uploadJob?.lastError).toBe('local_media_corrupt');
+  });
+
+  it.each(['token', 'reserve', 'put'] as const)(
+    'bounds a never-settling %s while plaintext is scoped and ignores its late completion',
+    async (stallStage) => {
+      const run = uploadHarness({ stallStage });
+      const pending = run.claimAndRun();
+      await run.deadlines.waitForActive();
+      expect(run.deadlines.activeCount()).toBe(1);
+      run.deadlines.fire();
+      await expect(pending).resolves.toBe('waiting');
+      expect(run.plaintextExits()).toBe(1);
+      expect(run.deadlines.activeCount()).toBe(0);
+      expect(run.current?.uploadJob).toMatchObject({
+        state: 'waiting', attempts: 1, resumeState: 'uploading', lastError: 'network',
+      });
+      expect(run.events.filter((event) => event === 'persist:waiting:1')).toHaveLength(1);
+      const beforeLateCompletion = [...run.events];
+      if (stallStage === 'token') run.rejectStall(new Error('late token secret=never-store'));
+      else run.releaseStall();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(run.events).toEqual(beforeLateCompletion);
+      expect(JSON.stringify(run.current)).not.toContain('late token secret');
+    },
+  );
+
+  it('bounds a never-settling recovery token before finalizing without opening plaintext', async () => {
+    const run = uploadHarness({ recoveringFinalizing: true, stallStage: 'token' });
+    const pending = run.runCurrentClaim();
+    await run.deadlines.waitForActive();
+    run.deadlines.fire();
+    await expect(pending).resolves.toBe('waiting');
+    expect(run.current?.uploadJob).toMatchObject({
+      state: 'waiting', attempts: 2, resumeState: 'finalizing', lastError: 'network',
+    });
+    expect(run.plaintextExits()).toBe(0);
+    expect(run.events).not.toContain('decrypt');
+    const beforeLateCompletion = [...run.events];
+    run.releaseStall();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(run.events).toEqual(beforeLateCompletion);
+  });
+
+  it('clears the plaintext deadline without aborting after successful completion', async () => {
+    const run = uploadHarness();
+    await expect(run.claimAndRun()).resolves.toBe('quarantined');
+    expect(run.deadlines.activeCount()).toBe(0);
+    expect(run.deadlines.controllers).toHaveLength(1);
+    expect(run.deadlines.controllers[0].signal.aborted).toBe(false);
+    expect(run.plaintextExits()).toBe(1);
   });
 
   it('never retransmits when ciphertext or row cleanup crashes after quarantined persistence', async () => {
@@ -251,27 +377,36 @@ describe('stateful remote fault convergence', () => {
   });
 });
 
-type ScriptedFailure = 'success' | 'network' | 'missing' | 'conflict' | MediaTransportFailure;
+type ScriptedFailure = 'success' | 'network' | 'missing' | 'conflict' | MediaTransportFailure | Error;
 
 function uploadHarness(options: Readonly<{
   reserve?: readonly ScriptedFailure[];
   put?: readonly ScriptedFailure[];
   finalize?: readonly ScriptedFailure[];
   artifactError?: string;
+  artifactErrors?: readonly (string | null)[];
   artifactHash?: string;
+  tokenError?: string;
+  tokenFailure?: unknown;
   deleteFailures?: number;
   cleanupFailures?: number;
   recoveringFinalizing?: boolean;
   fifthActiveState?: 'uploading' | 'finalizing';
   ownerSubject?: string | null;
+  pendingAttempts?: number;
+  stallStage?: 'token' | 'reserve' | 'put';
 }> = {}) {
   const events: string[] = [];
   const reserveInputs: unknown[] = [];
   const reserve = [...(options.reserve ?? ['success'])];
   const put = [...(options.put ?? ['success'])];
   const finalize = [...(options.finalize ?? ['success'])];
+  const artifactErrors = [...(options.artifactErrors ?? [])];
   let deleteFailures = options.deleteFailures ?? 0;
   let cleanupFailures = options.cleanupFailures ?? 0;
+  let plaintextExits = 0;
+  const stall = deferred<void>();
+  const deadlines = manualDeadlines();
   const run: {
     current: StoredDraft | null;
     dependencies: MediaUploadCoordinatorDependencies;
@@ -279,18 +414,26 @@ function uploadHarness(options: Readonly<{
     events: string[];
     reserveInputs: unknown[];
     accessTokenRequests(): number;
+    plaintextExits(): number;
+    deadlines: ReturnType<typeof manualDeadlines>;
+    releaseStall(): void;
+    rejectStall(error: unknown): void;
     claim(now?: string): Promise<MediaUploadClaim | null>;
     claimAndRun(now?: string): Promise<string>;
     runCurrentClaim(): Promise<string>;
   } = {
     current: options.fifthActiveState
       ? activeDraft(options.fifthActiveState, 5, 12)
-      : options.recoveringFinalizing ? activeDraft('finalizing', 2, 5) : pendingDraft(),
+      : options.recoveringFinalizing ? activeDraft('finalizing', 2, 5) : pendingDraft(options.pendingAttempts),
     dependencies: undefined as never,
     cas: undefined as never,
     events,
     reserveInputs,
     accessTokenRequests: () => tokenRequests,
+    plaintextExits: () => plaintextExits,
+    deadlines,
+    releaseStall: () => stall.resolve(),
+    rejectStall: (error) => stall.reject(error),
     claim: async () => null,
     claimAndRun: async () => '',
     runCurrentClaim: async () => '',
@@ -313,24 +456,39 @@ function uploadHarness(options: Readonly<{
       return run.cas.compareAndSwapUploadJob(id, revision, current.uploadJob.state, next);
     },
     getOwnerSubject: async () => options.ownerSubject ?? 'owner-12345678',
-    getAccessToken: async () => { tokenRequests += 1; return 'access-secret'; },
+    getAccessToken: async (signal: AbortSignal) => {
+      tokenRequests += 1;
+      if (options.tokenFailure) throw options.tokenFailure;
+      if (options.tokenError) throw new Error(options.tokenError);
+      if (options.stallStage === 'token') await abortableStall(stall.promise, signal);
+      return 'access-secret';
+    },
     withDecryptedReviewedJpeg: async (_input, consume) => {
       events.push('decrypt');
-      if (options.artifactError) throw new Error(options.artifactError);
-      return consume({
-        bytes: new Uint8Array([1, 2, 3, 4]),
-        sha256: options.artifactHash ?? receipt.sanitizedSha256,
-        byteLength: 4,
-      });
+      const artifactError = artifactErrors.length > 0 ? artifactErrors.shift() : options.artifactError;
+      if (artifactError) throw new Error(artifactError);
+      const bytes = new Uint8Array([1, 2, 3, 4]);
+      try {
+        return await consume({
+          bytes,
+          sha256: options.artifactHash ?? receipt.sanitizedSha256,
+          byteLength: 4,
+        });
+      } finally {
+        bytes.fill(0);
+        plaintextExits += 1;
+      }
     },
     reserveMediaUpload: async (input) => {
       events.push('reserve');
+      if (options.stallStage === 'reserve') await abortableStall(stall.promise, input.signal!);
       reserveInputs.push({ sightingId: input.sightingId, mediaId: input.mediaId, receipt: input.receipt });
       scripted(reserve.shift() ?? 'success', 'reserve');
       return capability();
     },
-    putReservedMedia: async () => {
+    putReservedMedia: async (input) => {
       events.push('put');
+      if (options.stallStage === 'put') await abortableStall(stall.promise, input.signal!);
       scripted(put.shift() ?? 'success', 'upload');
     },
     finalizeMediaUpload: async () => {
@@ -354,6 +512,10 @@ function uploadHarness(options: Readonly<{
     },
     now: () => new Date('2026-08-27T00:00:00.000Z'),
     random: () => 0.5,
+    plaintextDeadlineMs: 90_000,
+    createAbortController: () => deadlines.createAbortController(),
+    setDeadlineTimer: (callback, delayMs) => deadlines.set(callback, delayMs),
+    clearDeadlineTimer: (handle) => deadlines.clear(handle),
   };
   run.claim = async (now = '2026-08-27T00:00:00.000Z') =>
     claimMediaUploadAttemptWithDependencies(run.current!.id, new Date(now), 10_000, run.cas);
@@ -380,6 +542,65 @@ function uploadHarness(options: Readonly<{
     return runMediaUploadAttempt(claim, run.dependencies);
   };
   return run;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function abortableStall<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    // Deliberately ignore abort like a broken native/provider promise; the coordinator race must still settle.
+    const onAbort = () => undefined;
+    signal.addEventListener('abort', onAbort, { once: true });
+    void promise.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+}
+
+function manualDeadlines() {
+  type Handle = { callback: () => void; active: boolean };
+  const handles: Handle[] = [];
+  const controllers: AbortController[] = [];
+  return {
+    controllers,
+    createAbortController() {
+      const controller = new AbortController();
+      controllers.push(controller);
+      return controller;
+    },
+    set(callback: () => void, _delayMs: number): Handle {
+      const handle = { callback, active: true };
+      handles.push(handle);
+      return handle;
+    },
+    clear(handle: unknown) {
+      (handle as Handle).active = false;
+    },
+    activeCount: () => handles.filter(({ active }) => active).length,
+    fire() {
+      for (const handle of handles) {
+        if (!handle.active) continue;
+        handle.active = false;
+        handle.callback();
+      }
+    },
+    async waitForActive() {
+      for (let index = 0; index < 20; index += 1) {
+        if (handles.some(({ active }) => active)) return;
+        await Promise.resolve();
+      }
+      throw new Error('deadline_timer_not_started');
+    },
+  };
 }
 
 function statefulRemoteHarness(options: Readonly<{
@@ -459,7 +680,7 @@ function statefulRemoteHarness(options: Readonly<{
   return Object.assign(run, { remote });
 }
 
-function pendingDraft(): StoredDraft {
+function pendingDraft(attempts = 0): StoredDraft {
   return {
     id: 'draft-12345678', notes: 'tabby', risk: 'normal', mediaId: 'media-12345678',
     sightingId: 'sighting-12345678',
@@ -467,7 +688,7 @@ function pendingDraft(): StoredDraft {
     encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
     encryptionVersion: 'aes-256-gcm.v1', receipt, revision: 0,
     uploadJob: {
-      state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null,
+      state: 'upload_pending', attempts, nextAttemptAt: null, lastError: null,
       resumeState: null, attemptStartedAt: null,
     },
   };

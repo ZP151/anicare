@@ -33,11 +33,23 @@ describe('private media upload outcome policy', () => {
   });
 
   it.each([
+    [{ kind: 'authentication_required' } as const, 'authentication_required'],
+    [{ kind: 'local_media_unavailable' } as const, 'local_media_unavailable'],
+  ])('keeps the claimed phase retryable for transient prerequisite %j', (result, lastError) => {
+    expect(nextUploadOutcome(uploading, result, now, () => 0.5)).toEqual({
+      state: 'waiting', attempts: 2, nextAttemptAt: '2026-08-27T00:00:02.000Z',
+      lastError, resumeState: 'uploading', attemptStartedAt: null,
+    });
+  });
+
+  it.each([
     { kind: 'http', status: 400 } as const,
     { kind: 'http', status: 403 } as const,
     { kind: 'hash_mismatch' } as const,
     { kind: 'metadata_mismatch' } as const,
     { kind: 'version_mismatch' } as const,
+    { kind: 'local_media_missing' } as const,
+    { kind: 'local_media_key_missing' } as const,
     { kind: 'local_media_corrupt' } as const,
   ])('requires user action without changing the claimed attempt count for %j', (result) => {
     expect(nextUploadOutcome(uploading, result, now, () => 0.5)).toMatchObject({
@@ -57,6 +69,16 @@ describe('private media upload outcome policy', () => {
       lastError: 'retry_limit_reached',
       resumeState: null,
       attemptStartedAt: null,
+    });
+  });
+
+  it.each([
+    { kind: 'authentication_required' } as const,
+    { kind: 'local_media_unavailable' } as const,
+  ])('stops at the fifth claim for transient prerequisite %j', (result) => {
+    expect(nextUploadOutcome({ ...uploading, attempts: 5 }, result, now, () => 0.5)).toEqual({
+      state: 'needs_user', attempts: 5, nextAttemptAt: null, lastError: 'retry_limit_reached',
+      resumeState: null, attemptStartedAt: null,
     });
   });
 

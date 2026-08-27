@@ -33,11 +33,17 @@ const capability = {
 } as const;
 
 function dependencies(fetch: typeof globalThis.fetch) {
+  const deadlines = manualTransportDeadlines();
   return {
     fetch,
     supabaseUrl,
     now: () => new Date('2026-08-27T00:00:00.000Z'),
     insecureOrigins: [] as const,
+    edgeRequestTimeoutMs: 30_000,
+    uploadRequestTimeoutMs: 60_000,
+    createAbortController: () => deadlines.createAbortController(),
+    setTransportTimer: (callback: () => void, delayMs: number) => deadlines.set(callback, delayMs),
+    clearTransportTimer: (handle: unknown) => deadlines.clear(handle),
   };
 }
 
@@ -78,6 +84,7 @@ describe('private media transport', () => {
           confirmedAtLocal: '2026-08-27T00:00:00.000Z',
         },
       }),
+      signal: expect.anything(),
     });
   });
 
@@ -105,6 +112,7 @@ describe('private media transport', () => {
       body: JSON.stringify({
         sightingId: 'sighting-123456', mediaId: 'media-123456', sha256: 'a'.repeat(64),
       }),
+      signal: expect.anything(),
     });
   });
 
@@ -182,8 +190,59 @@ describe('private media transport', () => {
           'Cache-Control': 'no-cache',
         },
         body: bytes.buffer,
+        signal: expect.anything(),
       },
     );
+  });
+
+  it.each(['reserve', 'upload'] as const)(
+    'aborts and bounds a never-resolving %s fetch without retaining its late result',
+    async (stage) => {
+      const late = deferred<Response>();
+      const run = transportHarness(jest.fn(() => late.promise) as unknown as typeof fetch);
+      const operation = stage === 'upload'
+        ? putReservedMedia({ capability, artifact: { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) } }, run.dependencies)
+        : reserveMediaUpload({
+          sightingId: 'sighting-123456', mediaId: 'media-123456', receipt, accessToken,
+        }, run.dependencies);
+      await run.deadlines.waitForActive();
+      run.deadlines.fire();
+      await expect(operation).rejects.toEqual({
+        stage, kind: 'network', status: null, code: 'network_error',
+      });
+      expect(run.deadlines.activeCount()).toBe(0);
+      expect(run.deadlines.controllers[0].signal.aborted).toBe(true);
+      late.resolve(new Response(stage === 'reserve' ? JSON.stringify(reservationResponse) : null, { status: 200 }));
+      await Promise.resolve();
+      expect(run.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('aborts and bounds a never-resolving Edge response body read', async () => {
+    const body = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => undefined) });
+    const run = transportHarness(jest.fn(async () => new Response(body, { status: 201 })) as unknown as typeof fetch);
+    const operation = reserveMediaUpload({
+      sightingId: 'sighting-123456', mediaId: 'media-123456', receipt, accessToken,
+    }, run.dependencies);
+    await run.deadlines.waitForActive();
+    run.deadlines.fire();
+    await expect(operation).rejects.toEqual({
+      stage: 'reserve', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(run.deadlines.activeCount()).toBe(0);
+  });
+
+  it('clears the transport timer and external abort listener without aborting after success', async () => {
+    const run = transportHarness(jest.fn(async () => new Response(JSON.stringify(reservationResponse), { status: 201 })) as unknown as typeof fetch);
+    const external = new AbortController();
+    const removeListener = jest.spyOn(external.signal, 'removeEventListener');
+    await expect(reserveMediaUpload({
+      sightingId: 'sighting-123456', mediaId: 'media-123456', receipt, accessToken,
+      signal: external.signal,
+    }, run.dependencies)).resolves.toEqual(capability);
+    expect(run.deadlines.activeCount()).toBe(0);
+    expect(run.deadlines.controllers[0].signal.aborted).toBe(false);
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 
   it('fails closed when the supplied artifact is not one exact ArrayBuffer span', async () => {
@@ -224,3 +283,60 @@ describe('private media transport', () => {
     })).toThrow('invalid_media_finalization_response');
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
+function manualTransportDeadlines() {
+  type Handle = { callback: () => void; active: boolean };
+  const handles: Handle[] = [];
+  const controllers: AbortController[] = [];
+  return {
+    controllers,
+    createAbortController() {
+      const controller = new AbortController();
+      controllers.push(controller);
+      return controller;
+    },
+    set(callback: () => void, _delayMs: number): Handle {
+      const handle = { callback, active: true };
+      handles.push(handle);
+      return handle;
+    },
+    clear(handle: unknown) { (handle as Handle).active = false; },
+    activeCount: () => handles.filter(({ active }) => active).length,
+    fire() {
+      for (const handle of handles) {
+        if (!handle.active) continue;
+        handle.active = false;
+        handle.callback();
+      }
+    },
+    async waitForActive() {
+      for (let index = 0; index < 20; index += 1) {
+        if (handles.some(({ active }) => active)) return;
+        await Promise.resolve();
+      }
+      throw new Error('transport_timer_not_started');
+    },
+  };
+}
+
+function transportHarness(fetch: typeof globalThis.fetch) {
+  const deadlines = manualTransportDeadlines();
+  return {
+    fetch,
+    deadlines,
+    dependencies: {
+      ...dependencies(fetch),
+      edgeRequestTimeoutMs: 30_000,
+      uploadRequestTimeoutMs: 60_000,
+      createAbortController: () => deadlines.createAbortController(),
+      setTransportTimer: (callback: () => void, delayMs: number) => deadlines.set(callback, delayMs),
+      clearTransportTimer: (handle: unknown) => deadlines.clear(handle),
+    },
+  };
+}

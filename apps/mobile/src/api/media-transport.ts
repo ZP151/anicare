@@ -46,13 +46,19 @@ export type MediaTransportDependencies = Readonly<{
   supabaseUrl: string;
   now: () => Date;
   insecureOrigins: readonly string[];
+  edgeRequestTimeoutMs: number;
+  uploadRequestTimeoutMs: number;
+  createAbortController(): AbortController;
+  setTransportTimer(callback: () => void, delayMs: number): unknown;
+  clearTransportTimer(handle: unknown): void;
 }>;
 
-export type ReserveMediaUploadInput = ReserveMediaInput & Readonly<{ accessToken: string }>;
-export type FinalizeMediaUploadInput = FinalizeMediaInput & Readonly<{ accessToken: string }>;
+export type ReserveMediaUploadInput = ReserveMediaInput & Readonly<{ accessToken: string; signal?: AbortSignal }>;
+export type FinalizeMediaUploadInput = FinalizeMediaInput & Readonly<{ accessToken: string; signal?: AbortSignal }>;
 export type PutReservedMediaInput = Readonly<{
   capability: ValidatedUploadCapability;
   artifact: Readonly<{ bytes: Uint8Array }>;
+  signal?: AbortSignal;
 }>;
 
 export type MediaFinalizationResponse = Readonly<{
@@ -85,7 +91,56 @@ function strictAccessToken(value: unknown): value is string {
   return typeof value === 'string' && /^[^\s]{1,8192}$/.test(value);
 }
 
-async function readBoundedJson(response: Response): Promise<unknown> {
+function untilAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(new Error('transport_aborted')));
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    void operation.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
+async function withTransportDeadline<T>(
+  stage: MediaTransportFailure['stage'],
+  externalSignal: AbortSignal | undefined,
+  timeoutMs: number,
+  dependencies: MediaTransportDependencies,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS) {
+    throw failure(stage, 'invalid_response', null, 'invalid_response');
+  }
+  const controller = dependencies.createAbortController();
+  const forwardAbort = () => controller.abort();
+  if (externalSignal?.aborted) forwardAbort();
+  else externalSignal?.addEventListener('abort', forwardAbort, { once: true });
+  const timer = dependencies.setTransportTimer(() => controller.abort(), timeoutMs);
+  try {
+    if (controller.signal.aborted) throw new Error('transport_aborted');
+    return await untilAbort(operation(controller.signal), controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw failure(stage, 'network', null, 'network_error');
+    throw error;
+  } finally {
+    dependencies.clearTransportTimer(timer);
+    externalSignal?.removeEventListener('abort', forwardAbort);
+  }
+}
+
+async function readBoundedJson(response: Response, signal: AbortSignal): Promise<unknown> {
   const contentLength = response.headers.get('content-length');
   if (contentLength !== null && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_EDGE_RESPONSE_BYTES)) {
     throw new Error('invalid_response');
@@ -96,7 +151,7 @@ async function readBoundedJson(response: Response): Promise<unknown> {
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
   while (true) {
-    const { value, done } = await reader.read();
+    const { value, done } = await untilAbort(reader.read(), signal);
     if (done) break;
     byteLength += value.byteLength;
     if (byteLength > MAX_EDGE_RESPONSE_BYTES) throw new Error('invalid_response');
@@ -123,29 +178,32 @@ async function postEdgeJson(
   accessToken: string,
   body: Record<string, unknown>,
   dependencies: MediaTransportDependencies,
+  signal: AbortSignal,
 ): Promise<unknown> {
   if (!strictAccessToken(accessToken)) throw failure(stage, 'invalid_response', null, 'invalid_response');
 
   let response: Response;
   try {
-    response = await dependencies.fetch(endpoint, {
+    response = await untilAbort(dependencies.fetch(endpoint, {
       method: 'POST',
       redirect: 'error',
       cache: 'no-store',
+      signal,
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-    });
+    }), signal);
   } catch {
     throw failure(stage, 'network', null, 'network_error');
   }
   if (!response.ok) {
     let code: MediaTransportFailureCode = 'media_transport_failed';
     try {
-      code = edgeErrorCode(await readBoundedJson(response));
+      code = edgeErrorCode(await readBoundedJson(response, signal));
     } catch {
+      if (signal.aborted) throw new Error('transport_aborted');
       // Error payloads are optional. Preserve the HTTP result while retaining no body.
     }
     throw failure(stage, 'http', response.status, code);
@@ -153,8 +211,9 @@ async function postEdgeJson(
   if (response.redirected) throw failure(stage, 'invalid_response', null, 'invalid_response');
 
   try {
-    return await readBoundedJson(response);
+    return await readBoundedJson(response, signal);
   } catch {
+    if (signal.aborted) throw new Error('transport_aborted');
     throw failure(stage, 'invalid_response', null, 'invalid_response');
   }
 }
@@ -186,12 +245,16 @@ export async function reserveMediaUpload(
   } catch {
     throw failure('reserve', 'invalid_response', null, 'invalid_response');
   }
-  const response = await postEdgeJson(
-    'reserve',
-    `${origin}/functions/v1/reserve-media-upload`,
-    input.accessToken,
-    request,
-    dependencies,
+  const response = await withTransportDeadline(
+    'reserve', input.signal, dependencies.edgeRequestTimeoutMs, dependencies,
+    (signal) => postEdgeJson(
+      'reserve',
+      `${origin}/functions/v1/reserve-media-upload`,
+      input.accessToken,
+      request,
+      dependencies,
+      signal,
+    ),
   );
   try {
     return parseMediaReservationResponse(response, {
@@ -226,30 +289,34 @@ export async function putReservedMedia(
     throw failure('upload', 'invalid_response', null, 'invalid_response');
   }
   const bytes = input.artifact.bytes;
-  if (!isExactCapability(input.capability, dependencies.now()) || !(bytes.buffer instanceof ArrayBuffer) ||
-      bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
+  const uploadBody = bytes.buffer;
+  if (!isExactCapability(input.capability, dependencies.now()) || !(uploadBody instanceof ArrayBuffer) ||
+      bytes.byteOffset !== 0 || bytes.byteLength !== uploadBody.byteLength) {
     throw failure('upload', 'invalid_response', null, 'invalid_response');
   }
 
   const uploadUrl = `${origin}/storage/v1/object/upload/sign/media-staging/${input.capability.path}?token=${encodeURIComponent(input.capability.token)}`;
-  let response: Response;
-  try {
-    response = await dependencies.fetch(uploadUrl, {
-      method: 'PUT',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'image/jpeg',
-        'x-upsert': 'false',
-        'Cache-Control': 'no-cache',
-      },
-      body: bytes.buffer,
-    });
-  } catch {
-    throw failure('upload', 'network', null, 'network_error');
-  }
-  if (response.redirected) throw failure('upload', 'invalid_response', null, 'invalid_response');
-  if (!response.ok) throw failure('upload', 'http', response.status, 'storage_upload_failed');
+  await withTransportDeadline('upload', input.signal, dependencies.uploadRequestTimeoutMs, dependencies, async (signal) => {
+    let response: Response;
+    try {
+      response = await untilAbort(dependencies.fetch(uploadUrl, {
+        method: 'PUT',
+        redirect: 'error',
+        cache: 'no-store',
+        signal,
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'x-upsert': 'false',
+          'Cache-Control': 'no-cache',
+        },
+        body: uploadBody,
+      }), signal);
+    } catch {
+      throw failure('upload', 'network', null, 'network_error');
+    }
+    if (response.redirected) throw failure('upload', 'invalid_response', null, 'invalid_response');
+    if (!response.ok) throw failure('upload', 'http', response.status, 'storage_upload_failed');
+  });
 }
 
 export async function finalizeMediaUpload(
@@ -268,12 +335,16 @@ export async function finalizeMediaUpload(
   } catch {
     throw failure('finalize', 'invalid_response', null, 'invalid_response');
   }
-  const response = await postEdgeJson(
-    'finalize',
-    `${origin}/functions/v1/finalize-media-upload`,
-    input.accessToken,
-    request,
-    dependencies,
+  const response = await withTransportDeadline(
+    'finalize', input.signal, dependencies.edgeRequestTimeoutMs, dependencies,
+    (signal) => postEdgeJson(
+      'finalize',
+      `${origin}/functions/v1/finalize-media-upload`,
+      input.accessToken,
+      request,
+      dependencies,
+      signal,
+    ),
   );
   try {
     return parseMediaFinalizationResponse(response);

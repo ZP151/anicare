@@ -11,7 +11,7 @@ export type MediaUploadCoordinatorDependencies = Readonly<{
   getOfflineDraft(id: string): Promise<StoredDraft | null>;
   transitionClaimedMediaUpload(id: string, expectedRevision: number, next: UploadJob): Promise<boolean>;
   getOwnerSubject(): Promise<string | null>;
-  getAccessToken(): Promise<string>;
+  getAccessToken(signal?: AbortSignal): Promise<string>;
   withDecryptedReviewedJpeg<T>(
     input: Readonly<{
       draftId: string;
@@ -27,21 +27,29 @@ export type MediaUploadCoordinatorDependencies = Readonly<{
     mediaId: string;
     receipt: MediaUploadClaim['receipt'];
     accessToken: string;
+    signal?: AbortSignal;
   }>): Promise<ValidatedUploadCapability>;
   putReservedMedia(input: Readonly<{
     capability: ValidatedUploadCapability;
     artifact: Readonly<{ bytes: Uint8Array }>;
+    signal?: AbortSignal;
   }>): Promise<void>;
   finalizeMediaUpload(input: Readonly<{
     sightingId: string;
     mediaId: string;
     sha256: string;
     accessToken: string;
+    signal?: AbortSignal;
   }>): Promise<MediaFinalizationResponse>;
   deleteReviewedMediaReference(reference: string): Promise<void>;
   cleanupQuarantinedMedia(draftId: string, expectedRevision: number): Promise<void>;
   now(): Date;
   random(): number;
+  /** Finite ceiling for token, reservation, and PUT while authenticated plaintext is in scope. */
+  plaintextDeadlineMs: number;
+  createAbortController(): AbortController;
+  setDeadlineTimer(callback: () => void, delayMs: number): unknown;
+  clearDeadlineTimer(handle: unknown): void;
 }>;
 
 type MutableAttempt = {
@@ -100,21 +108,79 @@ function isPutConflict(value: unknown): boolean {
     value.status === 409 && value.code === 'storage_upload_failed';
 }
 
+function isAbortFailure(value: unknown): boolean {
+  return value instanceof Error && value.name === 'AbortError';
+}
+
 function transportOutcome(value: unknown): UploadAttemptResult {
+  if (isAbortFailure(value)) return { kind: 'network' };
   if (!isTransportFailure(value)) return { kind: 'upload_error' };
+  if (value.code === 'authentication_required') return { kind: 'authentication_required' };
   if (value.kind === 'network') return { kind: 'network' };
   if (value.kind === 'http' && value.status !== null) return { kind: 'http', status: value.status };
   return { kind: 'upload_error' };
 }
 
 function localOutcome(value: unknown): UploadAttemptResult {
+  if (isAbortFailure(value)) return { kind: 'network' };
   const message = value instanceof Error ? value.message : '';
+  if (message === 'media_upload_timeout') return { kind: 'network' };
+  if (message === 'authentication_required') return { kind: 'authentication_required' };
+  if (message === 'local_media_unavailable' || message === 'secure_media_processing_unavailable') {
+    return { kind: 'local_media_unavailable' };
+  }
   if (message === 'version_mismatch') return { kind: 'version_mismatch' };
-  if (message === 'local_media_key_missing' || message === 'local_media_corrupt' ||
-      message === 'hash_mismatch' || message === 'metadata_mismatch') {
+  if (message === 'local_media_key_missing') return { kind: 'local_media_key_missing' };
+  if (message === 'local_media_missing') return { kind: 'local_media_missing' };
+  if (message === 'local_media_corrupt' || message === 'hash_mismatch' || message === 'metadata_mismatch') {
     return { kind: 'local_media_corrupt' };
   }
   return { kind: 'upload_error' };
+}
+
+function untilAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(new Error('media_upload_timeout')));
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    void operation.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
+async function withAttemptDeadline<T>(
+  dependencies: MediaUploadCoordinatorDependencies,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  if (!Number.isFinite(dependencies.plaintextDeadlineMs) || dependencies.plaintextDeadlineMs <= 0) {
+    throw new Error('media_upload_timeout');
+  }
+  const controller = dependencies.createAbortController();
+  const timer = dependencies.setDeadlineTimer(() => controller.abort(), dependencies.plaintextDeadlineMs);
+  try {
+    return await untilAbort(operation(controller.signal), controller.signal);
+  } finally {
+    dependencies.clearDeadlineTimer(timer);
+  }
+}
+
+function getBoundedAccessToken(dependencies: MediaUploadCoordinatorDependencies): Promise<string> {
+  return withAttemptDeadline(
+    dependencies,
+    (signal) => untilAbort(dependencies.getAccessToken(signal), signal),
+  );
 }
 
 async function move(
@@ -202,12 +268,14 @@ async function reserve(
   attempt: MutableAttempt,
   accessToken: string,
   dependencies: MediaUploadCoordinatorDependencies,
+  signal?: AbortSignal,
 ): Promise<ValidatedUploadCapability> {
   return dependencies.reserveMediaUpload({
     sightingId: attempt.claim.sightingId,
     mediaId: attempt.claim.mediaId,
     receipt: attempt.claim.receipt,
     accessToken,
+    signal,
   });
 }
 
@@ -224,15 +292,17 @@ async function readAndPut(
     if (artifact.byteLength !== attempt.claim.receipt.byteLength || artifact.bytes.byteLength !== artifact.byteLength) {
       throw new Error('metadata_mismatch');
     }
-    const activeToken = accessToken ?? await dependencies.getAccessToken();
-    const activeCapability = capability ?? await reserve(attempt, activeToken, dependencies);
-    try {
-      await dependencies.putReservedMedia({ capability: activeCapability, artifact });
-      return { putConflict: false, accessToken: activeToken };
-    } catch (error) {
-      if (isPutConflict(error)) return { putConflict: true, accessToken: activeToken };
-      throw error;
-    }
+    return withAttemptDeadline(dependencies, async (signal) => {
+      const activeToken = accessToken ?? await untilAbort(dependencies.getAccessToken(signal), signal);
+      const activeCapability = capability ?? await untilAbort(reserve(attempt, activeToken, dependencies, signal), signal);
+      try {
+        await untilAbort(dependencies.putReservedMedia({ capability: activeCapability, artifact, signal }), signal);
+        return { putConflict: false, accessToken: activeToken };
+      } catch (error) {
+        if (isPutConflict(error)) return { putConflict: true, accessToken: activeToken };
+        throw error;
+      }
+    });
   });
 }
 
@@ -315,7 +385,11 @@ async function runRecovering(
 ): Promise<MediaUploadRunResult> {
   let accessToken: string;
   try {
-    accessToken = await dependencies.getAccessToken();
+    accessToken = await getBoundedAccessToken(dependencies);
+  } catch (error) {
+    return handleFailure(attempt, error, true, dependencies);
+  }
+  try {
     if (!await persistFinalizing(attempt, dependencies)) return 'stale';
     await finalize(attempt, accessToken, dependencies);
     return persistQuarantined(attempt, dependencies);

@@ -16,6 +16,10 @@ import { runMediaUploadAttempt, type MediaUploadRunResult } from './media-upload
 
 const CLAIM_LEASE_MS = 60_000;
 const RECOVERY_BATCH_LIMIT = 4;
+// Reservation credentials have at least five minutes of validated lifetime; plaintext is scoped to at most 90 seconds.
+const PLAINTEXT_DEADLINE_MS = 90_000;
+const EDGE_REQUEST_TIMEOUT_MS = 30_000;
+const STORAGE_UPLOAD_TIMEOUT_MS = 60_000;
 export { developmentInsecureOrigins } from '../api/development-origin';
 
 export type MediaUploadRuntimeResult = MediaUploadRunResult | UploadJobState | 'not_ready';
@@ -119,6 +123,12 @@ const strictTransportDependencies = {
   supabaseUrl,
   now: () => new Date(),
   insecureOrigins: developmentInsecureOrigins(supabaseUrl, process.env.NODE_ENV === 'production'),
+  // Both finite transport bounds remain well inside the validated five-minute credential safety window.
+  edgeRequestTimeoutMs: EDGE_REQUEST_TIMEOUT_MS,
+  uploadRequestTimeoutMs: STORAGE_UPLOAD_TIMEOUT_MS,
+  createAbortController: () => new AbortController(),
+  setTransportTimer: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
+  clearTransportTimer: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
 const nativeRuntime = createMediaUploadRuntime({
@@ -144,6 +154,10 @@ const nativeRuntime = createMediaUploadRuntime({
     cleanupQuarantinedMedia,
     now: () => new Date(),
     random: Math.random,
+    plaintextDeadlineMs: PLAINTEXT_DEADLINE_MS,
+    createAbortController: () => new AbortController(),
+    setDeadlineTimer: (callback, delayMs) => setTimeout(callback, delayMs),
+    clearDeadlineTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
   }),
   deleteCiphertext: deleteReviewedMediaReference,
   cleanupQuarantined: cleanupQuarantinedMedia,

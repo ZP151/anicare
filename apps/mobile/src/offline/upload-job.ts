@@ -23,14 +23,17 @@ export type UploadAttemptResult =
   | Readonly<{ kind: 'network' }>
   | Readonly<{ kind: 'http'; status: number }>
   | Readonly<{
-      kind: 'hash_mismatch' | 'metadata_mismatch' | 'version_mismatch' | 'local_media_corrupt' | 'upload_error';
+      kind: 'authentication_required' | 'local_media_unavailable' | 'local_media_missing' |
+        'local_media_key_missing' | 'hash_mismatch' | 'metadata_mismatch' | 'version_mismatch' |
+        'local_media_corrupt' | 'upload_error';
     }>
   | Readonly<{ kind: 'quarantined' }>;
 
 const activeStates = new Set<UploadJobState>(['uploading', 'finalizing']);
 const resultKinds = new Set<UploadAttemptResult['kind']>([
   'network', 'http', 'hash_mismatch', 'metadata_mismatch', 'version_mismatch',
-  'local_media_corrupt', 'upload_error', 'quarantined',
+  'authentication_required', 'local_media_unavailable', 'local_media_missing',
+  'local_media_key_missing', 'local_media_corrupt', 'upload_error', 'quarantined',
 ]);
 
 function invalidAttempt(): UploadJob {
@@ -63,7 +66,8 @@ export function nextUploadOutcome(
     };
   }
 
-  const retryable = result.kind === 'network' ||
+  const retryable = result.kind === 'network' || result.kind === 'authentication_required' ||
+    result.kind === 'local_media_unavailable' ||
     (result.kind === 'http' && (result.status === 408 || result.status === 429 ||
       (result.status >= 500 && result.status <= 599)));
   if (!retryable) {
