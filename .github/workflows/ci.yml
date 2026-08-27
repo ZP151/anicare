@@ -37,9 +37,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-        # No supported CLI version is recorded in this repository. Do not
-        # substitute an invented pin; selecting and verifying one is a release gate.
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.84.2
       - run: supabase start
       - run: supabase test db
       - run: supabase db lint --level warning

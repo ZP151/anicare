@@ -64,9 +64,9 @@ Exit gate: critical moderation SLA drill under 24 hours; complete audit trace fo
 
 Additional blocking gates: establish the Singapore company and DPO, publish
 privacy notices/terms/community rules, complete DPIA and transfer assessment,
-finish app-store signing and rehearse incident operations. A CI Supabase CLI
-version must be reproducibly pinned after it is verified; no supported version
-is recorded in this repository today.
+finish app-store signing and rehearse incident operations. CI pins Supabase CLI
+to 2.84.2, but migration, pgTAP, Deno/Edge and private Storage compatibility
+must still pass in mandatory CI and a local Docker/Supabase runtime.
 
 ## Prioritised next backlog
 

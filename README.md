@@ -99,6 +99,6 @@ completed and evidenced:
 - Provision a Singapore company and DPO; publish privacy notices, terms and
   community rules; complete DPIA and transfer assessment; finish app-store
   signing, incident operations and the required operational drills.
-- Select and verify a reproducible Supabase CLI version for CI. The repository
-  has no supported CLI version pin to justify today, so CI retains its mandatory
-  database-contract job without inventing one.
+- CI pins Supabase CLI to 2.84.2 and its database-contract job is mandatory;
+  migration, pgTAP, Deno/Edge and private Storage compatibility must still pass
+  in CI and in a local Docker/Supabase runtime before pilot readiness.
