@@ -30,4 +30,12 @@ describe('redaction render coordinator', () => {
     source.push({ id: 'later', rect: { x: 0.2, y: 0.2, width: 0.1, height: 0.1 } });
     expect(operation.masks.map(({ id }) => id)).toEqual(['mask']);
   });
+
+  it('cancels in-flight work so callbacks cannot update an abandoned screen', () => {
+    const coordinator = createRenderCoordinator();
+    const operation = coordinator.beginSelection();
+    coordinator.cancel();
+    expect(coordinator.isCurrent(operation.token)).toBe(false);
+    expect(coordinator.finish(operation.token)).toBe(false);
+  });
 });

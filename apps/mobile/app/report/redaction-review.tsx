@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   type LayoutChangeEvent,
@@ -20,6 +20,7 @@ import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
 import { normalizePreviewTap } from '../../src/media/redaction-geometry';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
 import { createRenderCoordinator } from '../../src/media/render-coordinator';
+import { createProcessorCacheLifecycle } from '../../src/media/processor-cache-lifecycle';
 import {
   commitReviewedDraft,
   resumeReviewedDraftCommit,
@@ -54,14 +55,27 @@ export default function RedactionReviewScreen() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, setPending] = useState<ReviewedMediaJournal | null>(null);
-  const processorCacheUris = useRef<string[]>([]);
   const renderCoordinator = useRef(createRenderCoordinator()).current;
+  const cacheLifecycle = useRef(createProcessorCacheLifecycle(cleanupProcessorCacheUris)).current;
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      renderCoordinator.cancel();
+      void cacheLifecycle.requestCleanup();
+    };
+  }, [cacheLifecycle, renderCoordinator]);
 
   async function choosePhoto() {
     const operation = renderCoordinator.beginSelection();
+    cacheLifecycle.beginAsyncWork();
     setBusy(true);
     setStatus('Preparing a private review copy…');
     try {
+      await cacheLifecycle.startSelection(operation.token);
+      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       const selected = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
@@ -70,22 +84,23 @@ export default function RedactionReviewScreen() {
       });
       if (selected.canceled || !selected.assets[0]?.uri || !renderCoordinator.isCurrent(operation.token)) return;
       const sourceUri = selected.assets[0].uri;
-      processorCacheUris.current = [];
       const prepared = await prepareCanonical(sourceUri);
-      processorCacheUris.current.push(prepared.uri);
+      await cacheLifecycle.adopt(operation.token, prepared.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
       setCanonical(prepared);
       const rendered = await renderOpaqueMasks({ canonical: prepared, masks: [] });
-      processorCacheUris.current.push(rendered.uri);
+      await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
       setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
       setStatus('Tap anywhere on the image to burn in an opaque mask. Review every pixel before confirming.');
     } catch (error) {
-      if (!renderCoordinator.isCurrent(operation.token)) return;
+      await cacheLifecycle.release(operation.token);
+      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       setStatus(error instanceof Error && error.message === 'secure_media_processing_unavailable'
         ? 'Secure media processing is unavailable on this device.'
         : 'The photo could not be prepared safely. Nothing was staged.');
     } finally {
+      await cacheLifecycle.endAsyncWork();
       if (renderCoordinator.finish(operation.token)) setBusy(false);
     }
   }
@@ -103,12 +118,14 @@ export default function RedactionReviewScreen() {
     if (!tap) return;
     const operation = renderCoordinator.beginMutation([...review.masks, maskAt(tap.x, tap.y)]);
     if (!operation) return;
+    cacheLifecycle.startMutation(operation.token);
+    cacheLifecycle.beginAsyncWork();
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
     setBusy(true);
     setStatus('Rendering the updated opaque masks…');
     try {
       const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
-      processorCacheUris.current.push(rendered.uri);
+      await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
       setReview((current) => reduceMediaReview(
         { ...current, masks: operation.masks },
@@ -116,9 +133,11 @@ export default function RedactionReviewScreen() {
       ));
       setStatus('Mask applied to final pixels. Review again before confirming.');
     } catch {
-      if (!renderCoordinator.isCurrent(operation.token)) return;
+      await cacheLifecycle.release(operation.token);
+      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       setStatus('The mask could not be rendered safely. Confirmation remains disabled.');
     } finally {
+      await cacheLifecycle.endAsyncWork();
       if (renderCoordinator.finish(operation.token)) setBusy(false);
     }
   }
@@ -127,11 +146,13 @@ export default function RedactionReviewScreen() {
     if (!canonical || busy || pending) return;
     const operation = renderCoordinator.beginMutation([]);
     if (!operation) return;
+    cacheLifecycle.startMutation(operation.token);
+    cacheLifecycle.beginAsyncWork();
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
     setBusy(true);
     try {
       const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
-      processorCacheUris.current.push(rendered.uri);
+      await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
       setReview((current) => reduceMediaReview(
         { ...current, masks: operation.masks },
@@ -139,9 +160,11 @@ export default function RedactionReviewScreen() {
       ));
       setStatus('Masks cleared. Review the newly rendered pixels before confirming.');
     } catch {
-      if (!renderCoordinator.isCurrent(operation.token)) return;
+      await cacheLifecycle.release(operation.token);
+      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       setStatus('The clean review copy could not be rendered. Confirmation remains disabled.');
     } finally {
+      await cacheLifecycle.endAsyncWork();
       if (renderCoordinator.finish(operation.token)) setBusy(false);
     }
   }
@@ -157,6 +180,7 @@ export default function RedactionReviewScreen() {
 
     setBusy(true);
     setStatus('Encrypting the reviewed copy on this device…');
+    cacheLifecycle.beginAsyncWork();
     try {
       const dependencies: ReviewedDraftCommitDependencies = {
         createCommitId: () => `commit-${Crypto.randomUUID()}`,
@@ -165,38 +189,45 @@ export default function RedactionReviewScreen() {
         commitMedia: persistReviewedMedia,
         finalizeJournal: async (journal) => { await saveJournal(journal, 'upload_pending', null); },
         markNeedsUser: async (journal, error) => { await saveJournal(journal, 'needs_user', error); },
-        cleanupCaches: cleanupProcessorCacheUris,
+        cleanupCaches: (uris) => cacheLifecycle.cleanupOwned(uris),
       };
       const result = pending
         ? await resumeReviewedDraftCommit(pending, {
             review: confirmed,
-            processorCacheUris: processorCacheUris.current,
+            processorCacheUris: cacheLifecycle.ownedUris(),
           }, dependencies)
         : await commitReviewedDraft({
             draftId,
             mediaId,
             review: confirmed,
-            processorCacheUris: processorCacheUris.current,
+            processorCacheUris: cacheLifecycle.ownedUris(),
           }, dependencies);
+      if (!mountedRef.current) return;
       if (result.status === 'local_persisting') {
         setPending(result.journal);
         setStatus('Private persistence is pending. Retry safely with the same immutable encrypted reference.');
         return;
       }
       if (result.status === 'needs_user') {
+        await cacheLifecycle.abandonAll();
         setPending(null);
         setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
         setStatus('The encrypted copy could not be authenticated. Select and review the photo again.');
         return;
       }
+      await cacheLifecycle.abandonAll();
       setPending(null);
       setStatus('Encrypted reviewed media saved privately. It has not been uploaded or published.');
       router.back();
     } catch {
-      if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
-      setStatus('Private encrypted storage failed. The media was not staged.');
+      await cacheLifecycle.abandonAll();
+      if (mountedRef.current) {
+        if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
+        setStatus('Private encrypted storage failed. The media was not staged.');
+      }
     } finally {
-      setBusy(false);
+      await cacheLifecycle.endAsyncWork();
+      if (mountedRef.current) setBusy(false);
     }
   }
 

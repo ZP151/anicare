@@ -30,5 +30,9 @@ export function createRenderCoordinator() {
       inFlight = false;
       return true;
     },
+    cancel(): void {
+      generation += 1;
+      inFlight = false;
+    },
   };
 }
