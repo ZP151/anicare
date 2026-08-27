@@ -25,6 +25,11 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
   authenticated artifact reader and reserve-to-signed-upload-to-finalize wiring
   are intentionally absent; this is a blocking release gate. Local migration,
   pgTAP, Deno/Edge and Storage runtime execution has not run in this workspace.
+- Account erasure now records legacy `public-media` and `private-evidence`
+  objects in a private, service-only deletion outbox before uploader ownership
+  is cleared. The scheduler validates both bucket and relative path, treats a
+  missing object as success, and retains transient failures for bounded retry.
+  Real Storage integration remains a release gate.
 - Narrow public feed/report/block and authenticated audited-admin contracts are
   implemented. Database runtime and two-session concurrency checks remain
   blocking gates.
