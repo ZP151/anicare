@@ -27,13 +27,19 @@ export type FinalizeMediaInput = Readonly<{
   sha256: string;
 }>;
 
-export type MediaReservationResponse = Readonly<{
+export type ValidatedUploadCapability = Readonly<{
   jobId: string;
-  mediaId: string;
-  reservationExpiresAt: string;
+  path: string;
+  token: string;
   /** Conservative lower bound captured before Storage minted the token. */
-  uploadCredentialUsableUntil: string;
-  upload: Readonly<{ signedUrl: string; token: string }>;
+  usableUntil: string;
+}>;
+
+export type MediaReservationValidationOptions = Readonly<{
+  expectedMediaId: string;
+  supabaseUrl: string;
+  now: Date;
+  insecureOrigins: readonly string[];
 }>;
 
 /**
@@ -95,16 +101,6 @@ function canonicalizeResponseTimestamp(value: unknown): string | null {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 }
 
-function validSignedUpload(value: unknown): value is Readonly<{ signedUrl: string; token: string }> {
-  if (!hasExactKeys(value, ['signedUrl', 'token']) || typeof value.signedUrl !== 'string' ||
-      typeof value.token !== 'string' || value.token.length < 1 || value.token.length > 8192) return false;
-  try {
-    return new URL(value.signedUrl).protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
 function validDetectorVersions(value: unknown): value is Readonly<{ cats: 'unavailable'; people: 'unavailable'; plates: 'unavailable' }> {
   return hasExactKeys(value, ['cats', 'people', 'plates']) &&
     value.cats === 'unavailable' && value.people === 'unavailable' && value.plates === 'unavailable';
@@ -155,24 +151,89 @@ export function buildFinalizeMediaRequest(input: FinalizeMediaInput): FinalizeMe
  * This maps a narrow response contract only. It intentionally does not start
  * transport: Task 2 has no native authenticated reviewed-artifact reader yet.
  */
-export function parseMediaReservationResponse(value: unknown): MediaReservationResponse {
+function parseOriginOnlyUrl(value: unknown): URL | null {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 2048) return null;
+  try {
+    const url = new URL(value);
+    return (value === url.origin || value === `${url.origin}/`) &&
+      url.username === '' && url.password === '' && url.search === '' && url.hash === '' && url.pathname === '/'
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseTrustedSupabaseOrigin(supabaseUrl: string, insecureOrigins: readonly string[]): string {
+  const configured = parseOriginOnlyUrl(supabaseUrl);
+  if (!configured) throw new Error('invalid_media_reservation_response');
+  if (configured.protocol === 'https:') return configured.origin;
+  if (configured.protocol !== 'http:') throw new Error('invalid_media_reservation_response');
+
+  const isAllowListed = insecureOrigins.some((entry) => parseOriginOnlyUrl(entry)?.origin === configured.origin);
+  if (!isAllowListed) throw new Error('invalid_media_reservation_response');
+  return configured.origin;
+}
+
+function validUploadToken(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 1 && value.length <= 8192 && !/[\r\n]/.test(value);
+}
+
+function validSignedUpload(
+  value: unknown,
+  trustedOrigin: string,
+  jobId: string,
+): value is Readonly<{ signedUrl: string; token: string }> {
+  if (!hasExactKeys(value, ['signedUrl', 'token']) || typeof value.signedUrl !== 'string' || !validUploadToken(value.token)) {
+    return false;
+  }
+  const expectedPath = `/storage/v1/object/upload/sign/media-staging/jobs/${jobId}.jpg`;
+  const expectedUrl = `${trustedOrigin}${expectedPath}?token=${encodeURIComponent(value.token)}`;
+  try {
+    const signedUrl = new URL(value.signedUrl);
+    return signedUrl.origin === trustedOrigin && signedUrl.username === '' && signedUrl.password === '' &&
+      signedUrl.hash === '' && signedUrl.pathname === expectedPath && signedUrl.search === `?token=${encodeURIComponent(value.token)}` &&
+      value.signedUrl === expectedUrl;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_RESERVATION_WINDOW_MS = 15 * 60 * 1000;
+const UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
+const MAX_UPLOAD_CREDENTIAL_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+export function parseMediaReservationResponse(
+  value: unknown,
+  options: MediaReservationValidationOptions,
+): ValidatedUploadCapability {
   const reservationExpiresAt = isPlainObject(value) ? canonicalizeResponseTimestamp(value.reservationExpiresAt) : null;
   const uploadCredentialUsableUntil = isPlainObject(value)
     ? canonicalizeResponseTimestamp(value.uploadCredentialUsableUntil)
     : null;
+  let trustedOrigin: string;
+  try {
+    trustedOrigin = parseTrustedSupabaseOrigin(options.supabaseUrl, options.insecureOrigins);
+  } catch {
+    throw new Error('invalid_media_reservation_response');
+  }
+  const now = options.now instanceof Date ? options.now.getTime() : Number.NaN;
+  const reservationExpiresAtMs = reservationExpiresAt === null ? Number.NaN : Date.parse(reservationExpiresAt);
+  const credentialUsableUntilMs = uploadCredentialUsableUntil === null ? Number.NaN : Date.parse(uploadCredentialUsableUntil);
   if (!hasExactKeys(value, [
     'jobId', 'mediaId', 'reservationExpiresAt', 'uploadCredentialUsableUntil', 'upload',
-  ]) || !isStableMediaId(value.jobId) || !isStableMediaId(value.mediaId) ||
+  ]) || !isStableMediaId(value.jobId) || !isStableMediaId(value.mediaId) || value.mediaId !== options.expectedMediaId ||
       reservationExpiresAt === null || uploadCredentialUsableUntil === null ||
-      Date.parse(uploadCredentialUsableUntil) <= Date.parse(reservationExpiresAt) ||
-      !validSignedUpload(value.upload)) {
+      !Number.isFinite(now) || reservationExpiresAtMs <= now || reservationExpiresAtMs > now + MAX_RESERVATION_WINDOW_MS ||
+      credentialUsableUntilMs <= now + UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS ||
+      credentialUsableUntilMs > now + MAX_UPLOAD_CREDENTIAL_WINDOW_MS ||
+      !validSignedUpload(value.upload, trustedOrigin, value.jobId)) {
     throw new Error('invalid_media_reservation_response');
   }
   return {
     jobId: value.jobId as string,
-    mediaId: value.mediaId as string,
-    reservationExpiresAt,
-    uploadCredentialUsableUntil,
-    upload: value.upload as Readonly<{ signedUrl: string; token: string }>,
+    path: `jobs/${value.jobId}.jpg`,
+    token: (value.upload as Readonly<{ signedUrl: string; token: string }>).token,
+    usableUntil: uploadCredentialUsableUntil,
   };
 }
