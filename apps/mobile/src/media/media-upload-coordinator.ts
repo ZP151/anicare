@@ -458,13 +458,15 @@ async function runInternal(
   } catch {
     throw new Error('media_upload_state_unavailable');
   }
-  if (!current || current.ownerSubject !== await dependencies.getOwnerSubject()) return 'stale';
+  if (!current) return 'stale';
   if (current.uploadJob?.state === 'quarantined' && current.encryptedReviewedRef) {
+    if (dependencies.cancellationSignal?.aborted || current.ownerSubject !== await dependencies.getOwnerSubject()) return 'stale';
     return cleanupTerminal(current.id, current.encryptedReviewedRef, current.revision ?? claim.revision, claim.ownerSubject, dependencies);
   }
   if (!currentMatchesClaim(current, claim)) return 'stale';
   const attempt: MutableAttempt = { claim, revision: claim.revision, job: claim.uploadJob };
-  if (dependencies.cancellationSignal?.aborted) {
+  const liveOwner = await dependencies.getOwnerSubject();
+  if (dependencies.cancellationSignal?.aborted || liveOwner !== claim.ownerSubject) {
     return persistOutcome(attempt, { kind: 'network' }, dependencies);
   }
   return claim.recovering ? runRecovering(attempt, dependencies) : runFresh(attempt, dependencies);

@@ -503,3 +503,15 @@ claimed fifth-attempt cancellation, coordinator terminal owner-await and
 post-delete cancellation, plus native terminal owner-await and post-delete
 row-retention paths. Each confirms no late destructive state effect and the
 durable terminal/waiting row remains recoverable.
+
+## Whole-branch fix — Batch I (post-claim owner race)
+
+RED: the new exact-claim owner-switch regressions returned `stale`, leaving the
+active lease. GREEN: `pnpm --filter @animalhelper/mobile test --
+media-upload-coordinator.test.ts` passed 1 suite / 50 tests after reordering
+the coordinator checks.
+
+An active row must first exactly match the owner/revision/source claim before
+an owner switch may settle it. A matching A claim observed under B becomes
+owner-bound waiting (uploading or finalizing resume state) with no transport;
+a stale claim never mutates. Quarantined cleanup retains its live-owner gate.

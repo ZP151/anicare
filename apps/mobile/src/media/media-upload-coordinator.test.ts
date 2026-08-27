@@ -24,9 +24,19 @@ const receipt = {
 };
 
 describe('crash-safe media upload coordinator', () => {
-  it('rejects a stale account before decrypting a previously claimed artifact', async () => {
+  it.each(['uploading', 'finalizing'] as const)('settles an exact %s A claim when live ownership changed to B', async (state) => {
+    const run = uploadHarness({ ownerSubject: 'owner-87654321', fifthActiveState: undefined });
+    run.current = { ...run.current!, uploadJob: { ...run.current!.uploadJob!, state, attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: '2026-08-27T00:00:00.000Z' } };
+    await expect(run.runCurrentClaim()).resolves.toBe('waiting');
+    expect(run.current?.uploadJob).toMatchObject({ state: 'waiting', resumeState: state, attempts: 1 });
+    expect(run.events).not.toContain('decrypt');
+    expect(run.accessTokenRequests()).toBe(0);
+  });
+
+  it('does not mutate a stale claim when live ownership changed to B', async () => {
     const run = uploadHarness({ ownerSubject: 'owner-87654321' });
     const claim = await run.claim();
+    run.current = { ...run.current!, revision: run.current!.revision! + 1 };
     const before = run.current;
     await expect(runMediaUploadAttempt(claim!, run.dependencies)).resolves.toBe('stale');
     expect(run.current).toBe(before);
