@@ -37,17 +37,21 @@ export type MediaReservationResponse = Readonly<{
 }>;
 
 /**
- * This is intentionally an interface only. Task 2 persists an AHM1 encrypted
- * envelope and exposes no authenticated native read API, so no URI/File-based
- * upload shortcut is permitted until a reader implements this boundary.
+ * Authenticated plaintext is scoped to the callback. Callers must not retain
+ * the bytes after the returned promise settles.
  */
 export interface ReviewedArtifactReader {
-  readDecryptedReviewedJpeg(input: Readonly<{
+  withDecryptedReviewedJpeg<T>(input: Readonly<{
     draftId: string;
     mediaId: string;
     encryptedReviewedRef: string;
+    encryptionVersion: 'aes-256-gcm.v1';
     receipt: ReviewReceipt;
-  }>): Promise<Readonly<{ bytes: Uint8Array; sha256: string; byteLength: number }>>;
+  }>, consume: (artifact: Readonly<{
+    bytes: Uint8Array;
+    sha256: string;
+    byteLength: number;
+  }>) => Promise<T> | T): Promise<T>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

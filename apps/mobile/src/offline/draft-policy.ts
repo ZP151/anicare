@@ -10,6 +10,7 @@ export type StoredDraft = {
   mediaId?: string;
   sightingId?: string;
   encryptedReviewedRef?: string;
+  encryptionVersion?: 'aes-256-gcm.v1';
   receipt?: ReviewReceipt;
   uploadJob?: UploadJob;
 };
@@ -69,11 +70,11 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
   };
 
   const hasAnyMedia = input.mediaId !== undefined || input.encryptedReviewedRef !== undefined ||
-    input.receipt !== undefined || input.uploadJob !== undefined || input.sightingId !== undefined;
+    input.encryptionVersion !== undefined || input.receipt !== undefined || input.uploadJob !== undefined || input.sightingId !== undefined;
   if (!hasAnyMedia) return draft;
 
   if (!stableId(input.mediaId) || !isReviewedMediaReference(input.encryptedReviewedRef, input.mediaId) ||
-      !validReceipt(input.receipt)) {
+      input.encryptionVersion !== 'aes-256-gcm.v1' || !validReceipt(input.receipt)) {
     throw new Error('invalid_reviewed_media_draft');
   }
   const uploadJob = sanitizeUploadJob(input.uploadJob) ?? {
@@ -86,6 +87,7 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     ...draft,
     mediaId: input.mediaId,
     encryptedReviewedRef: input.encryptedReviewedRef,
+    encryptionVersion: input.encryptionVersion,
     receipt: input.receipt,
     uploadJob,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),

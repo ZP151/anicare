@@ -39,6 +39,7 @@ describe('offline draft privacy', () => {
       risk: 'normal',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -57,6 +58,7 @@ describe('offline draft privacy', () => {
     })).toMatchObject({
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       sightingId: 'sighting-12345678',
       uploadJob: { state: 'waiting', attempts: 2, lastError: 'network' },
     });
@@ -67,6 +69,24 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'file:///raw.jpg',
+    })).toThrow('invalid_reviewed_media_draft');
+  });
+
+  it.each([undefined, 'aes-256-gcm.v2'])('rejects missing or unknown reviewed-media encryption version %s', (encryptionVersion) => {
+    expect(() => sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion,
+      receipt: {
+        sanitizedSha256: 'a'.repeat(64),
+        recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100,
+        height: 100,
+        byteLength: 100,
+        confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      },
     })).toThrow('invalid_reviewed_media_draft');
   });
 
@@ -88,6 +108,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-87654321.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt,
     })).toThrow('invalid_reviewed_media_draft');
   });
@@ -102,6 +123,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef,
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -123,6 +145,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -141,6 +164,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -159,6 +183,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -177,6 +202,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',
@@ -191,6 +217,7 @@ describe('offline draft privacy', () => {
       canonicalUri: 'file:///cache/canonical.jpg',
     })).toMatchObject({
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       uploadJob: { state: 'local_persisting', attempts: 0 },
     });
   });
@@ -200,6 +227,7 @@ describe('offline draft privacy', () => {
       id: 'draft-12345678',
       mediaId: 'media-12345678',
       encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryptionVersion: 'aes-256-gcm.v1',
       receipt: {
         sanitizedSha256: 'a'.repeat(64),
         recipeVersion: 'jpeg-srgb-2048-q88.v1',

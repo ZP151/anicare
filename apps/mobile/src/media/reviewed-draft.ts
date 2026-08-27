@@ -9,6 +9,7 @@ export type ReviewedMediaJournal = Readonly<{
   draftId: string;
   mediaId: string;
   encryptedReviewedRef: string;
+  encryptionVersion: 'aes-256-gcm.v1';
   receipt: ReviewReceipt;
 }>;
 
@@ -30,15 +31,19 @@ export type ReviewedDraftCommitDependencies = Readonly<{
   inspectArtifact(journal: ReviewedMediaJournal): Promise<ReviewedMediaArtifactStatus>;
   commitMedia(input: ReviewedDraftCommitInput & { intendedEncryptedRef: string }): Promise<unknown>;
   finalizeJournal(journal: ReviewedMediaJournal): Promise<void>;
-  markNeedsUser(journal: ReviewedMediaJournal, error: 'local_media_missing' | 'local_media_corrupt'): Promise<void>;
+  markNeedsUser(journal: ReviewedMediaJournal, error: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch'): Promise<void>;
   cleanupCaches(uris: readonly string[]): Promise<void>;
 }>;
 
 type RecoveryDependencies = Pick<ReviewedDraftCommitDependencies, 'inspectArtifact' | 'finalizeJournal' | 'markNeedsUser'>;
 
-function validJournal(journal: ReviewedMediaJournal): boolean {
+function validJournalIdentity(journal: ReviewedMediaJournal): boolean {
   return isStableMediaId(journal.draftId) && isStableMediaId(journal.mediaId) &&
     isReviewedMediaReference(journal.encryptedReviewedRef, journal.mediaId) && !!journal.receipt;
+}
+
+function validJournal(journal: ReviewedMediaJournal): boolean {
+  return validJournalIdentity(journal) && journal.encryptionVersion === 'aes-256-gcm.v1';
 }
 
 function sameReceipt(left: ReviewReceipt | null, right: ReviewReceipt): boolean {
@@ -53,15 +58,20 @@ function sameReceipt(left: ReviewReceipt | null, right: ReviewReceipt): boolean 
 export function decideLocalMediaRecovery(
   state: UploadJobState,
   artifact: ReviewedMediaArtifactStatus,
-): 'finalize' | 'needs_reselection' | 'needs_user_corrupt' | 'retry_later' | 'none' {
+): 'finalize' | 'needs_reselection' | 'needs_user_corrupt' | 'needs_user_version' | 'retry_later' | 'none' {
   if (state !== 'local_persisting') return 'none';
   if (artifact === 'valid') return 'finalize';
   if (artifact === 'retryable_unavailable') return 'retry_later';
+  if (artifact === 'version_mismatch') return 'needs_user_version';
   return artifact === 'absent' ? 'needs_reselection' : 'needs_user_corrupt';
 }
 
 export async function recoverReviewedDraft(journal: ReviewedMediaJournal, dependencies: RecoveryDependencies): Promise<ReviewedDraftResult> {
-  if (!validJournal(journal)) throw new Error('invalid_reviewed_media_journal');
+  if (!validJournalIdentity(journal)) throw new Error('invalid_reviewed_media_journal');
+  if (!validJournal(journal)) {
+    await dependencies.markNeedsUser(journal, 'version_mismatch');
+    return { status: 'needs_user', journal };
+  }
   const artifact = await dependencies.inspectArtifact(journal);
   const decision = decideLocalMediaRecovery('local_persisting', artifact);
   if (decision === 'retry_later') return { status: 'local_persisting', journal };
@@ -73,7 +83,9 @@ export async function recoverReviewedDraft(journal: ReviewedMediaJournal, depend
       return { status: 'local_persisting', journal };
     }
   }
-  const error = decision === 'needs_reselection' ? 'local_media_missing' : 'local_media_corrupt';
+  const error = decision === 'needs_reselection' ? 'local_media_missing'
+    : decision === 'needs_user_version' ? 'version_mismatch'
+      : 'local_media_corrupt';
   await dependencies.markNeedsUser(journal, error);
   return { status: 'needs_user', journal };
 }
@@ -83,8 +95,12 @@ export async function resumeReviewedDraftCommit(
   input: Pick<ReviewedDraftCommitInput, 'review' | 'processorCacheUris'>,
   dependencies: ReviewedDraftCommitDependencies,
 ): Promise<ReviewedDraftResult> {
-  if (!validJournal(journal) || !canStageMedia(input.review) || !sameReceipt(input.review.receipt, journal.receipt)) {
+  if (!validJournalIdentity(journal) || !canStageMedia(input.review) || !sameReceipt(input.review.receipt, journal.receipt)) {
     throw new Error('media_review_required');
+  }
+  if (!validJournal(journal)) {
+    await dependencies.markNeedsUser(journal, 'version_mismatch');
+    return { status: 'needs_user', journal };
   }
   let artifact: ReviewedMediaArtifactStatus;
   try {
@@ -112,7 +128,9 @@ export async function resumeReviewedDraftCommit(
   }
   if (artifact === 'retryable_unavailable') return { status: 'local_persisting', journal };
   if (artifact !== 'valid') {
-    await dependencies.markNeedsUser(journal, artifact === 'absent' ? 'local_media_missing' : 'local_media_corrupt');
+    await dependencies.markNeedsUser(journal, artifact === 'absent' ? 'local_media_missing'
+      : artifact === 'version_mismatch' ? 'version_mismatch'
+        : 'local_media_corrupt');
     return { status: 'needs_user', journal };
   }
   try {
@@ -138,6 +156,7 @@ export async function commitReviewedDraft(
     draftId: input.draftId,
     mediaId: input.mediaId,
     encryptedReviewedRef: createReviewedMediaReference(input.mediaId, dependencies.createCommitId()),
+    encryptionVersion: 'aes-256-gcm.v1',
     receipt: input.review.receipt,
   };
   await dependencies.prepareJournal(journal);
@@ -154,11 +173,13 @@ export async function recoverPendingReviewedDrafts(
   await dependencies.cleanupStaleProcessorCaches().catch(() => undefined);
   try {
     for (const draft of drafts) {
-      if (draft.uploadJob?.state !== 'local_persisting' || !draft.mediaId || !draft.encryptedReviewedRef || !draft.receipt) continue;
+      if (draft.uploadJob?.state !== 'local_persisting' || !draft.mediaId || !draft.encryptedReviewedRef ||
+          !draft.encryptionVersion || !draft.receipt) continue;
       await recoverReviewedDraft({
         draftId: draft.id,
         mediaId: draft.mediaId,
         encryptedReviewedRef: draft.encryptedReviewedRef,
+        encryptionVersion: draft.encryptionVersion,
         receipt: draft.receipt,
       }, dependencies);
     }

@@ -15,7 +15,7 @@ import {
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors, radii } from '../../src/design/theme';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
-import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
+import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
 import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
 import { normalizePreviewTap } from '../../src/media/redaction-geometry';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
@@ -27,7 +27,7 @@ import {
   type ReviewedDraftCommitDependencies,
   type ReviewedMediaJournal,
 } from '../../src/media/reviewed-draft';
-import { saveOfflineDraft } from '../../src/offline/draft-store';
+import { saveReviewedMediaJournal } from '../../src/offline/draft-store';
 
 const EMPTY_REVIEW: MediaReviewState = { status: 'idle', rendered: null, masks: [], receipt: null };
 
@@ -235,14 +235,13 @@ export default function RedactionReviewScreen() {
     }
   }
 
-  async function saveJournal(journal: ReviewedMediaJournal, state: 'local_persisting' | 'upload_pending' | 'needs_user', lastError: string | null) {
-    await saveOfflineDraft({
-      id: journal.draftId,
-      mediaId: journal.mediaId,
-      encryptedReviewedRef: journal.encryptedReviewedRef,
-      receipt: journal.receipt,
-      uploadJob: { state, attempts: 0, nextAttemptAt: null, lastError },
-    });
+  async function saveJournal(
+    journal: ReviewedMediaJournal,
+    state: 'local_persisting' | 'upload_pending' | 'needs_user',
+    lastError: 'local_media_missing' | 'local_media_corrupt' | 'version_mismatch' | null,
+  ) {
+    const previous = await saveReviewedMediaJournal(journal, state, lastError);
+    if (previous) await deleteReviewedMediaReference(previous).catch(() => undefined);
   }
 
   function rememberPreviewSize(event: LayoutChangeEvent) {

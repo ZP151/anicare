@@ -35,6 +35,7 @@ const journal: ReviewedMediaJournal = {
   draftId: 'draft-12345678',
   mediaId: 'media-12345678',
   encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+  encryptionVersion: 'aes-256-gcm.v1',
   receipt,
 };
 
@@ -175,18 +176,26 @@ describe('process-restart recovery', () => {
     expect(run.events).toEqual(['inspect:retryable_unavailable']);
   });
 
+  it('marks an unknown journal encryption version needs_user without inspecting it as v1', async () => {
+    const run = dependencies({ artifact: 'valid' });
+    const unknownVersion = { ...journal, encryptionVersion: 'aes-256-gcm.v2' } as never;
+    await expect(recoverReviewedDraft(unknownVersion, run.dependencies))
+      .resolves.toEqual({ status: 'needs_user', journal: unknownVersion });
+    expect(run.events).toEqual(['needs_user:version_mismatch']);
+  });
+
   it('cleans stale processor caches, recovers pending rows, and sweeps temp artifacts without final references', async () => {
     const completeRef = 'reviewed-media/media-87654321.commit-87654321.agcm';
     const events: string[] = [];
     await recoverPendingReviewedDrafts([
       {
         id: journal.draftId, notes: '', risk: 'normal', mediaId: journal.mediaId,
-        encryptedReviewedRef: journal.encryptedReviewedRef, receipt,
+        encryptedReviewedRef: journal.encryptedReviewedRef, encryptionVersion: 'aes-256-gcm.v1', receipt,
         uploadJob: { state: 'local_persisting', attempts: 0, nextAttemptAt: null, lastError: null },
       },
       {
         id: 'draft-87654321', notes: '', risk: 'normal', mediaId: 'media-87654321',
-        encryptedReviewedRef: completeRef, receipt,
+        encryptedReviewedRef: completeRef, encryptionVersion: 'aes-256-gcm.v1', receipt,
         uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null },
       },
     ], {
@@ -209,6 +218,7 @@ describe('process-restart recovery', () => {
     expect(decideLocalMediaRecovery('local_persisting', 'absent')).toBe('needs_reselection');
     expect(decideLocalMediaRecovery('local_persisting', 'corrupt')).toBe('needs_user_corrupt');
     expect(decideLocalMediaRecovery('local_persisting', 'retryable_unavailable')).toBe('retry_later');
+    expect(decideLocalMediaRecovery('local_persisting', 'version_mismatch')).toBe('needs_user_version');
     expect(decideLocalMediaRecovery('upload_pending', 'valid')).toBe('none');
   });
 });

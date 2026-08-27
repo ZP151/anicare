@@ -20,6 +20,7 @@ const input = {
   draftId: 'draft-12345678',
   mediaId: 'media-12345678',
   encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+  encryptionVersion: 'aes-256-gcm.v1' as const,
   receipt,
 };
 
@@ -36,7 +37,7 @@ describe('authenticated reviewed-media envelope', () => {
 
   it('distinguishes absent, authenticated valid, structurally corrupt, authenticated-tampered, and hash-mismatched artifacts', async () => {
     const base = {
-      getOrCreateKey: async () => ({ opaque: true }),
+      loadExistingKey: async () => ({ opaque: true }),
       getCommittedSize: async () => 40,
       readCommitted: async () => encodeEncryptedEnvelope(new Uint8Array(32)),
       decryptEnvelope: async () => new Uint8Array([1, 2, 3, 4]),
@@ -68,7 +69,7 @@ describe('authenticated reviewed-media envelope', () => {
     const base = {
       getCommittedSize: async () => 40,
       readCommitted: async () => encodeEncryptedEnvelope(new Uint8Array(32)),
-      getOrCreateKey: async () => {
+      loadExistingKey: async () => {
         if (!keyAvailable) throw new Error('secure_media_storage_unavailable');
         return { opaque: true };
       },
@@ -87,7 +88,7 @@ describe('authenticated reviewed-media envelope', () => {
   it('rejects impossible or oversized envelope metadata before reading the whole file', async () => {
     let reads = 0;
     const base = {
-      getOrCreateKey: async () => ({ opaque: true }),
+      loadExistingKey: async () => ({ opaque: true }),
       getCommittedSize: async () => MAX_REVIEWED_MEDIA_BYTES + 37,
       readCommitted: async () => { reads += 1; return new Uint8Array(); },
       decryptEnvelope: async () => new Uint8Array(),
