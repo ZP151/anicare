@@ -87,6 +87,23 @@ describe('native media upload runtime', () => {
     expect(run.dependencies.runAttempt).not.toHaveBeenCalled();
   });
 
+  it('settles A\'s claimed row through its coordinator when the owner changes after claim', async () => {
+    const run = runtimeHarness({
+      getOwnerSubject: jest.fn()
+        .mockResolvedValueOnce('owner-12345678')
+        .mockResolvedValueOnce('owner-12345678')
+        .mockResolvedValueOnce('owner-87654321'),
+      runAttempt: jest.fn(async (_claim: MediaUploadClaim, signal?: AbortSignal) => {
+        expect(signal?.aborted).toBe(true);
+        return 'waiting' as const;
+      }),
+    });
+    const runtime = createMediaUploadRuntime(run.dependencies);
+    await expect(runtime.uploadDraftMediaNow('draft-12345678')).resolves.toBe('waiting');
+    expect(run.dependencies.claimAttempt).toHaveBeenCalledTimes(1);
+    expect(run.dependencies.runAttempt).toHaveBeenCalledTimes(1);
+  });
+
   it('reports durable local cleanup as queued work rather than claiming a replacement outbox row', async () => {
     const run = runtimeHarness({
       drafts: [draft('draft-12345678', 'upload_pending', {

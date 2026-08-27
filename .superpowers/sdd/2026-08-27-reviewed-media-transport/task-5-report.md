@@ -402,3 +402,53 @@ PASS: Expo web export completed.
   local terminal persistence becomes waiting/finalizing-first recovery, never
   stale success; cleanup-only quarantine checks subject/signal between effects.
   Owner/token/capability/plaintext remain unlogged and unpersisted.
+
+## Whole-branch fix — Batch F (cancellation convergence)
+
+### TDD evidence
+
+#### RED
+
+```text
+pnpm --filter @animalhelper/mobile test -- MediaUploadRecovery.test.tsx
+FAIL: prior Batch E controller logic queued duplicate same-subject refresh work;
+the direct A-to-B and post-claim cancellation regressions then established the
+required bounded-settlement behavior.
+```
+
+#### GREEN
+
+```text
+pnpm --filter @animalhelper/mobile test -- media-upload-runtime.test.ts media-upload-coordinator.test.ts MediaUploadRecovery.test.tsx draft-store.native.test.ts
+PASS: 4 suites, 114 tests.
+
+pnpm --filter @animalhelper/mobile typecheck
+PASS: tsc --noEmit.
+
+pnpm --filter @animalhelper/mobile test
+PASS: 32 suites, 378 tests.
+
+pnpm --filter @animalhelper/edge-functions test
+PASS: 6 files, 48 tests.
+
+pnpm --filter @animalhelper/mobile build
+PASS: Expo web export completed.
+```
+
+### Batch F invariants and self-review
+
+- Terminal cleanup now rechecks the cancellation epoch and live owner after
+  pending drain, durable reread and active ciphertext deletion, before every
+  following destructive state effect. Any changed account retains the row and
+  remaining references for idempotent owner-bound recovery.
+- A post-claim owner change is fed back through the coordinator with an aborted
+  signal, so A’s own claimed CAS becomes bounded waiting (or attempt-five
+  retry-limit needs-user) without B decrypting, tokening, networking or
+  transitioning that row.
+- `persistFinalizing` is inside failure handling. Cancellation after PUT and
+  before/during its CAS converges to waiting/finalizing-first recovery; no
+  blind re-PUT or stale success is emitted. Cancellation allows only waiting,
+  plus the deliberate attempt-five retry-limit terminal needs-user state.
+- Rechecked every cancellation await/state boundary and owner/pending CAS;
+  deadlines, secret containment, web fail-closed behavior and durable cleanup
+  ordering remain unchanged.

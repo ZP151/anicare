@@ -101,7 +101,11 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
       const latest = await dependencies.getDraft(draftId);
       return latest?.mediaFailure ? 'needs_user' : latest?.uploadJob?.state ?? 'not_ready';
     }
-    if (await dependencies.getOwnerSubject() !== claim.ownerSubject) return 'stale';
+    if (await dependencies.getOwnerSubject() !== claim.ownerSubject) {
+      const cancelled = new AbortController();
+      cancelled.abort();
+      return dependencies.runAttempt(claim, cancelled.signal);
+    }
     return dependencies.runAttempt(claim, signal);
   }
 

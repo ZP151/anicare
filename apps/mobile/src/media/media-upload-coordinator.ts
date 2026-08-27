@@ -196,7 +196,8 @@ async function move(
   next: UploadJob,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<boolean> {
-  if (dependencies.cancellationSignal?.aborted && next.state !== 'waiting') {
+  if (dependencies.cancellationSignal?.aborted && next.state !== 'waiting' &&
+      !(next.state === 'needs_user' && attempt.job.attempts >= 5)) {
     throw new Error('media_upload_cancelled');
   }
   try {
@@ -232,12 +233,21 @@ async function cleanupTerminal(
   try {
     if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
     await dependencies.drainPendingCleanup(draftId);
+    if (dependencies.cancellationSignal?.aborted || ownerSubject !== await dependencies.getOwnerSubject()) {
+      throw new Error('media_upload_cancelled');
+    }
     const current = await dependencies.getOfflineDraft(draftId);
     if (!current || current.ownerSubject !== ownerSubject || current.pendingMediaCleanupRef ||
         current.uploadJob?.state !== 'quarantined' || current.encryptedReviewedRef !== reference) {
       throw new Error('terminal_cleanup_conflict');
     }
+    if (dependencies.cancellationSignal?.aborted || ownerSubject !== await dependencies.getOwnerSubject()) {
+      throw new Error('media_upload_cancelled');
+    }
     await dependencies.deleteReviewedMediaReference(reference);
+    if (dependencies.cancellationSignal?.aborted || ownerSubject !== await dependencies.getOwnerSubject()) {
+      throw new Error('media_upload_cancelled');
+    }
     await dependencies.cleanupQuarantinedMedia(draftId, current.revision ?? revision);
     return 'quarantined';
   } catch {
@@ -346,8 +356,8 @@ async function finishAfterPut(
   allowRecovery: boolean,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<MediaUploadRunResult> {
-  if (!await persistFinalizing(attempt, dependencies)) return 'stale';
   try {
+    if (!await persistFinalizing(attempt, dependencies)) return 'stale';
     await finalize(attempt, accessToken, dependencies);
     return persistQuarantined(attempt, dependencies);
   } catch (error) {
