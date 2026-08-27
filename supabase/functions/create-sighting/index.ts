@@ -1,18 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 
 import { encryptPreciseLocation } from '../_shared/encryption.ts';
 import { prepareSightingRecord } from '../_shared/sighting-policy.ts';
-
-const requestSchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  occurredAt: z.iso.datetime({ offset: true }),
-  risk: z.enum(['normal', 'sensitive', 'critical']).default('normal'),
-  traits: z.record(z.string(), z.unknown()).default({}),
-  notes: z.string().trim().max(2000).nullable().default(null),
-  clientDedupeKey: z.string().min(8).max(160),
-});
+import {
+  ownedStoredSightingSubmission,
+  parseSightingSubmission,
+  readBoundedSightingSubmissionJson,
+  strictBearerToken,
+  toSightingSubmissionResponse,
+} from '../_shared/sighting-submission.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,27 +35,25 @@ function toPostgresBytea(bytes: Uint8Array): string {
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+    return json({ error: 'invalid_request' }, 415);
+  }
 
-  const authorization = request.headers.get('Authorization');
-  const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const token = strictBearerToken(request);
   if (!token) return json({ error: 'authentication_required' }, 401);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const encryptionKey = Deno.env.get('PRECISE_LOCATION_ENCRYPTION_KEY');
-  if (!supabaseUrl || !serviceRoleKey || !encryptionKey) {
+  if (!supabaseUrl || !serviceRoleKey) {
     console.error('create-sighting is missing required server configuration');
     return json({ error: 'service_unavailable' }, 503);
   }
 
-  let payload: z.infer<typeof requestSchema>;
+  let payload: ReturnType<typeof parseSightingSubmission>;
   try {
-    payload = requestSchema.parse(await request.json());
-  } catch (error) {
-    return json(
-      { error: 'invalid_request', issues: error instanceof z.ZodError ? error.issues : [] },
-      400,
-    );
+    payload = parseSightingSubmission(await readBoundedSightingSubmissionJson(request));
+  } catch {
+    return json({ error: 'invalid_request' }, 400);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -68,6 +62,31 @@ Deno.serve(async (request) => {
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   if (userError || !userData.user) return json({ error: 'authentication_required' }, 401);
 
+  const requestId = crypto.randomUUID();
+  if ('recoverExisting' in payload) {
+    const { data: stored, error: recoveryError } = await admin
+      .from('sightings')
+      .select('id, reporter_id, visibility, visible_at')
+      .eq('reporter_id', userData.user.id)
+      .eq('client_dedupe_key', payload.clientDedupeKey)
+      .maybeSingle();
+    if (recoveryError) return json({ error: 'submission_failed', requestId }, 500);
+    if (!stored) return json({ error: 'sighting_submission_not_found' }, 404);
+
+    try {
+      const owned = ownedStoredSightingSubmission(stored, userData.user.id);
+      if (!owned) return json({ error: 'sighting_submission_not_found' }, 404);
+      return json(toSightingSubmissionResponse(owned, requestId), 200);
+    } catch {
+      return json({ error: 'submission_failed', requestId }, 500);
+    }
+  }
+
+  const encryptionKey = Deno.env.get('PRECISE_LOCATION_ENCRYPTION_KEY');
+  if (!encryptionKey) {
+    console.error('create-sighting is missing required server configuration');
+    return json({ error: 'service_unavailable' }, 503);
+  }
   const keyBytes = decodeBase64Key(encryptionKey);
   if (keyBytes.byteLength !== 32) {
     console.error('PRECISE_LOCATION_ENCRYPTION_KEY must decode to 32 bytes');
@@ -79,7 +98,6 @@ Deno.serve(async (request) => {
     { latitude: payload.latitude, longitude: payload.longitude },
     keyBytes,
   );
-  const requestId = crypto.randomUUID();
 
   const { data: sightingId, error: insertError } = await admin.rpc(
     'create_sighting_with_location',
@@ -109,15 +127,19 @@ Deno.serve(async (request) => {
     return json({ error: conflict ? 'duplicate_submission' : 'submission_failed', requestId }, conflict ? 409 : 500);
   }
 
-  return json(
-    {
-      sightingId,
-      publicCellId: publicRecord.publicCellId,
-      visibility: publicRecord.visibility,
-      visibleAt: publicRecord.visibleAt,
-      requestId,
-    },
-    201,
-  );
-});
+  const { data: stored, error: storedError } = await admin
+    .from('sightings')
+    .select('id, reporter_id, visibility, visible_at')
+    .eq('id', sightingId)
+    .eq('reporter_id', userData.user.id)
+    .maybeSingle();
+  if (storedError || !stored) return json({ error: 'submission_failed', requestId }, 500);
 
+  try {
+    const owned = ownedStoredSightingSubmission(stored, userData.user.id);
+    if (!owned) return json({ error: 'submission_failed', requestId }, 500);
+    return json(toSightingSubmissionResponse(owned, requestId), 201);
+  } catch {
+    return json({ error: 'submission_failed', requestId }, 500);
+  }
+});

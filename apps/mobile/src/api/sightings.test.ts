@@ -1,4 +1,8 @@
-import { buildSightingPayload } from './sightings';
+import {
+  buildSightingPayload,
+  recoverSightingSubmission,
+  submitSighting,
+} from './sightings';
 
 describe('buildSightingPayload', () => {
   it('includes precise input for the protected endpoint but never client-controlled exposure fields', () => {
@@ -27,3 +31,74 @@ describe('buildSightingPayload', () => {
   });
 });
 
+describe('sighting submission transport', () => {
+  const endpoint = 'https://example.invalid/functions/v1/create-sighting';
+  const accessToken = 'access-token';
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('returns only the stored submission response with a canonical visibility timestamp', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      sightingId: '00000000-0000-4000-8000-000000000911',
+      visibility: 'public',
+      visibleAt: '2026-08-27T10:00:00.123456+00:00',
+      requestId: '00000000-0000-4000-8000-000000000912',
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }));
+
+    await expect(submitSighting({
+      endpoint,
+      accessToken,
+      draft: {
+        latitude: 1.3521,
+        longitude: 103.8198,
+        occurredAt: new Date('2026-08-27T08:00:00.000Z'),
+        risk: 'normal',
+        traits: {},
+        notes: null,
+        clientDedupeKey: 'draft-12345678',
+      },
+    })).resolves.toEqual({
+      sightingId: '00000000-0000-4000-8000-000000000911',
+      visibility: 'public',
+      visibleAt: '2026-08-27T10:00:00.123Z',
+      requestId: '00000000-0000-4000-8000-000000000912',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(endpoint, expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('recovers only by the dedupe key and reports a not-found outcome without creating a sighting', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ error: 'sighting_submission_not_found' }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    await expect(recoverSightingSubmission({ endpoint, accessToken, clientDedupeKey: 'draft-12345678' }))
+      .resolves.toEqual({ kind: 'not_found' });
+    expect(fetchMock).toHaveBeenCalledWith(endpoint, expect.objectContaining({
+      body: JSON.stringify({ clientDedupeKey: 'draft-12345678', recoverExisting: true }),
+    }));
+  });
+
+  it('rejects an oversized submission response before it can become a result', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('x'.repeat(64 * 1024 + 1), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    await expect(submitSighting({
+      endpoint,
+      accessToken,
+      draft: {
+        latitude: 1.3521,
+        longitude: 103.8198,
+        occurredAt: new Date('2026-08-27T08:00:00.000Z'),
+        risk: 'normal',
+        traits: {},
+        notes: null,
+        clientDedupeKey: 'draft-12345678',
+      },
+    })).rejects.toThrow('invalid_sighting_submission_response');
+  });
+});
