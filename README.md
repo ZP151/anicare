@@ -91,11 +91,11 @@ are:
 
 - Gate 2A media proof is complete for local-stack HTTP/Auth/Storage composition
   with two synthetic sessions, evidenced on the fresh GitHub Actions run
-  [33193118991](https://github.com/ZP151/anicare/actions/runs/33193118991) with both
+  [33208195906](https://github.com/ZP151/anicare/actions/runs/33208195906) with both
   required jobs green:
-  [verify](https://github.com/ZP151/anicare/actions/runs/33193118991/job/98923364388)
+  [verify](https://github.com/ZP151/anicare/actions/runs/33208195906/job/98974573537)
   and
-  [database-contracts](https://github.com/ZP151/anicare/actions/runs/33193118991/job/98923364075).
+  [database-contracts](https://github.com/ZP151/anicare/actions/runs/33208195906/job/98974573765).
 - Build and test the manual review flow on supported native devices. Automatic
   person, licence-plate and cat detection remain disabled until device, model,
   licence and adversarial-corpus gates pass.

@@ -29,9 +29,9 @@ builds, and run the remaining non-media runtime/two-session database checks.
   reserve-to-signed-upload-to-finalize wiring are implemented. A `quarantined`
   result remains private and public promotion is disabled. Gate 2A media
   local-stack runtime evidence is recorded on
-  [run 33193118991](https://github.com/ZP151/anicare/actions/runs/33193118991) with both
+  [run 33208195906](https://github.com/ZP151/anicare/actions/runs/33208195906) with both
   `verify` and `database-contracts` green at commit
-  [7c457ea](https://github.com/ZP151/anicare/commit/7c457ea409b710b7f51c6297edb0521df54ee395).
+  [a87023f](https://github.com/ZP151/anicare/commit/a87023f956c468d063c2cc0167b5f2e19f6b3f85).
   Hosted Supabase, native-device end-to-end media checks, and true
   post-token-expiry cleanup/replay remain open release gates.
 - Account erasure now records legacy `public-media` and `private-evidence`

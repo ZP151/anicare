@@ -3,13 +3,13 @@
 ## Observed evidence (as of this branch state)
 
 Reference repository: [ZP151/anicare](https://github.com/ZP151/anicare)
-Reference commit: [7c457ea409b710b7f51c6297edb0521df54ee395](https://github.com/ZP151/anicare/commit/7c457ea409b710b7f51c6297edb0521df54ee395)
-Reference CI run: [33193118991](https://github.com/ZP151/anicare/actions/runs/33193118991)
+Reference commit: [a87023f956c468d063c2cc0167b5f2e19f6b3f85](https://github.com/ZP151/anicare/commit/a87023f956c468d063c2cc0167b5f2e19f6b3f85)
+Reference CI run: [33208195906](https://github.com/ZP151/anicare/actions/runs/33208195906)
 
 Verified jobs on that run:
 
-- [verify](https://github.com/ZP151/anicare/actions/runs/33193118991/job/98923364388) — successful
-- [database-contracts](https://github.com/ZP151/anicare/actions/runs/33193118991/job/98923364075) — successful
+- [verify](https://github.com/ZP151/anicare/actions/runs/33208195906/job/98974573537) — successful
+- [database-contracts](https://github.com/ZP151/anicare/actions/runs/33208195906/job/98974573765) — successful
 
 Pinned workflow versions observed in `.github/workflows/ci.yml`:
 
@@ -53,7 +53,7 @@ Environment notes:
 ## Closure recorded for this Task 8 pass
 
 - Local-stack HTTP/Auth/Storage composition is marked complete for Gate 2A after
-  both required jobs in run `33193118991` completed successfully.
+  both required jobs in run `33208195906` completed successfully.
 - The pinned non-upsert Storage replay behavior at this commit is observed as
   `upload/http/storage_upload_failed` with HTTP `400`.
 - Compatibility behavior for prior committed responses is recorded as exact `400` or
