@@ -33,6 +33,10 @@ function localServiceRoleKey(): string {
   return ['service', 'role', 'key'].join('-');
 }
 
+function localPreciseLocationEncryptionKey(): string {
+  return Buffer.alloc(32, 17).toString('base64');
+}
+
 function localEnvironment(): NodeJS.ProcessEnv {
   return {
     SUPABASE_URL: LOCAL_API_URL,
@@ -40,6 +44,7 @@ function localEnvironment(): NodeJS.ProcessEnv {
     SUPABASE_SERVICE_ROLE_KEY: localServiceRoleKey(),
     DATABASE_URL: localDatabaseUrl(),
     MEDIA_ALLOWED_ORIGIN: LOCAL_API_URL,
+    PRECISE_LOCATION_ENCRYPTION_KEY: localPreciseLocationEncryptionKey(),
   };
 }
 
@@ -50,6 +55,7 @@ describe('readLocalStackEnvironment', () => {
     'SUPABASE_SERVICE_ROLE_KEY',
     'DATABASE_URL',
     'MEDIA_ALLOWED_ORIGIN',
+    'PRECISE_LOCATION_ENCRYPTION_KEY',
   ])('rejects a missing %s without echoing environment values', (missingName) => {
     const source = { ...localEnvironment(), [missingName]: undefined };
 
@@ -62,6 +68,17 @@ describe('readLocalStackEnvironment', () => {
     ['SUPABASE_SERVICE_ROLE_KEY', 'service\trole-key'],
   ])('rejects whitespace-bearing credential keys', (name, value) => {
     expect(() => readLocalStackEnvironment({ ...localEnvironment(), [name]: value })).toThrow(
+      'Invalid Pilot Gate 2A environment.',
+    );
+  });
+
+  it.each([
+    ['non-standard alphabet', ['A'.repeat(43), '-'].join('')],
+    ['invalid padding', ['A'.repeat(42), '=='].join('')],
+    ['non-canonical trailing bits', ['A'.repeat(42), 'B='].join('')],
+    ['wrong decoded length', Buffer.alloc(31, 17).toString('base64')],
+  ])('rejects a %s precise-location encryption key', (_name, key) => {
+    expect(() => readLocalStackEnvironment({ ...localEnvironment(), PRECISE_LOCATION_ENCRYPTION_KEY: key })).toThrow(
       'Invalid Pilot Gate 2A environment.',
     );
   });
@@ -116,6 +133,7 @@ describe('readLocalStackEnvironment', () => {
       serviceRoleKey: localServiceRoleKey(),
       databaseUrl: localDatabaseUrl(),
       allowedOrigin: LOCAL_API_URL,
+      preciseLocationEncryptionKey: localPreciseLocationEncryptionKey(),
     });
   });
 });

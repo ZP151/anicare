@@ -4,6 +4,7 @@ export type LocalStackEnvironment = Readonly<{
   serviceRoleKey: string;
   databaseUrl: string;
   allowedOrigin: string;
+  preciseLocationEncryptionKey: string;
 }>;
 
 const LOCAL_DATABASE_PROTOCOL = 'postgresql:';
@@ -53,6 +54,13 @@ function credential(value: string): string {
   return value;
 }
 
+function preciseLocationEncryptionKey(value: string): string {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(value)) return invalidEnvironment();
+  const bytes = Buffer.from(value, 'base64');
+  if (bytes.byteLength !== 32 || bytes.toString('base64') !== value) return invalidEnvironment();
+  return value;
+}
+
 function exactLocalDatabaseUrl(value: string): void {
   let url: URL;
   try {
@@ -81,6 +89,7 @@ export function readLocalStackEnvironment(source: NodeJS.ProcessEnv): LocalStack
   const serviceRoleKey = credential(required(source, 'SUPABASE_SERVICE_ROLE_KEY'));
   const databaseUrl = required(source, 'DATABASE_URL');
   const allowedOrigin = required(source, 'MEDIA_ALLOWED_ORIGIN');
+  const encryptionKey = preciseLocationEncryptionKey(required(source, 'PRECISE_LOCATION_ENCRYPTION_KEY'));
   const api = localHttpUrl(apiUrl);
   const origin = localHttpUrl(allowedOrigin);
 
@@ -90,5 +99,5 @@ export function readLocalStackEnvironment(source: NodeJS.ProcessEnv): LocalStack
     return invalidEnvironment();
   }
 
-  return { apiUrl, anonKey, serviceRoleKey, databaseUrl, allowedOrigin };
+  return { apiUrl, anonKey, serviceRoleKey, databaseUrl, allowedOrigin, preciseLocationEncryptionKey: encryptionKey };
 }

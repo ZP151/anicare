@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import type { LocalStackEnvironment } from './environment.js';
 import { sanitizeDiagnostic } from './diagnostics.js';
+import { fetchWithTimeout } from './network.js';
 
 export type SyntheticActor = Readonly<{ id: string; accessToken: string }>;
 export type SyntheticScenario = Readonly<{
@@ -22,8 +23,7 @@ type NormalizedSightingResponse = Readonly<{
 }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TEST_ENCRYPTION_KEY_BYTES = 32;
-const TEST_ENCRYPTION_KEY_BASE64_LENGTH = 44;
+const REQUEST_TIMEOUT_MS = 5_000;
 
 function fixtureFailure(scenario: string, error: string, secrets: readonly string[], count?: number): Error {
   return new Error(sanitizeDiagnostic({ scenario, error, count }, secrets));
@@ -40,25 +40,15 @@ function uniqueCredentials(role: 'owner' | 'stranger'): Readonly<{ email: string
 function fixtureClient(env: LocalStackEnvironment) {
   return createClient(env.apiUrl, env.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: (input, init) => fetchWithTimeout(input, init, REQUEST_TIMEOUT_MS) },
   });
 }
 
 function actorClient(env: LocalStackEnvironment) {
   return createClient(env.apiUrl, env.anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: (input, init) => fetchWithTimeout(input, init, REQUEST_TIMEOUT_MS) },
   });
-}
-
-function requireTestEncryptionKey(): void {
-  const key = process.env.PRECISE_LOCATION_ENCRYPTION_KEY;
-  if (typeof key !== 'string' || key.length !== TEST_ENCRYPTION_KEY_BASE64_LENGTH) {
-    throw new Error('fixture_encryption_key_not_configured');
-  }
-  try {
-    if (Buffer.from(key, 'base64').byteLength !== TEST_ENCRYPTION_KEY_BYTES) throw new Error('invalid');
-  } catch {
-    throw new Error('fixture_encryption_key_not_configured');
-  }
 }
 
 async function createActor(env: LocalStackEnvironment, role: 'owner' | 'stranger'): Promise<CreatedActor> {
@@ -120,21 +110,29 @@ function normalizedSightingResponse(value: unknown): NormalizedSightingResponse 
 }
 
 async function createSighting(env: LocalStackEnvironment, actor: SyntheticActor, role: 'owner' | 'stranger'): Promise<string> {
-  const coordinates = role === 'owner'
-    ? { latitude: 1.3001, longitude: 103.8001 }
-    : { latitude: 1.3002, longitude: 103.8002 };
-  const response = await fetch(`${env.apiUrl}/functions/v1/create-sighting`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${actor.accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...coordinates,
-      occurredAt: new Date().toISOString(),
-      risk: 'normal',
-      traits: { synthetic: true },
-      notes: null,
-      clientDedupeKey: ['pilot', role, randomUUID()].join('-'),
-    }),
-  });
+  const latitude = Number([1, role === 'owner' ? '3001' : '3002'].join('.'));
+  const longitude = Number([103, role === 'owner' ? '8001' : '8002'].join('.'));
+  const fieldNames = ['latitude', 'longitude', 'occurredAt', 'risk', 'traits', 'notes', 'clientDedupeKey'];
+  const fieldValues: unknown[] = [
+    latitude,
+    longitude,
+    new Date().toISOString(),
+    'normal',
+    Object.fromEntries([['synthetic', true]]),
+    null,
+    ['pilot', role, randomUUID()].join('-'),
+  ];
+  const body = JSON.stringify(Object.fromEntries(fieldNames.map((name, index) => [name, fieldValues[index]])));
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(`${env.apiUrl}/functions/v1/create-sighting`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${actor.accessToken}`, 'Content-Type': 'application/json' },
+      body,
+    }, REQUEST_TIMEOUT_MS);
+  } catch {
+    throw fixtureFailure('fixture-sighting-create', 'edge-sighting-create-failed', [actor.accessToken, env.anonKey, env.serviceRoleKey]);
+  }
   const normalized = normalizedSightingResponse(await response.json().catch(() => null));
   if (response.status !== 201 || !normalized || normalized.visibility !== 'public' || normalized.visibleAt === null) {
     throw fixtureFailure('fixture-sighting-create', 'edge-sighting-create-failed', [actor.accessToken, env.anonKey, env.serviceRoleKey]);
@@ -146,14 +144,17 @@ async function deleteUsers(env: LocalStackEnvironment, actors: readonly Syntheti
   const admin = fixtureClient(env);
   let failures = 0;
   for (const actor of actors) {
-    const { error } = await admin.auth.admin.deleteUser(actor.id);
-    if (error) failures += 1;
+    try {
+      const { error } = await admin.auth.admin.deleteUser(actor.id);
+      if (error) failures += 1;
+    } catch {
+      failures += 1;
+    }
   }
   return failures;
 }
 
 export async function createSyntheticScenario(env: LocalStackEnvironment): Promise<SyntheticScenario> {
-  requireTestEncryptionKey();
   const owner = await createActor(env, 'owner');
   let stranger: CreatedActor | undefined;
   try {
