@@ -79,6 +79,11 @@ function latestOverlayProps(): MaskEditorOverlayProps {
   return call[0] as MaskEditorOverlayProps;
 }
 
+function clickEvent() {
+  const target = {};
+  return { currentTarget: target, target, nativeEvent: {}, stopPropagation: () => undefined };
+}
+
 async function renderPreparedReview(output: RenderedMedia = rendered) {
   jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);
   jest.mocked(prepareCanonical).mockResolvedValue(canonical);
@@ -92,6 +97,8 @@ async function renderPreparedReview(output: RenderedMedia = rendered) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.mocked(renderOpaqueMasks).mockReset();
+  jest.mocked(verifyReviewedMedia).mockReset();
   jest.mocked(cleanupProcessorCacheUris).mockResolvedValue(undefined);
   jest.mocked(deleteReviewedMediaReference).mockResolvedValue(undefined);
   jest.mocked(persistReviewedMedia).mockResolvedValue({
@@ -205,6 +212,22 @@ describe('private redaction review screen', () => {
     expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
   });
 
+  it('blocks confirmation synchronously when a preview and confirmation occur in the same act', async () => {
+    const view = await renderPreparedReview();
+    const overlay = latestOverlayProps();
+    const confirm = view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.onClick as (event: unknown) => void;
+
+    await act(async () => {
+      overlay.onMutationPreview([firstMask]);
+      confirm(clickEvent());
+      await Promise.resolve();
+    });
+
+    expect(saveReviewedMediaJournal).not.toHaveBeenCalled();
+    expect(persistReviewedMedia).not.toHaveBeenCalled();
+    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+  });
+
   it('renders a committed exact snapshot from canonical and enables confirmation only after current pixels complete', async () => {
     const mutation = deferred<RenderedMedia>();
     const updated = { ...rendered, uri: 'file:///cache/animalhelper-reviewed-updated.jpg', sha256: 'b'.repeat(64) };
@@ -226,16 +249,51 @@ describe('private redaction review screen', () => {
     expect(view.getByLabelText('Reviewed private image').props.source).toEqual({ uri: updated.uri });
   });
 
-  it('keeps a failed mutation non-stageable', async () => {
+  it('keeps an equal-snapshot mutation non-stageable when its render fails', async () => {
     const view = await renderPreparedReview();
     jest.mocked(renderOpaqueMasks).mockRejectedValueOnce(new Error('invalid_rendered_jpeg'));
 
-    await act(async () => { latestOverlayProps().onMutationCommit([firstMask]); });
+    await act(async () => { latestOverlayProps().onMutationCommit([]); });
     await waitFor(() => expect(view.getByText('The mask could not be rendered safely. Confirmation remains disabled.')).toBeTruthy());
 
-    expect(latestOverlayProps().masks).toEqual([firstMask]);
+    expect(latestOverlayProps().masks).toEqual([]);
     expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
     expect(persistReviewedMedia).not.toHaveBeenCalled();
+  });
+
+  it('blocks a same-act overlay commit after confirmation starts durable persistence', async () => {
+    const journalWrite = deferred<void>();
+    const unexpectedRender = deferred<RenderedMedia>();
+    jest.mocked(saveReviewedMediaJournal)
+      .mockImplementationOnce(() => journalWrite.promise)
+      .mockResolvedValue(undefined);
+    jest.mocked(verifyReviewedMedia).mockResolvedValue('valid');
+    const view = await renderPreparedReview();
+    jest.mocked(renderOpaqueMasks).mockImplementationOnce(() => unexpectedRender.promise);
+    const overlay = latestOverlayProps();
+    const confirm = view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.onClick as (event: unknown) => void;
+
+    await act(async () => {
+      confirm(clickEvent());
+      overlay.onMutationCommit([firstMask]);
+    });
+
+    await waitFor(() => expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(1));
+    const renderCallCount = jest.mocked(renderOpaqueMasks).mock.calls.length;
+    const observedMasks = latestOverlayProps().masks;
+
+    await act(async () => {
+      unexpectedRender.resolve({ ...rendered, uri: 'file:///cache/animalhelper-unexpected-concurrent-render.jpg' });
+      await unexpectedRender.promise;
+    });
+    await act(async () => { view.unmount(); });
+    await act(async () => {
+      journalWrite.resolve();
+      await journalWrite.promise;
+      await Promise.resolve();
+    });
+    expect(renderCallCount).toBe(1);
+    expect(observedMasks).toEqual([]);
   });
 
   it('commits single deletion without clearing the remaining mask', async () => {
@@ -301,5 +359,18 @@ describe('private redaction review screen', () => {
       masks: [],
       selectedMaskId: null,
     });
+  });
+
+  it('releases a stale mutation render after unmount instead of adopting its output', async () => {
+    const mutation = deferred<RenderedMedia>();
+    const staleRendered = { ...rendered, uri: 'file:///cache/animalhelper-reviewed-after-unmount.jpg', sha256: 'd'.repeat(64) };
+    const view = await renderPreparedReview();
+    jest.mocked(renderOpaqueMasks).mockImplementationOnce(() => mutation.promise);
+
+    await act(async () => { latestOverlayProps().onMutationCommit([firstMask]); });
+    await act(async () => { view.unmount(); });
+    await act(async () => { mutation.resolve(staleRendered); await mutation.promise; });
+
+    await waitFor(() => expect(cleanupProcessorCacheUris).toHaveBeenCalledWith([staleRendered.uri]));
   });
 });

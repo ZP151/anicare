@@ -40,6 +40,7 @@ export default function RedactionReviewScreen() {
   const [review, setReview] = useState<MediaReviewState>(EMPTY_REVIEW);
   const [previewWidth, setPreviewWidth] = useState(1);
   const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
+  const [renderCurrent, setRenderCurrent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, setPending] = useState<ReviewedMediaJournal | null>(null);
@@ -47,6 +48,7 @@ export default function RedactionReviewScreen() {
   const cacheLifecycle = useRef(createProcessorCacheLifecycle(cleanupProcessorCacheUris)).current;
   const mountedRef = useRef(true);
   const busyRef = useRef(false);
+  const renderCurrentRef = useRef(false);
   const renderedMasksRef = useRef<readonly PrivacyMask[]>([]);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export default function RedactionReviewScreen() {
     cacheLifecycle.reactivate();
     return () => {
       mountedRef.current = false;
+      renderCurrentRef.current = false;
       renderCoordinator.cancel();
       void cacheLifecycle.requestCleanup();
     };
@@ -61,6 +64,8 @@ export default function RedactionReviewScreen() {
 
   async function choosePhoto() {
     const operation = renderCoordinator.beginSelection();
+    renderCurrentRef.current = false;
+    setRenderCurrent(false);
     setSelectedMaskId(null);
     cacheLifecycle.beginAsyncWork();
     busyRef.current = true;
@@ -89,6 +94,8 @@ export default function RedactionReviewScreen() {
       await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
       renderedMasksRef.current = [];
+      renderCurrentRef.current = true;
+      setRenderCurrent(true);
       setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
       setStatus('Add, select and adjust opaque masks, then review every pixel before confirming.');
     } catch (error) {
@@ -107,9 +114,11 @@ export default function RedactionReviewScreen() {
   }
 
   async function commitMaskMutation(nextMasks: readonly PrivacyMask[]): Promise<void> {
-    if (!canonical || busy || pending) return;
+    if (!canonical || busyRef.current || pending) return;
     const operation = renderCoordinator.beginMutation(nextMasks);
     if (!operation) return;
+    renderCurrentRef.current = false;
+    setRenderCurrent(false);
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
     cacheLifecycle.startMutation(operation.token);
     cacheLifecycle.beginAsyncWork();
@@ -121,6 +130,8 @@ export default function RedactionReviewScreen() {
       await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
       renderedMasksRef.current = operation.masks;
+      renderCurrentRef.current = true;
+      setRenderCurrent(true);
       setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
       setStatus(operation.masks.length === 0
         ? 'Masks cleared. Review the newly rendered pixels before confirming.'
@@ -140,11 +151,14 @@ export default function RedactionReviewScreen() {
 
   function previewMaskMutation(nextMasks: readonly PrivacyMask[]) {
     if (!canonical || busyRef.current || pending) return;
+    renderCurrentRef.current = false;
+    setRenderCurrent(false);
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: nextMasks }));
   }
 
   async function confirmPrivateCopy() {
-    if (!draftId || !review.rendered || busyRef.current || (!pending && !renderedMasksAreCurrent)) return;
+    if (!draftId || !review.rendered || busyRef.current ||
+      (!pending && (!renderCurrentRef.current || !renderedMasksAreCurrent))) return;
     const confirmed = pending ? review : reduceMediaReview(review, { type: 'confirm' });
     if (!pending) setReview(confirmed);
     if (!pending && (!canStageMedia(confirmed) || !confirmed.receipt)) {
@@ -234,7 +248,7 @@ export default function RedactionReviewScreen() {
       renderedMask.rect.width === mask.rect.width && renderedMask.rect.height === mask.rect.height;
   });
   const editorDisabled = busy || !!pending;
-  const confirmationDisabled = busy || (!pending && !renderedMasksAreCurrent);
+  const confirmationDisabled = busy || (!pending && (!renderCurrent || !renderedMasksAreCurrent));
 
   return (
     <ScreenScaffold title="Private photo review" subtitle="Only a newly rendered, confirmed copy can be encrypted for this draft.">
