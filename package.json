@@ -7,7 +7,10 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
+    "pilot-gate-2a": "node scripts/run-pilot-gate-2a.mjs",
+    "pilot-gate-2a:cleanup-diagnostic": "node scripts/run-pilot-gate-2a.mjs cleanup-diagnostic",
     "test": "turbo run test",
+    "test:pilot-gate-2a-ci": "node --test scripts/pilot-gate-2a-inputs.test.mjs scripts/run-pilot-gate-2a.test.mjs",
     "typecheck": "turbo run typecheck",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
