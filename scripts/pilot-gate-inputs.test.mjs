@@ -39,7 +39,11 @@ test('discovers the complete repository source contract', () => {
   const repoRoot = path.resolve(import.meta.dirname, '..');
   const inputs = discoverPilotGateInputs(repoRoot);
 
-  assert.equal(inputs.sqlTests.length, 10);
+  assert.equal(inputs.sqlTests.length, 11);
+  assert.equal(
+    inputs.sqlTests.at(-1),
+    'supabase/tests/011_identity_review_control_plane.sql',
+  );
   assert.equal(inputs.edgeHandlers.length, 6);
   assert.deepEqual(inputs.edgeHandlers, [
     'supabase/functions/cleanup-legacy-media/index.ts',
