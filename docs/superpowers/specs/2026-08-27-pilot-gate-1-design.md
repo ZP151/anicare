@@ -1,6 +1,6 @@
 # WhiskerCommons Pilot Gate 1 Design
 
-**Status:** Approved direction; design review required before implementation
+**Status:** Approved by the user on 2026-08-28
 
 **Goal:** Turn the current Sprint 2–3 implementation into a reproducible, least-privilege release candidate foundation that can enter real Supabase and native-device validation without weakening any existing privacy boundary.
 
