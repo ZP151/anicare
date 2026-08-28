@@ -29,12 +29,12 @@ artifact upload is failure-only.
 |---|---|---|
 | Dependency install | `pnpm install --frozen-lockfile` | PASS |
 | Peer checks | `pnpm peers check` | PASS |
-| Gate 2A unit | `pnpm --filter @animalhelper/pilot-gate-2a test:unit` | PASS: 14 files / 95 tests |
+| Gate 2A unit | `pnpm --filter @animalhelper/pilot-gate-2a test:unit` | PASS: 14 files / 97 tests |
 | Gate 2A lint/typecheck | `pnpm --filter @animalhelper/pilot-gate-2a lint`<br>`pnpm --filter @animalhelper/pilot-gate-2a typecheck` | PASS |
 | Edge validation | `pnpm --filter @animalhelper/edge-functions test`<br>`pnpm --filter @animalhelper/edge-functions typecheck` | PASS: 6 files / 63 tests |
 | Mobile validation | `pnpm --filter @animalhelper/mobile test`<br>`pnpm --filter @animalhelper/mobile typecheck` | PASS: 37 suites / 517 tests |
 | Python static checks | `python -m ruff check services/ai`<br>`python -m mypy services/ai/src` | PASS (9 source files) |
-| Combined source run | `pnpm exec turbo run lint typecheck test build --force` | PASS: 24/24 tasks (AI 34, Admin 39, Domain 10, Edge 63, Gate 2A 95, Mobile 517; Expo 14 routes) |
+| Combined source run | `pnpm exec turbo run lint typecheck test build --force` | PASS: 24/24 tasks (AI 34, Admin 39, Domain 10, Edge 63, Gate 2A 97, Mobile 517; Expo 14 routes) |
 | Combined node input tests | `node --test scripts/pilot-gate-inputs.test.mjs scripts/pilot-gate-2a-inputs.test.mjs` | PASS: 17/17 |
 | UUID input gate | `node scripts/pilot-gate-inputs.mjs uuid` | PASS |
 | Gate 2A input discovery | `node scripts/pilot-gate-2a-inputs.mjs` | PASS: 6 tests, 5 endpoints |

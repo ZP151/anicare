@@ -1,8 +1,10 @@
 import { readLocalStackEnvironment } from './environment.js';
+import { isApprovedGate2AEdgePath } from './edge-endpoints.js';
 
 type FetchTarget = { fetch: typeof fetch };
 
 const REMOTE_TARGET_MESSAGE = 'Pilot Gate 2A fetch target must be loopback HTTP(S).';
+const UNAPPROVED_EDGE_ENDPOINT_MESSAGE = 'Pilot Gate 2A Edge endpoint is not approved.';
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 function fetchUrl(input: RequestInfo | URL): URL {
@@ -25,6 +27,22 @@ function assertLoopbackHttpTarget(input: RequestInfo | URL): void {
     url.password !== ''
   ) {
     throw new Error(REMOTE_TARGET_MESSAGE);
+  }
+  let decodedPath = url.pathname;
+  for (let pass = 0; pass < 4; pass += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(decodedPath);
+    } catch {
+      break;
+    }
+    if (next === decodedPath) break;
+    decodedPath = next;
+  }
+  const normalizedPath = decodedPath.replace(/\/{2,}/g, '/').toLowerCase();
+  const edgePrefix = `/${['functions', 'v1', ''].join('/')}`;
+  if (normalizedPath.startsWith(edgePrefix) && !isApprovedGate2AEdgePath(url.pathname)) {
+    throw new Error(UNAPPROVED_EDGE_ENDPOINT_MESSAGE);
   }
 }
 

@@ -77,6 +77,36 @@ describe('mandatory Pilot Gate 2A fetch boundary', () => {
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
+  it('rejects a dynamically constructed unapproved Edge endpoint before dispatch', async () => {
+    const dispatch = vi.fn<typeof fetch>(async () => new Response('local'));
+    const target = { fetch: dispatch };
+    installPilotGate2AFetchBoundary(validEnvironment(), target);
+    const unapprovedPaths = [
+      ['functions', 'v1', 'unreviewed-operation'].join('/'),
+      '%66unctions/v1/unreviewed-operation',
+      ['', 'functions', 'v1', 'unreviewed-operation'].join('/'),
+      'functions%2Fv1%2Funreviewed-operation',
+      '%2566unctions%252Fv1%252Funreviewed-operation',
+    ];
+
+    for (const path of unapprovedPaths) {
+      await expect(target.fetch(`${LOCAL_API_URL}/${path}`)).rejects.toThrow(
+        'Pilot Gate 2A Edge endpoint is not approved.',
+      );
+    }
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('permits a canonical manifest-approved Edge endpoint', async () => {
+    const dispatch = vi.fn<typeof fetch>(async () => new Response('local'));
+    const target = { fetch: dispatch };
+    installPilotGate2AFetchBoundary(validEnvironment(), target);
+    const approvedPath = ['functions', 'v1', 'create-sighting'].join('/');
+
+    await expect(target.fetch(`${LOCAL_API_URL}/${approvedPath}`)).resolves.toBeInstanceOf(Response);
+    expect(dispatch).toHaveBeenCalledOnce();
+  });
+
   it('fails during setup when the local environment contract is invalid', () => {
     const target = { fetch: vi.fn<typeof fetch>(async () => new Response()) };
 

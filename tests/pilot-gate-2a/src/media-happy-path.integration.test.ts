@@ -107,6 +107,7 @@ describe('real owner media happy path', () => {
       expect(Date.parse(reservation.usableUntil)).toBeGreaterThan(Date.now() + 5 * 60_000);
 
       await expectPrivateJobReadDenied(env, null, mediaId);
+      await expectPrivateJobReadDenied(env, scenario.owner, mediaId);
       await expectPrivateJobReadDenied(env, scenario.stranger, mediaId);
 
       expect(await putSignedMedia(reservation, jpeg.bytes)).toEqual({ ok: true, status: 200 });
@@ -141,10 +142,13 @@ describe('real owner media happy path', () => {
       });
 
       await expectStorageReadDenied(env, null, reservation.path);
+      await expectStorageReadDenied(env, scenario.owner, reservation.path);
       await expectStorageReadDenied(env, scenario.stranger, reservation.path);
       await expectAssetStateReadDenied(env, null, mediaId);
+      await expectAssetStateReadDenied(env, scenario.owner, mediaId);
       await expectAssetStateReadDenied(env, scenario.stranger, mediaId);
       await expectPrivateJobReadDenied(env, null, mediaId);
+      await expectPrivateJobReadDenied(env, scenario.owner, mediaId);
       await expectPrivateJobReadDenied(env, scenario.stranger, mediaId);
 
       const repeated = await finalizeMedia(scenario.owner, finalizeInput, env);

@@ -530,6 +530,30 @@ test('runtime sanitizer preserves the fixed replay diagnostic while redacting re
   assert.equal(sanitized.includes('11111111-2222-4333-8444-555555555555'), false);
 });
 
+test('runtime sanitizer fails closed on precise coordinate diagnostics', () => {
+  const sanitized = sanitizeRuntimeOutput([
+    'latitude=1.3521 longitude=103.8198',
+    'lat 1.3521, lng 103.8198',
+    '1.3521, 103.8198',
+    '1.3521 103.8198',
+    'POINT(103.8198 1.3521)',
+    'location=1.3521',
+    'precise_location=1.3521',
+    '1.3521',
+  ].join('\n'));
+
+  assert.deepEqual(sanitized.split('\n'), [
+    '[redacted]',
+    '[redacted]',
+    '[redacted]',
+    '[redacted]',
+    '[redacted]',
+    '[redacted]',
+    '[redacted]',
+    '[redacted]',
+  ]);
+});
+
 test('runtime sanitizer redacts every canonical UUID shape including v7, Nil, and Max', () => {
   const canonicalUuids = [
     '01890f47-eabc-7def-8123-456789abcdef',

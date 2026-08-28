@@ -62,7 +62,11 @@ Extend the existing `database-contracts` job after pgTAP and lint:
 
 1. start the pinned Supabase `2.84.2` local stack;
 2. capture `supabase start` and `supabase status` output without forwarding it, parse local API URL, anonymous key, service-role key and database URL in process memory, then register CI masks before invoking any downstream command;
-3. provide credentials to the harness only through the same process environment; write only the fixed synthetic location-encryption key and allowed origin to the temporary Edge env file;
+3. provide credentials to the harness only through the same process environment;
+   write only the fixed synthetic location-encryption key, allowed request origin
+   and validated local public Supabase origin to the temporary Edge env file;
+   the fixed key protects synthetic ephemeral test data only and is not a deploy
+   credential or a confidentiality claim;
 4. serve all repository Edge functions through the local Edge Runtime;
 5. wait on a bounded readiness probe;
 6. run the Gate 2A integration workspace;

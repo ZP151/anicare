@@ -233,7 +233,11 @@ git commit -m "test(pilot): verify concurrent media convergence"
 - [ ] Add source-discovery tests that require every `*.integration.test.ts`, every Edge function in the Gate 2A endpoint allowlist, and the local-only environment guard. Future endpoint/test additions must not silently escape CI.
 - [ ] Add pnpm setup and a frozen install to `database-contracts`, preserving Supabase CLI `2.84.2`, Deno `2.9.5` and Node 22.
 - [ ] Implement one guarded Node orchestration process that captures `supabase start` and `supabase status -o env` without forwarding their output, validates/parses credentials only in memory, emits CI mask directives immediately, and then launches every downstream process with the minimum inherited environment. Add unit tests with fake child processes proving startup/status secrets never reach stdout/stderr or temp files, including failure paths.
-- [ ] Create an Edge env file only in the OS temporary directory with the fixed synthetic location key and `MEDIA_ALLOWED_ORIGIN`; it contains no Supabase credential. Start `supabase functions serve` as a bounded child process and retain its handle.
+- [ ] Create an Edge env file only in the OS temporary directory with the fixed
+  synthetic location key, `MEDIA_ALLOWED_ORIGIN` and the validated local
+  `MEDIA_PUBLIC_SUPABASE_ORIGIN`; it contains no Supabase credential and the
+  fixed key is only a deterministic synthetic-test fixture. Start `supabase
+  functions serve` as a bounded child process and retain its handle.
 - [ ] Run the readiness test, then the full integration suite. Never use `continue-on-error` for either.
 - [ ] In unconditional cleanup, stop the Edge process, delete the noncredential Edge env file and any sanitized log, and run repository-scoped `supabase stop --no-backup` only after validating the project ID. No status/credential file may exist at any point.
 - [ ] On failure, sanitize Edge output before artifact upload; otherwise retain no runtime logs.

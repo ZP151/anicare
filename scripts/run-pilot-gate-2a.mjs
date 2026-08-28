@@ -561,6 +561,8 @@ function sanitizeLine(rawLine, secrets) {
   if (
     /[\\/?&{}<>]/.test(line) ||
     /\b(?:bearer|authorization|body|password|token|secret|credential)\b/i.test(line) ||
+    /\b(?:lat(?:itude)?|lon(?:gitude)?|lng|coordinates?)\b/i.test(line) ||
+    /[+-]?\d{1,3}\.\d{3,}/.test(line) ||
     /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(line) ||
     /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/.test(line) ||
     !/^[A-Za-z0-9 .,;:_@()[\]'=+\-\[\]]+$/.test(line)
