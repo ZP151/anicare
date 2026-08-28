@@ -18,6 +18,7 @@ const forbiddenKeys = new Set([
   'submit',
   'projectid',
   'credentials',
+  'credentialsource',
   'credentialssource',
   'secret',
   'secrets',
@@ -25,6 +26,10 @@ const forbiddenKeys = new Set([
 const allowedPilotKeys = new Set(['distribution', 'android', 'ios']);
 const allowedAndroidKeys = new Set(['buildType']);
 const allowedIosKeys = new Set(['simulator']);
+const allowedConfigKeys = new Set(['cli', 'build']);
+const allowedCliKeys = new Set(['version', 'requireCommit']);
+const allowedBuildKeys = new Set(['pilot']);
+const expectedValidateCommand = 'tsx scripts/validate-pilot-build.ts';
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -87,11 +92,18 @@ export function evaluatePilotBuildContract(
     codes.push('eas_ios_device_build_missing');
   }
 
-  if (
+  const hasForbiddenConfiguration =
     hasForbiddenKey(easConfig) ||
+    hasUnexpectedKeys(config, allowedConfigKeys) ||
+    hasUnexpectedKeys(cli, allowedCliKeys) ||
+    hasUnexpectedKeys(build, allowedBuildKeys) ||
     hasUnexpectedKeys(pilot, allowedPilotKeys) ||
     hasUnexpectedKeys(android, allowedAndroidKeys) ||
-    hasUnexpectedKeys(ios, allowedIosKeys)
+    hasUnexpectedKeys(ios, allowedIosKeys);
+
+  if (
+    hasForbiddenConfiguration ||
+    packageScripts?.['validate:pilot-build'] !== expectedValidateCommand
   ) {
     codes.push('eas_forbidden_configuration');
   }

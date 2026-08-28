@@ -118,6 +118,54 @@ describe('pilot build policy', () => {
     },
   );
 
+  it('rejects a singular credentialSource key anywhere in the EAS config', () => {
+    const codes = evaluatePilotBuildContract(
+      {
+        ...approvedEasConfig,
+        credentialSource: 'local',
+      },
+      approvedScripts,
+    );
+
+    expect(codes).toEqual(['eas_forbidden_configuration']);
+  });
+
+  it.each([
+    ['an extra top-level key', { metadata: 'unexpected' }],
+    ['an extra CLI key', { cli: { version: '22.6.0', requireCommit: true, extra: true } }],
+    [
+      'an extra build profile',
+      {
+        build: {
+          pilot: approvedPilotProfile,
+          production: approvedPilotProfile,
+        },
+      },
+    ],
+  ] as const)('rejects %s from the exact EAS configuration shape', (_description, extra) => {
+    const codes = evaluatePilotBuildContract(
+      { ...approvedEasConfig, ...extra },
+      approvedScripts,
+    );
+
+    expect(codes).toEqual(['eas_forbidden_configuration']);
+  });
+
+  it.each([
+    [
+      'a changed validator script',
+      { ...approvedScripts, 'validate:pilot-build': 'echo changed' },
+    ],
+    ['a missing validator script', (() => {
+      const { ['validate:pilot-build']: _removed, ...scripts } = approvedScripts;
+      return scripts;
+    })()],
+  ] as const)('rejects %s from the exact package scripts', (_description, scriptChange) => {
+    const codes = evaluatePilotBuildContract(approvedEasConfig, scriptChange);
+
+    expect(codes).toEqual(['eas_forbidden_configuration']);
+  });
+
   it('bounds malformed inputs to policy codes and never includes input values', () => {
     const codes = evaluatePilotBuildContract(
       { build: { pilot: { env: { TOKEN: 'do-not-return-this' } } } },
