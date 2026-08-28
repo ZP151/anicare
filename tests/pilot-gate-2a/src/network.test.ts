@@ -61,6 +61,23 @@ describe('fetchWithTimeout', () => {
     await expect(fetchWithTimeout('http://127.0.0.1', {}, 100, oversizedFetch)).rejects.toThrow('response_too_large');
   });
 
+  it('accepts a bodyless response whose declared representation exceeds the body limit', async () => {
+    const declaredLength = String(MAX_HARNESS_RESPONSE_BYTES + 1);
+    const bodylessFetch: typeof fetch = async () => new Response(null, {
+      status: 200,
+      statusText: 'Ready',
+      headers: { 'content-length': declaredLength, 'x-fixture': 'bodyless' },
+    });
+
+    const response = await fetchWithTimeout('http://127.0.0.1', {}, 100, bodylessFetch);
+
+    expect(response.status).toBe(200);
+    expect(response.statusText).toBe('Ready');
+    expect(response.headers.get('content-length')).toBe(declaredLength);
+    expect(response.headers.get('x-fixture')).toBe('bodyless');
+    expect(response.body).toBeNull();
+  });
+
   it('returns a bounded reconstructed response that callers can read normally', async () => {
     const normalFetch: typeof fetch = async () => new Response('ready', {
       status: 201,

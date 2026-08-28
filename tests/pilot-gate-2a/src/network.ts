@@ -29,12 +29,13 @@ async function settleBeforeAbort<T>(work: Promise<T>, signal: AbortSignal, cance
 }
 
 function responseBody(response: Response): Readonly<{ read: Promise<Uint8Array>; cancel: () => void }> {
+  if (!response.body) return { read: Promise.resolve(new Uint8Array()), cancel: () => undefined };
+
   const contentLength = response.headers.get('content-length');
   if (contentLength !== null && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_HARNESS_RESPONSE_BYTES) {
-    void response.body?.cancel().catch(() => undefined);
+    void response.body.cancel().catch(() => undefined);
     return { read: Promise.reject(new Error('response_too_large')), cancel: () => undefined };
   }
-  if (!response.body) return { read: Promise.resolve(new Uint8Array()), cancel: () => undefined };
 
   const reader = response.body.getReader();
   const cancel = () => {
