@@ -619,6 +619,12 @@ export function extractPgTapFailureMarkers(value, knownSecrets = []) {
       if (error && error !== '[redacted]') append(`pgtap_error=${error}`);
     }
 
+    const sqlErrorMatch = line.match(/\bERROR:\s*[A-Za-z][A-Za-z0-9 _."'()=:_-]{1,160}/);
+    if (sqlErrorMatch) {
+      const error = sanitizeLine(sqlErrorMatch[0].replaceAll('"', ''), secrets);
+      if (error && error !== '[redacted]') append(`pgtap_error=${error}`);
+    }
+
     const summaryMatch = line.match(/\bFailed tests?\s+\d{1,4}(?:-\d{1,4})?\b/i);
     if (summaryMatch) {
       const summary = sanitizeLine(summaryMatch[0], secrets);

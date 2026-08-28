@@ -575,6 +575,7 @@ test('pgTAP diagnostics retain only bounded source and failed assertion markers'
     '/home/runner/work/anicare/anicare/supabase/tests/011_identity_review_control_plane.sql ..',
     'not ok 27 - reviewer account erasure anonymizes the reviewer',
     '# died: 42702: column reference "payload_hash" is ambiguous',
+    'psql:/home/runner/work/011.sql:359: ERROR: column reference "animalId" is ambiguous',
     'detail 11111111-2222-4333-8444-555555555555 latitude=1.3521 token=private',
     'Failed test 27',
   ].join('\n');
@@ -585,6 +586,7 @@ test('pgTAP diagnostics retain only bounded source and failed assertion markers'
     'pgtap_file=011_identity_review_control_plane.sql',
     'pgtap_assertion=not ok 27 - reviewer account erasure anonymizes the reviewer',
     'pgtap_error=died: 42702: column reference payload_hash is ambiguous',
+    'pgtap_error=ERROR: column reference animalId is ambiguous',
     'pgtap_summary=Failed test 27',
   ]);
   assert.equal(markers.join('\n').includes('11111111-2222-4333-8444-555555555555'), false);
