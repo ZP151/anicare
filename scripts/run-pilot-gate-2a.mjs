@@ -180,13 +180,22 @@ async function drainCapturedOutput(child) {
   );
 }
 
-function posixSignalProcessGroup(child, signal) {
-  if (!Number.isSafeInteger(child.pid) || child.pid <= 0) return false;
+function signalPosixProcessGroup(pid, signal) {
   try {
-    process.kill(-child.pid, signal);
+    process.kill(-pid, signal);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return;
+    throw error;
+  }
+}
+
+function posixProcessGroupExists(pid) {
+  try {
+    process.kill(-pid, 0);
     return true;
   } catch (error) {
-    return error instanceof Error && 'code' in error && error.code === 'ESRCH';
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+    throw error;
   }
 }
 
@@ -228,26 +237,74 @@ async function runTaskkill(pid, force) {
   return !result.timedOut && result.exitCode === 0;
 }
 
-async function terminateProcessTree(child, exitPromise) {
-  if (!Number.isSafeInteger(child.pid) || child.pid <= 0) {
-    return withCleanupDeadline(exitPromise.then(() => true), PROCESS_KILL_CONFIRM_MS, false);
-  }
-
-  if (process.platform === 'win32') {
-    await runTaskkill(child.pid, false);
-    const exitedDuringGrace = await withCleanupDeadline(
-      exitPromise.then(() => true),
-      PROCESS_TERM_GRACE_MS,
+async function successfulWindowsTreeKill(windowsTreeKill, pid, force) {
+  try {
+    return await withCleanupDeadline(
+      Promise.resolve().then(() => windowsTreeKill(pid, force)).then((result) => result === true),
+      TASKKILL_DEADLINE_MS + PROCESS_TERM_GRACE_MS,
       false,
     );
-    if (!exitedDuringGrace) await runTaskkill(child.pid, true);
-  } else {
-    posixSignalProcessGroup(child, 'SIGTERM');
+  } catch {
+    return false;
+  }
+}
+
+async function waitForProcessGroupGone(pid, processGroupExists) {
+  const deadline = Date.now() + PROCESS_KILL_CONFIRM_MS;
+  while (true) {
+    try {
+      if (!await processGroupExists(pid)) return true;
+    } catch {
+      return false;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return false;
+    await cleanupDelayResult(Math.min(25, remaining), undefined);
+  }
+}
+
+async function terminateProcessTree(child, exitPromise, supervisor) {
+  if (!Number.isSafeInteger(child.pid) || child.pid <= 0) return false;
+
+  if (supervisor.platform === 'win32') {
+    const gracefulSupervision = await successfulWindowsTreeKill(supervisor.windowsTreeKill, child.pid, false);
     await cleanupDelayResult(PROCESS_TERM_GRACE_MS, undefined);
-    posixSignalProcessGroup(child, 'SIGKILL');
+    const forcedSupervision = await successfulWindowsTreeKill(supervisor.windowsTreeKill, child.pid, true);
+    const leaderExited = await withCleanupDeadline(
+      exitPromise.then(() => true),
+      PROCESS_KILL_CONFIRM_MS,
+      false,
+    );
+    return (gracefulSupervision || forcedSupervision) && leaderExited;
   }
 
-  return withCleanupDeadline(exitPromise.then(() => true), PROCESS_KILL_CONFIRM_MS, false);
+  let supervisionSucceeded = true;
+  try {
+    await supervisor.signalProcessGroup(child.pid, 'SIGTERM');
+  } catch {
+    supervisionSucceeded = false;
+  }
+  await cleanupDelayResult(PROCESS_TERM_GRACE_MS, undefined);
+
+  let groupExists = true;
+  try {
+    groupExists = await supervisor.processGroupExists(child.pid);
+  } catch {
+    supervisionSucceeded = false;
+  }
+  if (groupExists) {
+    try {
+      await supervisor.signalProcessGroup(child.pid, 'SIGKILL');
+    } catch {
+      supervisionSucceeded = false;
+    }
+  }
+
+  const [groupGone, leaderExited] = await Promise.all([
+    waitForProcessGroupGone(child.pid, supervisor.processGroupExists),
+    withCleanupDeadline(exitPromise.then(() => true), PROCESS_KILL_CONFIRM_MS, false),
+  ]);
+  return supervisionSucceeded && groupGone && leaderExited;
 }
 
 function cancellationResult(signal) {
@@ -264,7 +321,13 @@ function cancellationResult(signal) {
   return { promise, remove };
 }
 
-export function createSystemProcessAdapter() {
+export function createSystemProcessAdapter({
+  platform = process.platform,
+  windowsTreeKill = runTaskkill,
+  signalProcessGroup = signalPosixProcessGroup,
+  processGroupExists = posixProcessGroupExists,
+} = {}) {
+  const supervisor = { platform, windowsTreeKill, signalProcessGroup, processGroupExists };
   return {
     async capture(command, args, { cwd, env, signal, timeoutMs }) {
       let child;
@@ -275,7 +338,7 @@ export function createSystemProcessAdapter() {
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
-          detached: process.platform !== 'win32',
+          detached: platform !== 'win32',
         });
       } catch {
         return { exitCode: 1, stdout: '', stderr: '', truncated: false };
@@ -292,7 +355,7 @@ export function createSystemProcessAdapter() {
       cancellation.remove();
       let terminationConfirmed = true;
       if (outcome.kind !== 'exit') {
-        terminationConfirmed = await terminateProcessTree(child, exitPromise);
+        terminationConfirmed = await terminateProcessTree(child, exitPromise, supervisor);
       }
       await drainCapturedOutput(child);
       const out = stdout.snapshot();
@@ -317,7 +380,7 @@ export function createSystemProcessAdapter() {
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
-          detached: process.platform !== 'win32',
+          detached: platform !== 'win32',
         });
       } catch {
         throw new Error('child process failed to start');
@@ -327,7 +390,7 @@ export function createSystemProcessAdapter() {
       const exitPromise = waitForChildExit(child);
       let terminationPromise = null;
       const requestTermination = () => {
-        terminationPromise ??= terminateProcessTree(child, exitPromise);
+        terminationPromise ??= terminateProcessTree(child, exitPromise, supervisor);
         return terminationPromise;
       };
       const onAbort = () => {

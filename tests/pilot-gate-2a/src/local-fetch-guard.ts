@@ -37,6 +37,6 @@ export function installPilotGate2AFetchBoundary(
   const dispatch = target.fetch.bind(target);
   target.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     assertLoopbackHttpTarget(input);
-    return dispatch(input, init);
+    return dispatch(input, { ...init, redirect: 'error' });
   }) as typeof fetch;
 }

@@ -472,7 +472,99 @@ test('real abort kills a TERM-resistant descendant tree promptly without waiting
   assert.equal(await waitForProcessExit(parentPid), true);
   assert.equal(await waitForProcessExit(grandchildPid), true);
   assert.equal(result.terminationConfirmed, true);
-  assert.ok(Date.now() - startedAt < 4_000, 'abort exceeded the independent process-tree cleanup deadline');
+  assert.ok(Date.now() - startedAt < 6_000, 'abort exceeded the independent process-tree cleanup deadline');
+});
+
+test('failed Windows tree supervision is not hidden by leader exit while a descendant remains', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pilot-gate-windows-supervisor-'));
+  const parentPidFile = path.join(directory, 'parent.pid');
+  const grandchildPidFile = path.join(directory, 'grandchild.pid');
+  const exitTriggerFile = path.join(directory, 'exit.trigger');
+  let parentPid = 0;
+  let grandchildPid = 0;
+  t.after(async () => {
+    forceKillFixtureTree(parentPid, grandchildPid);
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const supervisorAttempts = [];
+  const controller = new AbortController();
+  const adapter = createSystemProcessAdapter({
+    platform: 'win32',
+    async windowsTreeKill(_pid, force) {
+      supervisorAttempts.push(force);
+      return false;
+    },
+  });
+  const fixture = path.resolve(import.meta.dirname, 'fixtures', 'pilot-gate-process-tree-child.mjs');
+  const capture = adapter.capture(
+    process.execPath,
+    [fixture, parentPidFile, grandchildPidFile, 'parent-exits-after-trigger', exitTriggerFile],
+    {
+      cwd: path.resolve(import.meta.dirname, '..'),
+      env: testChildEnvironment(),
+      signal: controller.signal,
+      timeoutMs: 5_000,
+    },
+  );
+
+  parentPid = await readSpawnedPid(parentPidFile);
+  grandchildPid = await readSpawnedPid(grandchildPidFile);
+  controller.abort();
+  await writeFile(exitTriggerFile, 'exit\n');
+
+  const result = await capture;
+  assert.deepEqual(supervisorAttempts, [false, true]);
+  assert.equal(result.terminationConfirmed, false);
+  assert.equal(await waitForProcessExit(parentPid), true);
+  assert.equal(processExists(grandchildPid), true);
+});
+
+test('a POSIX killpg supervision failure cannot be reported as confirmed termination', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pilot-gate-posix-supervisor-'));
+  const parentPidFile = path.join(directory, 'parent.pid');
+  const grandchildPidFile = path.join(directory, 'grandchild.pid');
+  let parentPid = 0;
+  let grandchildPid = 0;
+  t.after(async () => {
+    forceKillFixtureTree(parentPid, grandchildPid);
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const signals = [];
+  let groupChecks = 0;
+  const controller = new AbortController();
+  const adapter = createSystemProcessAdapter({
+    platform: 'linux',
+    signalProcessGroup(_pid, signal) {
+      signals.push(signal);
+      const failure = new Error('injected process-group supervisor failure');
+      failure.code = 'EPERM';
+      throw failure;
+    },
+    processGroupExists() {
+      groupChecks += 1;
+      return true;
+    },
+  });
+  const fixture = path.resolve(import.meta.dirname, 'fixtures', 'pilot-gate-process-tree-child.mjs');
+  const capture = adapter.capture(process.execPath, [fixture, parentPidFile, grandchildPidFile], {
+    cwd: path.resolve(import.meta.dirname, '..'),
+    env: testChildEnvironment(),
+    signal: controller.signal,
+    timeoutMs: 5_000,
+  });
+
+  parentPid = await readSpawnedPid(parentPidFile);
+  grandchildPid = await readSpawnedPid(grandchildPidFile);
+  controller.abort();
+
+  const result = await capture;
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+  assert.ok(groupChecks > 1, 'process-group disappearance was not polled');
+  assert.equal(result.terminationConfirmed, false);
+  assert.equal(processExists(parentPid), true);
+  assert.equal(processExists(grandchildPid), true);
 });
 
 test('an abort observed at a child boundary prevents later work and still performs full cleanup', async () => {

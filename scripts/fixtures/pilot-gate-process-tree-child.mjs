@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 
-const [, , parentPidFile, grandchildPidFile, mode = 'parent'] = process.argv;
+const [, , parentPidFile, grandchildPidFile, mode = 'parent', triggerFile] = process.argv;
 
 function resistTermination() {
   process.on('SIGTERM', () => undefined);
@@ -14,10 +14,16 @@ if (mode === 'grandchild') {
 } else {
   writeFileSync(parentPidFile, String(process.pid), { encoding: 'utf8', flag: 'wx' });
   spawn(process.execPath, [import.meta.filename, parentPidFile, grandchildPidFile, 'grandchild'], {
-    detached: false,
+    detached: mode === 'parent-exits-after-trigger',
     shell: false,
     stdio: ['ignore', 'inherit', 'inherit'],
     windowsHide: true,
   });
-  resistTermination();
+  if (mode === 'parent-exits-after-trigger') {
+    setInterval(() => {
+      if (existsSync(triggerFile)) process.exit(0);
+    }, 10);
+  } else {
+    resistTermination();
+  }
 }
