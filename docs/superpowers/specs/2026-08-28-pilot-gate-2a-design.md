@@ -112,7 +112,7 @@ Reservation expiry is induced only by the privileged test control plane updating
 
 Use synchronized `Promise.allSettled` starts for small, bounded races:
 
-- two reserves for the same media identity, both of which may idempotently return the same job/path with independently minted signed tokens;
+- two reserves for the same media identity, both of which may idempotently return the same job/path with independently minted signed tokens (the token strings need not differ under deterministic test storage);
 - two finalizations for the same uploaded object;
 - delete racing with a repeated finalization, which must converge to a tombstoned asset and `deletion_pending` job rather than an active quarantined asset;
 - two cleanup invocations claiming the same expired staging job.

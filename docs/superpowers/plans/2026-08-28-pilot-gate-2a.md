@@ -205,7 +205,7 @@ git commit -m "test(pilot): prove expiry and cleanup lifecycle"
 - Create: `tests/pilot-gate-2a/src/media-concurrency.integration.test.ts`
 - Modify: `tests/pilot-gate-2a/src/inspection.ts`
 
-- [ ] Start two same-media reserves from a shared barrier with `Promise.allSettled`; allow both to return equivalent reservations with independently minted signed tokens, and assert one job, one owner and one object path.
+- [ ] Start two same-media reserves from a shared barrier with `Promise.allSettled`; allow both to return equivalent reservations with independently minted signed tokens (the token strings need not differ under deterministic test storage), and assert one job, one owner and one object path.
 - [ ] Upload once, then start two finalizations together; both may report the same idempotent asset or one may return the documented conflict, but the database must contain exactly one asset.
 - [ ] Race owner deletion with repeated finalization. Require convergence to a tombstoned media asset plus `deletion_pending` upload job; a post-race finalize must conflict, with no ownership drift or duplicate asset.
 - [ ] Force one expired staging job and invoke two cleanup requests together. Assert one effective claim/removal and a valid terminal/retry state.

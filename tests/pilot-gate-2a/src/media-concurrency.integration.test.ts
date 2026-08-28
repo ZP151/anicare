@@ -236,8 +236,7 @@ describe('bounded media concurrency convergence', () => {
           firstReservation.jobId === secondReservation.jobId &&
           firstReservation.path === secondReservation.path &&
           firstReservation.mediaId === secondReservation.mediaId &&
-          firstReservation.origin === secondReservation.origin &&
-          firstReservation.token !== secondReservation.token);
+          firstReservation.origin === secondReservation.origin);
 
         const upload = await putSignedMedia(firstReservation, jpeg.bytes);
         requireNormalized(name, [...reserveLabels, upload.ok && upload.status === 200 ? 'uploaded' : 'upload_unexpected'],
