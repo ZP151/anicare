@@ -21,7 +21,9 @@ Included:
 1. Anonymous browsing of delayed, approximate sightings.
 2. Email, Apple and Google sign-in for contributors; 18+ self-confirmation without collecting date of birth.
 3. Photo, traits, risk and one-time location capture for a sighting.
-4. On-device EXIF removal and bystander/licence-plate redaction before any upload (release gate; not yet implemented).
+4. On-device EXIF removal and user-applied opaque masking before any upload are
+   implemented at source level. Automatic bystander/licence-plate detection and
+   physical-device evidence remain release gates.
 5. AI Top-3/new-cat candidate flow, tentative selection and independent review.
 6. Cat aliases, follows, care events and event-derived lifecycle state.
 7. Reporting, blocking, moderation queue, appeal and audit trail.

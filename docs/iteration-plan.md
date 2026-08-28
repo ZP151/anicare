@@ -61,12 +61,17 @@ pilot-ready before those checks.
 
 - Strict crop, embedding, callback and public-result contracts, synthetic
   evaluation fixtures and a fail-closed internal identify route are implemented.
+- The database identity control plane now separates contributor manual/new-cat
+  proposals from service-only AI provenance, denies direct authenticated
+  mutations, enforces independent reviewer recusal, records idempotent
+  append-only decisions and atomically links a sighting only after confirmation.
 - No model weights, labelled dataset, ANN, queue, real callback, automatic
   detection or production identity/accuracy result exists. AI cannot confirm an
   animal identity.
 
-Exit gate: use a consented independently labelled dataset and production-safe
-inference infrastructure before evaluating held-out metrics. Until then, any AI
+Exit gate: approve a purpose-limited consent/provenance dataset manifest, then
+use a consented independently labelled dataset and isolated inference adapter
+before evaluating animal-disjoint held-out/open-set metrics. Until then, any AI
 output remains synthetic-contract coverage only.
 
 ## Sprint 6–7 — care and governance
@@ -101,7 +106,8 @@ and real post-token-expiry media cleanup/replay are outside Gate 2A.
    detector/residual-validation release work.
 3. Provision a real development environment and exercise the audited
    admin/report/block contracts against it.
-4. Curate a consented labelled cat dataset and build a bounded inference/ANN/
-   callback pipeline behind the frozen contracts.
+4. Approve the dataset source/licence/consent/withdrawal rules, curate a
+   consented labelled cat dataset, and build an offline held-out benchmark
+   before any live inference/ANN/callback pipeline.
 5. Complete Singapore legal, privacy, app-store-signing and incident-operation
    launch gates.

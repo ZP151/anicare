@@ -29,6 +29,8 @@ jobs:
       - run: pnpm peers check
       - run: python -m ruff check services/ai
       - run: python -m mypy services/ai/src
+      - run: pnpm validate:pilot-policies
+      - run: pnpm test:root-contracts
       - run: pnpm verify
       - run: git diff --check
 

@@ -16,7 +16,7 @@
 mobile device
   ├─ encrypted draft DB (no coordinates)
   ├─ one-time precise location ──> create-sighting Edge Function
-  └─ redacted, EXIF-free image ──> public-media Storage
+  └─ reviewed, EXIF-free JPEG ──> private quarantined Storage staging
 
 create-sighting
   ├─ H3/time/risk projection ──> RLS-protected public tables
@@ -24,14 +24,17 @@ create-sighting
   └─ append-only access record ──> audit schema
 
 AI worker
-  ├─ reads redacted image + versioned reference embeddings
-  └─ writes candidate proposal (tentative, not identity truth)
+  ├─ future: reads only approved reviewed media + versioned references
+  └─ writes service-origin candidate proposal (tentative, never identity truth)
 
 admin
-  └─ role + recusal checks ──> moderation, identity review, task grants, audit
+  └─ fixed-path role + recusal checks ──> moderation, identity review, task grants, audit
 ```
 
 The private schema is not exposed through the client API. Service-role credentials stay in trusted server runtimes. Public responses never contain ciphertext, nonce, coordinates or internal AI scores.
+Reviewed media remains quarantined and private until a later trusted residual
+validation and promotion gate exists; the current client never writes public
+media.
 
 ## Core data model
 
@@ -41,8 +44,11 @@ The private schema is not exposed through the client API. Service-role credentia
 - `sightings`: approximate cell, time bucket, risk, traits and delayed visibility.
 - `private.precise_locations`: AES-GCM material with a 12-month destruction deadline.
 - `care_events`: completed care, not requests or promises.
-- `media_assets`: redaction assertion, consent status, hash and optional versioned embedding.
-- `identity_proposals` and `match_reviews`: tentative AI/manual proposal and independent decision.
+- `media_assets`: private staging status, reviewed receipt binding, consent
+  status, hash and optional internal versioned embedding.
+- `identity_proposals` and `match_reviews`: tentative service/manual proposal
+  and append-only independent decision. Authenticated mutations use fixed-path,
+  idempotent RPCs rather than direct table writes.
 - `moderation_reports`, `appeals`, `user_blocks`: UGC safety loop.
 - `role_grants`, `location_access_grants`, `audit.access_audit`: least privilege and accountability.
 
@@ -51,16 +57,16 @@ The private schema is not exposed through the client API. Service-role credentia
 1. A client cannot self-publish an immediate or precise sighting.
 2. Critical locations stay hidden; sensitive locations have a longer delay.
 3. A precise-location grant is user/animal/purpose scoped, revocable and no longer than 24 hours.
-4. A reviewer cannot decide a case involving themselves as reporter, author or target.
+4. A reviewer cannot decide a case involving themselves as reporter, proposer,
+   proposed animal profile creator, author or target.
 5. Deleting a photo tombstones metadata, disables training eligibility and clears the embedding before object deletion.
 6. The 12-month retention job destroys ciphertext and nonce; it does not merely hide rows.
 7. An AI output is a proposal and exposes bands/reasons, not numeric similarity.
 
 ## Deployment direction
 
-- Keep Singapore user data and secrets in a reviewed production environment; document every subprocesser and any overseas transfer safeguard.
+- Keep Singapore user data and secrets in a reviewed production environment; document every subprocessor and any overseas transfer safeguard.
 - Deploy separate development, staging and production projects with independent encryption keys.
 - Put AI behind a feature flag and queue; never block sighting creation on inference.
 - Require two-person approval for production schema changes affecting location, auth, storage or RLS.
 - Production admin must use authenticated server-side data access. The current static console is a visual/queue-policy scaffold only.
-
