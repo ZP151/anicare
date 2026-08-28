@@ -4,6 +4,7 @@ import { readLocalStackEnvironment } from './environment.js';
 import { sanitizeDiagnostic } from './diagnostics.js';
 import { createSyntheticScenario, destroySyntheticScenario } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
+import { postgrestReadinessRequest } from './readiness.js';
 
 const DEADLINE_MS = 20_000;
 const RETRY_DELAY_MS = 250;
@@ -40,9 +41,11 @@ async function eventually(
 describe('local stack readiness', () => {
   it('reaches Health, Auth, and the configured create-sighting Edge runtime', async () => {
     const env = readLocalStackEnvironment(process.env);
-    const health = await eventually(env, 'health', (remaining) => fetchWithTimeout(`${env.apiUrl}/rest/v1/`, {
-      headers: { apikey: env.anonKey },
-    }, Math.min(RETRY_DELAY_MS, remaining)), (response) => response.ok);
+    const health = await eventually(env, 'health', (remaining) => fetchWithTimeout(
+      postgrestReadinessRequest(env.apiUrl, env.anonKey),
+      {},
+      Math.min(RETRY_DELAY_MS, remaining),
+    ), (response) => response.ok);
     expect(health.status).toBe(200);
 
     const auth = await eventually(env, 'auth', (remaining) => fetchWithTimeout(`${env.apiUrl}/auth/v1/health`, {
