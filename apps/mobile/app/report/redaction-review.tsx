@@ -58,6 +58,7 @@ export default function RedactionReviewScreen() {
   const busyRef = useRef(false);
   const renderCurrentRef = useRef(false);
   const renderedMasksRef = useRef<readonly PrivacyMask[]>([]);
+  const gestureStartRenderCurrentRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -65,6 +66,7 @@ export default function RedactionReviewScreen() {
     return () => {
       mountedRef.current = false;
       renderCurrentRef.current = false;
+      gestureStartRenderCurrentRef.current = null;
       renderCoordinator.cancel();
       void cacheLifecycle.requestCleanup();
     };
@@ -73,6 +75,7 @@ export default function RedactionReviewScreen() {
   async function choosePhoto() {
     const operation = renderCoordinator.beginSelection();
     renderCurrentRef.current = false;
+    gestureStartRenderCurrentRef.current = null;
     setRenderCurrent(false);
     setSelectedMaskId(null);
     cacheLifecycle.beginAsyncWork();
@@ -125,6 +128,7 @@ export default function RedactionReviewScreen() {
     if (!canonical || busyRef.current || pending) return;
     const operation = renderCoordinator.beginMutation(nextMasks);
     if (!operation) return;
+    gestureStartRenderCurrentRef.current = null;
     renderCurrentRef.current = false;
     setRenderCurrent(false);
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
@@ -159,6 +163,9 @@ export default function RedactionReviewScreen() {
 
   function previewMaskMutation(nextMasks: readonly PrivacyMask[]) {
     if (!canonical || busyRef.current || pending) return;
+    if (gestureStartRenderCurrentRef.current === null) {
+      gestureStartRenderCurrentRef.current = renderCurrentRef.current;
+    }
     renderCurrentRef.current = false;
     setRenderCurrent(false);
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: nextMasks }));
@@ -166,9 +173,12 @@ export default function RedactionReviewScreen() {
 
   function cancelMaskMutation(originalMasks: readonly PrivacyMask[]) {
     if (!canonical || busyRef.current || pending) return;
-    const matchesRenderedPixels = sameMaskSnapshots(originalMasks, renderedMasksRef.current);
-    renderCurrentRef.current = matchesRenderedPixels;
-    setRenderCurrent(matchesRenderedPixels);
+    const hadRenderAuthority = gestureStartRenderCurrentRef.current === true;
+    gestureStartRenderCurrentRef.current = null;
+    const restoresRenderAuthority = hadRenderAuthority &&
+      sameMaskSnapshots(originalMasks, renderedMasksRef.current);
+    renderCurrentRef.current = restoresRenderAuthority;
+    setRenderCurrent(restoresRenderAuthority);
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: originalMasks }));
   }
 

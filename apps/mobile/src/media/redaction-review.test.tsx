@@ -274,12 +274,15 @@ describe('private redaction review screen', () => {
     expect(view.getByLabelText('Reviewed private image').props.source).toEqual({ uri: updated.uri });
   });
 
-  it('keeps an equal-snapshot mutation non-stageable when its render fails', async () => {
+  it('keeps a failed equal-snapshot render non-stageable after a later preview is cancelled', async () => {
     const view = await renderPreparedReview();
     jest.mocked(renderOpaqueMasks).mockRejectedValueOnce(new Error('invalid_rendered_jpeg'));
 
     await act(async () => { latestOverlayProps().onMutationCommit([]); });
     await waitFor(() => expect(view.getByText('The mask could not be rendered safely. Confirmation remains disabled.')).toBeTruthy());
+
+    await act(async () => { latestOverlayProps().onMutationPreview([firstMask]); });
+    await act(async () => { latestOverlayProps().onMutationCancel([]); });
 
     expect(latestOverlayProps().masks).toEqual([]);
     expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
