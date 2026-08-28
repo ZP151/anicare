@@ -14,6 +14,7 @@ import { readLocalStackEnvironment, type LocalStackEnvironment } from './environ
 import { edgeEndpointUrl } from './edge-endpoints.js';
 import { createSyntheticScenario, destroySyntheticScenario } from './fixtures.js';
 import { isExactActorResultFailure } from './media-failure-shape.js';
+import { classifyActorResult } from './media-diagnostic-outcomes.js';
 import {
   controlMediaLifecycleTimestamps,
   inspectMediaLifecycle,
@@ -276,7 +277,10 @@ describe('media expiry, deletion and cleanup lifecycle', () => {
 
       const replayBytes = jpeg.bytes.slice();
       replayBytes[replayBytes.byteLength - 2] = replayBytes[replayBytes.byteLength - 2]! ^ 1;
-      expect(signedReplayFailed(await putSignedMedia(reservation, replayBytes))).toBe(true);
+      const replayResult = await putSignedMedia(reservation, replayBytes);
+      if (!signedReplayFailed(replayResult)) {
+        throw new Error(`lifecycle_signed_replay_${classifyActorResult(replayResult)}`);
+      }
       await expect(inspectStoredStagingObject(env, {
         jobId: reservation.jobId,
         sha256: jpeg.sha256,

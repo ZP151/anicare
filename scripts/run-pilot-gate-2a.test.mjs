@@ -517,6 +517,19 @@ test('runtime sanitizer preserves bounded safe lines and replaces unsafe diagnos
   assert.match(sanitized, /\[redacted\]/);
 });
 
+test('runtime sanitizer preserves the fixed replay diagnostic while redacting request data', () => {
+  const sanitized = sanitizeRuntimeOutput([
+    'lifecycle_signed_replay_http_400',
+    'request https://127.0.0.1/upload?token=signed-token',
+    'job 11111111-2222-4333-8444-555555555555',
+  ].join('\n'));
+
+  assert.match(sanitized, /^lifecycle_signed_replay_http_400$/m);
+  assert.equal(sanitized.includes('https://127.0.0.1'), false);
+  assert.equal(sanitized.includes('signed-token'), false);
+  assert.equal(sanitized.includes('11111111-2222-4333-8444-555555555555'), false);
+});
+
 test('runtime sanitizer redacts every canonical UUID shape including v7, Nil, and Max', () => {
   const canonicalUuids = [
     '01890f47-eabc-7def-8123-456789abcdef',
