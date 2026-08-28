@@ -62,6 +62,20 @@ describe('native config policy', () => {
     expect(evaluateNativeConfigEvidence(safeEvidence)).toEqual([]);
   });
 
+  it('requires Android gallery and foreground-location permissions', () => {
+    expect(
+      evaluateNativeConfigEvidence({
+        ...safeEvidence,
+        androidPermissions: ['android.permission.INTERNET'],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        'photo_library_permission_missing',
+        'location_when_in_use_missing',
+      ]),
+    );
+  });
+
   it('normalizes only inspected native configuration fields', () => {
     expect(
       normalizeNativeConfigEvidence(

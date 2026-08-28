@@ -16,31 +16,36 @@ function nativeConfigJsonInvalid(): Error {
   return new Error('native_config_json_invalid');
 }
 
+function isExpoConfigKind(kind: unknown): kind is ExpoConfigKind {
+  return kind === 'public' || kind === 'introspect';
+}
+
 export const runExpoConfig: ExpoConfigRunner = (kind) => {
-  const pnpmExecutable = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-  const suppressShellDeprecation = process.noDeprecation;
-  if (process.platform === 'win32') {
-    process.noDeprecation = true;
+  if (!isExpoConfigKind(kind)) {
+    throw new Error('native_config_command_failed');
   }
 
-  let result;
-  try {
-    result = spawnSync(
-      pnpmExecutable,
-      ['exec', 'expo', 'config', '--type', kind, '--json'],
-      {
-        cwd: mobileRoot,
-        encoding: 'utf8',
-        maxBuffer: 4 * 1024 * 1024,
-        shell:
-          process.platform === 'win32'
-            ? (process.env.ComSpec ?? 'cmd.exe')
-            : false,
-      },
-    );
-  } finally {
-    process.noDeprecation = suppressShellDeprecation;
-  }
+  const pnpmExecutable = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  const expoConfigArguments = [
+    'exec',
+    'expo',
+    'config',
+    '--type',
+    kind,
+    '--json',
+  ];
+  const useWindowsCommand = process.platform === 'win32';
+  const result = spawnSync(
+    useWindowsCommand ? 'cmd.exe' : pnpmExecutable,
+    useWindowsCommand
+      ? ['/d', '/s', '/c', pnpmExecutable, ...expoConfigArguments]
+      : expoConfigArguments,
+    {
+      cwd: mobileRoot,
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  );
 
   if (result.error || result.status !== 0 || result.signal !== null) {
     throw new Error('native_config_command_failed');

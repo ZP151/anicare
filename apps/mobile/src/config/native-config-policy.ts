@@ -31,6 +31,14 @@ const expectedLocation = {
 const expectedSqlite = {
   useSQLCipher: true,
 };
+const androidGalleryPermissions = [
+  'android.permission.READ_MEDIA_IMAGES',
+  'android.permission.READ_EXTERNAL_STORAGE',
+];
+const androidForegroundLocationPermissions = [
+  'android.permission.ACCESS_FINE_LOCATION',
+  'android.permission.ACCESS_COARSE_LOCATION',
+];
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -88,6 +96,15 @@ function hasInfoPlistKey(
   key: string,
 ): boolean {
   return evidence.iosUsageDescriptionKeys.includes(key);
+}
+
+function hasAndroidPermission(
+  evidence: NativeConfigEvidence,
+  permissions: readonly string[],
+): boolean {
+  return permissions.some((permission) =>
+    evidence.androidPermissions.includes(permission),
+  );
 }
 
 function hasPluginOptions(
@@ -185,10 +202,16 @@ export function evaluateNativeConfigEvidence(
   ) {
     codes.push('ios_always_location_usage_forbidden');
   }
-  if (!hasInfoPlistKey(evidence, 'NSPhotoLibraryUsageDescription')) {
+  if (
+    !hasInfoPlistKey(evidence, 'NSPhotoLibraryUsageDescription') ||
+    !hasAndroidPermission(evidence, androidGalleryPermissions)
+  ) {
     codes.push('photo_library_permission_missing');
   }
-  if (!hasInfoPlistKey(evidence, 'NSLocationWhenInUseUsageDescription')) {
+  if (
+    !hasInfoPlistKey(evidence, 'NSLocationWhenInUseUsageDescription') ||
+    !hasAndroidPermission(evidence, androidForegroundLocationPermissions)
+  ) {
     codes.push('location_when_in_use_missing');
   }
   if (!hasPluginOptions(evidence.plugins, 'expo-sqlite', expectedSqlite)) {

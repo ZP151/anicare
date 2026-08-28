@@ -1,7 +1,14 @@
+jest.mock('node:child_process', () => ({
+  spawnSync: jest.fn(),
+}));
+
 import {
+  runExpoConfig,
   validateNativeConfigWithRunner,
+  type ExpoConfigKind,
   type ExpoConfigRunner,
 } from './native-config-command';
+import { spawnSync } from 'node:child_process';
 
 const validPublicConfig = {
   scheme: 'animalhelper',
@@ -25,7 +32,10 @@ const validPublicConfig = {
 
 const validIntrospectedConfig = {
   android: {
-    permissions: ['android.permission.ACCESS_FINE_LOCATION'],
+    permissions: [
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.READ_MEDIA_IMAGES',
+    ],
   },
   _internal: {
     modResults: {
@@ -40,6 +50,13 @@ const validIntrospectedConfig = {
 };
 
 describe('native config command adapter', () => {
+  it('rejects an invalid config kind before spawning a command', () => {
+    expect(() => runExpoConfig('invalid' as ExpoConfigKind)).toThrow(
+      'native_config_command_failed',
+    );
+    expect(spawnSync).not.toHaveBeenCalled();
+  });
+
   it('returns policy codes from the public and introspected command results', () => {
     const run: ExpoConfigRunner = (kind) =>
       kind === 'public' ? validPublicConfig : validIntrospectedConfig;
