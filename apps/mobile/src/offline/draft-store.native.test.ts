@@ -144,6 +144,7 @@ describe('native draft storage privacy boundary', () => {
   });
 
   it('executes migration/backfill invariants against an injected state model', async () => {
+    const events: string[] = [];
     const columns = new Set([
       'id', 'notes', 'risk', 'reviewed_media_ref', 'encryption_version', 'updated_at', 'reviewed_media_path',
     ]);
@@ -158,14 +159,16 @@ describe('native draft storage privacy boundary', () => {
     await ensureDraftTransportSchemaWithDependencies({
       listColumns: async () => [...columns],
       addColumn: async (name, _type) => {
+        events.push(`add:${name}`);
         columns.add(name);
         if (name === 'revision') row.revision = 0;
         if (name === 'pending_media_cleanup_ref') row.pending_media_cleanup_ref = null;
       },
       backfillEncryptionVersion: async () => {
+        events.push('backfill');
         if (row.reviewed_media_ref && row.encryption_version === null) row.encryption_version = 'aes-256-gcm.v1';
       },
-      clearLegacyReviewedPath: async () => { row.reviewed_media_path = null; },
+      clearLegacyReviewedPath: async () => { events.push('clear-legacy-path'); row.reviewed_media_path = null; },
     });
     expect(columns.has('upload_resume_state')).toBe(true);
     expect(columns.has('upload_attempt_started_at')).toBe(true);
@@ -179,6 +182,8 @@ describe('native draft storage privacy boundary', () => {
       owner_subject: 'owner-12345678',
       pending_media_cleanup_ref: null,
     });
+    expect(events.at(-2)).toBe('backfill');
+    expect(events.at(-1)).toBe('clear-legacy-path');
   });
 
   it('deserializes a valid legacy AHM1 row as v1 after the migration backfill', () => {

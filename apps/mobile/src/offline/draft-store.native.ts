@@ -11,6 +11,11 @@ import {
   UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
   type StoredDraft,
 } from './draft-policy';
+import {
+  createRetryableSingleFlight,
+  loadOrCreateDatabaseKey,
+  openEncryptedDatabaseWithDependencies,
+} from './draft-database-initialization';
 import type { UploadJob, UploadJobState, UploadResumeState } from './upload-job';
 
 const DATABASE_KEY_NAME = 'animalhelper.offline-drafts.v1';
@@ -215,32 +220,7 @@ export async function ensureDraftTransportSchemaWithDependencies(
   if (existing.has('reviewed_media_path')) await dependencies.clearLegacyReviewedPath();
 }
 
-let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
-
-function bytesToHex(bytes: Uint8Array) {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function getDatabaseKey() {
-  const available = await SecureStore.isAvailableAsync();
-  if (!available) throw new Error('secure_offline_storage_unavailable');
-
-  const current = await SecureStore.getItemAsync(DATABASE_KEY_NAME);
-  if (current) return current;
-
-  const created = bytesToHex(Crypto.getRandomBytes(32));
-  await SecureStore.setItemAsync(DATABASE_KEY_NAME, created, {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  });
-  return created;
-}
-
-async function openDraftDatabase() {
-  if (Platform.OS === 'web') throw new Error('secure_offline_storage_unavailable');
-
-  const key = await getDatabaseKey();
-  const database = await SQLite.openDatabaseAsync(DATABASE_NAME);
-  await database.execAsync(`PRAGMA key = "x'${key}'";`);
+async function initializeDraftDatabaseSchema(database: SQLite.SQLiteDatabase) {
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS sighting_drafts (
@@ -276,13 +256,30 @@ async function openDraftDatabase() {
     backfillEncryptionVersion: async () => { await database.execAsync(ENCRYPTION_VERSION_BACKFILL_SQL); },
     clearLegacyReviewedPath: async () => { await database.execAsync(LEGACY_REVIEWED_PATH_CLEAR_SQL); },
   });
-  return database;
 }
 
-async function getDatabase() {
-  databasePromise ??= openDraftDatabase();
-  return databasePromise;
+async function openDraftDatabase() {
+  return openEncryptedDatabaseWithDependencies({
+    isNative: Platform.OS !== 'web',
+    loadKey: () => loadOrCreateDatabaseKey({
+      isAvailable: () => SecureStore.isAvailableAsync(),
+      load: () => SecureStore.getItemAsync(DATABASE_KEY_NAME),
+      store: async (created) => {
+        await SecureStore.setItemAsync(DATABASE_KEY_NAME, created, {
+          keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        });
+      },
+      randomBytes: (length) => Crypto.getRandomBytes(length),
+    }),
+    openDatabase: () => SQLite.openDatabaseAsync(DATABASE_NAME),
+    applyKey: async (database, key) => {
+      await database.execAsync(`PRAGMA key = "x'${key}'";`);
+    },
+    initialize: initializeDraftDatabaseSchema,
+  });
 }
+
+const getDatabase = createRetryableSingleFlight(openDraftDatabase);
 
 export async function saveOfflineDraft(input: Record<string, unknown>) {
   const draft = sanitizeDraftForStorage(input);
