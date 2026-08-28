@@ -11,15 +11,9 @@ import {
 } from './actors.js';
 import { readLocalStackEnvironment } from './environment.js';
 import { createSyntheticScenario, destroySyntheticScenario } from './fixtures.js';
+import { isExactMediaBoundaryFailure } from './media-failure-shape.js';
 import { inspectFinalizedMedia, inspectStoredStagingObject } from './inspection.js';
 import { deterministicJpegFixture } from './jpeg-fixture.js';
-
-type ReserveFailure = Readonly<{
-  stage: 'reserve';
-  kind: 'http';
-  status: 409;
-  code: 'media_reservation_conflict';
-}>;
 
 function receipt(sightingId: string, mediaId: string, sha256: string, byteLength: number, width: number, height: number): ReserveInput {
   return {
@@ -37,18 +31,13 @@ function receipt(sightingId: string, mediaId: string, sha256: string, byteLength
   };
 }
 
-function exactReserveConflict(value: unknown): value is ReserveFailure {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const actual = value as Record<string, unknown>;
-  return Object.keys(actual).length === 5 && actual.stage === 'reserve' && actual.kind === 'http' &&
-    actual.status === 409 && actual.code === 'media_reservation_conflict';
-}
-
 async function expectReserveConflict(action: Promise<unknown>): Promise<void> {
   try {
     await action;
   } catch (error) {
-    expect(exactReserveConflict(error)).toBe(true);
+    expect(isExactMediaBoundaryFailure(error, {
+      stage: 'reserve', status: 409, code: 'media_reservation_conflict',
+    })).toBe(true);
     return;
   }
   expect(false).toBe(true);

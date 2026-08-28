@@ -12,6 +12,7 @@ import {
 } from './actors.js';
 import { readLocalStackEnvironment, type LocalStackEnvironment } from './environment.js';
 import { createSyntheticScenario, destroySyntheticScenario, type SyntheticActor } from './fixtures.js';
+import { isExactMediaBoundaryFailure, type MediaBoundaryFailureExpectation } from './media-failure-shape.js';
 import { inspectFinalizedMedia } from './inspection.js';
 import { deterministicJpegFixture } from './jpeg-fixture.js';
 import { fetchWithTimeout } from './network.js';
@@ -21,10 +22,10 @@ const DENIED_STATUSES = new Set([400, 401, 403, 404, 406]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type HttpFailure = Readonly<{
-  stage: 'reserve' | 'finalize' | 'delete';
+  stage: MediaBoundaryFailureExpectation['stage'];
   kind: 'http';
-  status: number;
-  code: 'media_not_found_or_forbidden' | 'media_reservation_conflict';
+  status: MediaBoundaryFailureExpectation['status'];
+  code: MediaBoundaryFailureExpectation['code'];
 }>;
 
 function receipt(sightingId: string, mediaId: string, sha256: string, byteLength: number, width: number, height: number): ReserveInput {
@@ -43,18 +44,6 @@ function receipt(sightingId: string, mediaId: string, sha256: string, byteLength
   };
 }
 
-function exactBoundaryFailure(
-  value: unknown,
-  stage: HttpFailure['stage'],
-  status: HttpFailure['status'],
-  code: HttpFailure['code'],
-): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const actual = value as Record<string, unknown>;
-  return Object.keys(actual).length === 5 && actual.stage === stage && actual.kind === 'http' &&
-    actual.status === status && actual.code === code;
-}
-
 async function reserveFailsWith(
   action: Promise<unknown>,
   status: HttpFailure['status'],
@@ -63,7 +52,7 @@ async function reserveFailsWith(
   try {
     await action;
   } catch (error) {
-    expect(exactBoundaryFailure(error, 'reserve', status, code)).toBe(true);
+    expect(isExactMediaBoundaryFailure(error, { stage: 'reserve', status, code })).toBe(true);
     return;
   }
   expect(false).toBe(true);
