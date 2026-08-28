@@ -9,7 +9,10 @@
     "lint": "tsc --noEmit",
     "test": "jest --runInBand",
     "typecheck": "tsc --noEmit",
-    "validate:native-config": "tsx scripts/validate-native-config.ts"
+    "validate:native-config": "tsx scripts/validate-native-config.ts",
+    "validate:pilot-build": "tsx scripts/validate-pilot-build.ts",
+    "build:pilot:android": "pnpm dlx eas-cli@22.6.0 build --profile pilot --platform android",
+    "build:pilot:ios": "pnpm dlx eas-cli@22.6.0 build --profile pilot --platform ios"
   },
   "dependencies": {
     "@animalhelper/domain": "workspace:*",

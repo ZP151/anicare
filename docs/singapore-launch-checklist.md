@@ -19,6 +19,13 @@ This is an engineering and operating checklist, not legal advice. A Singapore-qu
 - [ ] Maintain an incident assessment runbook. A notifiable breach must be reported to the PDPC as soon as practicable and no later than three calendar days after determination: [PDPC breach notification timing](https://www.pdpc.gov.sg/report-data-breach/before-you-report-a-data-breach-3/info).
 - [ ] Document why each personal-data attribute is necessary for AI and minimise training data, consistent with the [PDPC AI guidelines](https://www.pdpc.gov.sg/-/media/files/pdpc/pdf-files/advisory-guidelines/advisory-guidelines-on-the-use-of-personal-data-in-ai-recommendation-and-decision-systems.pdf).
 
+## Pilot Gate 1
+
+- [ ] Treat the `pilot` EAS profile as an internal test artifact only; it is not a public release or a claim that the app is pilot-ready.
+- [ ] Keep EAS login, project linking, credential creation, iOS device registration, and disabling unauthenticated internal-build access as manual gates.
+- [ ] Treat hosted Supabase Storage, two-user concurrency, native-device SQLCipher/process-kill tests, signing, legal/operational drills, and AI accuracy as unresolved release gates.
+- [ ] Do not share an internal build until the test-data protocol and authorized Expo access are approved.
+
 ## Community and animal welfare
 
 - [ ] Align terminology and operational escalation with AVS and partner caregivers. Singapore’s framework includes TNRM for community cats and encourages responsible caregiving: [AVS Cat Management Framework](https://avs.nparks.gov.sg/noticeboard/cat-management-framework/general-information/).
@@ -49,4 +56,3 @@ This is an engineering and operating checklist, not legal advice. A Singapore-qu
 - [ ] ML owner: dataset consent/provenance and held-out gates.
 - [ ] Legal/accounting: entity, terms, fundraising and tax wording.
 - [ ] Engineering: native builds, RLS/security tests, observability, backups and rollback.
-
