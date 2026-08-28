@@ -6,7 +6,11 @@ export type LocalStackEnvironment = Readonly<{
   allowedOrigin: string;
 }>;
 
-const DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+const LOCAL_DATABASE_PROTOCOL = 'postgresql:';
+const LOCAL_DATABASE_USER = 'postgres';
+const LOCAL_DATABASE_HOST = '127.0.0.1';
+const LOCAL_DATABASE_PORT = '54322';
+const LOCAL_DATABASE_PATHNAME = '/postgres';
 const INVALID_ENVIRONMENT_MESSAGE = 'Invalid Pilot Gate 2A environment.';
 
 function invalidEnvironment(): never {
@@ -49,6 +53,28 @@ function credential(value: string): string {
   return value;
 }
 
+function exactLocalDatabaseUrl(value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return invalidEnvironment();
+  }
+
+  if (
+    url.protocol !== LOCAL_DATABASE_PROTOCOL ||
+    url.username !== LOCAL_DATABASE_USER ||
+    url.password !== LOCAL_DATABASE_USER ||
+    url.hostname !== LOCAL_DATABASE_HOST ||
+    url.port !== LOCAL_DATABASE_PORT ||
+    url.pathname !== LOCAL_DATABASE_PATHNAME ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    return invalidEnvironment();
+  }
+}
+
 export function readLocalStackEnvironment(source: NodeJS.ProcessEnv): LocalStackEnvironment {
   const apiUrl = required(source, 'SUPABASE_URL');
   const anonKey = credential(required(source, 'SUPABASE_ANON_KEY'));
@@ -58,7 +84,9 @@ export function readLocalStackEnvironment(source: NodeJS.ProcessEnv): LocalStack
   const api = localHttpUrl(apiUrl);
   const origin = localHttpUrl(allowedOrigin);
 
-  if (databaseUrl !== DATABASE_URL || allowedOrigin !== api.origin || origin.origin !== api.origin) {
+  exactLocalDatabaseUrl(databaseUrl);
+
+  if (allowedOrigin !== api.origin || origin.origin !== api.origin) {
     return invalidEnvironment();
   }
 

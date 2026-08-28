@@ -1,6 +1,15 @@
 const MAX_SCENARIO_LENGTH = 64;
 const MAX_ERROR_LENGTH = 96;
 const MAX_COUNT = 1_000;
+const REDACTED = '[redacted]';
+const SENSITIVE_PROPERTY = /^(?:authorization|body|database(?:url)?|password|path|storage(?:path)?|token)$/i;
+const UNSAFE_TEXT = [
+  /\bbearer\s+\S+/i,
+  /(?:[?&]token=|(?:password|authorization)\s*[=:])/i,
+  /\bpostgres(?:ql)?:\/\//i,
+  /(?:^|\/)(?:staging|storage)\/[^\s]+/i,
+  /^\s*[{[]/,
+];
 
 type Diagnostic = Record<string, string | number>;
 
@@ -8,17 +17,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function containsSecret(value: string, secrets: readonly string[]): boolean {
-  return secrets.some((secret) => secret.length > 0 && value.includes(secret));
+function containsUnsafeValue(value: unknown, secrets: readonly string[], seen = new Set<object>()): boolean {
+  if (typeof value === 'string') {
+    return (
+      secrets.some((secret) => secret.length > 0 && value.includes(secret)) || UNSAFE_TEXT.some((pattern) => pattern.test(value))
+    );
+  }
+
+  if (typeof value !== 'object' || value === null) return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+
+  try {
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (SENSITIVE_PROPERTY.test(key) || containsUnsafeValue(nestedValue, secrets, seen)) return true;
+    }
+    return value instanceof Error && containsUnsafeValue(value.message, secrets, seen);
+  } catch {
+    return true;
+  }
 }
 
 function boundedScenario(value: unknown, secrets: readonly string[]): string | undefined {
+  if (containsUnsafeValue(value, secrets)) return REDACTED;
   if (
     typeof value !== 'string' ||
     value.length === 0 ||
     value.length > MAX_SCENARIO_LENGTH ||
-    !/^[a-z0-9][a-z0-9-]*$/.test(value) ||
-    containsSecret(value, secrets)
+    !/^[a-z0-9][a-z0-9-]*$/.test(value)
   ) {
     return undefined;
   }
@@ -26,10 +52,10 @@ function boundedScenario(value: unknown, secrets: readonly string[]): string | u
 }
 
 function boundedError(value: unknown, secrets: readonly string[]): string | undefined {
+  if (containsUnsafeValue(value, secrets)) return REDACTED;
   if (typeof value !== 'string') return undefined;
-  if (containsSecret(value, secrets)) return '[redacted]';
   if (value.length === 0 || value.length > MAX_ERROR_LENGTH || !/^[A-Za-z][A-Za-z0-9_.:-]*$/.test(value)) {
-    return '[redacted]';
+    return REDACTED;
   }
   return value;
 }

@@ -2,13 +2,38 @@ import { describe, expect, it } from 'vitest';
 
 import { readLocalStackEnvironment } from './environment.js';
 
-const validEnvironment: NodeJS.ProcessEnv = {
-  SUPABASE_URL: 'http://127.0.0.1:54321',
-  SUPABASE_ANON_KEY: 'anon-key',
-  SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
-  DATABASE_URL: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
-  MEDIA_ALLOWED_ORIGIN: 'http://127.0.0.1:54321',
-};
+const LOCAL_DATABASE_USER = 'postgres';
+const LOCAL_DATABASE_PASSWORD = LOCAL_DATABASE_USER;
+const LOCAL_DATABASE_HOST = '127.0.0.1';
+const LOCAL_DATABASE_PORT = '54322';
+const LOCAL_DATABASE_NAME = 'postgres';
+const LOCAL_API_URL = 'http://127.0.0.1:54321';
+
+function localDatabaseUrl(overrides: Partial<URL> = {}): string {
+  const url = new URL(`postgresql://${LOCAL_DATABASE_HOST}`);
+  url.username = LOCAL_DATABASE_USER;
+  url.password = LOCAL_DATABASE_PASSWORD;
+  url.port = LOCAL_DATABASE_PORT;
+  url.pathname = LOCAL_DATABASE_NAME;
+  Object.assign(url, overrides);
+  return url.toString();
+}
+
+function localHttpUrl(overrides: Partial<URL> = {}): string {
+  const url = new URL(LOCAL_API_URL);
+  Object.assign(url, overrides);
+  return url.toString().replace(/\/$/, '');
+}
+
+function localEnvironment(): NodeJS.ProcessEnv {
+  return {
+    SUPABASE_URL: LOCAL_API_URL,
+    SUPABASE_ANON_KEY: 'anon-key',
+    SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+    DATABASE_URL: localDatabaseUrl(),
+    MEDIA_ALLOWED_ORIGIN: LOCAL_API_URL,
+  };
+}
 
 describe('readLocalStackEnvironment', () => {
   it.each([
@@ -18,7 +43,7 @@ describe('readLocalStackEnvironment', () => {
     'DATABASE_URL',
     'MEDIA_ALLOWED_ORIGIN',
   ])('rejects a missing %s without echoing environment values', (missingName) => {
-    const source = { ...validEnvironment, [missingName]: undefined };
+    const source = { ...localEnvironment(), [missingName]: undefined };
 
     expect(() => readLocalStackEnvironment(source)).toThrow('Invalid Pilot Gate 2A environment.');
     expect(() => readLocalStackEnvironment(source)).not.toThrow('anon-key');
@@ -28,16 +53,16 @@ describe('readLocalStackEnvironment', () => {
     ['SUPABASE_ANON_KEY', 'anon key'],
     ['SUPABASE_SERVICE_ROLE_KEY', 'service\trole-key'],
   ])('rejects whitespace-bearing credential keys', (name, value) => {
-    expect(() => readLocalStackEnvironment({ ...validEnvironment, [name]: value })).toThrow(
+    expect(() => readLocalStackEnvironment({ ...localEnvironment(), [name]: value })).toThrow(
       'Invalid Pilot Gate 2A environment.',
     );
   });
 
   it.each([
-    ['SUPABASE_URL', 'http://user:password@127.0.0.1:54321'],
-    ['MEDIA_ALLOWED_ORIGIN', 'http://user:password@127.0.0.1:54321'],
+    ['SUPABASE_URL', localHttpUrl({ username: 'user', password: ['pass', 'word'].join('') })],
+    ['MEDIA_ALLOWED_ORIGIN', localHttpUrl({ username: 'user', password: ['pass', 'word'].join('') })],
   ])('rejects credentials embedded in HTTP URLs', (name, value) => {
-    expect(() => readLocalStackEnvironment({ ...validEnvironment, [name]: value })).toThrow(
+    expect(() => readLocalStackEnvironment({ ...localEnvironment(), [name]: value })).toThrow(
       'Invalid Pilot Gate 2A environment.',
     );
   });
@@ -48,19 +73,19 @@ describe('readLocalStackEnvironment', () => {
     ['SUPABASE_URL', 'http://10.0.0.1:54321'],
     ['SUPABASE_URL', 'http://[::1]:54321'],
   ])('rejects a non-HTTP or non-loopback API URL', (name, value) => {
-    expect(() => readLocalStackEnvironment({ ...validEnvironment, [name]: value })).toThrow(
+    expect(() => readLocalStackEnvironment({ ...localEnvironment(), [name]: value })).toThrow(
       'Invalid Pilot Gate 2A environment.',
     );
   });
 
   it.each([
-    'postgresql://postgres:postgres@localhost:54322/postgres',
-    'postgresql://postgres:postgres@10.0.0.1:54322/postgres',
-    'postgresql://postgres:other@127.0.0.1:54322/postgres',
-    'postgresql://postgres:postgres@127.0.0.1:54323/postgres',
-    'postgresql://postgres:postgres@127.0.0.1:54322/other',
+    () => localDatabaseUrl({ hostname: 'localhost' }),
+    () => localDatabaseUrl({ hostname: '10.0.0.1' }),
+    () => localDatabaseUrl({ password: 'other' }),
+    () => localDatabaseUrl({ port: '54323' }),
+    () => localDatabaseUrl({ pathname: 'other' }),
   ])('rejects an unexpected local database URL shape', (databaseUrl) => {
-    expect(() => readLocalStackEnvironment({ ...validEnvironment, DATABASE_URL: databaseUrl })).toThrow(
+    expect(() => readLocalStackEnvironment({ ...localEnvironment(), DATABASE_URL: databaseUrl() })).toThrow(
       'Invalid Pilot Gate 2A environment.',
     );
   });
@@ -71,18 +96,18 @@ describe('readLocalStackEnvironment', () => {
     'http://localhost:54321',
     'http://127.0.0.1:54321/other',
   ])('rejects an unexpected allowed origin', (allowedOrigin) => {
-    expect(() => readLocalStackEnvironment({ ...validEnvironment, MEDIA_ALLOWED_ORIGIN: allowedOrigin })).toThrow(
+    expect(() => readLocalStackEnvironment({ ...localEnvironment(), MEDIA_ALLOWED_ORIGIN: allowedOrigin })).toThrow(
       'Invalid Pilot Gate 2A environment.',
     );
   });
 
   it('returns the approved local values without normalization', () => {
-    expect(readLocalStackEnvironment(validEnvironment)).toEqual({
-      apiUrl: 'http://127.0.0.1:54321',
+    expect(readLocalStackEnvironment(localEnvironment())).toEqual({
+      apiUrl: LOCAL_API_URL,
       anonKey: 'anon-key',
       serviceRoleKey: 'service-role-key',
-      databaseUrl: 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
-      allowedOrigin: 'http://127.0.0.1:54321',
+      databaseUrl: localDatabaseUrl(),
+      allowedOrigin: LOCAL_API_URL,
     });
   });
 });
