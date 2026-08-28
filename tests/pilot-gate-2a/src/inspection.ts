@@ -63,6 +63,29 @@ export type MediaLifecycleInspection = Readonly<{
   stagingObjectExists: boolean;
 }>;
 
+export type MediaConcurrencyInspectionInput = Readonly<{
+  jobId: string;
+  ownerId: string;
+  sightingId: string;
+  mediaId: string;
+}>;
+
+export type MediaConcurrencyInspection = Readonly<{
+  jobCountForMediaId: number;
+  matchingOwnerJobCount: number;
+  distinctOwnerCount: number;
+  distinctObjectPathCount: number;
+  canonicalObjectPathCount: number;
+  assetCountForMediaId: number;
+  matchingOwnerSightingAssetCount: number;
+  matchingJobAssetCount: number;
+  activeQuarantinedAssetCount: number;
+  tombstonedAssetCount: number;
+  jobStatus: 'missing' | 'reserved' | 'finalized' | 'deletion_pending';
+  cleanupClaimed: boolean;
+  stagingObjectExists: boolean;
+}>;
+
 type InspectionRow = Readonly<{
   asset_count_for_media_id: number;
   matching_quarantined_asset_count: number;
@@ -86,7 +109,26 @@ type MediaLifecycleAssetInspectionRow = Readonly<{
   asset_tombstoned: boolean;
 }>;
 
+type MediaConcurrencyJobInspectionRow = Readonly<{
+  job_count_for_media_id: number;
+  matching_owner_job_count: number;
+  distinct_owner_count: number;
+  distinct_object_path_count: number;
+  canonical_object_path_count: number;
+  target_job_status: string;
+  cleanup_claimed: boolean;
+}>;
+
+type MediaConcurrencyAssetInspectionRow = Readonly<{
+  asset_count_for_media_id: number;
+  matching_owner_sighting_asset_count: number;
+  matching_job_asset_count: number;
+  active_quarantined_asset_count: number;
+  tombstoned_asset_count: number;
+}>;
+
 type MediaLifecycleDatabaseInspection = Omit<MediaLifecycleInspection, 'stagingObjectExists'>;
+type MediaConcurrencyDatabaseInspection = Omit<MediaConcurrencyInspection, 'stagingObjectExists'>;
 
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -108,6 +150,14 @@ function validMediaLifecycleInspectionInput(value: unknown): value is MediaLifec
   if (!exactObject(value, ['jobId', 'ownerId', 'mediaId'])) return false;
   return typeof value.jobId === 'string' && UUID.test(value.jobId) &&
     typeof value.ownerId === 'string' && UUID.test(value.ownerId) &&
+    typeof value.mediaId === 'string' && UUID.test(value.mediaId);
+}
+
+function validMediaConcurrencyInspectionInput(value: unknown): value is MediaConcurrencyInspectionInput {
+  if (!exactObject(value, ['jobId', 'ownerId', 'sightingId', 'mediaId'])) return false;
+  return typeof value.jobId === 'string' && UUID.test(value.jobId) &&
+    typeof value.ownerId === 'string' && UUID.test(value.ownerId) &&
+    typeof value.sightingId === 'string' && UUID.test(value.sightingId) &&
     typeof value.mediaId === 'string' && UUID.test(value.mediaId);
 }
 
@@ -146,6 +196,57 @@ function lifecycleAssetInspectionRow(value: unknown): value is MediaLifecycleAss
   if (!exactObject(value, ['asset_count', 'asset_tombstoned'])) return false;
   return boundedSingleCount(value.asset_count) && typeof value.asset_tombstoned === 'boolean' &&
     (value.asset_count === 1 || value.asset_tombstoned === false);
+}
+
+function mediaConcurrencyJobInspectionRow(value: unknown): value is MediaConcurrencyJobInspectionRow {
+  if (!exactObject(value, [
+    'job_count_for_media_id', 'matching_owner_job_count', 'distinct_owner_count',
+    'distinct_object_path_count', 'canonical_object_path_count', 'target_job_status', 'cleanup_claimed',
+  ])) return false;
+  if (!boundedCount(value.job_count_for_media_id) || !boundedCount(value.matching_owner_job_count) ||
+      !boundedCount(value.distinct_owner_count) || !boundedCount(value.distinct_object_path_count) ||
+      !boundedCount(value.canonical_object_path_count) || !lifecycleStatus(value.target_job_status) ||
+      typeof value.cleanup_claimed !== 'boolean') return false;
+  return value.matching_owner_job_count <= value.job_count_for_media_id &&
+    value.distinct_owner_count <= value.job_count_for_media_id &&
+    value.distinct_object_path_count <= value.job_count_for_media_id &&
+    value.canonical_object_path_count <= value.job_count_for_media_id &&
+    (value.matching_owner_job_count > 0 || value.target_job_status === 'missing');
+}
+
+function mediaConcurrencyAssetInspectionRow(value: unknown): value is MediaConcurrencyAssetInspectionRow {
+  if (!exactObject(value, [
+    'asset_count_for_media_id', 'matching_owner_sighting_asset_count', 'matching_job_asset_count',
+    'active_quarantined_asset_count', 'tombstoned_asset_count',
+  ])) return false;
+  if (!boundedCount(value.asset_count_for_media_id) ||
+      !boundedCount(value.matching_owner_sighting_asset_count) ||
+      !boundedCount(value.matching_job_asset_count) ||
+      !boundedCount(value.active_quarantined_asset_count) || !boundedCount(value.tombstoned_asset_count)) return false;
+  return value.matching_owner_sighting_asset_count <= value.asset_count_for_media_id &&
+    value.matching_job_asset_count <= value.matching_owner_sighting_asset_count &&
+    value.active_quarantined_asset_count + value.tombstoned_asset_count <= value.asset_count_for_media_id;
+}
+
+export function combineMediaConcurrencyDatabaseInspection(
+  jobValue: unknown,
+  assetValue: unknown,
+): MediaConcurrencyDatabaseInspection | null {
+  if (!mediaConcurrencyJobInspectionRow(jobValue) || !mediaConcurrencyAssetInspectionRow(assetValue)) return null;
+  return {
+    jobCountForMediaId: jobValue.job_count_for_media_id,
+    matchingOwnerJobCount: jobValue.matching_owner_job_count,
+    distinctOwnerCount: jobValue.distinct_owner_count,
+    distinctObjectPathCount: jobValue.distinct_object_path_count,
+    canonicalObjectPathCount: jobValue.canonical_object_path_count,
+    assetCountForMediaId: assetValue.asset_count_for_media_id,
+    matchingOwnerSightingAssetCount: assetValue.matching_owner_sighting_asset_count,
+    matchingJobAssetCount: assetValue.matching_job_asset_count,
+    activeQuarantinedAssetCount: assetValue.active_quarantined_asset_count,
+    tombstonedAssetCount: assetValue.tombstoned_asset_count,
+    jobStatus: jobValue.target_job_status as MediaConcurrencyInspection['jobStatus'],
+    cleanupClaimed: jobValue.cleanup_claimed,
+  };
 }
 
 export function combineMediaLifecycleDatabaseInspection(
@@ -241,6 +342,87 @@ export async function controlMediaLifecycleTimestamps(
     if (rows.length !== 1 || rows[0]?.updated_count !== 1) throw new Error('media_time_control_failed');
   } catch {
     throw new Error('media_time_control_failed');
+  } finally {
+    await sql.end({ timeout: 1 }).catch(() => undefined);
+  }
+}
+
+export async function inspectMediaConcurrency(
+  env: LocalStackEnvironment,
+  input: MediaConcurrencyInspectionInput,
+): Promise<MediaConcurrencyInspection> {
+  if (!validMediaConcurrencyInspectionInput(input)) throw new Error('media_inspection_failed');
+  const sql = postgres(env.databaseUrl, {
+    max: 1,
+    connect_timeout: 5,
+    idle_timeout: 5,
+    max_lifetime: 10,
+    prepare: false,
+    debug: false,
+    onnotice: () => undefined,
+    connection: { statement_timeout: 5_000, lock_timeout: 1_000 },
+  });
+  try {
+    const jobRows = await sql<MediaConcurrencyJobInspectionRow[]>`
+      with media_jobs as (
+        select j.*
+        from private.media_upload_jobs j
+        where j.media_id = ${input.mediaId}
+      ), target_job as (
+        select j.*
+        from media_jobs j
+        where j.id = ${input.jobId}::uuid
+          and j.uploader_id = ${input.ownerId}::uuid
+      )
+      select
+        count(j.id)::integer as job_count_for_media_id,
+        count(j.id) filter (where j.uploader_id = ${input.ownerId}::uuid)::integer as matching_owner_job_count,
+        count(distinct j.uploader_id)::integer as distinct_owner_count,
+        count(distinct j.object_path)::integer as distinct_object_path_count,
+        count(j.id) filter (where j.object_path = 'jobs/' || j.id::text || '.jpg')::integer as canonical_object_path_count,
+        coalesce((select max(t.status::text) from target_job t), 'missing') as target_job_status,
+        coalesce((select bool_or(t.cleanup_claimed_at is not null or t.cleanup_claim_id is not null) from target_job t), false) as cleanup_claimed
+      from media_jobs j
+    `;
+    const assetRows = await sql<MediaConcurrencyAssetInspectionRow[]>`
+      with target_job as (
+        select j.*
+        from private.media_upload_jobs j
+        where j.id = ${input.jobId}::uuid
+          and j.uploader_id = ${input.ownerId}::uuid
+          and j.media_id = ${input.mediaId}
+      )
+      select
+        count(m.id)::integer as asset_count_for_media_id,
+        count(m.id) filter (where
+          m.uploader_id = ${input.ownerId}::uuid
+          and m.sighting_id = ${input.sightingId}::uuid
+        )::integer as matching_owner_sighting_asset_count,
+        count(m.id) filter (where exists (
+          select 1 from target_job j
+          where j.media_asset_id = m.id
+            and m.storage_bucket = 'media-staging'
+            and m.storage_path = j.object_path
+        ))::integer as matching_job_asset_count,
+        count(m.id) filter (where m.status = 'quarantined' and m.deleted_at is null)::integer as active_quarantined_asset_count,
+        count(m.id) filter (where m.deleted_at is not null)::integer as tombstoned_asset_count
+      from public.media_assets m
+      where m.client_media_id = ${input.mediaId}
+    `;
+    const databaseInspection = combineMediaConcurrencyDatabaseInspection(
+      jobRows.length === 1 ? jobRows[0] : undefined,
+      assetRows.length === 1 ? assetRows[0] : undefined,
+    );
+    if (!databaseInspection) throw new Error('media_inspection_failed');
+
+    const { data: stagingObjectExists } = await inspectionClient(env)
+      .storage
+      .from('media-staging')
+      .exists(`jobs/${input.jobId}.jpg`);
+    if (typeof stagingObjectExists !== 'boolean') throw new Error('media_inspection_failed');
+    return { ...databaseInspection, stagingObjectExists };
+  } catch {
+    throw new Error('media_inspection_failed');
   } finally {
     await sql.end({ timeout: 1 }).catch(() => undefined);
   }
