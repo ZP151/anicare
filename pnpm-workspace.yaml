@@ -3,6 +3,7 @@ packages:
   - packages/*
   - services/*
   - supabase/functions
+  - tests/*
 
 allowBuilds:
   '@shopify/react-native-skia': true

@@ -1,0 +1,66 @@
+export type LocalStackEnvironment = Readonly<{
+  apiUrl: string;
+  anonKey: string;
+  serviceRoleKey: string;
+  databaseUrl: string;
+  allowedOrigin: string;
+}>;
+
+const DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+const INVALID_ENVIRONMENT_MESSAGE = 'Invalid Pilot Gate 2A environment.';
+
+function invalidEnvironment(): never {
+  throw new Error(INVALID_ENVIRONMENT_MESSAGE);
+}
+
+function required(source: NodeJS.ProcessEnv, name: string): string {
+  const value = source[name];
+  if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) {
+    return invalidEnvironment();
+  }
+  return value;
+}
+
+function localHttpUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return invalidEnvironment();
+  }
+
+  if (
+    url.protocol !== 'http:' ||
+    url.hostname !== '127.0.0.1' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    return invalidEnvironment();
+  }
+
+  return url;
+}
+
+function credential(value: string): string {
+  if (/\s/.test(value)) return invalidEnvironment();
+  return value;
+}
+
+export function readLocalStackEnvironment(source: NodeJS.ProcessEnv): LocalStackEnvironment {
+  const apiUrl = required(source, 'SUPABASE_URL');
+  const anonKey = credential(required(source, 'SUPABASE_ANON_KEY'));
+  const serviceRoleKey = credential(required(source, 'SUPABASE_SERVICE_ROLE_KEY'));
+  const databaseUrl = required(source, 'DATABASE_URL');
+  const allowedOrigin = required(source, 'MEDIA_ALLOWED_ORIGIN');
+  const api = localHttpUrl(apiUrl);
+  const origin = localHttpUrl(allowedOrigin);
+
+  if (databaseUrl !== DATABASE_URL || allowedOrigin !== api.origin || origin.origin !== api.origin) {
+    return invalidEnvironment();
+  }
+
+  return { apiUrl, anonKey, serviceRoleKey, databaseUrl, allowedOrigin };
+}

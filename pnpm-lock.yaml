@@ -210,6 +210,25 @@ importers:
         specifier: latest
         version: 4.1.11(@types/node@26.2.0)(jsdom@20.0.3(supports-color@8.1.1))(vite@8.2.2(@types/node@26.2.0)(terser@5.50.0)(yaml@2.9.0))
 
+  tests/pilot-gate-2a:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: 2.98.0
+        version: 2.98.0
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
+    devDependencies:
+      '@types/node':
+        specifier: latest
+        version: 26.2.0
+      typescript:
+        specifier: latest
+        version: 7.0.2
+      vitest:
+        specifier: latest
+        version: 4.1.11(@types/node@26.2.0)(jsdom@20.0.3(supports-color@8.1.1))(vite@8.2.2(@types/node@26.2.0)(terser@5.50.0)(yaml@2.9.0))
+
 packages:
 
   '@babel/code-frame@7.29.7':
@@ -6223,6 +6242,13 @@ packages:
         integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==
       }
     engines: { node: ^10 || ^12 || >=14 }
+
+  postgres@3.4.9:
+    resolution:
+      {
+        integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==
+      }
+    engines: { node: '>=12' }
 
   pretty-format@29.7.0:
     resolution:
@@ -12425,6 +12451,8 @@ snapshots:
       nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  postgres@3.4.9: {}
 
   pretty-format@29.7.0:
     dependencies:
