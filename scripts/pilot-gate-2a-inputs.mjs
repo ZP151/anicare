@@ -11,6 +11,7 @@ const ENDPOINT_MANIFEST = 'tests/pilot-gate-2a/edge-endpoints.json';
 const INTEGRATION_CONFIG = 'tests/pilot-gate-2a/vitest.integration.config.ts';
 export const READINESS_TEST = `${INTEGRATION_DIRECTORY}/readiness.integration.test.ts`;
 const PACKAGE_SOURCE_PREFIX = 'tests/pilot-gate-2a/';
+const INTEGRATION_TEST_SUFFIX = '.integration.test.ts';
 
 const REVIEWED_GATE_2A_ENDPOINTS = Object.freeze({
   cleanupMediaStaging: 'cleanup-media-staging',
@@ -38,6 +39,16 @@ function walkFiles(directory) {
     }
   }
   return files;
+}
+
+function isValidIntegrationTestPath(testPath) {
+  if (
+    typeof testPath !== 'string' ||
+    !testPath.startsWith(PACKAGE_SOURCE_PREFIX) ||
+    !testPath.endsWith(INTEGRATION_TEST_SUFFIX)
+  ) return false;
+  const basename = path.posix.basename(testPath, INTEGRATION_TEST_SUFFIX);
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(basename);
 }
 
 function plainRecord(value) {
@@ -284,6 +295,9 @@ export function discoverPilotGate2AInputs(repoRoot) {
 }
 
 export function validatePilotGate2AInputs(inputs) {
+  if (!Array.isArray(inputs.integrationTests) || inputs.integrationTests.some((testPath) => !isValidIntegrationTestPath(testPath))) {
+    throw new Error('invalid Gate 2A integration test path');
+  }
   if (inputs.integrationTests.length === 0) {
     throw new Error('no Gate 2A integration tests found');
   }
@@ -348,6 +362,9 @@ export function buildPilotGate2ATestArgs(
   integrationTests,
   { readinessOnly = false, integrationFile = null } = {},
 ) {
+  if (!Array.isArray(integrationTests) || integrationTests.some((testPath) => !isValidIntegrationTestPath(testPath))) {
+    throw new Error('invalid Gate 2A integration test path');
+  }
   if (integrationFile === READINESS_TEST) {
     throw new Error('readiness test cannot be included in full integration');
   }

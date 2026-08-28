@@ -348,6 +348,32 @@ test('stops the serialized integration group at the first failed file and record
   await clearDiagnostic();
 });
 
+test('uses one monotonic integration deadline and refuses to start a file after the budget is exhausted', async () => {
+  await clearDiagnostic();
+  const root = path.resolve(import.meta.dirname, '..');
+  const processes = fakeProcesses();
+  const monotonicTimes = [0, 0, 15 * 60_000];
+  let nowCalls = 0;
+  const now = () => monotonicTimes[Math.min(nowCalls++, monotonicTimes.length - 1)];
+
+  await assert.rejects(
+    runPilotGate2A({
+      repoRoot: root,
+      processAdapter: processes.adapter,
+      outputAdapter: outputRecorder().adapter,
+      parentEnvironment: parentEnvironment(),
+      now,
+    }),
+    /Pilot Gate 2A failed at integration-media-happy-path/,
+  );
+
+  const integrationCalls = processes.calls.filter(({ stage }) => stage.startsWith('integration-'));
+  assert.deepEqual(integrationCalls.map(({ stage }) => stage), ['integration-media-concurrency']);
+  assert.equal(integrationCalls[0].options.timeoutMs, 15 * 60_000);
+  assert.match(await readFile(failureDiagnosticPath(), 'utf8'), /^stage=integration-media-happy-path$/m);
+  await clearDiagnostic();
+});
+
 test('suppresses unmasked startup and status output on their failure paths while still stopping the scoped stack', async (t) => {
   for (const failedStage of ['start', 'status']) {
     await t.test(failedStage, async () => {
@@ -656,7 +682,7 @@ test('an abort observed at a child boundary prevents later work and still perfor
     /Pilot Gate 2A failed at cancelled/,
   );
 
-  assert.equal(processes.calls.some(({ stage }) => stage === 'integration'), false);
+  assert.equal(processes.calls.some(({ stage }) => stage.startsWith('integration-')), false);
   assert.equal(processes.calls.some(({ kind }) => kind === 'stop-child'), true);
   assert.equal(processes.calls.some(({ stage }) => stage === 'stop'), true);
   assert.equal(existsSync(processes.observations.edgeEnvPath), false);
@@ -709,7 +735,7 @@ test('an Edge serve process that exits after readiness blocks the complete suite
   );
 
   assert.equal(processes.calls.some(({ stage }) => stage === 'readiness'), true);
-  assert.equal(processes.calls.some(({ stage }) => stage === 'integration'), false);
+  assert.equal(processes.calls.some(({ stage }) => stage.startsWith('integration-')), false);
   assert.equal(processes.calls.some(({ kind }) => kind === 'stop-child'), true);
   assert.equal(processes.calls.some(({ stage }) => stage === 'stop'), true);
   assert.equal(existsSync(processes.observations.edgeEnvPath), false);

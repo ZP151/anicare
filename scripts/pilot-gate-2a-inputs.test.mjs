@@ -230,6 +230,19 @@ test('an empty setup file cannot satisfy the mandatory global fetch-boundary ins
   );
 });
 
+test('rejects a discovered integration file whose basename is not lowercase-hyphen safe', async (t) => {
+  const root = await createFixture(t);
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'Leaky_UUID.integration.test.ts'),
+    'edgeEndpointUrl(environment.apiUrl, "createSighting");\n',
+  );
+
+  assert.throws(
+    () => validatePilotGate2AInputs(discoverPilotGate2AInputs(root)),
+    /invalid Gate 2A integration test path/,
+  );
+});
+
 test('builds explicit readiness and one-file integration arguments without repeating readiness', () => {
   const integrationTests = [
     'tests/pilot-gate-2a/src/media-a.integration.test.ts',
@@ -263,6 +276,13 @@ test('builds explicit readiness and one-file integration arguments without repea
       integrationFile: 'tests/pilot-gate-2a/src/readiness.integration.test.ts',
     }),
     /readiness test cannot be included in full integration/,
+  );
+  assert.throws(
+    () => buildPilotGate2ATestArgs([
+      'tests/pilot-gate-2a/src/Leaky_UUID.integration.test.ts',
+      'tests/pilot-gate-2a/src/readiness.integration.test.ts',
+    ], { readinessOnly: true }),
+    /invalid Gate 2A integration test path/,
   );
 });
 

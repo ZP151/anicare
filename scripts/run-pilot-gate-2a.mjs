@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -712,6 +713,7 @@ export async function runPilotGate2A({
   outputAdapter,
   parentEnvironment = process.env,
   signal,
+  now = () => performance.now(),
 }) {
   const output = outputAdapter ?? defaultOutputAdapter(parentEnvironment);
   let stage = 'project-validation';
@@ -820,11 +822,11 @@ export async function runPilotGate2A({
     assertEdgeProcessRunning(edgeProcess);
     output.info('Pilot Gate 2A readiness passed.');
 
-    const integrationDeadline = Date.now() + STAGE_TIMEOUTS.integration;
+    const integrationDeadline = now() + STAGE_TIMEOUTS.integration;
     const integrationFiles = inputs.integrationTests.filter((testPath) => testPath !== READINESS_TEST);
     for (const integrationFile of integrationFiles) {
       stage = integrationStageForFile(integrationFile);
-      const remaining = integrationDeadline - Date.now();
+      const remaining = integrationDeadline - now();
       if (remaining <= 0) throw new StageFailure(stage);
       await capturedStage(
         processAdapter,
