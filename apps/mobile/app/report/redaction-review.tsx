@@ -32,6 +32,14 @@ import { saveReviewedMediaJournal } from '../../src/offline/draft-store';
 const EMPTY_REVIEW: MediaReviewState = { status: 'idle', rendered: null, masks: [], receipt: null };
 const PREVIEW_HEIGHT = 360;
 
+function sameMaskSnapshots(left: readonly PrivacyMask[], right: readonly PrivacyMask[]): boolean {
+  return left.length === right.length && left.every((mask, index) => {
+    const other = right[index];
+    return other?.id === mask.id && other.rect.x === mask.rect.x && other.rect.y === mask.rect.y &&
+      other.rect.width === mask.rect.width && other.rect.height === mask.rect.height;
+  });
+}
+
 export default function RedactionReviewScreen() {
   const params = useLocalSearchParams<{ draftId?: string }>();
   const draftId = typeof params.draftId === 'string' ? params.draftId : '';
@@ -156,6 +164,14 @@ export default function RedactionReviewScreen() {
     setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: nextMasks }));
   }
 
+  function cancelMaskMutation(originalMasks: readonly PrivacyMask[]) {
+    if (!canonical || busyRef.current || pending) return;
+    const matchesRenderedPixels = sameMaskSnapshots(originalMasks, renderedMasksRef.current);
+    renderCurrentRef.current = matchesRenderedPixels;
+    setRenderCurrent(matchesRenderedPixels);
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: originalMasks }));
+  }
+
   async function confirmPrivateCopy() {
     if (!draftId || !review.rendered || busyRef.current ||
       (!pending && (!renderCurrentRef.current || !renderedMasksAreCurrent))) return;
@@ -241,12 +257,7 @@ export default function RedactionReviewScreen() {
     setPreviewWidth(event.nativeEvent.layout.width);
   }
 
-  const renderedMasksAreCurrent = review.masks.length === renderedMasksRef.current.length && review.masks.every((mask, index) => {
-    const renderedMask = renderedMasksRef.current[index];
-    return renderedMask?.id === mask.id &&
-      renderedMask.rect.x === mask.rect.x && renderedMask.rect.y === mask.rect.y &&
-      renderedMask.rect.width === mask.rect.width && renderedMask.rect.height === mask.rect.height;
-  });
+  const renderedMasksAreCurrent = sameMaskSnapshots(review.masks, renderedMasksRef.current);
   const editorDisabled = busy || !!pending;
   const confirmationDisabled = busy || (!pending && (!renderCurrent || !renderedMasksAreCurrent));
 
@@ -276,6 +287,7 @@ export default function RedactionReviewScreen() {
             onSelectionChange={setSelectedMaskId}
             onMutationPreview={previewMaskMutation}
             onMutationCommit={(masks) => { void commitMaskMutation(masks); }}
+            onMutationCancel={cancelMaskMutation}
           />
         </View>
       ) : (

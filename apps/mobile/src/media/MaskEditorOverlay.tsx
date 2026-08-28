@@ -35,12 +35,14 @@ export type MaskEditorOverlayProps = Readonly<{
   onSelectionChange(maskId: string | null): void;
   onMutationPreview(masks: readonly PrivacyMask[]): void;
   onMutationCommit(masks: readonly PrivacyMask[]): void;
+  onMutationCancel(originalMasks: readonly PrivacyMask[]): void;
 }>;
 
 type DragGesture = Readonly<{
   mask: PrivacyMask;
   masks: readonly PrivacyMask[];
   start: NormalizedPoint;
+  startPixel: NormalizedPoint;
   part: 'body' | MaskCorner;
   latest: readonly PrivacyMask[];
   previewed: boolean;
@@ -54,6 +56,8 @@ type PendingAdd = Readonly<{
 type ActiveGesture = DragGesture | PendingAdd;
 
 const HANDLE_RADIUS_PX = 22;
+// Keeps ordinary tap jitter selection-only while remaining small relative to a 44pt handle.
+const DRAG_THRESHOLD_PX = 6;
 
 const controlActions: readonly Readonly<{
   label: string;
@@ -77,6 +81,14 @@ function replaceMask(masks: readonly PrivacyMask[], replacement: PrivacyMask): r
   return masks.map((mask, maskIndex) => maskIndex === index ? replacement : mask);
 }
 
+function sameMaskSnapshots(left: readonly PrivacyMask[], right: readonly PrivacyMask[]): boolean {
+  return left.length === right.length && left.every((mask, index) => {
+    const other = right[index];
+    return other?.id === mask.id && other.rect.x === mask.rect.x && other.rect.y === mask.rect.y &&
+      other.rect.width === mask.rect.width && other.rect.height === mask.rect.height;
+  });
+}
+
 export function MaskEditorOverlay({
   imageWidth,
   imageHeight,
@@ -89,6 +101,7 @@ export function MaskEditorOverlay({
   onSelectionChange,
   onMutationPreview,
   onMutationCommit,
+  onMutationCancel,
 }: MaskEditorOverlayProps) {
   const activeGesture = useRef<ActiveGesture | null>(null);
   const selectedMask = useMemo(
@@ -117,6 +130,13 @@ export function MaskEditorOverlay({
     return replaceMask(active.masks, nextMask);
   }
 
+  function passedDragThreshold(active: DragGesture, event: GestureResponderEvent): boolean {
+    const x = event.nativeEvent.locationX;
+    const y = event.nativeEvent.locationY;
+    return [x, y].every(Number.isFinite) &&
+      (x - active.startPixel.x) ** 2 + (y - active.startPixel.y) ** 2 >= DRAG_THRESHOLD_PX ** 2;
+  }
+
   function beginResponder(event: GestureResponderEvent) {
     if (disabled) return;
     const point = pointFor(event);
@@ -143,6 +163,7 @@ export function MaskEditorOverlay({
       mask: hitMask,
       masks,
       start: point,
+      startPixel: { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY },
       part: isSelected ? hit.part : 'body',
       latest: masks,
       previewed: false,
@@ -154,8 +175,9 @@ export function MaskEditorOverlay({
     const active = activeGesture.current;
     const point = pointFor(event);
     if (!active || !point || !('part' in active)) return;
+    if (!passedDragThreshold(active, event)) return;
     const next = nextMasksFor(active, point);
-    if (next === active.latest) return;
+    if (sameMaskSnapshots(next, active.latest)) return;
     onMutationPreview(next);
     activeGesture.current = { ...active, latest: next, previewed: true };
   }
@@ -170,12 +192,16 @@ export function MaskEditorOverlay({
       return;
     }
     const point = pointFor(event);
+    const thresholdPassed = passedDragThreshold(active, event);
+    if (!active.previewed && !thresholdPassed) return;
     const finalMasks = point ? nextMasksFor(active, point) : active.latest;
-    if (active.previewed || finalMasks !== active.masks) onMutationCommit(finalMasks);
+    if (active.previewed || !sameMaskSnapshots(finalMasks, active.masks)) onMutationCommit(finalMasks);
   }
 
   function terminateResponder() {
+    const active = activeGesture.current;
     activeGesture.current = null;
+    if (active && 'part' in active && active.previewed) onMutationCancel(active.masks);
   }
 
   function commitAdjustment(action: AccessibleMaskAction) {

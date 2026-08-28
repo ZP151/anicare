@@ -110,6 +110,69 @@ describe('mask geometry', () => {
     })).toEqual({ maskId: 'm1', part });
   });
 
+  it.each([
+    ['top_left', 40, 20],
+    ['top_right', 48, 20],
+    ['bottom_left', 40, 24],
+    ['bottom_right', 48, 24],
+  ] as const)('chooses the nearest %s corner on a minimum-size mask', (part, x, y) => {
+    expect(hitTestMasks({
+      imageWidth: 200,
+      imageHeight: 100,
+      frameWidth: 200,
+      frameHeight: 100,
+      x,
+      y,
+      handleRadiusPx: 22,
+      masks: [{ id: 'minimum', rect: { x: 0.2, y: 0.2, width: MIN_MASK_EDGE, height: MIN_MASK_EDGE } }],
+    })).toEqual({ maskId: 'minimum', part });
+  });
+
+  it('breaks an equal-distance minimum-mask corner tie deterministically', () => {
+    expect(hitTestMasks({
+      imageWidth: 200,
+      imageHeight: 100,
+      frameWidth: 200,
+      frameHeight: 100,
+      x: 44,
+      y: 22,
+      handleRadiusPx: 22,
+      masks: [{ id: 'minimum', rect: { x: 0.2, y: 0.2, width: MIN_MASK_EDGE, height: MIN_MASK_EDGE } }],
+    })).toEqual({ maskId: 'minimum', part: 'top_left' });
+  });
+
+  it.each([
+    ['top_left', 40, 70],
+    ['top_right', 160, 70],
+    ['bottom_left', 40, 130],
+    ['bottom_right', 160, 130],
+  ] as const)('keeps the inward 44-point %s edge handle region hittable', (part, x, y) => {
+    expect(hitTestMasks({
+      imageWidth: 200,
+      imageHeight: 100,
+      frameWidth: 200,
+      frameHeight: 200,
+      x,
+      y,
+      handleRadiusPx: 22,
+      masks: [{ id: 'edge', rect: { x: 0, y: 0, width: 1, height: 1 } }],
+    })).toEqual({ maskId: 'edge', part });
+  });
+
+  it('never extends inward edge handles into letterbox space', () => {
+    const input = {
+      imageWidth: 200,
+      imageHeight: 100,
+      frameWidth: 200,
+      frameHeight: 200,
+      x: 40,
+      handleRadiusPx: 22,
+      masks: [{ id: 'edge', rect: { x: 0, y: 0, width: 1, height: 1 } }],
+    } as const;
+    expect(hitTestMasks({ ...input, y: 49.99 })).toBeNull();
+    expect(hitTestMasks({ ...input, y: 150.01 })).toBeNull();
+  });
+
   it('rejects non-finite hit-test values and invalid rectangles', () => {
     expect(hitTestMasks({
       imageWidth: 100,

@@ -212,6 +212,31 @@ describe('private redaction review screen', () => {
     expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
   });
 
+  it('restores rendered masks after gesture cancellation but still requires confirmation again', async () => {
+    jest.mocked(verifyReviewedMedia)
+      .mockResolvedValueOnce('absent')
+      .mockResolvedValueOnce('valid')
+      .mockResolvedValueOnce('absent')
+      .mockResolvedValueOnce('valid');
+    const view = await renderPreparedReview();
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await waitFor(() => expect(persistReviewedMedia).toHaveBeenCalledTimes(1));
+    const renderCalls = jest.mocked(renderOpaqueMasks).mock.calls.length;
+    const journalCalls = jest.mocked(saveReviewedMediaJournal).mock.calls.length;
+
+    await act(async () => { latestOverlayProps().onMutationPreview([firstMask]); });
+    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+    await act(async () => { latestOverlayProps().onMutationCancel([]); });
+
+    expect(latestOverlayProps().masks).toEqual([]);
+    expect(renderOpaqueMasks).toHaveBeenCalledTimes(renderCalls);
+    expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(journalCalls);
+    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(false);
+
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await waitFor(() => expect(persistReviewedMedia).toHaveBeenCalledTimes(2));
+  });
+
   it('blocks confirmation synchronously when a preview and confirmation occur in the same act', async () => {
     const view = await renderPreparedReview();
     const overlay = latestOverlayProps();

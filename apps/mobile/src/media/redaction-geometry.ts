@@ -57,6 +57,12 @@ function roundNormalized(value: number): number {
   return Math.round(value * 1_000_000_000_000) / 1_000_000_000_000;
 }
 
+function inwardHitBounds(position: number, radius: number, minimum: number, length: number): Readonly<{ minimum: number; maximum: number }> {
+  const extent = Math.min(radius * 2, length);
+  const start = clamp(position - radius, minimum, minimum + length - extent);
+  return { minimum: start, maximum: start + extent };
+}
+
 function isNormalizedRect(rect: NormalizedRect): boolean {
   const { x, y, width, height } = rect;
   return [x, y, width, height].every(Number.isFinite) &&
@@ -123,10 +129,6 @@ export function hitTestMasks(input: HitTestInput): MaskHit | null {
   const content = contentFrame(input);
   const point = normalizePreviewTap(input);
   if (!content || !point) return null;
-  const tolerance = {
-    x: input.handleRadiusPx / content.width,
-    y: input.handleRadiusPx / content.height,
-  };
 
   for (let index = input.masks.length - 1; index >= 0; index -= 1) {
     const mask = input.masks[index];
@@ -135,15 +137,23 @@ export function hitTestMasks(input: HitTestInput): MaskHit | null {
     const right = x + width;
     const bottom = y + height;
     const corners: readonly [MaskCorner, number, number][] = [
-      ['top_left', x, y],
-      ['top_right', right, y],
-      ['bottom_left', x, bottom],
-      ['bottom_right', right, bottom],
+      ['top_left', content.x + x * content.width, content.y + y * content.height],
+      ['top_right', content.x + right * content.width, content.y + y * content.height],
+      ['bottom_left', content.x + x * content.width, content.y + bottom * content.height],
+      ['bottom_right', content.x + right * content.width, content.y + bottom * content.height],
     ];
-    const corner = corners.find(([, cornerX, cornerY]) =>
-      Math.abs(point.x - cornerX) <= tolerance.x && Math.abs(point.y - cornerY) <= tolerance.y,
-    );
-    if (corner) return { maskId: mask.id, part: corner[0] };
+    let nearestCorner: Readonly<{ part: MaskCorner; distanceSquared: number }> | null = null;
+    for (const [part, cornerX, cornerY] of corners) {
+      const horizontal = inwardHitBounds(cornerX, input.handleRadiusPx, content.x, content.width);
+      const vertical = inwardHitBounds(cornerY, input.handleRadiusPx, content.y, content.height);
+      if (input.x < horizontal.minimum || input.x > horizontal.maximum ||
+          input.y < vertical.minimum || input.y > vertical.maximum) continue;
+      const distanceSquared = (input.x - cornerX) ** 2 + (input.y - cornerY) ** 2;
+      if (!nearestCorner || distanceSquared < nearestCorner.distanceSquared) {
+        nearestCorner = { part, distanceSquared };
+      }
+    }
+    if (nearestCorner) return { maskId: mask.id, part: nearestCorner.part };
     if (point.x >= x && point.x <= right && point.y >= y && point.y <= bottom) {
       return { maskId: mask.id, part: 'body' };
     }

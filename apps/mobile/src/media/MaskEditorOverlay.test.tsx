@@ -20,6 +20,7 @@ async function renderOverlay(options: OverlayOptions = {}) {
   const onSelectionChange = jest.fn();
   const onMutationPreview = jest.fn();
   const onMutationCommit = jest.fn();
+  const onMutationCancel = jest.fn();
   const view = await render(
     <MaskEditorOverlay
       imageWidth={200}
@@ -33,10 +34,11 @@ async function renderOverlay(options: OverlayOptions = {}) {
       onSelectionChange={onSelectionChange}
       onMutationPreview={onMutationPreview}
       onMutationCommit={onMutationCommit}
+      onMutationCancel={onMutationCancel}
       {...options}
     />,
   );
-  return Object.assign(view, { onSelectionChange, onMutationPreview, onMutationCommit });
+  return Object.assign(view, { onSelectionChange, onMutationPreview, onMutationCommit, onMutationCancel });
 }
 
 function pointer(x: number, y: number) {
@@ -81,6 +83,7 @@ describe('MaskEditorOverlay', () => {
     expect(view.onSelectionChange).not.toHaveBeenCalled();
     expect(view.onMutationPreview).not.toHaveBeenCalled();
     expect(view.onMutationCommit).not.toHaveBeenCalled();
+    expect(view.onMutationCancel).not.toHaveBeenCalled();
   });
 
   it('selects a touched mask without adding or mutating it', async () => {
@@ -120,7 +123,7 @@ describe('MaskEditorOverlay', () => {
     expect(view.onMutationCommit).toHaveBeenCalledWith(expected);
   });
 
-  it('does not commit a selected-mask drag after responder termination', async () => {
+  it('cancels a previewed selected-mask drag with its grant-time snapshot', async () => {
     const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
 
     await grant(view, 70, 40);
@@ -131,6 +134,55 @@ describe('MaskEditorOverlay', () => {
       { id: 'mask-one', rect: { x: 0.3, y: 0.2, width: 0.3, height: 0.4 } },
     ]);
     expect(view.onMutationCommit).not.toHaveBeenCalled();
+    expect(view.onMutationCancel).toHaveBeenCalledTimes(1);
+    expect(view.onMutationCancel).toHaveBeenCalledWith([firstMask]);
+  });
+
+  it('treats selected-mask body jitter below six points as selection-only', async () => {
+    const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
+
+    await grant(view, 70, 40);
+    await move(view, 75, 40);
+    await release(view, 75, 40);
+
+    expect(view.onMutationPreview).not.toHaveBeenCalled();
+    expect(view.onMutationCommit).not.toHaveBeenCalled();
+    expect(view.onMutationCancel).not.toHaveBeenCalled();
+  });
+
+  it('treats selected-mask corner jitter below six points as selection-only', async () => {
+    const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
+
+    await grant(view, 40, 20);
+    await move(view, 45, 20);
+    await release(view, 45, 20);
+
+    expect(view.onMutationPreview).not.toHaveBeenCalled();
+    expect(view.onMutationCommit).not.toHaveBeenCalled();
+    expect(view.onMutationCancel).not.toHaveBeenCalled();
+  });
+
+  it('emits only one preview for repeated identical move geometry', async () => {
+    const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
+
+    await grant(view, 70, 40);
+    await move(view, 90, 40);
+    await move(view, 90, 40);
+
+    expect(view.onMutationPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('commits release geometry from the grant snapshot after dragging back inside the threshold', async () => {
+    const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
+
+    await grant(view, 70, 40);
+    await move(view, 90, 40);
+    await release(view, 72, 40);
+
+    expect(view.onMutationPreview).toHaveBeenCalledTimes(1);
+    expect(view.onMutationCommit).toHaveBeenCalledWith([
+      { id: 'mask-one', rect: { x: 0.21, y: 0.2, width: 0.3, height: 0.4 } },
+    ]);
   });
 
   it.each([
@@ -173,6 +225,7 @@ describe('MaskEditorOverlay', () => {
         onSelectionChange={view.onSelectionChange}
         onMutationPreview={view.onMutationPreview}
         onMutationCommit={view.onMutationCommit}
+        onMutationCancel={view.onMutationCancel}
       />,
     );
     expect(view.onSelectionChange).not.toHaveBeenCalled();
@@ -190,6 +243,7 @@ describe('MaskEditorOverlay', () => {
         onSelectionChange={view.onSelectionChange}
         onMutationPreview={view.onMutationPreview}
         onMutationCommit={view.onMutationCommit}
+        onMutationCancel={view.onMutationCancel}
       />,
     );
     expect(view.onSelectionChange).toHaveBeenCalledWith(null);
@@ -207,6 +261,7 @@ describe('MaskEditorOverlay', () => {
     expect(view.onSelectionChange).not.toHaveBeenCalled();
     expect(view.onMutationPreview).not.toHaveBeenCalled();
     expect(view.onMutationCommit).not.toHaveBeenCalled();
+    expect(view.onMutationCancel).not.toHaveBeenCalled();
   });
 
   it('defers clearing a missing selection until the overlay is enabled', async () => {
@@ -227,6 +282,7 @@ describe('MaskEditorOverlay', () => {
         onSelectionChange={view.onSelectionChange}
         onMutationPreview={view.onMutationPreview}
         onMutationCommit={view.onMutationCommit}
+        onMutationCancel={view.onMutationCancel}
       />,
     );
 
