@@ -242,7 +242,9 @@ create table private.precise_locations (
   nonce bytea not null,
   key_version integer not null default 1,
   captured_at timestamptz not null,
-  coarsen_after timestamptz generated always as (captured_at + interval '12 months') stored,
+  coarsen_after timestamptz generated always as (
+    ((captured_at at time zone 'UTC') + interval '12 months') at time zone 'UTC'
+  ) stored,
   coarsened_at timestamptz,
   created_at timestamptz not null default now()
 );
