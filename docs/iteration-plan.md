@@ -11,7 +11,8 @@ This sequence deliberately proves safety and identity quality before community g
 - Email/Apple/Google PKCE entry points.
 - Static operations console and AI candidate-fusion/evaluation contract.
 
-Exit gap: run database tests with Docker/Supabase CLI; provision real dev credentials; complete native device builds.
+Exit gap: provision hosted development credentials, complete native device
+builds, and run the remaining non-media runtime/two-session database checks.
 
 ## Sprint 2–3 — safe capture foundations (implemented, not pilot-ready)
 
@@ -26,10 +27,13 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
 - Backend private Supabase staging/quarantine, cleanup contracts, strict JPEG
   validation, authenticated artifact reader and native
   reserve-to-signed-upload-to-finalize wiring are implemented. A `quarantined`
-  result remains private and public promotion is disabled. Local migration,
-  pgTAP, Deno/Edge and signed Storage runtime execution has not run in this
-  workspace; redirect behavior, capability/expiry and cleanup races remain
-  blocking release gates.
+  result remains private and public promotion is disabled. Gate 2A media
+  local-stack runtime evidence is recorded on
+  [run 33193118991](https://github.com/ZP151/anicare/actions/runs/33193118991) with both
+  `verify` and `database-contracts` green at commit
+  [7c457ea](https://github.com/ZP151/anicare/commit/7c457ea409b710b7f51c6297edb0521df54ee395).
+  Hosted Supabase, native-device end-to-end media checks, and true
+  post-token-expiry cleanup/replay remain open release gates.
 - Account erasure now records legacy `public-media` and `private-evidence`
   objects in a private, service-only deletion outbox before uploader ownership
   is cleared. The scheduler validates the bucket plus immutable owner-prefixed,
@@ -37,20 +41,21 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
   missing object as success, and retains transient failures for bounded retry.
   Unsafe historical keys remain durable manual-review rows and are never sent to
   Storage, so they cannot abort account deletion.
-  Real Storage integration remains a release gate.
+  Hosted legacy-object deletion-outbox Storage integration remains a release
+  gate.
 - Narrow public feed/report/block and authenticated audited-admin contracts are
-  implemented. Database runtime and two-session concurrency checks remain
-  blocking gates.
+  implemented. Their non-media database runtime and two-session concurrency
+  checks remain blocking gates.
 - Media remains private and quarantined. Public promotion is disabled until
   trusted server residual validation exists; manual quarantine is not public
   publication.
 
-Exit gate: run the authenticated artifact reader and
-reserve-to-signed-upload-to-finalize mobile flow against real Docker/Supabase,
-Deno and signed Storage; then complete the native-device review/lifecycle,
-adversarial redaction, residual-detector/public-promotion, public-projection
-and two-session concurrency checks. Do not label the branch pilot-ready before
-those checks.
+Exit gate: repeat the authenticated artifact reader and
+reserve-to-signed-upload-to-finalize flow on hosted Supabase and supported
+native devices, including true post-token-expiry cleanup/replay; then complete
+adversarial redaction, residual-detector/public-promotion, public-projection and
+the non-media two-session concurrency checks. Do not label the branch
+pilot-ready before those checks.
 
 ## Sprint 4–5 — AI identity alpha contracts (implemented skeleton)
 
@@ -84,13 +89,14 @@ Additional blocking gates: establish the Singapore company and DPO, publish
 privacy notices/terms/community rules, complete DPIA and transfer assessment,
 finish app-store signing and rehearse incident operations. The mandatory CI
 database-contract job pins Supabase CLI to 2.84.2 and runs migrations/pgTAP and
-warning-level DB lint. Deno/Edge runtime, private Storage integration, local
-Docker/Supabase and two-session verification remain separate release gates.
+warning-level DB lint. Hosted Supabase, feed/report/admin runtime, legal/compliance,
+and real post-token-expiry media cleanup/replay are outside Gate 2A.
 
 ## Prioritised next backlog
 
-1. Run real Supabase/Docker/Deno/Storage checks, migrations, pgTAP and
-   two-session concurrency verification.
+1. Run hosted Supabase Gate 2B and native end-to-end media checks, including
+   true post-token-expiry cleanup/replay, then finish non-media two-session
+   concurrency verification.
 2. Complete supported native-device review/recovery testing and automatic
    detector/residual-validation release work.
 3. Provision a real development environment and exercise the audited

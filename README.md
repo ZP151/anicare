@@ -20,13 +20,13 @@ names remain compatible technical identifiers.
   coordinator; supported-device validation remains a release gate.
 - Backend private Supabase staging/quarantine, cleanup contracts and strict JPEG
   marker validation, plus authenticated native artifact access and the
-  reserve-to-signed-upload-to-finalize wiring, are implemented. Real
-  Supabase/Storage redirect, capability-expiry and cleanup-race validation is
-  still required before release. No media is promoted to public storage: a
-  durable `quarantined` result is private and is not public availability.
+  reserve-to-signed-upload-to-finalize wiring, are implemented. Hosted/native
+  redirect coverage and true post-storage-token-expiry cleanup/replay remain
+  required before release. No media is promoted to public storage: a durable
+  `quarantined` result is private and is not public availability.
 - Narrow public-feed/report/block contracts and an authenticated, audited admin
-  contract. Database runtime verification and two-session concurrency remain
-  required gates.
+  contract. Their non-media database runtime verification and two-session
+  concurrency remain required gates.
 - Versioned, model-free AI contracts for crops, embeddings, callbacks and public
   results, plus synthetic evaluation fixtures. The internal identify route
   fails closed behind an ASGI token boundary. There are no model weights,
@@ -86,29 +86,30 @@ Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable th
 
 ## Release gates
 
-The branch cannot be labelled pilot-ready until all of the following are
-completed and evidenced:
+Gate 2A evidence and the remaining gates that still block pilot-ready status
+are:
 
-- Run migrations, pgTAP, Deno/Edge and private Storage checks against a real
-  local Supabase/Docker runtime; run the required two-session database
-  concurrency checks.
+- Gate 2A media proof is complete for local-stack HTTP/Auth/Storage composition
+  with two synthetic sessions, evidenced on the fresh GitHub Actions run
+  [33193118991](https://github.com/ZP151/anicare/actions/runs/33193118991) with both
+  required jobs green:
+  [verify](https://github.com/ZP151/anicare/actions/runs/33193118991/job/98923364388)
+  and
+  [database-contracts](https://github.com/ZP151/anicare/actions/runs/33193118991/job/98923364075).
 - Build and test the manual review flow on supported native devices. Automatic
   person, licence-plate and cat detection remain disabled until device, model,
   licence and adversarial-corpus gates pass.
 - Keep public media promotion disabled until trusted server-side residual checks
   are implemented and verified. Client attestation alone never permits it.
 - Exercise the authenticated artifact reader and complete
-  reserve-to-signed-upload-to-finalize mobile transport against real signed
-  Storage, including redirects, capability expiry and cleanup races. Local
-  unit coverage is not a substitute for that release gate.
+  reserve-to-signed-upload-to-finalize media transport on hosted or native
+  paths, including redirects, capability expiry and cleanup races. Local unit
+  coverage and local-stack CI are not a substitute for that completion.
+- Validate true post-storage-token-expiry cleanup and replay behavior in Gate 2B.
+- Complete non-media and cross-functional gates: feed/report/admin runtime,
+  legal/compliance operations, Singapore legal structures, real-user/test-data
+  policy, and production AI accuracy evidence on consented data.
 - Use a qualified, consented labelled dataset before evaluating Recall@3 at
   least 85%, unknown rejection at least 80%, and likely false matches on unknown
   cats at most 5%. Current evaluation is synthetic only and establishes no
   production accuracy result.
-- Provision a Singapore company and DPO; publish privacy notices, terms and
-  community rules; complete DPIA and transfer assessment; finish app-store
-  signing, incident operations and the required operational drills.
-- CI pins Supabase CLI to 2.84.2. Its mandatory database-contract job runs
-  `supabase start`, `supabase test db` (migrations/pgTAP), and warning-level DB
-  lint. Deno/Edge runtime, private Storage integration, local Docker/Supabase
-  and two-session checks remain separate release gates before pilot readiness.
