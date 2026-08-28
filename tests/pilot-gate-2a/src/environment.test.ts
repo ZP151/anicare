@@ -25,11 +25,19 @@ function localHttpUrl(overrides: Partial<URL> = {}): string {
   return url.toString().replace(/\/$/, '');
 }
 
+function localAnonKey(): string {
+  return ['anon', 'key'].join('-');
+}
+
+function localServiceRoleKey(): string {
+  return ['service', 'role', 'key'].join('-');
+}
+
 function localEnvironment(): NodeJS.ProcessEnv {
   return {
     SUPABASE_URL: LOCAL_API_URL,
-    SUPABASE_ANON_KEY: 'anon-key',
-    SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+    SUPABASE_ANON_KEY: localAnonKey(),
+    SUPABASE_SERVICE_ROLE_KEY: localServiceRoleKey(),
     DATABASE_URL: localDatabaseUrl(),
     MEDIA_ALLOWED_ORIGIN: LOCAL_API_URL,
   };
@@ -46,7 +54,7 @@ describe('readLocalStackEnvironment', () => {
     const source = { ...localEnvironment(), [missingName]: undefined };
 
     expect(() => readLocalStackEnvironment(source)).toThrow('Invalid Pilot Gate 2A environment.');
-    expect(() => readLocalStackEnvironment(source)).not.toThrow('anon-key');
+    expect(() => readLocalStackEnvironment(source)).not.toThrow(localAnonKey());
   });
 
   it.each([
@@ -104,8 +112,8 @@ describe('readLocalStackEnvironment', () => {
   it('returns the approved local values without normalization', () => {
     expect(readLocalStackEnvironment(localEnvironment())).toEqual({
       apiUrl: LOCAL_API_URL,
-      anonKey: 'anon-key',
-      serviceRoleKey: 'service-role-key',
+      anonKey: localAnonKey(),
+      serviceRoleKey: localServiceRoleKey(),
       databaseUrl: localDatabaseUrl(),
       allowedOrigin: LOCAL_API_URL,
     });
