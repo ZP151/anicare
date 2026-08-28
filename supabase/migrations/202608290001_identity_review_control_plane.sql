@@ -467,7 +467,7 @@ begin
     )
     and grants.revoked_at is null
     and (grants.provisional_until is null or grants.provisional_until > pg_catalog.now())
-  for key share;
+  for update;
   if not found then
     raise exception 'trusted_identity_reviewer_required' using errcode = '42501';
   end if;
@@ -536,7 +536,8 @@ begin
     from public.animals animals
     where animals.id = proposal_row.proposed_animal_id
       and animals.archived_at is null
-      and animals.visibility <> 'hidden'::public.record_visibility;
+      and animals.visibility <> 'hidden'::public.record_visibility
+    for update;
     if not found then
       raise exception 'identity_animal_not_available' using errcode = 'P0001';
     end if;
