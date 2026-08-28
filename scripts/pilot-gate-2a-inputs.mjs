@@ -4,16 +4,23 @@ import { fileURLToPath } from 'node:url';
 
 const INTEGRATION_DIRECTORY = 'tests/pilot-gate-2a/src';
 const ENVIRONMENT_GUARD = `${INTEGRATION_DIRECTORY}/environment.ts`;
+const ENDPOINT_MODULE = `${INTEGRATION_DIRECTORY}/edge-endpoints.ts`;
+const FETCH_GUARD = `${INTEGRATION_DIRECTORY}/local-fetch-guard.ts`;
+const INTEGRATION_SETUP = `${INTEGRATION_DIRECTORY}/integration-setup.ts`;
+const ENDPOINT_MANIFEST = 'tests/pilot-gate-2a/edge-endpoints.json';
+const INTEGRATION_CONFIG = 'tests/pilot-gate-2a/vitest.integration.config.ts';
 const READINESS_TEST = `${INTEGRATION_DIRECTORY}/readiness.integration.test.ts`;
 const PACKAGE_SOURCE_PREFIX = 'tests/pilot-gate-2a/';
 
-export const GATE_2A_EDGE_ENDPOINTS = Object.freeze([
-  'cleanup-media-staging',
-  'create-sighting',
-  'delete-media',
-  'finalize-media-upload',
-  'reserve-media-upload',
-]);
+const REVIEWED_GATE_2A_ENDPOINTS = Object.freeze({
+  cleanupMediaStaging: 'cleanup-media-staging',
+  createSighting: 'create-sighting',
+  deleteMedia: 'delete-media',
+  finalizeMediaUpload: 'finalize-media-upload',
+  reserveMediaUpload: 'reserve-media-upload',
+});
+
+export const GATE_2A_EDGE_ENDPOINTS = Object.freeze(Object.values(REVIEWED_GATE_2A_ENDPOINTS).sort());
 
 function toPosixRelative(repoRoot, absolutePath) {
   return path.relative(repoRoot, absolutePath).split(path.sep).join(path.posix.sep);
@@ -33,16 +40,189 @@ function walkFiles(directory) {
   return files;
 }
 
-function discoverEndpointReferences(sourceFiles) {
-  const endpoints = new Set();
-  const endpointPattern = /\/functions\/v1\/([a-z0-9]+(?:-[a-z0-9]+)*)/g;
-  for (const sourceFile of sourceFiles) {
-    const source = readFileSync(sourceFile, 'utf8');
-    for (const match of source.matchAll(endpointPattern)) {
-      endpoints.add(match[1]);
+function plainRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function readEndpointManifest(repoRoot) {
+  const absolutePath = path.join(repoRoot, ...ENDPOINT_MANIFEST.split('/'));
+  if (!existsSync(absolutePath)) throw new Error(`missing Gate 2A endpoint manifest: ${ENDPOINT_MANIFEST}`);
+  const source = readFileSync(absolutePath, 'utf8');
+  let manifest;
+  try {
+    manifest = JSON.parse(source);
+  } catch {
+    throw new Error('invalid Gate 2A endpoint manifest');
+  }
+  for (const name of ['version', 'endpoints', ...Object.keys(REVIEWED_GATE_2A_ENDPOINTS)]) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const occurrences = source.match(new RegExp(`"${escaped}"\\s*:`, 'g'))?.length ?? 0;
+    if (occurrences !== 1) throw new Error('invalid Gate 2A endpoint manifest');
+  }
+  if (
+    !plainRecord(manifest) ||
+    manifest.version !== 1 ||
+    !plainRecord(manifest.endpoints) ||
+    Object.keys(manifest).sort().join(',') !== 'endpoints,version'
+  ) {
+    throw new Error('invalid Gate 2A endpoint manifest');
+  }
+
+  for (const [name, slug] of Object.entries(manifest.endpoints)) {
+    if (!Object.hasOwn(REVIEWED_GATE_2A_ENDPOINTS, name)) {
+      throw new Error(`unreviewed Gate 2A Edge endpoint manifest entry: ${name}`);
+    }
+    if (REVIEWED_GATE_2A_ENDPOINTS[name] !== slug) {
+      throw new Error(`invalid Gate 2A Edge endpoint manifest mapping: ${name}`);
     }
   }
-  return [...endpoints].sort();
+  for (const name of Object.keys(REVIEWED_GATE_2A_ENDPOINTS)) {
+    if (!Object.hasOwn(manifest.endpoints, name)) {
+      throw new Error(`missing Gate 2A Edge endpoint manifest entry: ${name}`);
+    }
+  }
+  return Object.values(manifest.endpoints).sort();
+}
+
+function configurationTokens(source) {
+  const tokens = [];
+  for (let index = 0; index < source.length;) {
+    const character = source[index];
+    if (/\s/.test(character)) {
+      index += 1;
+      continue;
+    }
+    if (character === '/' && source[index + 1] === '/') {
+      index = source.indexOf('\n', index + 2);
+      if (index === -1) break;
+      continue;
+    }
+    if (character === '/' && source[index + 1] === '*') {
+      const end = source.indexOf('*/', index + 2);
+      if (end === -1) return [];
+      index = end + 2;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === '`') {
+      const quote = character;
+      let value = '';
+      let closed = false;
+      index += 1;
+      while (index < source.length) {
+        const next = source[index];
+        if (next === '\\' && index + 1 < source.length) {
+          value += source[index + 1];
+          index += 2;
+        } else if (next === quote) {
+          index += 1;
+          closed = true;
+          break;
+        } else {
+          value += next;
+          index += 1;
+        }
+      }
+      if (!closed) return [];
+      tokens.push({ type: 'string', value, quote });
+      continue;
+    }
+    const identifier = source.slice(index).match(/^[A-Za-z_$][A-Za-z0-9_$]*/)?.[0];
+    if (identifier) {
+      tokens.push({ type: 'identifier', value: identifier });
+      index += identifier.length;
+      continue;
+    }
+    if ('{}[]():,'.includes(character)) tokens.push({ type: 'punctuator', value: character });
+    index += 1;
+  }
+  return tokens;
+}
+
+function directPropertyValues(tokens, objectStart, propertyName) {
+  const values = [];
+  let depth = 0;
+  for (let index = objectStart + 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.value === '}' && depth === 0) return values;
+    if (depth === 0 && token.value === propertyName && tokens[index + 1]?.value === ':') values.push(index + 2);
+    if (token.value === '{' || token.value === '[' || token.value === '(') depth += 1;
+    if (token.value === '}' || token.value === ']' || token.value === ')') depth -= 1;
+  }
+  return values;
+}
+
+function endpointBuilderCalls(source) {
+  const calls = [];
+  const tokens = configurationTokens(source);
+  for (let index = 0; index < tokens.length - 3; index += 1) {
+    if (tokens[index]?.type !== 'identifier' || tokens[index]?.value !== 'edgeEndpointUrl' || tokens[index + 1]?.value !== '(') {
+      continue;
+    }
+    let depth = 1;
+    let argument = 0;
+    for (let cursor = index + 2; cursor < tokens.length && depth > 0; cursor += 1) {
+      const token = tokens[cursor];
+      if (token.value === '(' || token.value === '[' || token.value === '{') depth += 1;
+      if (token.value === ')' || token.value === ']' || token.value === '}') depth -= 1;
+      if (depth === 1 && token.value === ',') {
+        argument += 1;
+        if (argument === 1 && tokens[cursor + 1]?.type === 'string') calls.push(tokens[cursor + 1].value);
+      }
+    }
+  }
+  return calls;
+}
+
+function discoverHarnessEndpointUsages(repoRoot, sourceFiles) {
+  const usages = new Set();
+  for (const file of sourceFiles) {
+    const relativePath = toPosixRelative(repoRoot, file);
+    const executableHarnessSource = relativePath.endsWith('.integration.test.ts') || !relativePath.endsWith('.test.ts');
+    if (!executableHarnessSource || relativePath === ENDPOINT_MODULE) continue;
+    for (const endpoint of endpointBuilderCalls(readFileSync(file, 'utf8'))) usages.add(endpoint);
+  }
+  return [...usages].sort();
+}
+
+function validatePilotGate2AIntegrationSetup(source) {
+  const tokens = typeof source === 'string' ? configurationTokens(source) : [];
+  const expected = [
+    'import', '{', 'installPilotGate2AFetchBoundary', '}', 'from', './local-fetch-guard.js',
+    'installPilotGate2AFetchBoundary', '(', 'process', 'env', ',', 'globalThis', ')',
+  ];
+  if (tokens.length !== expected.length || expected.some((value, index) => tokens[index]?.value !== value)) {
+    throw new Error('missing mandatory Gate 2A global fetch boundary installation');
+  }
+}
+
+export function validatePilotGate2AIntegrationConfig(source) {
+  if (typeof source !== 'string') throw new Error('missing mandatory Gate 2A integration setup');
+  const tokens = configurationTokens(source);
+  const marker = ['export', 'default', 'defineConfig', '(', '{'];
+  const configurationStarts = [];
+  for (let index = 0; index <= tokens.length - marker.length; index += 1) {
+    if (marker.every((value, offset) => tokens[index + offset]?.value === value)) {
+      configurationStarts.push(index + marker.length - 1);
+    }
+  }
+  const testValues = configurationStarts.length === 1
+    ? directPropertyValues(tokens, configurationStarts[0], 'test')
+    : [];
+  const setupValues = testValues.length === 1 && tokens[testValues[0]]?.value === '{'
+    ? directPropertyValues(tokens, testValues[0], 'setupFiles')
+    : [];
+  const setupValue = setupValues.length === 1 ? setupValues[0] : -1;
+  if (
+    setupValue < 0 ||
+    tokens[setupValue]?.value !== '[' ||
+    tokens[setupValue + 1]?.type !== 'string' ||
+    tokens[setupValue + 1]?.quote === '`' ||
+    tokens[setupValue + 1]?.value !== './src/integration-setup.ts' ||
+    tokens[setupValue + 2]?.value !== ']'
+  ) {
+    throw new Error('missing mandatory Gate 2A integration setup');
+  }
+  return { setupFile: './src/integration-setup.ts' };
 }
 
 export function discoverPilotGate2AInputs(repoRoot) {
@@ -52,16 +232,54 @@ export function discoverPilotGate2AInputs(repoRoot) {
     .filter((file) => file.endsWith('.integration.test.ts'))
     .map((file) => toPosixRelative(repoRoot, file))
     .sort();
-  const edgeHandlers = GATE_2A_EDGE_ENDPOINTS
+  const manifestEndpoints = readEndpointManifest(repoRoot);
+  const edgeHandlers = manifestEndpoints
     .map((endpoint) => `supabase/functions/${endpoint}/index.ts`)
     .filter((relativePath) => existsSync(path.join(repoRoot, ...relativePath.split('/'))));
   const environmentPath = path.join(repoRoot, ...ENVIRONMENT_GUARD.split('/'));
+  const endpointModulePath = path.join(repoRoot, ...ENDPOINT_MODULE.split('/'));
+  const fetchGuardPath = path.join(repoRoot, ...FETCH_GUARD.split('/'));
+  const integrationSetupPath = path.join(repoRoot, ...INTEGRATION_SETUP.split('/'));
+  const integrationConfigPath = path.join(repoRoot, ...INTEGRATION_CONFIG.split('/'));
+  let integrationSetupConfigured = false;
+  if (existsSync(integrationConfigPath)) {
+    try {
+      validatePilotGate2AIntegrationConfig(readFileSync(integrationConfigPath, 'utf8'));
+      integrationSetupConfigured = true;
+    } catch {
+      integrationSetupConfigured = false;
+    }
+  }
+  let integrationSetupInstallsBoundary = false;
+  if (existsSync(integrationSetupPath)) {
+    try {
+      validatePilotGate2AIntegrationSetup(readFileSync(integrationSetupPath, 'utf8'));
+      integrationSetupInstallsBoundary = true;
+    } catch {
+      integrationSetupInstallsBoundary = false;
+    }
+  }
+  const forbiddenEndpointLiterals = sourceFiles
+    .filter((file) => toPosixRelative(repoRoot, file) !== ENDPOINT_MODULE)
+    .filter((file) => readFileSync(file, 'utf8').includes('/functions/v1/'))
+    .map((file) => toPosixRelative(repoRoot, file))
+    .sort();
+  const usedEndpointNames = discoverHarnessEndpointUsages(repoRoot, sourceFiles);
 
   return {
     integrationTests,
     edgeHandlers,
-    referencedEndpoints: discoverEndpointReferences(sourceFiles),
+    manifestEndpoints,
+    endpointManifest: ENDPOINT_MANIFEST,
+    endpointModule: existsSync(endpointModulePath) ? ENDPOINT_MODULE : null,
+    fetchGuard: existsSync(fetchGuardPath) ? FETCH_GUARD : null,
     environmentGuard: existsSync(environmentPath) ? ENVIRONMENT_GUARD : null,
+    integrationSetup: existsSync(integrationSetupPath) ? INTEGRATION_SETUP : null,
+    integrationConfig: existsSync(integrationConfigPath) ? INTEGRATION_CONFIG : null,
+    integrationSetupConfigured,
+    integrationSetupInstallsBoundary,
+    forbiddenEndpointLiterals,
+    usedEndpointNames,
   };
 }
 
@@ -75,6 +293,38 @@ export function validatePilotGate2AInputs(inputs) {
   if (inputs.environmentGuard !== ENVIRONMENT_GUARD) {
     throw new Error(`missing Gate 2A environment guard: ${ENVIRONMENT_GUARD}`);
   }
+  if (inputs.endpointManifest !== ENDPOINT_MANIFEST) {
+    throw new Error(`missing Gate 2A endpoint manifest: ${ENDPOINT_MANIFEST}`);
+  }
+  if (inputs.endpointModule !== ENDPOINT_MODULE) {
+    throw new Error(`missing Gate 2A endpoint module: ${ENDPOINT_MODULE}`);
+  }
+  if (inputs.fetchGuard !== FETCH_GUARD) {
+    throw new Error(`missing Gate 2A global fetch guard: ${FETCH_GUARD}`);
+  }
+  if (inputs.integrationSetup !== INTEGRATION_SETUP) {
+    throw new Error(`missing Gate 2A integration setup: ${INTEGRATION_SETUP}`);
+  }
+  if (inputs.integrationConfig !== INTEGRATION_CONFIG || !inputs.integrationSetupConfigured) {
+    throw new Error('missing mandatory Gate 2A integration setup');
+  }
+  if (!inputs.integrationSetupInstallsBoundary) {
+    throw new Error('missing mandatory Gate 2A global fetch boundary installation');
+  }
+  if (inputs.forbiddenEndpointLiterals.length > 0) {
+    throw new Error(`literal Gate 2A Edge path outside approved endpoint module: ${inputs.forbiddenEndpointLiterals[0]}`);
+  }
+  for (const name of inputs.usedEndpointNames) {
+    if (!Object.hasOwn(REVIEWED_GATE_2A_ENDPOINTS, name)) {
+      throw new Error(`unreviewed Gate 2A Edge endpoint builder usage: ${name}`);
+    }
+  }
+  const endpointUsages = new Set(inputs.usedEndpointNames);
+  for (const name of Object.keys(REVIEWED_GATE_2A_ENDPOINTS)) {
+    if (!endpointUsages.has(name)) {
+      throw new Error(`Gate 2A Edge endpoint is not used by executable harness source: ${name}`);
+    }
+  }
 
   const discoveredHandlers = new Set(inputs.edgeHandlers);
   for (const endpoint of GATE_2A_EDGE_ENDPOINTS) {
@@ -84,17 +334,11 @@ export function validatePilotGate2AInputs(inputs) {
     }
   }
 
-  const allowedEndpoints = new Set(GATE_2A_EDGE_ENDPOINTS);
-  for (const endpoint of inputs.referencedEndpoints) {
-    if (!allowedEndpoints.has(endpoint)) {
-      throw new Error(`unreviewed Gate 2A Edge endpoint: ${endpoint}`);
-    }
-  }
-  const referencedEndpoints = new Set(inputs.referencedEndpoints);
-  for (const endpoint of GATE_2A_EDGE_ENDPOINTS) {
-    if (!referencedEndpoints.has(endpoint)) {
-      throw new Error(`Gate 2A Edge endpoint is not exercised: ${endpoint}`);
-    }
+  if (
+    inputs.manifestEndpoints.length !== GATE_2A_EDGE_ENDPOINTS.length ||
+    inputs.manifestEndpoints.some((endpoint, index) => endpoint !== GATE_2A_EDGE_ENDPOINTS[index])
+  ) {
+    throw new Error('Gate 2A endpoint manifest does not match the reviewed exact-five contract');
   }
 
   return inputs;

@@ -9,6 +9,7 @@ import {
   buildPilotGate2ATestArgs,
   discoverPilotGate2AInputs,
   validatePilotGate2AInputs,
+  validatePilotGate2AIntegrationConfig,
   validatePilotGate2AWorkflow,
 } from './pilot-gate-2a-inputs.mjs';
 
@@ -19,6 +20,16 @@ const EXPECTED_ENDPOINTS = [
   'finalize-media-upload',
   'reserve-media-upload',
 ];
+const ENDPOINT_MANIFEST = Object.freeze({
+  version: 1,
+  endpoints: {
+    cleanupMediaStaging: 'cleanup-media-staging',
+    createSighting: 'create-sighting',
+    deleteMedia: 'delete-media',
+    finalizeMediaUpload: 'finalize-media-upload',
+    reserveMediaUpload: 'reserve-media-upload',
+  },
+});
 
 async function createFixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'pilot-gate-2a-inputs-'));
@@ -27,24 +38,57 @@ async function createFixture(t) {
   await mkdir(path.join(root, 'tests', 'pilot-gate-2a', 'src', 'nested'), { recursive: true });
   await mkdir(path.join(root, 'supabase', 'functions'), { recursive: true });
   await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'edge-endpoints.json'),
+    `${JSON.stringify(ENDPOINT_MANIFEST, null, 2)}\n`,
+  );
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'vitest.integration.config.ts'),
+    [
+      "import { defineConfig } from 'vitest/config';",
+      "export default defineConfig({ test: { setupFiles: ['./src/integration-setup.ts'] } });",
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
     path.join(root, 'tests', 'pilot-gate-2a', 'src', 'environment.ts'),
     'export function readLocalStackEnvironment() { return "local-only"; }\n',
   );
   await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'integration-setup.ts'),
+    [
+      "import { installPilotGate2AFetchBoundary } from './local-fetch-guard.js';",
+      'installPilotGate2AFetchBoundary(process.env, globalThis);',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'local-fetch-guard.ts'),
+    'export function installPilotGate2AFetchBoundary() {}\n',
+  );
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'edge-endpoints.ts'),
+    [
+      'export function edgeEndpointUrl(origin: string, endpoint: string) {',
+      '  return `${origin}/functions/v1/${endpoint}`;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(
     path.join(root, 'tests', 'pilot-gate-2a', 'src', 'readiness.integration.test.ts'),
-    'fetch("http://127.0.0.1/functions/v1/create-sighting");\n',
+    'edgeEndpointUrl(environment.apiUrl, "createSighting");\n',
   );
   await writeFile(
     path.join(root, 'tests', 'pilot-gate-2a', 'src', 'media.integration.test.ts'),
     [
-      'fetch("http://127.0.0.1/functions/v1/reserve-media-upload");',
-      'fetch("http://127.0.0.1/functions/v1/finalize-media-upload");',
-      'fetch("http://127.0.0.1/functions/v1/delete-media");',
+      'edgeEndpointUrl(environment.apiUrl, "reserveMediaUpload");',
+      'edgeEndpointUrl(environment.apiUrl, "finalizeMediaUpload");',
+      'edgeEndpointUrl(environment.apiUrl, "deleteMedia");',
     ].join('\n'),
   );
   await writeFile(
     path.join(root, 'tests', 'pilot-gate-2a', 'src', 'nested', 'cleanup.integration.test.ts'),
-    'fetch("http://127.0.0.1/functions/v1/cleanup-media-staging");\n',
+    'edgeEndpointUrl(environment.apiUrl, "cleanupMediaStaging");\n',
   );
   await writeFile(
     path.join(root, 'tests', 'pilot-gate-2a', 'src', 'ordinary.test.ts'),
@@ -59,7 +103,7 @@ async function createFixture(t) {
   return root;
 }
 
-test('discovers every recursive integration test, allowlisted Edge handler, endpoint reference, and environment guard', async (t) => {
+test('discovers every recursive integration test and consumes the explicit endpoint and setup policy inputs', async (t) => {
   const root = await createFixture(t);
 
   assert.deepEqual(discoverPilotGate2AInputs(root), {
@@ -75,8 +119,17 @@ test('discovers every recursive integration test, allowlisted Edge handler, endp
       'supabase/functions/finalize-media-upload/index.ts',
       'supabase/functions/reserve-media-upload/index.ts',
     ],
-    referencedEndpoints: EXPECTED_ENDPOINTS,
+    manifestEndpoints: EXPECTED_ENDPOINTS,
+    endpointManifest: 'tests/pilot-gate-2a/edge-endpoints.json',
+    endpointModule: 'tests/pilot-gate-2a/src/edge-endpoints.ts',
+    fetchGuard: 'tests/pilot-gate-2a/src/local-fetch-guard.ts',
     environmentGuard: 'tests/pilot-gate-2a/src/environment.ts',
+    integrationSetup: 'tests/pilot-gate-2a/src/integration-setup.ts',
+    integrationConfig: 'tests/pilot-gate-2a/vitest.integration.config.ts',
+    integrationSetupConfigured: true,
+    integrationSetupInstallsBoundary: true,
+    forbiddenEndpointLiterals: [],
+    usedEndpointNames: Object.keys(ENDPOINT_MANIFEST.endpoints).sort(),
   });
 });
 
@@ -90,16 +143,90 @@ test('rejects a missing allowlisted Edge handler instead of silently narrowing t
   );
 });
 
-test('rejects an endpoint referenced by Gate 2A sources until it joins the reviewed allowlist', async (t) => {
+test('rejects an unknown endpoint manifest entry until it joins the reviewed exact-five contract', async (t) => {
   const root = await createFixture(t);
+  const manifestPath = path.join(root, 'tests', 'pilot-gate-2a', 'edge-endpoints.json');
   await writeFile(
-    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'unexpected.ts'),
-    'fetch("http://127.0.0.1/functions/v1/unreviewed-endpoint");\n',
+    manifestPath,
+    `${JSON.stringify({
+      ...ENDPOINT_MANIFEST,
+      endpoints: { ...ENDPOINT_MANIFEST.endpoints, unreviewedOperation: 'unreviewed-endpoint' },
+    }, null, 2)}\n`,
   );
 
   assert.throws(
     () => validatePilotGate2AInputs(discoverPilotGate2AInputs(root)),
-    /unreviewed Gate 2A Edge endpoint: unreviewed-endpoint/,
+    /unreviewed Gate 2A Edge endpoint manifest entry: unreviewedOperation/,
+  );
+});
+
+test('rejects literal Edge path construction outside the sole approved endpoint module, including comments', async (t) => {
+  for (const source of [
+    'fetch("http://127.0.0.1/functions/v1/create-sighting");\n',
+    '// /functions/v1/create-sighting must not count as endpoint usage\n',
+  ]) {
+    const root = await createFixture(t);
+    await writeFile(path.join(root, 'tests', 'pilot-gate-2a', 'src', 'unexpected.ts'), source);
+
+    assert.throws(
+      () => validatePilotGate2AInputs(discoverPilotGate2AInputs(root)),
+      /literal Gate 2A Edge path outside approved endpoint module: tests\/pilot-gate-2a\/src\/unexpected\.ts/,
+    );
+  }
+});
+
+test('unit tests and comments cannot satisfy executable harness endpoint usage', async (t) => {
+  const root = await createFixture(t);
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'nested', 'cleanup.integration.test.ts'),
+    'export const noCleanupCall = true;\n',
+  );
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'ordinary.test.ts'),
+    'edgeEndpointUrl(environment.apiUrl, "cleanupMediaStaging");\n',
+  );
+  await writeFile(
+    path.join(root, 'tests', 'pilot-gate-2a', 'src', 'comment-only.ts'),
+    [
+      '// edgeEndpointUrl(environment.apiUrl, "cleanupMediaStaging");',
+      'export const fakeUsage = `edgeEndpointUrl(environment.apiUrl, "cleanupMediaStaging")`;',
+      '',
+    ].join('\n'),
+  );
+
+  assert.throws(
+    () => validatePilotGate2AInputs(discoverPilotGate2AInputs(root)),
+    /Gate 2A Edge endpoint is not used by executable harness source: cleanupMediaStaging/,
+  );
+});
+
+test('integration config cannot omit the mandatory global setup file or satisfy it with a comment', () => {
+  assert.throws(
+    () => validatePilotGate2AIntegrationConfig('export default { test: {} };\n'),
+    /mandatory Gate 2A integration setup/,
+  );
+  assert.throws(
+    () => validatePilotGate2AIntegrationConfig('// setupFiles: [".\/src\/integration-setup.ts"]\nexport default {};\n'),
+    /mandatory Gate 2A integration setup/,
+  );
+  assert.throws(
+    () => validatePilotGate2AIntegrationConfig([
+      'export default defineConfig({ test: {',
+      '  setupFiles: ["./src/integration-setup.ts"],',
+      '  setupFiles: [],',
+      '} });',
+    ].join('\n')),
+    /mandatory Gate 2A integration setup/,
+  );
+});
+
+test('an empty setup file cannot satisfy the mandatory global fetch-boundary installation', async (t) => {
+  const root = await createFixture(t);
+  await writeFile(path.join(root, 'tests', 'pilot-gate-2a', 'src', 'integration-setup.ts'), 'export {};\n');
+
+  assert.throws(
+    () => validatePilotGate2AInputs(discoverPilotGate2AInputs(root)),
+    /mandatory Gate 2A global fetch boundary installation/,
   );
 });
 
@@ -145,8 +272,17 @@ test('discovers the complete repository Gate 2A source contract', () => {
       'supabase/functions/finalize-media-upload/index.ts',
       'supabase/functions/reserve-media-upload/index.ts',
     ],
-    referencedEndpoints: EXPECTED_ENDPOINTS,
+    manifestEndpoints: EXPECTED_ENDPOINTS,
+    endpointManifest: 'tests/pilot-gate-2a/edge-endpoints.json',
+    endpointModule: 'tests/pilot-gate-2a/src/edge-endpoints.ts',
+    fetchGuard: 'tests/pilot-gate-2a/src/local-fetch-guard.ts',
     environmentGuard: 'tests/pilot-gate-2a/src/environment.ts',
+    integrationSetup: 'tests/pilot-gate-2a/src/integration-setup.ts',
+    integrationConfig: 'tests/pilot-gate-2a/vitest.integration.config.ts',
+    integrationSetupConfigured: true,
+    integrationSetupInstallsBoundary: true,
+    forbiddenEndpointLiterals: [],
+    usedEndpointNames: Object.keys(ENDPOINT_MANIFEST.endpoints).sort(),
   });
 });
 

@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
 import type { LocalStackEnvironment } from './environment.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 import { sanitizeDiagnostic } from './diagnostics.js';
 import { fetchWithTimeout } from './network.js';
 
@@ -125,7 +126,7 @@ async function createSighting(env: LocalStackEnvironment, actor: SyntheticActor,
   const body = JSON.stringify(Object.fromEntries(fieldNames.map((name, index) => [name, fieldValues[index]])));
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${env.apiUrl}/functions/v1/create-sighting`, {
+    response = await fetchWithTimeout(edgeEndpointUrl(env.apiUrl, 'createSighting'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${actor.accessToken}`, 'Content-Type': 'application/json' },
       body,

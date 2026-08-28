@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,6 +8,7 @@ import test from 'node:test';
 
 import {
   failureDiagnosticPath,
+  createSystemProcessAdapter,
   removePilotGate2AFailureDiagnostic,
   runPilotGate2A,
   sanitizeRuntimeOutput,
@@ -141,6 +143,65 @@ function allRecordedText(recorder) {
 async function clearDiagnostic() {
   await removePilotGate2AFailureDiagnostic();
   assert.equal(existsSync(failureDiagnosticPath()), false);
+}
+
+function testChildEnvironment() {
+  return Object.fromEntries(
+    ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC']
+      .filter((name) => typeof process.env[name] === 'string')
+      .map((name) => [name, process.env[name]]),
+  );
+}
+
+async function readSpawnedPid(filename) {
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline) {
+    try {
+      const value = Number.parseInt(await readFile(filename, 'utf8'), 10);
+      if (Number.isSafeInteger(value) && value > 0) return value;
+    } catch {
+      // The supervised fixture has not reached this process boundary yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error('process-tree fixture did not publish its pid');
+}
+
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForProcessExit(pid) {
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline && processExists(pid)) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return !processExists(pid);
+}
+
+function forceKillFixtureTree(parentPid, grandchildPid) {
+  if (process.platform === 'win32' && parentPid > 0 && processExists(parentPid)) {
+    spawnSync('taskkill', ['/PID', String(parentPid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+  } else if (parentPid > 0 && processExists(parentPid)) {
+    try {
+      process.kill(-parentPid, 'SIGKILL');
+    } catch {
+      // The process group may already have been reaped.
+    }
+  }
+  for (const pid of [parentPid, grandchildPid]) {
+    if (pid <= 0 || !processExists(pid)) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Exact fixture process is already gone.
+    }
+  }
 }
 
 test('captures startup/status, masks status values, writes only custom Edge env, and runs children with minimum environments', async () => {
@@ -363,6 +424,57 @@ test('runtime sanitizer preserves bounded safe lines and replaces unsafe diagnos
   assert.match(sanitized, /\[redacted\]/);
 });
 
+test('runtime sanitizer redacts every canonical UUID shape including v7, Nil, and Max', () => {
+  const canonicalUuids = [
+    '01890f47-eabc-7def-8123-456789abcdef',
+    '00000000-0000-0000-0000-000000000000',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  ];
+
+  const sanitized = sanitizeRuntimeOutput(canonicalUuids.map((value, index) => (
+    index === 0 ? `prefix${value}suffix` : `job ${value}`
+  )).join('\n'));
+
+  for (const uuid of canonicalUuids) assert.equal(sanitized.includes(uuid), false);
+  assert.deepEqual(sanitized.split('\n'), canonicalUuids.map(() => '[redacted]'));
+});
+
+test('real abort kills a TERM-resistant descendant tree promptly without waiting for inherited pipes to close', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pilot-gate-process-tree-'));
+  const parentPidFile = path.join(directory, 'parent.pid');
+  const grandchildPidFile = path.join(directory, 'grandchild.pid');
+  let parentPid = 0;
+  let grandchildPid = 0;
+  t.after(async () => {
+    forceKillFixtureTree(parentPid, grandchildPid);
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const controller = new AbortController();
+  const adapter = createSystemProcessAdapter();
+  const fixture = path.resolve(import.meta.dirname, 'fixtures', 'pilot-gate-process-tree-child.mjs');
+  const startedAt = Date.now();
+  const capture = adapter.capture(process.execPath, [fixture, parentPidFile, grandchildPidFile], {
+    cwd: path.resolve(import.meta.dirname, '..'),
+    env: testChildEnvironment(),
+    signal: controller.signal,
+    timeoutMs: 1_000,
+  });
+
+  parentPid = await readSpawnedPid(parentPidFile);
+  grandchildPid = await readSpawnedPid(grandchildPidFile);
+  assert.equal(processExists(parentPid), true);
+  assert.equal(processExists(grandchildPid), true);
+  controller.abort();
+
+  const result = await capture;
+  assert.equal(result.exitCode, 1);
+  assert.equal(await waitForProcessExit(parentPid), true);
+  assert.equal(await waitForProcessExit(grandchildPid), true);
+  assert.equal(result.terminationConfirmed, true);
+  assert.ok(Date.now() - startedAt < 4_000, 'abort exceeded the independent process-tree cleanup deadline');
+});
+
 test('an abort observed at a child boundary prevents later work and still performs full cleanup', async () => {
   await clearDiagnostic();
   const root = path.resolve(import.meta.dirname, '..');
@@ -392,6 +504,34 @@ test('an abort observed at a child boundary prevents later work and still perfor
   assert.equal(processes.calls.some(({ stage }) => stage === 'stop'), true);
   assert.equal(existsSync(processes.observations.edgeEnvPath), false);
   assert.equal(output.messages.includes('Pilot Gate 2A readiness passed.'), false);
+  await clearDiagnostic();
+});
+
+test('an unconfirmed child-tree exit becomes a fixed cleanup failure and still performs scoped cleanup', async () => {
+  await clearDiagnostic();
+  const root = path.resolve(import.meta.dirname, '..');
+  const processes = fakeProcesses();
+  const originalCapture = processes.adapter.capture;
+  processes.adapter.capture = async (command, args, options) => {
+    const result = await originalCapture(command, args, options);
+    return commandStage(command, args) === 'pgtap'
+      ? { ...result, terminationConfirmed: false }
+      : result;
+  };
+
+  await assert.rejects(
+    runPilotGate2A({
+      repoRoot: root,
+      processAdapter: processes.adapter,
+      outputAdapter: outputRecorder().adapter,
+      parentEnvironment: parentEnvironment(),
+    }),
+    /Pilot Gate 2A failed at process-tree-cleanup/,
+  );
+
+  assert.equal(processes.calls.some(({ kind }) => kind === 'stop-child'), false);
+  assert.equal(processes.calls.some(({ stage }) => stage === 'stop'), true);
+  assert.match(await readFile(failureDiagnosticPath(), 'utf8'), /stage=process-tree-cleanup/);
   await clearDiagnostic();
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { readLocalStackEnvironment } from './environment.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 import { sanitizeDiagnostic } from './diagnostics.js';
 import { createSyntheticScenario, destroySyntheticScenario } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
@@ -53,7 +54,7 @@ describe('local stack readiness', () => {
     }, Math.min(RETRY_DELAY_MS, remaining)), (response) => response.ok);
     expect(auth.status).toBe(200);
 
-    const edge = await eventually(env, 'edge', (remaining) => fetchWithTimeout(`${env.apiUrl}/functions/v1/create-sighting`, {
+    const edge = await eventually(env, 'edge', (remaining) => fetchWithTimeout(edgeEndpointUrl(env.apiUrl, 'createSighting'), {
       method: 'POST',
       headers: { apikey: env.anonKey, 'Content-Type': 'application/json' },
       body: new Uint8Array(),

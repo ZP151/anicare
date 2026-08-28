@@ -12,6 +12,7 @@ import {
   type Reservation,
   type ReserveInput,
 } from './actors.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 
 const UUID_JOB = '11111111-1111-4111-8111-111111111111';
 const UUID_MEDIA = '22222222-2222-4222-8222-222222222222';
@@ -132,7 +133,7 @@ describe('owner media actors', () => {
     expect(result.path === response.path && result.token === response.body.upload.token).toBe(true);
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
-    expect(url).toBe(`${env.apiUrl}/functions/v1/reserve-media-upload`);
+    expect(url).toBe(edgeEndpointUrl(env.apiUrl, 'reserveMediaUpload'));
     expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
       method: 'POST', redirect: 'error', cache: 'no-store',
     });
@@ -359,7 +360,7 @@ describe('owner media actors', () => {
       ok: true, status: 200, mediaAssetId: UUID_ASSET,
     });
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
-    expect(url).toBe(`${env.apiUrl}/functions/v1/finalize-media-upload`);
+    expect(url).toBe(edgeEndpointUrl(env.apiUrl, 'finalizeMediaUpload'));
     expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
       method: 'POST', redirect: 'error', cache: 'no-store',
     });
@@ -387,7 +388,7 @@ describe('owner media actors', () => {
 
     await expect(deleteMedia(owner, UUID_ASSET, env)).resolves.toEqual({ ok: true, status: 200, deleted: true });
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
-    expect(url).toBe(`${env.apiUrl}/functions/v1/delete-media`);
+    expect(url).toBe(edgeEndpointUrl(env.apiUrl, 'deleteMedia'));
     expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
       method: 'POST', redirect: 'error', cache: 'no-store',
     });

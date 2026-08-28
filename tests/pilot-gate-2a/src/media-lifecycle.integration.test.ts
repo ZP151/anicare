@@ -11,6 +11,7 @@ import {
   type ReserveInput,
 } from './actors.js';
 import { readLocalStackEnvironment, type LocalStackEnvironment } from './environment.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 import { createSyntheticScenario, destroySyntheticScenario } from './fixtures.js';
 import { isExactActorResultFailure } from './media-failure-shape.js';
 import {
@@ -68,7 +69,7 @@ function cleanupResult(value: unknown): CleanupResult | null {
 async function invokeCleanup(env: LocalStackEnvironment): Promise<CleanupResult> {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${env.apiUrl}/functions/v1/cleanup-media-staging`, {
+    response = await fetchWithTimeout(edgeEndpointUrl(env.apiUrl, 'cleanupMediaStaging'), {
       method: 'POST',
       redirect: 'error',
       cache: 'no-store',

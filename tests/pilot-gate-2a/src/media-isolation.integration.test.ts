@@ -11,6 +11,7 @@ import {
   type ReserveInput,
 } from './actors.js';
 import { readLocalStackEnvironment, type LocalStackEnvironment } from './environment.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 import { createSyntheticScenario, destroySyntheticScenario, type SyntheticActor } from './fixtures.js';
 import { isExactMediaBoundaryFailure, type MediaBoundaryFailureExpectation } from './media-failure-shape.js';
 import { inspectFinalizedMedia } from './inspection.js';
@@ -85,7 +86,7 @@ async function createAdditionalOwnerSighting(env: LocalStackEnvironment, actor: 
   ];
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${env.apiUrl}/functions/v1/create-sighting`, {
+    response = await fetchWithTimeout(edgeEndpointUrl(env.apiUrl, 'createSighting'), {
       method: 'POST',
       redirect: 'error',
       cache: 'no-store',

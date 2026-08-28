@@ -9,6 +9,7 @@ import {
 import { isStableMediaId } from '../../../apps/mobile/src/media/media-reference.js';
 
 import type { LocalStackEnvironment } from './environment.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 import type { SyntheticActor } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
 
@@ -182,7 +183,7 @@ export async function reserveMedia(
   const serializedBody = reservationRequest(input);
   if (serializedBody === null) throw failure('reserve', 'invalid_response', null, 'invalid_response');
   const response = await actorPost(
-    'reserve', `${env.apiUrl}/functions/v1/reserve-media-upload`, actor, serializedBody,
+    'reserve', edgeEndpointUrl(env.apiUrl, 'reserveMediaUpload'), actor, serializedBody,
   );
   if (!(response instanceof Response)) throw response;
   if (!response.ok) throw await httpFailure('reserve', response);
@@ -276,7 +277,7 @@ export async function finalizeMedia(
     return { ok: false, ...failure('finalize', 'invalid_response', null, 'invalid_response') };
   }
   const response = await actorPost(
-    'finalize', `${env.apiUrl}/functions/v1/finalize-media-upload`, actor, serializedBody,
+    'finalize', edgeEndpointUrl(env.apiUrl, 'finalizeMediaUpload'), actor, serializedBody,
   );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('finalize', response) };
@@ -299,7 +300,7 @@ export async function deleteMedia(
     return { ok: false, ...failure('delete', 'invalid_response', null, 'invalid_response') };
   }
   const response = await actorPost(
-    'delete', `${env.apiUrl}/functions/v1/delete-media`, actor, serializedBody,
+    'delete', edgeEndpointUrl(env.apiUrl, 'deleteMedia'), actor, serializedBody,
   );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('delete', response) };

@@ -7,6 +7,7 @@ if (process.env.PILOT_GATE_2A !== '1') {
 export default defineConfig({
   test: {
     include: ['src/**/*.integration.test.ts'],
+    setupFiles: ['./src/integration-setup.ts'],
     fileParallelism: false,
     maxWorkers: 1,
   },

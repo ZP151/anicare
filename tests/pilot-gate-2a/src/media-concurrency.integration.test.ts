@@ -12,6 +12,7 @@ import {
 } from './actors.js';
 import { runIsolatedAttempts, settleTwoAtBarrier } from './concurrency.js';
 import { readLocalStackEnvironment, type LocalStackEnvironment } from './environment.js';
+import { edgeEndpointUrl } from './edge-endpoints.js';
 import { createSyntheticScenario, destroySyntheticScenario, type SyntheticActor } from './fixtures.js';
 import {
   normalizeCleanupConvergence as cleanupConvergence,
@@ -79,7 +80,7 @@ function cleanupResult(value: unknown): CleanupResult | null {
 async function invokeCleanup(env: LocalStackEnvironment): Promise<'cleanup_completed'> {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${env.apiUrl}/functions/v1/cleanup-media-staging`, {
+    response = await fetchWithTimeout(edgeEndpointUrl(env.apiUrl, 'cleanupMediaStaging'), {
       method: 'POST',
       redirect: 'error',
       cache: 'no-store',

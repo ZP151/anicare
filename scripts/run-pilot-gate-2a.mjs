@@ -18,6 +18,10 @@ const MAX_CAPTURE_BYTES = 256 * 1024;
 const MAX_DIAGNOSTIC_LINES = 80;
 const MAX_DIAGNOSTIC_LINE_LENGTH = 240;
 const MAX_STATUS_BYTES = 128 * 1024;
+const PROCESS_TERM_GRACE_MS = 350;
+const PROCESS_KILL_CONFIRM_MS = 1_500;
+const PROCESS_OUTPUT_DRAIN_MS = 100;
+const TASKKILL_DEADLINE_MS = 1_000;
 
 export const FIXED_PRECISE_LOCATION_ENCRYPTION_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
@@ -91,7 +95,7 @@ function createBoundedCollector(stream) {
   const chunks = [];
   let byteLength = 0;
   let truncated = false;
-  stream?.on('data', (chunk) => {
+  const collect = (chunk) => {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     const remaining = MAX_CAPTURE_BYTES - byteLength;
     if (remaining > 0) {
@@ -100,15 +104,20 @@ function createBoundedCollector(stream) {
       byteLength += retained.byteLength;
     }
     if (bytes.byteLength > remaining) truncated = true;
-  });
+  };
+  stream?.on('data', collect);
   return {
     snapshot() {
       return { text: Buffer.concat(chunks).toString('utf8'), truncated };
     },
+    stop() {
+      stream?.removeListener('data', collect);
+      stream?.destroy();
+    },
   };
 }
 
-function waitForChild(child) {
+function waitForChildExit(child) {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (exitCode) => {
@@ -116,7 +125,11 @@ function waitForChild(child) {
       settled = true;
       resolve(Number.isInteger(exitCode) ? exitCode : 1);
     };
-    child.once('close', finish);
+    if (child.exitCode !== null || child.signalCode !== null) {
+      finish(child.exitCode);
+      return;
+    }
+    child.once('exit', finish);
     child.once('error', () => finish(1));
   });
 }
@@ -126,6 +139,129 @@ function delayResult(milliseconds, result) {
     const timer = setTimeout(() => resolve(result), milliseconds);
     timer.unref?.();
   });
+}
+
+function cleanupDelayResult(milliseconds, result) {
+  return new Promise((resolve) => setTimeout(() => resolve(result), milliseconds));
+}
+
+async function withCleanupDeadline(promise, milliseconds, fallback) {
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(fallback), milliseconds);
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function waitForStreamEnd(stream) {
+  if (!stream || stream.readableEnded || stream.destroyed) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      stream.removeListener('end', finish);
+      stream.removeListener('error', finish);
+      stream.removeListener('close', finish);
+      resolve();
+    };
+    stream.once('end', finish);
+    stream.once('error', finish);
+    stream.once('close', finish);
+  });
+}
+
+async function drainCapturedOutput(child) {
+  await withCleanupDeadline(
+    Promise.all([waitForStreamEnd(child.stdout), waitForStreamEnd(child.stderr)]),
+    PROCESS_OUTPUT_DRAIN_MS,
+    undefined,
+  );
+}
+
+function posixSignalProcessGroup(child, signal) {
+  if (!Number.isSafeInteger(child.pid) || child.pid <= 0) return false;
+  try {
+    process.kill(-child.pid, signal);
+    return true;
+  } catch (error) {
+    return error instanceof Error && 'code' in error && error.code === 'ESRCH';
+  }
+}
+
+function taskkillExecutable() {
+  const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  return windowsRoot ? path.join(windowsRoot, 'System32', 'taskkill.exe') : 'taskkill.exe';
+}
+
+async function runTaskkill(pid, force) {
+  let killer;
+  try {
+    killer = spawn(
+      taskkillExecutable(),
+      ['/PID', String(pid), '/T', ...(force ? ['/F'] : [])],
+      {
+        env: minimumChildEnvironment(process.env),
+        shell: false,
+        stdio: 'ignore',
+        windowsHide: true,
+      },
+    );
+  } catch {
+    return false;
+  }
+  const exitPromise = waitForChildExit(killer);
+  const result = await withCleanupDeadline(
+    exitPromise.then((exitCode) => ({ exitCode, timedOut: false })),
+    TASKKILL_DEADLINE_MS,
+    { exitCode: 1, timedOut: true },
+  );
+  if (result.timedOut) {
+    try {
+      killer.kill('SIGKILL');
+    } catch {
+      // A timed-out supervisor is treated as a fixed termination failure.
+    }
+    await withCleanupDeadline(exitPromise, PROCESS_TERM_GRACE_MS, 1);
+  }
+  return !result.timedOut && result.exitCode === 0;
+}
+
+async function terminateProcessTree(child, exitPromise) {
+  if (!Number.isSafeInteger(child.pid) || child.pid <= 0) {
+    return withCleanupDeadline(exitPromise.then(() => true), PROCESS_KILL_CONFIRM_MS, false);
+  }
+
+  if (process.platform === 'win32') {
+    await runTaskkill(child.pid, false);
+    const exitedDuringGrace = await withCleanupDeadline(
+      exitPromise.then(() => true),
+      PROCESS_TERM_GRACE_MS,
+      false,
+    );
+    if (!exitedDuringGrace) await runTaskkill(child.pid, true);
+  } else {
+    posixSignalProcessGroup(child, 'SIGTERM');
+    await cleanupDelayResult(PROCESS_TERM_GRACE_MS, undefined);
+    posixSignalProcessGroup(child, 'SIGKILL');
+  }
+
+  return withCleanupDeadline(exitPromise.then(() => true), PROCESS_KILL_CONFIRM_MS, false);
+}
+
+function cancellationResult(signal) {
+  let remove = () => {};
+  const promise = new Promise((resolve) => {
+    const cancelled = () => resolve({ kind: 'cancelled', exitCode: 1 });
+    if (signal?.aborted) {
+      cancelled();
+      return;
+    }
+    signal?.addEventListener('abort', cancelled, { once: true });
+    remove = () => signal?.removeEventListener('abort', cancelled);
+  });
+  return { promise, remove };
 }
 
 export function createSystemProcessAdapter() {
@@ -139,35 +275,36 @@ export function createSystemProcessAdapter() {
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
+          detached: process.platform !== 'win32',
         });
       } catch {
         return { exitCode: 1, stdout: '', stderr: '', truncated: false };
       }
       const stdout = createBoundedCollector(child.stdout);
       const stderr = createBoundedCollector(child.stderr);
-      const onAbort = () => child.kill('SIGTERM');
-      signal?.addEventListener('abort', onAbort, { once: true });
-      const exitPromise = waitForChild(child);
-      const exitResult = await Promise.race([
-        exitPromise.then((exitCode) => ({ exitCode, timedOut: false })),
-        delayResult(timeoutMs, { exitCode: 1, timedOut: true }),
+      const exitPromise = waitForChildExit(child);
+      const cancellation = cancellationResult(signal);
+      const outcome = await Promise.race([
+        exitPromise.then((exitCode) => ({ kind: 'exit', exitCode })),
+        cancellation.promise,
+        delayResult(timeoutMs, { kind: 'timeout', exitCode: 1 }),
       ]);
-      if (exitResult.timedOut) {
-        child.kill('SIGTERM');
-        const stopped = await Promise.race([exitPromise.then(() => true), delayResult(5_000, false)]);
-        if (!stopped) {
-          child.kill('SIGKILL');
-          await Promise.race([exitPromise, delayResult(5_000, 1)]);
-        }
+      cancellation.remove();
+      let terminationConfirmed = true;
+      if (outcome.kind !== 'exit') {
+        terminationConfirmed = await terminateProcessTree(child, exitPromise);
       }
-      signal?.removeEventListener('abort', onAbort);
+      await drainCapturedOutput(child);
       const out = stdout.snapshot();
       const err = stderr.snapshot();
+      stdout.stop();
+      stderr.stop();
       return {
-        exitCode: exitResult.exitCode,
+        exitCode: outcome.kind === 'exit' ? outcome.exitCode : 1,
         stdout: out.text,
         stderr: err.text,
-        truncated: out.truncated || err.truncated || exitResult.timedOut,
+        truncated: out.truncated || err.truncated || outcome.kind === 'timeout' || !terminationConfirmed,
+        terminationConfirmed,
       };
     },
 
@@ -180,14 +317,22 @@ export function createSystemProcessAdapter() {
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
           windowsHide: true,
+          detached: process.platform !== 'win32',
         });
       } catch {
         throw new Error('child process failed to start');
       }
       const stdout = createBoundedCollector(child.stdout);
       const stderr = createBoundedCollector(child.stderr);
-      const exitPromise = waitForChild(child);
-      const onAbort = () => child.kill('SIGTERM');
+      const exitPromise = waitForChildExit(child);
+      let terminationPromise = null;
+      const requestTermination = () => {
+        terminationPromise ??= terminateProcessTree(child, exitPromise);
+        return terminationPromise;
+      };
+      const onAbort = () => {
+        void requestTermination();
+      };
       signal?.addEventListener('abort', onAbort, { once: true });
 
       await new Promise((resolve, reject) => {
@@ -210,16 +355,11 @@ export function createSystemProcessAdapter() {
         },
         async stop() {
           signal?.removeEventListener('abort', onAbort);
-          if (child.exitCode !== null || child.signalCode !== null) {
-            await exitPromise;
-            return;
-          }
-          child.kill('SIGTERM');
-          const stopped = await Promise.race([exitPromise.then(() => true), delayResult(5_000, false)]);
-          if (!stopped) {
-            child.kill('SIGKILL');
-            await Promise.race([exitPromise, delayResult(5_000, 1)]);
-          }
+          const confirmed = await requestTermination();
+          await drainCapturedOutput(child);
+          stdout.stop();
+          stderr.stop();
+          if (!confirmed) throw new Error('process tree termination failed');
         },
       };
     },
@@ -356,7 +496,7 @@ function sanitizeLine(rawLine, secrets) {
   if (
     /[\\/?&{}<>]/.test(line) ||
     /\b(?:bearer|authorization|body|password|token|secret|credential)\b/i.test(line) ||
-    /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i.test(line) ||
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(line) ||
     /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/.test(line) ||
     !/^[A-Za-z0-9 .,;:_@()[\]'=+\-\[\]]+$/.test(line)
   ) {
@@ -461,6 +601,7 @@ async function capturedStage(processAdapter, stage, command, args, options, reta
   } catch {
     throw new StageFailure(stage);
   }
+  if (result?.terminationConfirmed === false) throw new StageFailure('process-tree-cleanup');
   assertNotAborted(options.signal);
   if (result.exitCode !== 0) {
     throw new StageFailure(stage, retainFailureOutput ? result : null);
