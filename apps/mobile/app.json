@@ -26,14 +26,17 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "WhiskerCommons uses your location once to protect and associate a community-cat sighting. Exact coordinates are never public."
+          "locationWhenInUsePermission": "WhiskerCommons uses your location once to protect and associate a community-cat sighting. Exact coordinates are never public.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false
         }
       ],
       [
         "expo-image-picker",
         {
           "photosPermission": "Choose a cat photo to attach to your report. Review and redact bystanders before upload.",
-          "cameraPermission": "Take a community-cat photo for a sighting report."
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       [
