@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { MaskEditorOverlay } from './MaskEditorOverlay';
 import type { PrivacyMask } from './contracts';
@@ -248,6 +249,31 @@ describe('MaskEditorOverlay', () => {
     await fireEvent.press(view.getByRole('button', { name: label }));
 
     expect(view.onMutationCommit).toHaveBeenCalledWith([{ id: 'mask-one', rect }]);
+  });
+
+  it('keeps full accessible labels while presenting compact grouped controls', async () => {
+    const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
+
+    expect(view.getByText('Position')).toBeTruthy();
+    expect(view.getByText('Size')).toBeTruthy();
+    expect(view.getByText('Left')).toBeTruthy();
+    expect(view.getByText('Wider')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Move selected mask left' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Make selected mask wider' })).toBeTruthy();
+  });
+
+  it('keeps narrow grouped controls at least 44 points wide and switches to two columns', async () => {
+    const view = await renderOverlay({
+      frameWidth: 200,
+      masks: [firstMask],
+      selectedMaskId: 'mask-one',
+    });
+
+    const leftStyle = StyleSheet.flatten(
+      view.getByRole('button', { name: 'Move selected mask left' }).props.style,
+    );
+    expect(leftStyle.minWidth).toBe(44);
+    expect(leftStyle.flexBasis).toBe('46%');
   });
 
   it('disables a boundary no-op control without emitting a mutation', async () => {

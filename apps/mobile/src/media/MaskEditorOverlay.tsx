@@ -7,6 +7,8 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 
+import { GlassSurface } from '../design/GlassSurface';
+import { colors, radii } from '../design/theme';
 import type { PrivacyMask } from './contracts';
 import {
   adjustMask,
@@ -53,15 +55,20 @@ type ActiveGesture = DragGesture | PendingAdd;
 
 const HANDLE_RADIUS_PX = 22;
 
-const controlActions: readonly Readonly<{ label: string; action: AccessibleMaskAction }>[] = [
-  { label: 'Move selected mask left', action: 'move_left' },
-  { label: 'Move selected mask right', action: 'move_right' },
-  { label: 'Move selected mask up', action: 'move_up' },
-  { label: 'Move selected mask down', action: 'move_down' },
-  { label: 'Make selected mask wider', action: 'wider' },
-  { label: 'Make selected mask narrower', action: 'narrower' },
-  { label: 'Make selected mask taller', action: 'taller' },
-  { label: 'Make selected mask shorter', action: 'shorter' },
+const controlActions: readonly Readonly<{
+  label: string;
+  visibleLabel: string;
+  action: AccessibleMaskAction;
+  group: 'position' | 'size';
+}>[] = [
+  { label: 'Move selected mask left', visibleLabel: 'Left', action: 'move_left', group: 'position' },
+  { label: 'Move selected mask right', visibleLabel: 'Right', action: 'move_right', group: 'position' },
+  { label: 'Move selected mask up', visibleLabel: 'Up', action: 'move_up', group: 'position' },
+  { label: 'Move selected mask down', visibleLabel: 'Down', action: 'move_down', group: 'position' },
+  { label: 'Make selected mask wider', visibleLabel: 'Wider', action: 'wider', group: 'size' },
+  { label: 'Make selected mask narrower', visibleLabel: 'Narrower', action: 'narrower', group: 'size' },
+  { label: 'Make selected mask taller', visibleLabel: 'Taller', action: 'taller', group: 'size' },
+  { label: 'Make selected mask shorter', visibleLabel: 'Shorter', action: 'shorter', group: 'size' },
 ];
 
 function replaceMask(masks: readonly PrivacyMask[], replacement: PrivacyMask): readonly PrivacyMask[] {
@@ -230,24 +237,35 @@ export function MaskEditorOverlay({
           : `${masks.length} manual opaque masks. No mask selected.`}
       </Text>
 
-      <View style={styles.controls}>
-        {controlActions.map(({ label, action }) => {
-          const noChange = !selectedMask || adjustMask(selectedMask, action) === selectedMask;
-          const controlDisabled = disabled || noChange;
-          return (
-            <Pressable
-              key={action}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              accessibilityState={{ disabled: controlDisabled }}
-              disabled={controlDisabled}
-              onPress={() => commitAdjustment(action)}
-              style={[styles.control, controlDisabled && styles.controlDisabled]}
-            >
-              <Text style={styles.controlText}>{label}</Text>
-            </Pressable>
-          );
-        })}
+      <GlassSurface interactive style={styles.controlsPanel}>
+        {(['position', 'size'] as const).map((group) => (
+          <View key={group} style={styles.controlGroup}>
+            <Text style={styles.groupLabel}>{group === 'position' ? 'Position' : 'Size'}</Text>
+            <View style={styles.controlRow}>
+              {controlActions.filter((control) => control.group === group).map(({ label, visibleLabel, action }) => {
+                const noChange = !selectedMask || adjustMask(selectedMask, action) === selectedMask;
+                const controlDisabled = disabled || noChange;
+                return (
+                  <Pressable
+                    key={action}
+                    accessibilityRole="button"
+                    accessibilityLabel={label}
+                    accessibilityState={{ disabled: controlDisabled }}
+                    disabled={controlDisabled}
+                    onPress={() => commitAdjustment(action)}
+                    style={[
+                      styles.control,
+                      frameWidth < 240 && styles.narrowControl,
+                      controlDisabled && styles.controlDisabled,
+                    ]}
+                  >
+                    <Text numberOfLines={1} style={styles.controlText}>{visibleLabel}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ))}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Delete selected mask"
@@ -258,7 +276,7 @@ export function MaskEditorOverlay({
         >
           <Text style={styles.controlText}>Delete selected mask</Text>
         </Pressable>
-      </View>
+      </GlassSurface>
     </View>
   );
 }
@@ -279,13 +297,28 @@ const styles = StyleSheet.create({
   bottomLeft: { left: -HANDLE_RADIUS_PX, bottom: -HANDLE_RADIUS_PX },
   bottomRight: { right: -HANDLE_RADIUS_PX, bottom: -HANDLE_RADIUS_PX },
   handleDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#172116' },
-  selectionText: { color: '#536050', lineHeight: 20 },
-  controls: { gap: 8 },
-  control: {
-    minHeight: 44, paddingHorizontal: 12, borderRadius: 12, justifyContent: 'center',
-    borderWidth: 1, borderColor: '#61845C', backgroundColor: 'rgba(255, 255, 255, 0.72)',
+  selectionText: { color: colors.muted, lineHeight: 20 },
+  controlsPanel: {
+    padding: 10,
+    gap: 8,
+    overflow: 'hidden',
+    borderRadius: radii.medium,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.78)',
   },
-  deleteControl: { borderColor: '#A64040' },
+  controlGroup: { gap: 5 },
+  groupLabel: { color: colors.muted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8 },
+  controlRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  control: {
+    flexGrow: 1, flexShrink: 1, flexBasis: 44, minWidth: 44, minHeight: 44,
+    paddingHorizontal: 4, borderRadius: 14, justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.leaf, backgroundColor: 'rgba(255, 255, 255, 0.68)',
+  },
+  narrowControl: { flexBasis: '46%' },
+  deleteControl: {
+    flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: 0,
+    borderColor: colors.danger, backgroundColor: 'rgba(158, 61, 56, 0.08)',
+  },
   controlDisabled: { opacity: 0.45 },
-  controlText: { color: '#21301F', fontWeight: '700', textAlign: 'center' },
+  controlText: { color: colors.ink, fontWeight: '700', textAlign: 'center' },
 });
