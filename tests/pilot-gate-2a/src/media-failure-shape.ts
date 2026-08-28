@@ -6,7 +6,7 @@ export type MediaBoundaryFailureExpectation = Readonly<{
 
 export type ActorResultFailureExpectation = Readonly<{
   stage: 'reserve' | 'upload' | 'finalize' | 'delete';
-  status: 403 | 409;
+  status: 400 | 403 | 409;
   code: 'media_not_found_or_forbidden' | 'media_reservation_conflict' |
     'media_finalization_conflict' | 'storage_upload_failed';
 }>;

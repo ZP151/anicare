@@ -221,7 +221,7 @@ Cover every sequence:
 4. Finalize commits but response is lost: resumed finalizing retries finalize without decrypting first.
 5. Reservation expired after PUT: finalizing probes, renews reserve, probes again and finalizes without PUT.
 6. Cleanup deleted the object: finalizing probes, renews, probes, then performs an authenticated reread/PUT/finalize.
-7. PUT 409 plus finalize success converges; PUT 409 plus fresh-reservation finalize 409 becomes `needs_user` and does not remint forever.
+7. The pinned local Storage replay contract is non-upsert PUT HTTP 400 plus finalize success converges. Client recovery intentionally treats only exact `upload`/`http`/`storage_upload_failed` failures with status in `{400, 409}` as possibly committed; the compatibility 409 case plus fresh-reservation finalize 409 becomes `needs_user` and does not remint forever.
 8. Network/408/429/5xx becomes bounded waiting with the current resume phase; every crash after a claim consumes an attempt.
 9. Artifact/key/version/hash failure makes no network call and becomes explicit `needs_user`.
 10. Quarantined persisted before ciphertext cleanup: crashes at quarantine, file delete and row cleanup never retransmit.

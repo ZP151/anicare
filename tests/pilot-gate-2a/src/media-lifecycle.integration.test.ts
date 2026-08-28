@@ -94,7 +94,7 @@ function strangerDeleteDenied(value: ActorResult): boolean {
 
 function signedReplayFailed(value: ActorResult): boolean {
   return isExactActorResultFailure(value, {
-    stage: 'upload', status: 409, code: 'storage_upload_failed',
+    stage: 'upload', status: 400, code: 'storage_upload_failed',
   });
 }
 

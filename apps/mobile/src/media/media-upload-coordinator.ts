@@ -107,7 +107,7 @@ function isMissingObject(value: unknown): boolean {
 
 function isPutConflict(value: unknown): boolean {
   return isTransportFailure(value) && value.stage === 'upload' && value.kind === 'http' &&
-    value.status === 409 && value.code === 'storage_upload_failed';
+    (value.status === 400 || value.status === 409) && value.code === 'storage_upload_failed';
 }
 
 function isAbortFailure(value: unknown): boolean {

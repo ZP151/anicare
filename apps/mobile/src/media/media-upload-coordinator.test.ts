@@ -185,10 +185,40 @@ describe('crash-safe media upload coordinator', () => {
     ]);
   });
 
-  it('treats PUT conflict as potentially committed and converges when finalize succeeds', async () => {
-    const run = uploadHarness({ put: ['conflict'], finalize: ['success'] });
+  it('treats an exact upload HTTP 400 storage failure as potentially committed and converges when finalize succeeds', async () => {
+    const run = uploadHarness({
+      put: [transportFailure('upload', 'http', 400, 'storage_upload_failed')],
+      finalize: ['success'],
+    });
     await expect(run.claimAndRun()).resolves.toBe('quarantined');
     expect(run.events).toContain('persist:finalizing:1');
+  });
+
+  it('keeps an exact upload HTTP 409 storage failure compatible with finalize convergence', async () => {
+    const run = uploadHarness({
+      put: [transportFailure('upload', 'http', 409, 'storage_upload_failed')],
+      finalize: ['success'],
+    });
+    await expect(run.claimAndRun()).resolves.toBe('quarantined');
+    expect(run.events).toContain('persist:finalizing:1');
+  });
+
+  it.each([
+    ['401 status', transportFailure('upload', 'http', 401, 'storage_upload_failed')],
+    ['403 status', transportFailure('upload', 'http', 403, 'storage_upload_failed')],
+    ['408 status', transportFailure('upload', 'http', 408, 'storage_upload_failed')],
+    ['429 status', transportFailure('upload', 'http', 429, 'storage_upload_failed')],
+    ['500 status', transportFailure('upload', 'http', 500, 'storage_upload_failed')],
+    ['wrong code', transportFailure('upload', 'http', 400, 'media_transport_failed')],
+    ['reserve stage', transportFailure('reserve', 'http', 400, 'storage_upload_failed')],
+    ['finalize stage', transportFailure('finalize', 'http', 400, 'storage_upload_failed')],
+    ['network kind', transportFailure('upload', 'network', null, 'storage_upload_failed')],
+    ['invalid-response kind', transportFailure('upload', 'invalid_response', null, 'storage_upload_failed')],
+  ] as const)('fails closed for a possible-commit lookalike with %s', async (_name, failure) => {
+    const run = uploadHarness({ put: [failure], finalize: ['success'] });
+    await expect(run.claimAndRun()).resolves.not.toBe('quarantined');
+    expect(run.events).not.toContain('persist:finalizing:1');
+    expect(run.events).not.toContain('finalize');
   });
 
   it('stops after PUT conflict plus a fresh-reservation finalize conflict', async () => {

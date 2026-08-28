@@ -26,25 +26,25 @@ describe('isExactActorResultFailure', () => {
   it('accepts only the exact five-field HTTP failure result', () => {
     const expected = {
       stage: 'upload' as const,
-      status: 409 as const,
+      status: 400 as const,
       code: 'storage_upload_failed' as const,
     };
 
     expect([
       isExactActorResultFailure({
-        ok: false, stage: 'upload', kind: 'http', status: 409, code: 'storage_upload_failed',
+        ok: false, stage: 'upload', kind: 'http', status: 400, code: 'storage_upload_failed',
       }, expected),
       isExactActorResultFailure({
-        stage: 'upload', kind: 'http', status: 409, code: 'storage_upload_failed',
+        stage: 'upload', kind: 'http', status: 400, code: 'storage_upload_failed',
       }, expected),
       isExactActorResultFailure({
-        ok: false, stage: 'upload', kind: 'http', status: 409, code: 'storage_upload_failed', detail: 'discarded',
+        ok: false, stage: 'upload', kind: 'http', status: 400, code: 'storage_upload_failed', detail: 'discarded',
       }, expected),
       isExactActorResultFailure({
-        ok: true, stage: 'upload', kind: 'http', status: 409, code: 'storage_upload_failed',
+        ok: true, stage: 'upload', kind: 'http', status: 400, code: 'storage_upload_failed',
       }, expected),
       isExactActorResultFailure({
-        ok: false, stage: 'upload', kind: 'network', status: 409, code: 'storage_upload_failed',
+        ok: false, stage: 'upload', kind: 'network', status: 400, code: 'storage_upload_failed',
       }, expected),
     ]).toEqual([true, false, false, false, false]);
   });
