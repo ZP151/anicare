@@ -124,7 +124,7 @@ begin
     or new.reviewed_at is not null then
     raise exception 'identity_proposal_must_start_tentative' using errcode = '42501';
   end if;
-  if not pg_catalog.coalesce((
+  if not coalesce((
     (
       new.source = 'manual_search'
       and new.proposer_id is not null
@@ -327,13 +327,13 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   sighting_row public.sightings%rowtype;
   prior private.identity_requests%rowtype;
   proposal_row public.identity_proposals%rowtype;
   payload_hash text;
 begin
-  if actor_id is null or not public.is_adult_contributor() then
+  if v_actor_id is null or not public.is_adult_contributor() then
     raise exception 'adult_contributor_required' using errcode = '42501';
   end if;
   if p_sighting_id is null
@@ -358,11 +358,11 @@ begin
   );
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0)
+    pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0)
   );
   select * into prior
   from private.identity_requests requests
-  where requests.actor_id = submit_identity_proposal.actor_id
+  where requests.actor_id = v_actor_id
     and requests.request_id = p_request_id;
   if found then
     if prior.operation <> 'submit' or prior.payload_hash <> payload_hash then
@@ -382,7 +382,7 @@ begin
   from public.sightings sightings
   where sightings.id = p_sighting_id
   for update;
-  if not found or sighting_row.reporter_id is distinct from actor_id then
+  if not found or sighting_row.reporter_id is distinct from v_actor_id then
     raise exception 'identity_sighting_owner_required' using errcode = '42501';
   end if;
   if sighting_row.animal_id is not null then
@@ -408,19 +408,19 @@ begin
     sighting_id, proposed_animal_id, proposer_id, source, status,
     model_version, confidence_band, reasons, reviewed_at
   ) values (
-    p_sighting_id, p_proposed_animal_id, actor_id, p_source,
+    p_sighting_id, p_proposed_animal_id, v_actor_id, p_source,
     'tentative'::public.identity_proposal_status, null, null, '[]'::jsonb, null
   ) returning * into proposal_row;
 
   insert into private.identity_requests (
     actor_id, request_id, operation, payload_hash, proposal_id
   ) values (
-    actor_id, p_request_id, 'submit', payload_hash, proposal_row.id
+    v_actor_id, p_request_id, 'submit', payload_hash, proposal_row.id
   );
   insert into audit.access_audit (
     actor_id, action, resource_type, resource_id, purpose, request_id
   ) values (
-    actor_id, 'identity_proposal_submit', 'identity_proposal', proposal_row.id,
+    v_actor_id, 'identity_proposal_submit', 'identity_proposal', proposal_row.id,
     'identity_review', p_request_id::text
   );
 
@@ -446,7 +446,7 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   normalized_rationale text;
   payload_hash text;
   prior private.identity_requests%rowtype;
@@ -456,12 +456,12 @@ declare
   animal_creator_id uuid;
   resulting_status public.identity_proposal_status;
 begin
-  if actor_id is null then
+  if v_actor_id is null then
     raise exception 'trusted_identity_reviewer_required' using errcode = '42501';
   end if;
   perform 1
   from public.role_grants grants
-  where grants.user_id = actor_id
+  where grants.user_id = v_actor_id
     and grants.role = any(
       array['trusted_contributor', 'area_steward', 'platform_admin']::public.trust_role[]
     )
@@ -494,11 +494,11 @@ begin
   );
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0)
+    pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0)
   );
   select * into prior
   from private.identity_requests requests
-  where requests.actor_id = review_identity_proposal.actor_id
+  where requests.actor_id = v_actor_id
     and requests.request_id = p_request_id;
   if found then
     if prior.operation <> 'review' or prior.payload_hash <> payload_hash then
@@ -545,16 +545,16 @@ begin
     raise exception 'identity_animal_not_available' using errcode = 'P0001';
   end if;
 
-  if actor_id = proposal_row.proposer_id
-    or actor_id = sighting_row.reporter_id
-    or actor_id = animal_creator_id then
+  if v_actor_id = proposal_row.proposer_id
+    or v_actor_id = sighting_row.reporter_id
+    or v_actor_id = animal_creator_id then
     raise exception 'identity_reviewer_recusal_required' using errcode = '42501';
   end if;
 
   insert into public.match_reviews (
     proposal_id, reviewer_id, decision, rationale, request_id
   ) values (
-    proposal_row.id, actor_id, p_decision, normalized_rationale, p_request_id
+    proposal_row.id, v_actor_id, p_decision, normalized_rationale, p_request_id
   ) returning * into review_row;
 
   resulting_status := proposal_row.status;
@@ -581,12 +581,12 @@ begin
   insert into private.identity_requests (
     actor_id, request_id, operation, payload_hash, proposal_id, review_id
   ) values (
-    actor_id, p_request_id, 'review', payload_hash, proposal_row.id, review_row.id
+    v_actor_id, p_request_id, 'review', payload_hash, proposal_row.id, review_row.id
   );
   insert into audit.access_audit (
     actor_id, action, resource_type, resource_id, purpose, request_id
   ) values (
-    actor_id, 'identity_proposal_review', 'identity_proposal', proposal_row.id,
+    v_actor_id, 'identity_proposal_review', 'identity_proposal', proposal_row.id,
     'identity_review', p_request_id::text
   );
 
