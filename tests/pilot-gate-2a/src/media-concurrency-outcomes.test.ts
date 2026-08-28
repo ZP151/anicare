@@ -68,7 +68,7 @@ describe('media concurrency HTTP outcome normalization', () => {
 });
 
 describe('media concurrency cleanup convergence normalization', () => {
-  it('accepts only an unclaimed removed retry or terminal state', () => {
+  it('rejects terminal purge while the forced-expired job credential watermark remains live', () => {
     const retry: MediaLifecycleInspection = {
       jobCount: 1,
       assetCount: 0,
@@ -93,6 +93,6 @@ describe('media concurrency cleanup convergence normalization', () => {
       }),
       normalizeCleanupConvergence({ ...retry, cleanupClaimed: true }),
       normalizeCleanupConvergence({ ...retry, stagingObjectExists: true }),
-    ]).toEqual(['retry_state', 'terminal_state', 'unexpected_state', 'unexpected_state']);
+    ]).toEqual(['retry_state', 'unexpected_state', 'unexpected_state', 'unexpected_state']);
   });
 });

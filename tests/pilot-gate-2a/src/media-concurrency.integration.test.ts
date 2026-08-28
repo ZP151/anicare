@@ -10,7 +10,7 @@ import {
   type Reservation,
   type ReserveInput,
 } from './actors.js';
-import { settleTwoAtBarrier } from './concurrency.js';
+import { runIsolatedAttempts, settleTwoAtBarrier } from './concurrency.js';
 import { readLocalStackEnvironment, type LocalStackEnvironment } from './environment.js';
 import { createSyntheticScenario, destroySyntheticScenario, type SyntheticActor } from './fixtures.js';
 import {
@@ -137,11 +137,31 @@ function activeConcurrencyState(): MediaConcurrencyInspection {
     assetCountForMediaId: 1,
     matchingOwnerSightingAssetCount: 1,
     matchingJobAssetCount: 1,
+    matchingExpectedAssetCount: 1,
     activeQuarantinedAssetCount: 1,
     tombstonedAssetCount: 0,
     jobStatus: 'finalized',
     cleanupClaimed: false,
     stagingObjectExists: true,
+  };
+}
+
+function cleanedRetryConcurrencyState(): MediaConcurrencyInspection {
+  return {
+    jobCountForMediaId: 1,
+    matchingOwnerJobCount: 1,
+    distinctOwnerCount: 1,
+    distinctObjectPathCount: 1,
+    canonicalObjectPathCount: 1,
+    assetCountForMediaId: 0,
+    matchingOwnerSightingAssetCount: 0,
+    matchingJobAssetCount: 0,
+    matchingExpectedAssetCount: 0,
+    activeQuarantinedAssetCount: 0,
+    tombstonedAssetCount: 0,
+    jobStatus: 'reserved',
+    cleanupClaimed: false,
+    stagingObjectExists: false,
   };
 }
 
@@ -183,10 +203,11 @@ async function reserveUploadAndFinalize(
 describe('bounded media concurrency convergence', () => {
   it('converges concurrent same-media reserves and finalizations to one owner job, path and asset', async () => {
     const env = readLocalStackEnvironment(process.env);
-    const scenario = await createSyntheticScenario(env);
-    try {
-      const jpeg = deterministicJpegFixture();
-      for (let attempt = 0; attempt < RACE_ATTEMPTS; attempt += 1) {
+    const jpeg = deterministicJpegFixture();
+    await runIsolatedAttempts(
+      RACE_ATTEMPTS,
+      () => createSyntheticScenario(env),
+      async (scenario, attempt) => {
         const name = scenarioName('reserve-finalize-race', attempt);
         const mediaId = randomUUID();
         const reserveInput = receipt(
@@ -246,22 +267,23 @@ describe('bounded media concurrency convergence', () => {
           ownerId: scenario.owner.id,
           sightingId: scenario.ownerSightingId,
           mediaId,
+          expectedMediaAssetId: mediaAssetId,
         }));
         requireNormalized(name, [...reserveLabels, ...finalizeLabels, 'active_state_unexpected'],
           sameNormalizedState(inspection, activeConcurrencyState()));
         report(name, [...reserveLabels, ...finalizeLabels, 'one_active_asset']);
-      }
-    } finally {
-      await destroySyntheticScenario(env, scenario);
-    }
+      },
+      (scenario) => destroySyntheticScenario(env, scenario),
+    );
   }, 120_000);
 
   it('converges deletion racing repeated finalization to one tombstoned asset', async () => {
     const env = readLocalStackEnvironment(process.env);
-    const scenario = await createSyntheticScenario(env);
-    try {
-      const jpeg = deterministicJpegFixture();
-      for (let attempt = 0; attempt < RACE_ATTEMPTS; attempt += 1) {
+    const jpeg = deterministicJpegFixture();
+    await runIsolatedAttempts(
+      RACE_ATTEMPTS,
+      () => createSyntheticScenario(env),
+      async (scenario, attempt) => {
         const name = scenarioName('delete-finalize-race', attempt);
         const mediaId = randomUUID();
         const input = receipt(
@@ -293,6 +315,7 @@ describe('bounded media concurrency convergence', () => {
           ownerId: scenario.owner.id,
           sightingId: scenario.ownerSightingId,
           mediaId,
+          expectedMediaAssetId: prepared.mediaAssetId,
         }));
         requireNormalized(name, [deleteLabel, finalizeLabel, 'tombstone_state_unexpected'],
           sameNormalizedState(inspection, tombstonedConcurrencyState()));
@@ -305,18 +328,18 @@ describe('bounded media concurrency convergence', () => {
         requireNormalized(name, [deleteLabel, finalizeLabel, postRaceLabel],
           postRaceLabel === 'documented_conflict');
         report(name, [deleteLabel, finalizeLabel, postRaceLabel, 'one_tombstoned_asset']);
-      }
-    } finally {
-      await destroySyntheticScenario(env, scenario);
-    }
+      },
+      (scenario) => destroySyntheticScenario(env, scenario),
+    );
   }, 120_000);
 
   it('gives one forced-expired staging job one effective cleanup claim and removal', async () => {
     const env = readLocalStackEnvironment(process.env);
-    const scenario = await createSyntheticScenario(env);
-    try {
-      const jpeg = deterministicJpegFixture();
-      for (let attempt = 0; attempt < RACE_ATTEMPTS; attempt += 1) {
+    const jpeg = deterministicJpegFixture();
+    await runIsolatedAttempts(
+      RACE_ATTEMPTS,
+      () => createSyntheticScenario(env),
+      async (scenario, attempt) => {
         const name = scenarioName('cleanup-race', attempt);
         const mediaId = randomUUID();
         const input = receipt(
@@ -353,17 +376,26 @@ describe('bounded media concurrency convergence', () => {
           name,
           'inspection_unexpected',
           () => inspectMediaLifecycle(env, {
-          jobId: reservation.jobId,
-          ownerId: scenario.owner.id,
-          mediaId,
+            jobId: reservation.jobId,
+            ownerId: scenario.owner.id,
+            mediaId,
           }),
         ));
-        requireNormalized(name, [...cleanupLabels, convergence],
-          convergence === 'retry_state' || convergence === 'terminal_state');
-        report(name, [...cleanupLabels, convergence, 'one_effective_removal']);
-      }
-    } finally {
-      await destroySyntheticScenario(env, scenario);
-    }
+        const aggregate = await normalizedStep(name, 'inspection_unexpected', () => inspectMediaConcurrency(env, {
+          jobId: reservation.jobId,
+          ownerId: scenario.owner.id,
+          sightingId: scenario.ownerSightingId,
+          mediaId,
+          expectedMediaAssetId: null,
+        }));
+        const aggregateLabel = sameNormalizedState(aggregate, cleanedRetryConcurrencyState())
+          ? 'one_retry_job'
+          : 'cleanup_aggregate_unexpected';
+        requireNormalized(name, [...cleanupLabels, convergence, aggregateLabel],
+          convergence === 'retry_state' && aggregateLabel === 'one_retry_job');
+        report(name, [...cleanupLabels, convergence, aggregateLabel, 'one_effective_removal']);
+      },
+      (scenario) => destroySyntheticScenario(env, scenario),
+    );
   }, 120_000);
 });

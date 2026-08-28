@@ -68,6 +68,7 @@ export type MediaConcurrencyInspectionInput = Readonly<{
   ownerId: string;
   sightingId: string;
   mediaId: string;
+  expectedMediaAssetId: string | null;
 }>;
 
 export type MediaConcurrencyInspection = Readonly<{
@@ -79,6 +80,7 @@ export type MediaConcurrencyInspection = Readonly<{
   assetCountForMediaId: number;
   matchingOwnerSightingAssetCount: number;
   matchingJobAssetCount: number;
+  matchingExpectedAssetCount: number;
   activeQuarantinedAssetCount: number;
   tombstonedAssetCount: number;
   jobStatus: 'missing' | 'reserved' | 'finalized' | 'deletion_pending';
@@ -123,6 +125,7 @@ type MediaConcurrencyAssetInspectionRow = Readonly<{
   asset_count_for_media_id: number;
   matching_owner_sighting_asset_count: number;
   matching_job_asset_count: number;
+  matching_expected_asset_count: number;
   active_quarantined_asset_count: number;
   tombstoned_asset_count: number;
 }>;
@@ -153,12 +156,14 @@ function validMediaLifecycleInspectionInput(value: unknown): value is MediaLifec
     typeof value.mediaId === 'string' && UUID.test(value.mediaId);
 }
 
-function validMediaConcurrencyInspectionInput(value: unknown): value is MediaConcurrencyInspectionInput {
-  if (!exactObject(value, ['jobId', 'ownerId', 'sightingId', 'mediaId'])) return false;
+export function isMediaConcurrencyInspectionInput(value: unknown): value is MediaConcurrencyInspectionInput {
+  if (!exactObject(value, ['jobId', 'ownerId', 'sightingId', 'mediaId', 'expectedMediaAssetId'])) return false;
   return typeof value.jobId === 'string' && UUID.test(value.jobId) &&
     typeof value.ownerId === 'string' && UUID.test(value.ownerId) &&
     typeof value.sightingId === 'string' && UUID.test(value.sightingId) &&
-    typeof value.mediaId === 'string' && UUID.test(value.mediaId);
+    typeof value.mediaId === 'string' && UUID.test(value.mediaId) &&
+    (value.expectedMediaAssetId === null ||
+      typeof value.expectedMediaAssetId === 'string' && UUID.test(value.expectedMediaAssetId));
 }
 
 function validInput(input: FinalizedMediaInspectionInput): boolean {
@@ -217,14 +222,16 @@ function mediaConcurrencyJobInspectionRow(value: unknown): value is MediaConcurr
 function mediaConcurrencyAssetInspectionRow(value: unknown): value is MediaConcurrencyAssetInspectionRow {
   if (!exactObject(value, [
     'asset_count_for_media_id', 'matching_owner_sighting_asset_count', 'matching_job_asset_count',
-    'active_quarantined_asset_count', 'tombstoned_asset_count',
+    'matching_expected_asset_count', 'active_quarantined_asset_count', 'tombstoned_asset_count',
   ])) return false;
   if (!boundedCount(value.asset_count_for_media_id) ||
       !boundedCount(value.matching_owner_sighting_asset_count) ||
       !boundedCount(value.matching_job_asset_count) ||
+      !boundedCount(value.matching_expected_asset_count) ||
       !boundedCount(value.active_quarantined_asset_count) || !boundedCount(value.tombstoned_asset_count)) return false;
   return value.matching_owner_sighting_asset_count <= value.asset_count_for_media_id &&
     value.matching_job_asset_count <= value.matching_owner_sighting_asset_count &&
+    value.matching_expected_asset_count <= value.matching_job_asset_count &&
     value.active_quarantined_asset_count + value.tombstoned_asset_count <= value.asset_count_for_media_id;
 }
 
@@ -242,6 +249,7 @@ export function combineMediaConcurrencyDatabaseInspection(
     assetCountForMediaId: assetValue.asset_count_for_media_id,
     matchingOwnerSightingAssetCount: assetValue.matching_owner_sighting_asset_count,
     matchingJobAssetCount: assetValue.matching_job_asset_count,
+    matchingExpectedAssetCount: assetValue.matching_expected_asset_count,
     activeQuarantinedAssetCount: assetValue.active_quarantined_asset_count,
     tombstonedAssetCount: assetValue.tombstoned_asset_count,
     jobStatus: jobValue.target_job_status as MediaConcurrencyInspection['jobStatus'],
@@ -351,7 +359,7 @@ export async function inspectMediaConcurrency(
   env: LocalStackEnvironment,
   input: MediaConcurrencyInspectionInput,
 ): Promise<MediaConcurrencyInspection> {
-  if (!validMediaConcurrencyInspectionInput(input)) throw new Error('media_inspection_failed');
+  if (!isMediaConcurrencyInspectionInput(input)) throw new Error('media_inspection_failed');
   const sql = postgres(env.databaseUrl, {
     max: 1,
     connect_timeout: 5,
@@ -404,6 +412,16 @@ export async function inspectMediaConcurrency(
             and m.storage_bucket = 'media-staging'
             and m.storage_path = j.object_path
         ))::integer as matching_job_asset_count,
+        count(m.id) filter (where
+          ${input.expectedMediaAssetId}::uuid is not null
+          and m.id = ${input.expectedMediaAssetId}::uuid
+          and exists (
+            select 1 from target_job j
+            where j.media_asset_id = m.id
+              and m.storage_bucket = 'media-staging'
+              and m.storage_path = j.object_path
+          )
+        )::integer as matching_expected_asset_count,
         count(m.id) filter (where m.status = 'quarantined' and m.deleted_at is null)::integer as active_quarantined_asset_count,
         count(m.id) filter (where m.deleted_at is not null)::integer as tombstoned_asset_count
       from public.media_assets m

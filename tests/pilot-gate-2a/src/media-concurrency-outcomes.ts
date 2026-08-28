@@ -6,7 +6,7 @@ export type ReserveOutcome = 'reserved' | 'reservation_conflict' | 'unexpected';
 export type FinalizeOutcome = 'idempotent_asset' | 'documented_conflict' | 'unexpected';
 export type DeleteOutcome = 'deleted' | 'unexpected';
 export type CleanupOutcome = 'cleanup_completed' | 'unexpected';
-export type CleanupConvergence = 'retry_state' | 'terminal_state' | 'unexpected_state';
+export type CleanupConvergence = 'retry_state' | 'unexpected_state';
 
 export function normalizeReserveOutcome(
   outcome: PromiseSettledResult<Reservation>,
@@ -54,8 +54,5 @@ export function normalizeCleanupConvergence(
   const retry = value.jobCount === 1 && value.assetCount === 0 && value.jobStatus === 'reserved' &&
     value.reservationExpired && value.uploadCredentialWatermarkInFuture && value.cleanupScheduledInFuture &&
     !value.cleanupClaimed && !value.assetTombstoned && !value.stagingObjectExists;
-  if (retry) return 'retry_state';
-  const terminal = value.jobCount === 0 && value.assetCount === 0 && value.jobStatus === 'missing' &&
-    !value.cleanupClaimed && !value.assetTombstoned && !value.stagingObjectExists;
-  return terminal ? 'terminal_state' : 'unexpected_state';
+  return retry ? 'retry_state' : 'unexpected_state';
 }
