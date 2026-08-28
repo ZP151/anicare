@@ -37,10 +37,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.5
       - uses: supabase/setup-cli@v2
         with:
           version: 2.84.2
-      - run: python3 supabase/tests/validate_sql_uuid_literals.py supabase/tests/007_legacy_media_erasure_and_guards.sql
+      - run: node --test scripts/pilot-gate-inputs.test.mjs
+      - run: node scripts/pilot-gate-inputs.mjs uuid
+      - run: node scripts/pilot-gate-inputs.mjs deno
       - run: supabase start
       - run: supabase test db
       - run: supabase db lint --level warning
