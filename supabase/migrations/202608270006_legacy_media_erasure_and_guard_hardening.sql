@@ -334,7 +334,7 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   normalized_detail text;
   payload_hash text;
   prior private.safety_requests%rowtype;
@@ -346,9 +346,9 @@ declare
   report_id uuid;
   should_auto_hide boolean := false;
 begin
-  if actor_id is null then raise exception 'authentication_required' using errcode = '42501'; end if;
+  if v_actor_id is null then raise exception 'authentication_required' using errcode = '42501'; end if;
   if not exists (
-    select 1 from public.user_profiles p where p.id = actor_id and p.adult_confirmed_at is not null and p.adult_confirmed_at <= pg_catalog.now()
+    select 1 from public.user_profiles p where p.id = v_actor_id and p.adult_confirmed_at is not null and p.adult_confirmed_at <= pg_catalog.now()
   ) then raise exception 'adult_contributor_required' using errcode = '42501'; end if;
   if p_content_type is null or p_content_type not in ('sighting', 'user') or p_content_id is null
       or p_reason_code is null or p_reason_code not in ('spam', 'harassment', 'unsafe_location', 'animal_welfare', 'graphic_content', 'misinformation', 'precise_location_exposure', 'animal_in_immediate_danger')
@@ -361,9 +361,9 @@ begin
   payload_hash := pg_catalog.encode(extensions.digest(pg_catalog.convert_to(pg_catalog.jsonb_build_object(
     'contentType', p_content_type, 'contentId', p_content_id, 'reasonCode', p_reason_code, 'detail', normalized_detail
   )::text, 'UTF8'), 'sha256'), 'hex');
-  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0));
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0));
   select * into prior from private.safety_requests r
-  where r.actor_id = create_moderation_report.actor_id and r.request_id = p_request_id;
+  where r.actor_id = v_actor_id and r.request_id = p_request_id;
   if found then
     if prior.operation <> 'report' or prior.target_id <> p_content_id or prior.payload_hash <> payload_hash then
       raise exception 'idempotency_conflict' using errcode = 'P0001';
@@ -376,16 +376,16 @@ begin
     from public.sightings s join public.animals a on a.id = s.animal_id
     where s.id = p_content_id and s.visibility = 'public' and s.visible_at is not null and s.visible_at <= pg_catalog.now()
       and s.risk <> 'critical' and a.visibility = 'public'
-      and (s.reporter_id is null or not exists (select 1 from public.user_blocks b where (b.blocker_id = actor_id and b.blocked_id = s.reporter_id) or (b.blocker_id = s.reporter_id and b.blocked_id = actor_id)))
+      and (s.reporter_id is null or not exists (select 1 from public.user_blocks b where (b.blocker_id = v_actor_id and b.blocked_id = s.reporter_id) or (b.blocker_id = s.reporter_id and b.blocked_id = v_actor_id)))
     for update of s;
     if not found then raise exception 'target_not_available' using errcode = 'P0001'; end if;
   else
-    select p.id into target_user_id from public.user_profiles p where p.id = p_content_id and p.id <> actor_id;
+    select p.id into target_user_id from public.user_profiles p where p.id = p_content_id and p.id <> v_actor_id;
     if not found then
       insert into private.safety_requests (actor_id, request_id, operation, target_id, payload_hash)
-      values (actor_id, p_request_id, 'report', p_content_id, payload_hash);
+      values (v_actor_id, p_request_id, 'report', p_content_id, payload_hash);
       insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, request_id)
-      values (actor_id, 'create_moderation_report', 'moderation_target', p_content_id, 'community_safety', p_request_id::text);
+      values (v_actor_id, 'create_moderation_report', 'moderation_target', p_content_id, 'community_safety', p_request_id::text);
       return p_request_id;
     end if;
   end if;
@@ -396,20 +396,20 @@ begin
   derived_status := case when should_auto_hide then 'auto_hidden'::public.moderation_status else 'open'::public.moderation_status end;
   derived_due_at := pg_catalog.now() + case derived_risk when 'critical'::public.risk_tier then interval '1 hour' when 'sensitive'::public.risk_tier then interval '24 hours' else interval '72 hours' end;
   insert into private.safety_requests (actor_id, request_id, operation, target_id, payload_hash)
-  values (actor_id, p_request_id, 'report', p_content_id, payload_hash);
+  values (v_actor_id, p_request_id, 'report', p_content_id, payload_hash);
   insert into public.moderation_reports (reporter_id, content_type, content_id, content_author_id, target_user_id, reason, detail, risk, status, assigned_reviewer_id, due_at, request_id)
-  values (actor_id, p_content_type, p_content_id, author_id, target_user_id, p_reason_code, normalized_detail, derived_risk, derived_status, null, derived_due_at, p_request_id)
+  values (v_actor_id, p_content_type, p_content_id, author_id, target_user_id, p_reason_code, normalized_detail, derived_risk, derived_status, null, derived_due_at, p_request_id)
   returning id into report_id;
   if should_auto_hide then
     update public.sightings set visibility = 'hidden' where id = p_content_id;
     insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, reason, request_id)
-    values (actor_id, 'auto_hide_sighting', 'sighting', p_content_id, 'community_safety', null, p_request_id::text);
+    values (v_actor_id, 'auto_hide_sighting', 'sighting', p_content_id, 'community_safety', null, p_request_id::text);
   end if;
   insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, reason, request_id)
-  values (actor_id, 'create_moderation_report', 'moderation_report', report_id, 'community_safety', null, p_request_id::text);
+  values (v_actor_id, 'create_moderation_report', 'moderation_report', report_id, 'community_safety', null, p_request_id::text);
   update private.safety_requests request_row
      set result_id = report_id
-   where request_row.actor_id = create_moderation_report.actor_id
+   where request_row.actor_id = v_actor_id
      and request_row.request_id = p_request_id;
   return p_request_id;
 end;

@@ -269,8 +269,8 @@ select ok(
   exists (
     select 1 from pg_constraint
     where conrelid = 'public.media_assets'::regclass
-      and pg_get_constraintdef(oid) like '%recipe_version is not null%'
-      and pg_get_constraintdef(oid) like '%detector_versions is not null%'
+      and lower(pg_get_constraintdef(oid)) like '%recipe_version is not null%'
+      and lower(pg_get_constraintdef(oid)) like '%detector_versions is not null%'
   ),
   'review receipt fields cannot bypass NULL checks when a client media id is present'
 );

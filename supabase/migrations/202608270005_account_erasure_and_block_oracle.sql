@@ -153,14 +153,14 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   payload_hash text;
   prior private.safety_requests%rowtype;
 begin
-  if actor_id is null then
+  if v_actor_id is null then
     raise exception 'authentication_required' using errcode = '42501';
   end if;
-  if not exists (select 1 from public.user_profiles p where p.id = actor_id) then
+  if not exists (select 1 from public.user_profiles p where p.id = v_actor_id) then
     raise exception 'authentication_required' using errcode = '42501';
   end if;
   if p_request_id is null or p_blocked_id is null then
@@ -177,11 +177,11 @@ begin
     'hex'
   );
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0)
+    pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0)
   );
   select * into prior
   from private.safety_requests r
-  where r.actor_id = block_user.actor_id and r.request_id = p_request_id;
+  where r.actor_id = v_actor_id and r.request_id = p_request_id;
   if found then
     if prior.operation <> 'block'
         or prior.target_id <> p_blocked_id
@@ -191,14 +191,14 @@ begin
     return true;
   end if;
 
-  if p_blocked_id = actor_id then
+  if p_blocked_id = v_actor_id then
     raise exception 'target_not_available' using errcode = 'P0001';
   end if;
 
   insert into private.safety_requests (
     actor_id, request_id, operation, target_id, payload_hash
   ) values (
-    actor_id, p_request_id, 'block', p_blocked_id, payload_hash
+    v_actor_id, p_request_id, 'block', p_blocked_id, payload_hash
   );
 
   -- Lock an extant target until this transaction completes. If it is absent,
@@ -210,14 +210,14 @@ begin
   for key share;
   if found then
     insert into public.user_blocks (blocker_id, blocked_id)
-    values (actor_id, p_blocked_id)
+    values (v_actor_id, p_blocked_id)
     on conflict (blocker_id, blocked_id) do nothing;
   end if;
 
   insert into audit.access_audit (
     actor_id, action, resource_type, resource_id, purpose, reason, request_id
   ) values (
-    actor_id, 'block_user', 'user_block', p_blocked_id,
+    v_actor_id, 'block_user', 'user_block', p_blocked_id,
     'community_safety', null, p_request_id::text
   );
   return true;
@@ -235,14 +235,14 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   payload_hash text;
   prior private.safety_requests%rowtype;
 begin
-  if actor_id is null then
+  if v_actor_id is null then
     raise exception 'authentication_required' using errcode = '42501';
   end if;
-  if not exists (select 1 from public.user_profiles p where p.id = actor_id) then
+  if not exists (select 1 from public.user_profiles p where p.id = v_actor_id) then
     raise exception 'authentication_required' using errcode = '42501';
   end if;
   if p_request_id is null or p_blocked_id is null then
@@ -259,11 +259,11 @@ begin
     'hex'
   );
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0)
+    pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0)
   );
   select * into prior
   from private.safety_requests r
-  where r.actor_id = unblock_user.actor_id and r.request_id = p_request_id;
+  where r.actor_id = v_actor_id and r.request_id = p_request_id;
   if found then
     if prior.operation <> 'unblock'
         or prior.target_id <> p_blocked_id
@@ -273,21 +273,21 @@ begin
     return true;
   end if;
 
-  if p_blocked_id = actor_id then
+  if p_blocked_id = v_actor_id then
     raise exception 'target_not_available' using errcode = 'P0001';
   end if;
 
   insert into private.safety_requests (
     actor_id, request_id, operation, target_id, payload_hash
   ) values (
-    actor_id, p_request_id, 'unblock', p_blocked_id, payload_hash
+    v_actor_id, p_request_id, 'unblock', p_blocked_id, payload_hash
   );
   delete from public.user_blocks b
-   where b.blocker_id = actor_id and b.blocked_id = p_blocked_id;
+   where b.blocker_id = v_actor_id and b.blocked_id = p_blocked_id;
   insert into audit.access_audit (
     actor_id, action, resource_type, resource_id, purpose, reason, request_id
   ) values (
-    actor_id, 'unblock_user', 'user_block', p_blocked_id,
+    v_actor_id, 'unblock_user', 'user_block', p_blocked_id,
     'community_safety', null, p_request_id::text
   );
   return true;

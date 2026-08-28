@@ -157,7 +157,7 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   prior private.admin_moderation_requests%rowtype;
   report_row public.moderation_reports%rowtype;
   sighting_row public.sightings%rowtype;
@@ -167,18 +167,18 @@ declare
   own_auto_hold uuid;
   other_active_hold boolean := false;
 begin
-  if actor_id is null or not public.admin_has_active_platform_admin() then raise exception 'platform_admin_required' using errcode = '42501'; end if;
+  if v_actor_id is null or not public.admin_has_active_platform_admin() then raise exception 'platform_admin_required' using errcode = '42501'; end if;
   normalized_rationale := pg_catalog.btrim(p_rationale);
   if p_report_id is null or p_request_id is null or p_action is null or p_rationale is null
     or p_action not in ('hide_sighting', 'restore_sighting', 'no_action')
     or char_length(coalesce(normalized_rationale, '')) not between 10 and 2000 then
     raise exception 'invalid_moderation_resolution' using errcode = '22023';
   end if;
-  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0));
-  select * into prior from private.admin_moderation_requests requests where requests.actor_id = actor_id and requests.request_id = p_request_id;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0));
+  select * into prior from private.admin_moderation_requests requests where requests.actor_id = v_actor_id and requests.request_id = p_request_id;
   if found then
     if prior.operation <> 'resolve' or prior.report_id is distinct from p_report_id or prior.action is distinct from p_action or prior.rationale is distinct from normalized_rationale then raise exception 'idempotency_conflict' using errcode = 'P0001'; end if;
-    return query select action_row.report_id, action_row.action, 'resolved'::text, action_row.resulting_visibility::text from public.moderation_actions action_row where action_row.actor_id = actor_id and action_row.request_id = p_request_id;
+    return query select action_row.report_id, action_row.action, 'resolved'::text, action_row.resulting_visibility::text from public.moderation_actions action_row where action_row.actor_id = v_actor_id and action_row.request_id = p_request_id;
     return;
   end if;
   select * into report_row from public.moderation_reports report
@@ -188,7 +188,7 @@ begin
   select * into sighting_row from public.sightings sighting where sighting.id = report_row.content_id for update;
   if not found then raise exception 'moderation_target_not_available' using errcode = 'P0001'; end if;
   author_id := sighting_row.reporter_id;
-  if actor_id = report_row.reporter_id or actor_id = author_id or actor_id = report_row.target_user_id then raise exception 'moderation_reviewer_recusal_required' using errcode = '42501'; end if;
+  if v_actor_id = report_row.reporter_id or v_actor_id = author_id or v_actor_id = report_row.target_user_id then raise exception 'moderation_reviewer_recusal_required' using errcode = '42501'; end if;
 
   resulting_visibility := sighting_row.visibility;
   if p_action = 'hide_sighting' then
@@ -211,11 +211,11 @@ begin
     if not other_active_hold and sighting_row.visibility = 'hidden'::public.record_visibility then resulting_visibility := 'limited'::public.record_visibility; end if;
   end if;
 
-  insert into private.admin_moderation_requests (actor_id, request_id, operation, report_id, action, rationale) values (actor_id, p_request_id, 'resolve', p_report_id, p_action, normalized_rationale);
+  insert into private.admin_moderation_requests (actor_id, request_id, operation, report_id, action, rationale) values (v_actor_id, p_request_id, 'resolve', p_report_id, p_action, normalized_rationale);
   if p_action = 'hide_sighting' or (p_action = 'restore_sighting' and resulting_visibility is distinct from sighting_row.visibility) then update public.sightings set visibility = resulting_visibility where id = sighting_row.id; end if;
-  update public.moderation_reports set status = 'resolved'::public.moderation_status, assigned_reviewer_id = actor_id, resolved_at = pg_catalog.now() where id = report_row.id;
-  insert into public.moderation_actions (actor_id, report_id, action, rationale, request_id, resulting_visibility) values (actor_id, report_row.id, p_action, normalized_rationale, p_request_id, resulting_visibility);
-  insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, request_id) values (actor_id, 'admin_resolve_moderation_report', 'moderation_report', report_row.id, 'moderation', p_request_id::text);
+  update public.moderation_reports set status = 'resolved'::public.moderation_status, assigned_reviewer_id = v_actor_id, resolved_at = pg_catalog.now() where id = report_row.id;
+  insert into public.moderation_actions (actor_id, report_id, action, rationale, request_id, resulting_visibility) values (v_actor_id, report_row.id, p_action, normalized_rationale, p_request_id, resulting_visibility);
+  insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, request_id) values (v_actor_id, 'admin_resolve_moderation_report', 'moderation_report', report_row.id, 'moderation', p_request_id::text);
   return query select report_row.id, p_action, 'resolved'::text, resulting_visibility::text;
 end;
 $$;

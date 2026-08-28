@@ -99,10 +99,10 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   prior private.admin_moderation_requests%rowtype;
 begin
-  if actor_id is null or not public.admin_has_active_platform_admin() then
+  if v_actor_id is null or not public.admin_has_active_platform_admin() then
     raise exception 'platform_admin_required' using errcode = '42501';
   end if;
   if p_request_id is null then
@@ -110,10 +110,10 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0)
+    pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0)
   );
   select * into prior from private.admin_moderation_requests requests
-  where requests.actor_id = admin_list_moderation_queue.actor_id
+  where requests.actor_id = v_actor_id
     and requests.request_id = p_request_id;
   if found then
     if prior.operation <> 'queue_read' then
@@ -121,9 +121,9 @@ begin
     end if;
   else
     insert into private.admin_moderation_requests (actor_id, request_id, operation)
-    values (actor_id, p_request_id, 'queue_read');
+    values (v_actor_id, p_request_id, 'queue_read');
     insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, request_id)
-    values (actor_id, 'admin_read_moderation_queue', 'moderation_queue', null, 'moderation', p_request_id::text);
+    values (v_actor_id, 'admin_read_moderation_queue', 'moderation_queue', null, 'moderation', p_request_id::text);
   end if;
 
   return query
@@ -161,11 +161,11 @@ security definer
 set search_path = pg_catalog
 as $$
 declare
-  actor_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
   prior private.admin_moderation_requests%rowtype;
   report_row public.moderation_reports%rowtype;
 begin
-  if actor_id is null or not public.admin_has_active_platform_admin() then
+  if v_actor_id is null or not public.admin_has_active_platform_admin() then
     raise exception 'platform_admin_required' using errcode = '42501';
   end if;
   if p_report_id is null or p_request_id is null then
@@ -173,10 +173,10 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(actor_id::text || ':' || p_request_id::text, 0)
+    pg_catalog.hashtextextended(v_actor_id::text || ':' || p_request_id::text, 0)
   );
   select * into prior from private.admin_moderation_requests requests
-  where requests.actor_id = admin_get_moderation_report.actor_id
+  where requests.actor_id = v_actor_id
     and requests.request_id = p_request_id;
   if found then
     if prior.operation <> 'report_read' or prior.report_id is distinct from p_report_id then
@@ -193,12 +193,12 @@ begin
   end if;
   if not exists (
     select 1 from private.admin_moderation_requests requests
-    where requests.actor_id = actor_id and requests.request_id = p_request_id
+    where requests.actor_id = v_actor_id and requests.request_id = p_request_id
   ) then
     insert into private.admin_moderation_requests (actor_id, request_id, operation, report_id)
-    values (actor_id, p_request_id, 'report_read', p_report_id);
+    values (v_actor_id, p_request_id, 'report_read', p_report_id);
     insert into audit.access_audit (actor_id, action, resource_type, resource_id, purpose, request_id)
-    values (actor_id, 'admin_read_moderation_report', 'moderation_report', p_report_id, 'moderation', p_request_id::text);
+    values (v_actor_id, 'admin_read_moderation_report', 'moderation_report', p_report_id, 'moderation', p_request_id::text);
   end if;
 
   return query select
