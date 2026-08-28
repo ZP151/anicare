@@ -326,6 +326,7 @@ select lives_ok(
     'needs_more_evidence', 'A second clear angle is still required.', '00000000-0000-4000-8000-000000001504')$$,
   'a trusted independent reviewer can request more evidence'
 );
+reset role;
 select is(
   (select status::text from public.identity_proposals where sighting_id = '00000000-0000-4000-8000-000000001300'),
   'tentative', 'needs-more-evidence leaves the proposal tentative'
@@ -334,6 +335,9 @@ select is(
   (select animal_id from public.sightings where id = '00000000-0000-4000-8000-000000001300'),
   null::uuid, 'needs-more-evidence does not link the sighting'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000001101', true);
 select lives_ok(
   $$select * from public.review_identity_proposal(
     (select id from public.identity_proposals where sighting_id = '00000000-0000-4000-8000-000000001300'),
@@ -362,6 +366,7 @@ select lives_ok(
     'confirm', 'Independent evidence supports this match.', '00000000-0000-4000-8000-000000001505')$$,
   'a second independent reviewer can confirm after more evidence arrives'
 );
+reset role;
 select is(
   (select status::text from public.identity_proposals where sighting_id = '00000000-0000-4000-8000-000000001300'),
   'confirmed', 'confirm creates the terminal proposal state'
@@ -371,6 +376,9 @@ select is(
   '00000000-0000-4000-8000-000000001200'::uuid,
   'confirm atomically links the sighting to the proposed animal'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000001106', true);
 select throws_ok(
   $$select * from public.review_identity_proposal(
     (select id from public.identity_proposals where sighting_id = '00000000-0000-4000-8000-000000001300'),
@@ -383,16 +391,21 @@ select lives_ok(
     'reject', 'Visible markings contradict this match.', '00000000-0000-4000-8000-000000001507')$$,
   'an independent reviewer can reject a tentative proposal'
 );
+reset role;
 select is(
   (select animal_id from public.sightings where id = '00000000-0000-4000-8000-000000001305'),
   null::uuid, 'rejection never links a sighting'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000001106', true);
 select lives_ok(
   $$select * from public.review_identity_proposal(
     (select id from public.identity_proposals where sighting_id = '00000000-0000-4000-8000-000000001303'),
     'confirm', 'Evidence supports treating this as a new cat.', '00000000-0000-4000-8000-000000001508')$$,
   'an independent reviewer can confirm a new-animal outcome'
 );
+reset role;
 select is(
   (select concat_ws('|', p.status::text, s.animal_id::text)
      from public.identity_proposals p join public.sightings s on s.id = p.sighting_id
