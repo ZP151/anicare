@@ -432,6 +432,7 @@ select is(
   true,
   'a nonexistent block target retains idempotent retry semantics'
 );
+reset role;
 select is_empty(
   $$select 1 from public.user_blocks
       where blocker_id = '00000000-0000-4000-8000-000000000111'
@@ -454,6 +455,9 @@ select is(
   1::bigint,
   'a nonexistent block target appends one audit outcome'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000111', true);
 select is(
   public.unblock_user(
     '00000000-0000-4000-8000-000000009999',
@@ -462,6 +466,7 @@ select is(
   true,
   'a nonexistent unblock target has the same successful no-op result'
 );
+reset role;
 select is_empty(
   $$select 1 from public.user_blocks
       where blocker_id = '00000000-0000-4000-8000-000000000111'
@@ -484,6 +489,9 @@ select is(
   1::bigint,
   'a nonexistent unblock target appends one audit outcome'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000111', true);
 select throws_ok(
   $$delete from public.user_blocks
      where blocker_id = '00000000-0000-4000-8000-000000000111'$$,
