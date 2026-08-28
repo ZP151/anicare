@@ -15,9 +15,11 @@ Exit gap: run database tests with Docker/Supabase CLI; provision real dev creden
 
 ## Sprint 2–3 — safe capture foundations (implemented, not pilot-ready)
 
-- Manual opaque-mask review, canonical JPEG re-rendering, metadata stripping,
-  local receipt/journal boundaries, retry policy and encrypted reviewed-media
-  recovery are implemented. Native report submission now persists the stable
+- Manual opaque-mask selection, move, resize, single deletion and accessible
+  controls are implemented and locally verified alongside canonical JPEG
+  re-rendering, metadata stripping, local receipt/journal boundaries, retry
+  policy and encrypted reviewed-media recovery. This is not physical-device or
+  real-user-photo evidence. Native report submission now persists the stable
   sighting ID before a CAS-coordinated authenticated media transport/retry run.
 - Automatic person, licence-plate and cat detection are explicitly unavailable;
   native-device execution has not been completed.

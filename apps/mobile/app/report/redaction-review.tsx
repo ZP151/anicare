@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   type LayoutChangeEvent,
-  type GestureResponderEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -17,8 +16,8 @@ import { getSupabaseClient } from '../../src/api/supabase';
 import { colors, radii } from '../../src/design/theme';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
 import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
+import { MaskEditorOverlay } from '../../src/media/MaskEditorOverlay';
 import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
-import { normalizePreviewTap } from '../../src/media/redaction-geometry';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
 import { createRenderCoordinator } from '../../src/media/render-coordinator';
 import { createProcessorCacheLifecycle } from '../../src/media/processor-cache-lifecycle';
@@ -31,20 +30,7 @@ import {
 import { saveReviewedMediaJournal } from '../../src/offline/draft-store';
 
 const EMPTY_REVIEW: MediaReviewState = { status: 'idle', rendered: null, masks: [], receipt: null };
-
-function maskAt(x: number, y: number): PrivacyMask {
-  const width = 0.24;
-  const height = 0.14;
-  return {
-    id: Crypto.randomUUID(),
-    rect: {
-      x: Math.min(1 - width, Math.max(0, x - width / 2)),
-      y: Math.min(1 - height, Math.max(0, y - height / 2)),
-      width,
-      height,
-    },
-  };
-}
+const PREVIEW_HEIGHT = 360;
 
 export default function RedactionReviewScreen() {
   const params = useLocalSearchParams<{ draftId?: string }>();
@@ -52,13 +38,16 @@ export default function RedactionReviewScreen() {
   const [mediaId] = useState(() => `media-${Crypto.randomUUID()}`);
   const [canonical, setCanonical] = useState<RenderedMedia | null>(null);
   const [review, setReview] = useState<MediaReviewState>(EMPTY_REVIEW);
-  const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
+  const [previewWidth, setPreviewWidth] = useState(1);
+  const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, setPending] = useState<ReviewedMediaJournal | null>(null);
   const renderCoordinator = useRef(createRenderCoordinator()).current;
   const cacheLifecycle = useRef(createProcessorCacheLifecycle(cleanupProcessorCacheUris)).current;
   const mountedRef = useRef(true);
+  const busyRef = useRef(false);
+  const renderedMasksRef = useRef<readonly PrivacyMask[]>([]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -72,7 +61,9 @@ export default function RedactionReviewScreen() {
 
   async function choosePhoto() {
     const operation = renderCoordinator.beginSelection();
+    setSelectedMaskId(null);
     cacheLifecycle.beginAsyncWork();
+    busyRef.current = true;
     setBusy(true);
     setStatus('Preparing a private review copy…');
     try {
@@ -86,6 +77,7 @@ export default function RedactionReviewScreen() {
       if (!mountedRef.current) return;
       setCanonical(null);
       setReview(EMPTY_REVIEW);
+      renderedMasksRef.current = [];
       await cacheLifecycle.startSelection(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       const sourceUri = selected.assets[0].uri;
@@ -96,8 +88,9 @@ export default function RedactionReviewScreen() {
       const rendered = await renderOpaqueMasks({ canonical: prepared, masks: [] });
       await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
+      renderedMasksRef.current = [];
       setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
-      setStatus('Tap anywhere on the image to burn in an opaque mask. Review every pixel before confirming.');
+      setStatus('Add, select and adjust opaque masks, then review every pixel before confirming.');
     } catch (error) {
       await cacheLifecycle.release(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
@@ -106,76 +99,52 @@ export default function RedactionReviewScreen() {
         : 'The photo could not be prepared safely. Nothing was staged.');
     } finally {
       await cacheLifecycle.endAsyncWork();
-      if (renderCoordinator.finish(operation.token)) setBusy(false);
+      if (renderCoordinator.finish(operation.token)) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
-  async function addMask(event: GestureResponderEvent) {
+  async function commitMaskMutation(nextMasks: readonly PrivacyMask[]): Promise<void> {
     if (!canonical || busy || pending) return;
-    const tap = normalizePreviewTap({
-      imageWidth: review.rendered?.width ?? canonical.width,
-      imageHeight: review.rendered?.height ?? canonical.height,
-      frameWidth: previewSize.width,
-      frameHeight: previewSize.height,
-      x: event.nativeEvent.locationX,
-      y: event.nativeEvent.locationY,
-    });
-    if (!tap) return;
-    const operation = renderCoordinator.beginMutation([...review.masks, maskAt(tap.x, tap.y)]);
+    const operation = renderCoordinator.beginMutation(nextMasks);
     if (!operation) return;
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
     cacheLifecycle.startMutation(operation.token);
     cacheLifecycle.beginAsyncWork();
-    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
+    busyRef.current = true;
     setBusy(true);
     setStatus('Rendering the updated opaque masks…');
     try {
       const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
       await cacheLifecycle.adopt(operation.token, rendered.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
-      setReview((current) => reduceMediaReview(
-        { ...current, masks: operation.masks },
-        { type: 'rendered_changed', rendered },
-      ));
-      setStatus('Mask applied to final pixels. Review again before confirming.');
+      renderedMasksRef.current = operation.masks;
+      setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
+      setStatus(operation.masks.length === 0
+        ? 'Masks cleared. Review the newly rendered pixels before confirming.'
+        : 'Mask applied to final pixels. Review again before confirming.');
     } catch {
       await cacheLifecycle.release(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       setStatus('The mask could not be rendered safely. Confirmation remains disabled.');
     } finally {
       await cacheLifecycle.endAsyncWork();
-      if (renderCoordinator.finish(operation.token)) setBusy(false);
+      if (renderCoordinator.finish(operation.token)) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
-  async function clearMasks() {
-    if (!canonical || busy || pending) return;
-    const operation = renderCoordinator.beginMutation([]);
-    if (!operation) return;
-    cacheLifecycle.startMutation(operation.token);
-    cacheLifecycle.beginAsyncWork();
-    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: operation.masks }));
-    setBusy(true);
-    try {
-      const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
-      await cacheLifecycle.adopt(operation.token, rendered.uri);
-      if (!renderCoordinator.isCurrent(operation.token)) return;
-      setReview((current) => reduceMediaReview(
-        { ...current, masks: operation.masks },
-        { type: 'rendered_changed', rendered },
-      ));
-      setStatus('Masks cleared. Review the newly rendered pixels before confirming.');
-    } catch {
-      await cacheLifecycle.release(operation.token);
-      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
-      setStatus('The clean review copy could not be rendered. Confirmation remains disabled.');
-    } finally {
-      await cacheLifecycle.endAsyncWork();
-      if (renderCoordinator.finish(operation.token)) setBusy(false);
-    }
+  function previewMaskMutation(nextMasks: readonly PrivacyMask[]) {
+    if (!canonical || busyRef.current || pending) return;
+    setReview((current) => reduceMediaReview(current, { type: 'masks_changed', masks: nextMasks }));
   }
 
   async function confirmPrivateCopy() {
-    if (!draftId || !review.rendered || busy) return;
+    if (!draftId || !review.rendered || busyRef.current || (!pending && !renderedMasksAreCurrent)) return;
     const confirmed = pending ? review : reduceMediaReview(review, { type: 'confirm' });
     if (!pending) setReview(confirmed);
     if (!pending && (!canStageMedia(confirmed) || !confirmed.receipt)) {
@@ -183,6 +152,7 @@ export default function RedactionReviewScreen() {
       return;
     }
 
+    busyRef.current = true;
     setBusy(true);
     setStatus('Encrypting the reviewed copy on this device…');
     cacheLifecycle.beginAsyncWork();
@@ -234,7 +204,10 @@ export default function RedactionReviewScreen() {
       }
     } finally {
       await cacheLifecycle.endAsyncWork();
-      if (mountedRef.current) setBusy(false);
+      if (mountedRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -251,8 +224,17 @@ export default function RedactionReviewScreen() {
   }
 
   function rememberPreviewSize(event: LayoutChangeEvent) {
-    setPreviewSize(event.nativeEvent.layout);
+    setPreviewWidth(event.nativeEvent.layout.width);
   }
+
+  const renderedMasksAreCurrent = review.masks.length === renderedMasksRef.current.length && review.masks.every((mask, index) => {
+    const renderedMask = renderedMasksRef.current[index];
+    return renderedMask?.id === mask.id &&
+      renderedMask.rect.x === mask.rect.x && renderedMask.rect.y === mask.rect.y &&
+      renderedMask.rect.width === mask.rect.width && renderedMask.rect.height === mask.rect.height;
+  });
+  const editorDisabled = busy || !!pending;
+  const confirmationDisabled = busy || (!pending && !renderedMasksAreCurrent);
 
   return (
     <ScreenScaffold title="Private photo review" subtitle="Only a newly rendered, confirmed copy can be encrypted for this draft.">
@@ -264,15 +246,24 @@ export default function RedactionReviewScreen() {
       </View>
 
       {review.rendered ? (
-        <Pressable
-          accessibilityLabel="Reviewed image. Tap to add an opaque mask"
-          disabled={busy || !!pending}
-          onLayout={rememberPreviewSize}
-          onPress={addMask}
-          style={styles.previewFrame}
-        >
-          <Image resizeMode="contain" source={{ uri: review.rendered.uri }} style={styles.preview} />
-        </Pressable>
+        <View onLayout={rememberPreviewSize} style={styles.editor}>
+          <View pointerEvents="none" style={styles.previewFrame}>
+            <Image accessibilityLabel="Reviewed private image" resizeMode="contain" source={{ uri: review.rendered.uri }} style={styles.preview} />
+          </View>
+          <MaskEditorOverlay
+            imageWidth={review.rendered.width}
+            imageHeight={review.rendered.height}
+            frameWidth={previewWidth}
+            frameHeight={PREVIEW_HEIGHT}
+            masks={review.masks}
+            selectedMaskId={selectedMaskId}
+            disabled={editorDisabled}
+            createMaskId={() => Crypto.randomUUID()}
+            onSelectionChange={setSelectedMaskId}
+            onMutationPreview={previewMaskMutation}
+            onMutationCommit={(masks) => { void commitMaskMutation(masks); }}
+          />
+        </View>
       ) : (
         <Pressable accessibilityLabel="Choose photo for private review" accessibilityRole="button" disabled={busy} onPress={choosePhoto} style={styles.photoButton}>
           <Text style={styles.photoButtonText}>{busy ? 'Preparing…' : 'Choose photo for private review'}</Text>
@@ -281,11 +272,10 @@ export default function RedactionReviewScreen() {
 
       {review.rendered ? (
         <>
-          <Text style={styles.help}>{review.masks.length} manual opaque mask{review.masks.length === 1 ? '' : 's'} · tap the image to add one.</Text>
-          <Pressable accessibilityRole="button" disabled={busy || !!pending || review.masks.length === 0} onPress={clearMasks} style={styles.secondary}>
+          <Pressable accessibilityRole="button" disabled={editorDisabled || review.masks.length === 0} onPress={() => { void commitMaskMutation([]); }} style={styles.secondary}>
             <Text style={styles.secondaryText}>Clear all masks</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" disabled={busy} onPress={confirmPrivateCopy} style={styles.action}>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: confirmationDisabled }} disabled={confirmationDisabled} onPress={confirmPrivateCopy} style={styles.action}>
             <Text style={styles.actionText}>{busy ? 'Working…' : pending ? 'Retry saving encrypted reference' : 'Confirm exact pixels and encrypt'}</Text>
           </Pressable>
         </>
@@ -301,9 +291,9 @@ const styles = StyleSheet.create({
   warning: { color: colors.muted, lineHeight: 19, marginTop: 4 },
   photoButton: { minHeight: 180, alignItems: 'center', justifyContent: 'center', borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, backgroundColor: colors.leafSoft },
   photoButtonText: { color: colors.leaf, fontWeight: '800' },
-  previewFrame: { height: 360, overflow: 'hidden', borderRadius: radii.large, backgroundColor: '#111111' },
+  editor: { position: 'relative', alignSelf: 'stretch' },
+  previewFrame: { position: 'absolute', top: 0, right: 0, left: 0, height: PREVIEW_HEIGHT, overflow: 'hidden', borderRadius: radii.large, backgroundColor: '#111111' },
   preview: { width: '100%', height: '100%' },
-  help: { color: colors.muted, lineHeight: 20 },
   secondary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.leaf },
   secondaryText: { color: colors.leaf, fontWeight: '800' },
   action: { minHeight: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },

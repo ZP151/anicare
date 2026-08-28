@@ -1,5 +1,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
+const mockMaskEditorOverlay = jest.fn((_props: unknown) => null);
+
 jest.mock('@shopify/react-native-skia', () => ({ ImageFormat: { JPEG: 3 }, Skia: {} }));
 jest.mock('../components/ScreenScaffold', () => {
   const React = require('react');
@@ -20,6 +22,9 @@ jest.mock('../../src/media/processor', () => ({
   prepareCanonical: jest.fn(),
   renderOpaqueMasks: jest.fn(),
 }));
+jest.mock('../../src/media/MaskEditorOverlay', () => ({
+  MaskEditorOverlay: (props: unknown) => mockMaskEditorOverlay(props),
+}));
 jest.mock('../../src/media/draft-media', () => ({
   cleanupProcessorCacheUris: jest.fn(),
   deleteReviewedMediaReference: jest.fn(),
@@ -39,6 +44,8 @@ import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewe
 import { prepareCanonical, renderOpaqueMasks } from './processor';
 import { saveReviewedMediaJournal } from '../offline/draft-store';
 import { getSupabaseClient } from '../api/supabase';
+import type { MaskEditorOverlayProps } from './MaskEditorOverlay';
+import type { PrivacyMask, RenderedMedia } from './contracts';
 
 const canonical = {
   uri: 'file:///cache/animalhelper-canonical-12345678.jpg',
@@ -47,6 +54,41 @@ const canonical = {
   detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
 };
 const rendered = { ...canonical, uri: 'file:///cache/animalhelper-reviewed-12345678.jpg' };
+const firstMask: PrivacyMask = {
+  id: 'mask-one',
+  rect: { x: 0.1, y: 0.1, width: 0.24, height: 0.14 },
+};
+const secondMask: PrivacyMask = {
+  id: 'mask-two',
+  rect: { x: 0.55, y: 0.35, width: 0.2, height: 0.2 },
+};
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function latestOverlayProps(): MaskEditorOverlayProps {
+  const call = mockMaskEditorOverlay.mock.calls.at(-1);
+  if (!call) throw new Error('mask_editor_overlay_not_rendered');
+  return call[0] as MaskEditorOverlayProps;
+}
+
+async function renderPreparedReview(output: RenderedMedia = rendered) {
+  jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);
+  jest.mocked(prepareCanonical).mockResolvedValue(canonical);
+  jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(output);
+  const view = await render(<RedactionReviewScreen />);
+
+  await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
+  await waitFor(() => expect(mockMaskEditorOverlay).toHaveBeenCalled());
+  return view;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -81,7 +123,7 @@ describe('private redaction review screen', () => {
     const view = await render(<RedactionReviewScreen />);
 
     await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
-    await waitFor(() => expect(view.getByText(/Tap anywhere on the image/)).toBeTruthy());
+    await waitFor(() => expect(view.getByText(/Add, select and adjust opaque masks/)).toBeTruthy());
     view.unmount();
 
     await waitFor(() => expect(cleanupProcessorCacheUris).toHaveBeenCalledWith([
@@ -126,7 +168,7 @@ describe('private redaction review screen', () => {
     const view = await render(<RedactionReviewScreen />);
 
     await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
-    await waitFor(() => expect(view.getByText(/Tap anywhere on the image/)).toBeTruthy());
+    await waitFor(() => expect(view.getByText(/Add, select and adjust opaque masks/)).toBeTruthy());
     await act(async () => { fireEvent.press(view.getByText('Confirm exact pixels and encrypt')); });
 
     await waitFor(() => expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(2));
@@ -143,9 +185,121 @@ describe('private redaction review screen', () => {
     jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
     const view = await render(<RedactionReviewScreen />);
     await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
-    await waitFor(() => expect(view.getByText(/Tap anywhere on the image/)).toBeTruthy());
+    await waitFor(() => expect(view.getByText(/Add, select and adjust opaque masks/)).toBeTruthy());
     await act(async () => { fireEvent.press(view.getByText('Confirm exact pixels and encrypt')); });
     expect(saveReviewedMediaJournal).not.toHaveBeenCalled();
     expect(view.getByText('Sign in again before saving reviewed media. No media was staged.')).toBeTruthy();
+  });
+
+  it('invalidates a confirmed receipt on the first edit preview without rendering', async () => {
+    jest.mocked(verifyReviewedMedia).mockResolvedValueOnce('absent').mockResolvedValueOnce('valid');
+    const view = await renderPreparedReview();
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await waitFor(() => expect(view.getByText('Encrypted reviewed media saved privately. It has not been uploaded or published.')).toBeTruthy());
+    const renderCallsBeforePreview = jest.mocked(renderOpaqueMasks).mock.calls.length;
+
+    await act(async () => { latestOverlayProps().onMutationPreview([firstMask]); });
+
+    expect(jest.mocked(renderOpaqueMasks)).toHaveBeenCalledTimes(renderCallsBeforePreview);
+    expect(latestOverlayProps().masks).toEqual([firstMask]);
+    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('renders a committed exact snapshot from canonical and enables confirmation only after current pixels complete', async () => {
+    const mutation = deferred<RenderedMedia>();
+    const updated = { ...rendered, uri: 'file:///cache/animalhelper-reviewed-updated.jpg', sha256: 'b'.repeat(64) };
+    const view = await renderPreparedReview();
+    jest.mocked(renderOpaqueMasks).mockImplementationOnce(() => mutation.promise);
+
+    await act(async () => { latestOverlayProps().onMutationCommit([firstMask, secondMask]); });
+
+    expect(jest.mocked(renderOpaqueMasks)).toHaveBeenLastCalledWith({ canonical, masks: [firstMask, secondMask] });
+    expect(latestOverlayProps().masks).toEqual([firstMask, secondMask]);
+    expect(latestOverlayProps().disabled).toBe(true);
+    expect(view.getByRole('button', { name: 'Working…' }).props.accessibilityState.disabled).toBe(true);
+
+    await act(async () => { mutation.resolve(updated); await mutation.promise; });
+    await waitFor(() => expect(view.getByText('Mask applied to final pixels. Review again before confirming.')).toBeTruthy());
+
+    expect(latestOverlayProps().disabled).toBe(false);
+    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(false);
+    expect(view.getByLabelText('Reviewed private image').props.source).toEqual({ uri: updated.uri });
+  });
+
+  it('keeps a failed mutation non-stageable', async () => {
+    const view = await renderPreparedReview();
+    jest.mocked(renderOpaqueMasks).mockRejectedValueOnce(new Error('invalid_rendered_jpeg'));
+
+    await act(async () => { latestOverlayProps().onMutationCommit([firstMask]); });
+    await waitFor(() => expect(view.getByText('The mask could not be rendered safely. Confirmation remains disabled.')).toBeTruthy());
+
+    expect(latestOverlayProps().masks).toEqual([firstMask]);
+    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+    expect(persistReviewedMedia).not.toHaveBeenCalled();
+  });
+
+  it('commits single deletion without clearing the remaining mask', async () => {
+    const withTwoMasks = { ...rendered, uri: 'file:///cache/animalhelper-reviewed-two-masks.jpg' };
+    const withOneMask = { ...rendered, uri: 'file:///cache/animalhelper-reviewed-one-mask.jpg' };
+    const view = await renderPreparedReview();
+    jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(withTwoMasks).mockResolvedValueOnce(withOneMask);
+    await act(async () => { latestOverlayProps().onMutationCommit([firstMask, secondMask]); });
+    await waitFor(() => expect(latestOverlayProps().masks).toEqual([firstMask, secondMask]));
+
+    await act(async () => { latestOverlayProps().onMutationCommit([secondMask]); });
+    await waitFor(() => expect(latestOverlayProps().masks).toEqual([secondMask]));
+
+    expect(jest.mocked(renderOpaqueMasks)).toHaveBeenLastCalledWith({ canonical, masks: [secondMask] });
+  });
+
+  it('denies a second rapid mutation without changing masks while the first render owns the coordinator', async () => {
+    const mutation = deferred<RenderedMedia>();
+    const view = await renderPreparedReview();
+    jest.mocked(renderOpaqueMasks).mockImplementationOnce(() => mutation.promise);
+    const overlay = latestOverlayProps();
+
+    await act(async () => {
+      overlay.onMutationCommit([firstMask]);
+      overlay.onMutationPreview([secondMask]);
+      overlay.onMutationCommit([secondMask]);
+    });
+
+    expect(jest.mocked(renderOpaqueMasks)).toHaveBeenCalledTimes(2);
+    expect(latestOverlayProps().masks).toEqual([firstMask]);
+
+    await act(async () => { mutation.resolve({ ...rendered, uri: 'file:///cache/animalhelper-reviewed-first.jpg' }); await mutation.promise; });
+    await waitFor(() => expect(latestOverlayProps().disabled).toBe(false));
+  });
+
+  it('does not let a stale selection completion overwrite a newer photo selection lifecycle', async () => {
+    const stalePicker = deferred<Awaited<ReturnType<typeof launchImageLibraryAsync>>>();
+    const replacementCanonical = { ...canonical, uri: 'file:///cache/animalhelper-canonical-replacement.jpg', width: 900, height: 1200 };
+    const replacementRendered = { ...replacementCanonical, uri: 'file:///cache/animalhelper-reviewed-replacement.jpg', sha256: 'c'.repeat(64) };
+    jest.mocked(launchImageLibraryAsync)
+      .mockImplementationOnce(() => stalePicker.promise)
+      .mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'content://gallery/replacement.jpg' }] } as never);
+    jest.mocked(prepareCanonical).mockResolvedValueOnce(replacementCanonical);
+    jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(replacementRendered);
+    const view = await render(<RedactionReviewScreen />);
+    const chooseButton = view.getByRole('button', { name: 'Choose photo for private review' });
+    const onClick = chooseButton.props.onClick as (event: unknown) => void;
+    const target = {};
+    const click = { currentTarget: target, target, nativeEvent: {}, stopPropagation: () => undefined };
+
+    await act(async () => { onClick(click); onClick(click); });
+    await waitFor(() => expect(view.getByLabelText('Reviewed private image').props.source).toEqual({ uri: replacementRendered.uri }));
+    await act(async () => {
+      stalePicker.resolve({ canceled: false, assets: [{ uri: 'content://gallery/stale.jpg' }] } as never);
+      await stalePicker.promise;
+    });
+
+    expect(view.getByLabelText('Reviewed private image').props.source).toEqual({ uri: replacementRendered.uri });
+    expect(prepareCanonical).toHaveBeenCalledTimes(1);
+    expect(latestOverlayProps()).toMatchObject({
+      imageWidth: replacementRendered.width,
+      imageHeight: replacementRendered.height,
+      masks: [],
+      selectedMaskId: null,
+    });
   });
 });
