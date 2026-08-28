@@ -613,6 +613,12 @@ export function extractPgTapFailureMarkers(value, knownSecrets = []) {
       }
     }
 
+    const errorMatch = line.match(/\bdied:\s*[A-Z0-9]{5}:\s*[A-Za-z][A-Za-z0-9 _."'()-]{1,160}/i);
+    if (errorMatch) {
+      const error = sanitizeLine(errorMatch[0], secrets);
+      if (error && error !== '[redacted]') append(`pgtap_error=${error}`);
+    }
+
     const summaryMatch = line.match(/\bFailed tests?\s+\d{1,4}(?:-\d{1,4})?\b/i);
     if (summaryMatch) {
       const summary = sanitizeLine(summaryMatch[0], secrets);
