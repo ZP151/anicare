@@ -81,10 +81,19 @@ function reservation(env: LocalStackEnvironment): Reservation {
     jobId: UUID_JOB,
     mediaId: UUID_MEDIA,
     path: fixture.path,
-    reservationExpiresAt: fixture.body.reservationExpiresAt,
-    uploadCredentialUsableUntil: fixture.body.uploadCredentialUsableUntil,
-    signedUploadUrl: fixture.signedUploadUrl,
+    token: fixture.body.upload.token,
+    usableUntil: fixture.body.uploadCredentialUsableUntil,
+    origin: new URL(env.apiUrl).origin,
   };
+}
+
+async function reservationFailure(operation: Promise<Reservation>): Promise<unknown> {
+  try {
+    await operation;
+    return null;
+  } catch (error) {
+    return error;
+  }
 }
 
 afterEach(() => {
@@ -104,35 +113,33 @@ describe('owner media actors', () => {
     expect({
       jobId: result.jobId,
       mediaId: result.mediaId,
-      reservationExpiresAt: result.reservationExpiresAt,
-      uploadCredentialUsableUntil: result.uploadCredentialUsableUntil,
+      usableUntil: result.usableUntil,
+      origin: result.origin,
     }).toEqual({
       jobId: UUID_JOB,
       mediaId: UUID_MEDIA,
-      reservationExpiresAt: response.body.reservationExpiresAt,
-      uploadCredentialUsableUntil: response.body.uploadCredentialUsableUntil,
+      usableUntil: response.body.uploadCredentialUsableUntil,
+      origin: new URL(env.apiUrl).origin,
     });
     expect(Object.keys(result).sort()).toEqual([
       'jobId',
       'mediaId',
+      'origin',
       'path',
-      'reservationExpiresAt',
-      'signedUploadUrl',
-      'uploadCredentialUsableUntil',
+      'token',
+      'usableUntil',
     ]);
-    expect(result.path === response.path && result.signedUploadUrl === response.signedUploadUrl).toBe(true);
+    expect(result.path === response.path && result.token === response.body.upload.token).toBe(true);
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
     expect(url).toBe(`${env.apiUrl}/functions/v1/reserve-media-upload`);
-    expect(init).toMatchObject({
-      method: 'POST',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: {
-        Authorization: `Bearer ${owner.accessToken}`,
-        'Content-Type': 'application/json',
-      },
+    expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
+      method: 'POST', redirect: 'error', cache: 'no-store',
     });
+    const headers = new Headers(init?.headers);
+    expect([...headers.keys()].sort()).toEqual(['authorization', 'content-type']);
+    expect(headers.get('authorization') === `Bearer ${owner.accessToken}`).toBe(true);
+    expect(headers.get('content-type')).toBe('application/json');
     expect(JSON.parse(String(init?.body))).toEqual({
       sightingId: UUID_SIGHTING,
       mediaId: UUID_MEDIA,
@@ -153,12 +160,47 @@ describe('owner media actors', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...response.body, extra: 'discard-me' }), { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(reserveMedia(owner, reserveInput(), env)).rejects.toEqual({
+    expect(await reservationFailure(reserveMedia(owner, reserveInput(), env))).toEqual({
       stage: 'reserve', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
-    await expect(reserveMedia(owner, reserveInput(), env)).rejects.toEqual({
+    expect(await reservationFailure(reserveMedia(owner, reserveInput(), env))).toEqual({
       stage: 'reserve', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
+  });
+
+  it('rejects a semantically equivalent but noncanonical signed URL', async () => {
+    const env = localEnvironment();
+    const owner = actor();
+    const response = reservationResponse(env);
+    const token = response.body.upload.token;
+    const noncanonical = new URL(response.signedUploadUrl);
+    noncanonical.search = `?token=%73${encodeURIComponent(token.slice(1))}`;
+    response.body.upload.signedUrl = noncanonical.toString();
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(response.body), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await reservationFailure(reserveMedia(owner, reserveInput(), env))).toEqual({
+      stage: 'reserve', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+  });
+
+  it.each([
+    ['a malformed digest', () => ({ ...reserveInput(), sha256: 'g'.repeat(64) })],
+    ['an oversized synthetic receipt', () => ({
+      ...reserveInput(),
+      review: { ...reserveInput().review, confirmedAtLocal: 'x'.repeat(8 * 1024 + 1) },
+    })],
+  ])('rejects %s before starting reservation I/O', async (_name, createInput) => {
+    const env = localEnvironment();
+    const owner = actor();
+    const response = reservationResponse(env);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(response.body), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await reservationFailure(reserveMedia(owner, createInput() as ReserveInput, env))).toEqual({
+      stage: 'reserve', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('normalizes HTTP errors and drops credentials, capabilities and response payloads', async () => {
@@ -177,9 +219,9 @@ describe('owner media actors', () => {
     } catch (error) {
       expect(error).toEqual({ stage: 'reserve', kind: 'http', status: 401, code: 'authentication_required' });
       const serialized = JSON.stringify(error);
-      expect(serialized).not.toContain(payloadMarker);
-      expect(serialized).not.toContain(owner.accessToken);
-      expect(serialized).not.toContain(response.signedUploadUrl);
+      expect(serialized.includes(payloadMarker)).toBe(false);
+      expect(serialized.includes(owner.accessToken)).toBe(false);
+      expect(serialized.includes(response.signedUploadUrl)).toBe(false);
     }
   });
 
@@ -195,7 +237,9 @@ describe('owner media actors', () => {
     await expect(putSignedMedia(capability, bytes)).resolves.toEqual({ ok: true, status: 200 });
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
-    expect(url === capability.signedUploadUrl).toBe(true);
+    const expectedUploadUrl = `${capability.origin}/storage/v1/object/upload/sign/media-staging/${capability.path}` +
+      `?token=${encodeURIComponent(capability.token)}`;
+    expect(url === expectedUploadUrl).toBe(true);
     expect(init).toMatchObject({
       method: 'PUT',
       redirect: 'error',
@@ -210,18 +254,32 @@ describe('owner media actors', () => {
     expect(new Uint8Array(init?.body as ArrayBuffer)).toEqual(bytes);
   });
 
-  it('refuses a stale signed capability before starting an upload', async () => {
+  it('uses only the validated credential usability for upload preflight', async () => {
     const env = localEnvironment();
-    const stale = {
-      ...reservation(env),
-      reservationExpiresAt: new Date(Date.now() - 1_000).toISOString(),
-    };
+    const capability = reservation(env);
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      Key: ['media-staging', stale.path].join('/'),
+      Key: ['media-staging', capability.path].join('/'),
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(putSignedMedia(stale, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]))).resolves.toEqual({
+    await expect(putSignedMedia(capability, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]))).resolves.toEqual({
+      ok: true, status: 200,
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('requires more than five minutes of credential usability before upload I/O', async () => {
+    const env = localEnvironment();
+    const unsafe = {
+      ...reservation(env),
+      usableUntil: new Date(Date.now() + 4 * 60_000).toISOString(),
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      Key: ['media-staging', unsafe.path].join('/'),
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(putSignedMedia(unsafe, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]))).resolves.toEqual({
       ok: false, stage: 'upload', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -241,15 +299,13 @@ describe('owner media actors', () => {
     });
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
     expect(url).toBe(`${env.apiUrl}/functions/v1/finalize-media-upload`);
-    expect(init).toMatchObject({
-      method: 'POST',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: {
-        Authorization: `Bearer ${owner.accessToken}`,
-        'Content-Type': 'application/json',
-      },
+    expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
+      method: 'POST', redirect: 'error', cache: 'no-store',
     });
+    const headers = new Headers(init?.headers);
+    expect([...headers.keys()].sort()).toEqual(['authorization', 'content-type']);
+    expect(headers.get('authorization') === `Bearer ${owner.accessToken}`).toBe(true);
+    expect(headers.get('content-type')).toBe('application/json');
     expect(JSON.parse(String(init?.body))).toEqual(finalizeInput());
 
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
@@ -271,18 +327,33 @@ describe('owner media actors', () => {
     await expect(deleteMedia(owner, UUID_ASSET, env)).resolves.toEqual({ ok: true, status: 200, deleted: true });
     const [url, init] = (fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>)[0]!;
     expect(url).toBe(`${env.apiUrl}/functions/v1/delete-media`);
-    expect(init).toMatchObject({
-      method: 'POST',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: {
-        Authorization: `Bearer ${owner.accessToken}`,
-        'Content-Type': 'application/json',
-      },
+    expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
+      method: 'POST', redirect: 'error', cache: 'no-store',
     });
+    const headers = new Headers(init?.headers);
+    expect([...headers.keys()].sort()).toEqual(['authorization', 'content-type']);
+    expect(headers.get('authorization') === `Bearer ${owner.accessToken}`).toBe(true);
+    expect(headers.get('content-type')).toBe('application/json');
     expect(JSON.parse(String(init?.body))).toEqual({ mediaId: UUID_ASSET });
     await expect(deleteMedia(owner, UUID_ASSET, env)).resolves.toEqual({
       ok: false, stage: 'delete', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
+  });
+
+  it('rejects malformed finalize and delete identifiers before starting I/O', async () => {
+    const env = localEnvironment();
+    const owner = actor();
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      mediaAssetId: UUID_ASSET, status: 'quarantined',
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(owner, { ...finalizeInput(), sha256: 'z'.repeat(64) }, env)).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+    await expect(deleteMedia(owner, ['not', 'a', 'uuid'].join('-'), env)).resolves.toEqual({
+      ok: false, stage: 'delete', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

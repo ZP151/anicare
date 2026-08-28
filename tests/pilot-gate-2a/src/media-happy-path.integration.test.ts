@@ -23,12 +23,16 @@ async function boundedPrivateRead(
   url: string,
   headers: HeadersInit = {},
 ): Promise<Response> {
-  return fetchWithTimeout(url, {
-    method: 'GET',
-    redirect: 'error',
-    cache: 'no-store',
-    headers: { ...clientHeaders(env, actor), ...headers },
-  }, PRIVATE_READ_TIMEOUT_MS);
+  try {
+    return await fetchWithTimeout(url, {
+      method: 'GET',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: { ...clientHeaders(env, actor), ...headers },
+    }, PRIVATE_READ_TIMEOUT_MS);
+  } catch {
+    throw new Error('private_read_failed');
+  }
 }
 
 async function expectStorageReadDenied(
@@ -98,13 +102,9 @@ describe('real owner media happy path', () => {
       const reservation = await reserveMedia(scenario.owner, receipt, env);
       expect(reservation.mediaId).toBe(mediaId);
       expect(reservation.path === `jobs/${reservation.jobId}.jpg`).toBe(true);
-      const signedUrl = new URL(reservation.signedUploadUrl);
-      expect(signedUrl.origin).toBe(new URL(env.apiUrl).origin);
-      expect(signedUrl.hostname).toBe('127.0.0.1');
-      expect(Date.parse(reservation.reservationExpiresAt)).toBeGreaterThan(Date.now());
-      expect(Date.parse(reservation.uploadCredentialUsableUntil)).toBeGreaterThan(
-        Date.parse(reservation.reservationExpiresAt),
-      );
+      expect(reservation.origin).toBe(new URL(env.apiUrl).origin);
+      expect(new URL(reservation.origin).hostname).toBe('127.0.0.1');
+      expect(Date.parse(reservation.usableUntil)).toBeGreaterThan(Date.now() + 5 * 60_000);
 
       await expectPrivateJobReadDenied(env, null, mediaId);
       await expectPrivateJobReadDenied(env, scenario.stranger, mediaId);

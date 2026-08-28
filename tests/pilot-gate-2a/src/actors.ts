@@ -1,11 +1,22 @@
+import {
+  buildFinalizeMediaRequest,
+  buildReserveMediaRequest,
+  parseMediaReservationResponse,
+  parseTrustedSupabaseOrigin,
+  type FinalizeMediaInput as MobileFinalizeMediaInput,
+  type ValidatedUploadCapability,
+} from '../../../apps/mobile/src/api/media.js';
+import { isStableMediaId } from '../../../apps/mobile/src/media/media-reference.js';
+
 import type { LocalStackEnvironment } from './environment.js';
 import type { SyntheticActor } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
 
 const REQUEST_TIMEOUT_MS = 5_000;
+const MAX_REQUEST_BYTES = 8 * 1024;
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+const UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SHA256 = /^[a-f0-9]{64}$/;
 const ACTOR_TOKEN = /^\S{1,8192}$/;
 const EDGE_ERROR_CODES = new Set([
   'authentication_required',
@@ -37,19 +48,11 @@ export type ReserveInput = Readonly<{
   }>;
 }>;
 
-export type FinalizeInput = Readonly<{
-  sightingId: string;
-  mediaId: string;
-  sha256: string;
-}>;
+export type FinalizeInput = MobileFinalizeMediaInput;
 
-export type Reservation = Readonly<{
-  jobId: string;
+export type Reservation = Readonly<ValidatedUploadCapability & {
   mediaId: string;
-  path: string;
-  reservationExpiresAt: string;
-  uploadCredentialUsableUntil: string;
-  signedUploadUrl: string;
+  origin: string;
 }>;
 
 type ActorStage = 'reserve' | 'upload' | 'finalize' | 'delete';
@@ -81,14 +84,58 @@ function exactObject(value: unknown, keys: readonly string[]): value is Record<s
   return actual.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
-function exactIsoTimestamp(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  const milliseconds = Date.parse(value);
-  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value;
-}
-
 function validActor(actor: SyntheticActor): boolean {
   return UUID.test(actor.id) && ACTOR_TOKEN.test(actor.accessToken);
+}
+
+function serializeRequest(value: unknown): string | null {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return null;
+  }
+  return new TextEncoder().encode(serialized).byteLength <= MAX_REQUEST_BYTES ? serialized : null;
+}
+
+function reservationRequest(input: ReserveInput): string | null {
+  if (!exactObject(input, ['sightingId', 'mediaId', 'sha256', 'byteLength', 'review']) ||
+      !exactObject(input.review, [
+        'recipeVersion', 'detectorVersions', 'width', 'height', 'confirmedAtLocal',
+      ])) return null;
+  try {
+    const request = buildReserveMediaRequest({
+      sightingId: input.sightingId,
+      mediaId: input.mediaId,
+      receipt: {
+        sanitizedSha256: input.sha256,
+        recipeVersion: input.review.recipeVersion,
+        detectorVersions: input.review.detectorVersions,
+        width: input.review.width,
+        height: input.review.height,
+        byteLength: input.byteLength,
+        confirmedAtLocal: input.review.confirmedAtLocal,
+      },
+    });
+    return serializeRequest(request);
+  } catch {
+    return null;
+  }
+}
+
+function finalizationRequest(input: FinalizeInput): string | null {
+  try {
+    return serializeRequest(buildFinalizeMediaRequest(input));
+  } catch {
+    return null;
+  }
+}
+
+function deletionRequest(mediaAssetId: string): string | null {
+  const input: unknown = { mediaAssetId };
+  return exactObject(input, ['mediaAssetId']) && UUID.test(String(input.mediaAssetId))
+    ? serializeRequest({ mediaId: input.mediaAssetId })
+    : null;
 }
 
 async function boundedJson(response: Response): Promise<unknown> {
@@ -104,7 +151,7 @@ async function actorPost(
   stage: 'reserve' | 'finalize' | 'delete',
   endpoint: string,
   actor: SyntheticActor,
-  body: Record<string, unknown>,
+  serializedBody: string,
 ): Promise<Response | ActorFailure> {
   if (!validActor(actor)) return failure(stage, 'invalid_response', null, 'invalid_response');
   try {
@@ -116,7 +163,7 @@ async function actorPost(
         Authorization: `Bearer ${actor.accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: serializedBody,
     }, REQUEST_TIMEOUT_MS);
   } catch {
     return failure(stage, 'network', null, 'network_error');
@@ -127,98 +174,63 @@ async function httpFailure(stage: ActorStage, response: Response): Promise<Actor
   return failure(stage, 'http', response.status, edgeError(await boundedJson(response)));
 }
 
-function parseReservation(value: unknown, input: ReserveInput, env: LocalStackEnvironment): Reservation | null {
-  if (!exactObject(value, [
-    'jobId',
-    'mediaId',
-    'reservationExpiresAt',
-    'uploadCredentialUsableUntil',
-    'upload',
-  ]) || !UUID.test(String(value.jobId)) || value.mediaId !== input.mediaId ||
-      !exactIsoTimestamp(value.reservationExpiresAt) || !exactIsoTimestamp(value.uploadCredentialUsableUntil) ||
-      !exactObject(value.upload, ['signedUrl', 'token']) ||
-      typeof value.upload.signedUrl !== 'string' || typeof value.upload.token !== 'string' ||
-      !ACTOR_TOKEN.test(value.upload.token)) {
-    return null;
-  }
-
-  const reservationExpiresAt = Date.parse(value.reservationExpiresAt);
-  const usableUntil = Date.parse(value.uploadCredentialUsableUntil);
-  if (reservationExpiresAt <= Date.now() || usableUntil <= reservationExpiresAt) return null;
-
-  let signedUrl: URL;
-  try {
-    signedUrl = new URL(value.upload.signedUrl);
-  } catch {
-    return null;
-  }
-  const path = `jobs/${String(value.jobId)}.jpg`;
-  const expectedPathname = `/storage/v1/object/upload/sign/media-staging/${path}`;
-  const expectedOrigin = new URL(env.apiUrl).origin;
-  if (signedUrl.origin !== expectedOrigin || signedUrl.protocol !== 'http:' || signedUrl.hostname !== '127.0.0.1' ||
-      signedUrl.username !== '' || signedUrl.password !== '' || signedUrl.pathname !== expectedPathname ||
-      signedUrl.hash !== '' || signedUrl.searchParams.size !== 1 ||
-      signedUrl.searchParams.get('token') !== value.upload.token) {
-    return null;
-  }
-
-  return {
-    jobId: value.jobId as string,
-    mediaId: value.mediaId as string,
-    path,
-    reservationExpiresAt: value.reservationExpiresAt,
-    uploadCredentialUsableUntil: value.uploadCredentialUsableUntil,
-    signedUploadUrl: signedUrl.toString(),
-  };
-}
-
 export async function reserveMedia(
   actor: SyntheticActor,
   input: ReserveInput,
   env: LocalStackEnvironment,
 ): Promise<Reservation> {
-  const response = await actorPost('reserve', `${env.apiUrl}/functions/v1/reserve-media-upload`, actor, {
-    sightingId: input.sightingId,
-    mediaId: input.mediaId,
-    sha256: input.sha256,
-    byteLength: input.byteLength,
-    review: input.review,
-  });
+  const serializedBody = reservationRequest(input);
+  if (serializedBody === null) throw failure('reserve', 'invalid_response', null, 'invalid_response');
+  const response = await actorPost(
+    'reserve', `${env.apiUrl}/functions/v1/reserve-media-upload`, actor, serializedBody,
+  );
   if (!(response instanceof Response)) throw response;
   if (!response.ok) throw await httpFailure('reserve', response);
   if (response.status !== 201 || response.redirected) {
     throw failure('reserve', 'invalid_response', null, 'invalid_response');
   }
-  const reservation = parseReservation(await boundedJson(response), input, env);
-  if (!reservation) throw failure('reserve', 'invalid_response', null, 'invalid_response');
-  return reservation;
+  try {
+    const capability = parseMediaReservationResponse(await boundedJson(response), {
+      expectedMediaId: input.mediaId,
+      supabaseUrl: env.apiUrl,
+      now: new Date(),
+      insecureOrigins: [env.allowedOrigin],
+    });
+    const origin = parseTrustedSupabaseOrigin(env.apiUrl, [env.allowedOrigin]);
+    return { ...capability, mediaId: input.mediaId, origin };
+  } catch {
+    throw failure('reserve', 'invalid_response', null, 'invalid_response');
+  }
 }
 
-function validReservationCapability(reservation: Reservation): boolean {
-  if (!UUID.test(reservation.jobId) || reservation.path !== `jobs/${reservation.jobId}.jpg` ||
-      !exactIsoTimestamp(reservation.reservationExpiresAt) ||
-      !exactIsoTimestamp(reservation.uploadCredentialUsableUntil)) return false;
-  const reservationExpiresAt = Date.parse(reservation.reservationExpiresAt);
-  const usableUntil = Date.parse(reservation.uploadCredentialUsableUntil);
-  if (reservationExpiresAt <= Date.now() || usableUntil <= reservationExpiresAt) return false;
+function canonicalUploadUrl(reservation: Reservation): string | null {
+  if (!exactObject(reservation, ['jobId', 'path', 'token', 'usableUntil', 'mediaId', 'origin']) ||
+      !isStableMediaId(reservation.jobId) || !isStableMediaId(reservation.mediaId) ||
+      reservation.path !== `jobs/${reservation.jobId}.jpg` ||
+      typeof reservation.token !== 'string' || reservation.token.length < 1 ||
+      reservation.token.length > 8192 || /[\r\n]/.test(reservation.token)) return null;
+  const usableUntil = Date.parse(String(reservation.usableUntil));
+  if (!Number.isFinite(usableUntil) || usableUntil <= Date.now() + UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS) return null;
   try {
-    const url = new URL(reservation.signedUploadUrl);
-    return url.protocol === 'http:' && url.hostname === '127.0.0.1' && url.username === '' && url.password === '' &&
-      url.pathname === `/storage/v1/object/upload/sign/media-staging/${reservation.path}` && url.hash === '' &&
-      url.searchParams.size === 1 && ACTOR_TOKEN.test(url.searchParams.get('token') ?? '');
+    const origin = parseTrustedSupabaseOrigin(reservation.origin, [reservation.origin]);
+    const parsedOrigin = new URL(origin);
+    if (parsedOrigin.protocol !== 'http:' || parsedOrigin.hostname !== '127.0.0.1') return null;
+    return `${origin}/storage/v1/object/upload/sign/media-staging/${reservation.path}` +
+      `?token=${encodeURIComponent(reservation.token)}`;
   } catch {
-    return false;
+    return null;
   }
 }
 
 export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array): Promise<ActorResult> {
-  if (!validReservationCapability(reservation) || bytes.byteLength < 1 || bytes.byteLength > MAX_MEDIA_BYTES ||
+  const uploadUrl = canonicalUploadUrl(reservation);
+  if (uploadUrl === null || bytes.byteLength < 1 || bytes.byteLength > MAX_MEDIA_BYTES ||
       bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
     return { ok: false, ...failure('upload', 'invalid_response', null, 'invalid_response') };
   }
   let response: Response;
   try {
-    response = await fetchWithTimeout(reservation.signedUploadUrl, {
+    response = await fetchWithTimeout(uploadUrl, {
       method: 'PUT',
       redirect: 'error',
       cache: 'no-store',
@@ -254,11 +266,13 @@ export async function finalizeMedia(
   input: FinalizeInput,
   env: LocalStackEnvironment,
 ): Promise<ActorResult> {
-  const response = await actorPost('finalize', `${env.apiUrl}/functions/v1/finalize-media-upload`, actor, {
-    sightingId: input.sightingId,
-    mediaId: input.mediaId,
-    sha256: input.sha256,
-  });
+  const serializedBody = finalizationRequest(input);
+  if (serializedBody === null) {
+    return { ok: false, ...failure('finalize', 'invalid_response', null, 'invalid_response') };
+  }
+  const response = await actorPost(
+    'finalize', `${env.apiUrl}/functions/v1/finalize-media-upload`, actor, serializedBody,
+  );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('finalize', response) };
   if (response.status !== 200 || response.redirected) {
@@ -275,7 +289,13 @@ export async function deleteMedia(
   mediaAssetId: string,
   env: LocalStackEnvironment,
 ): Promise<ActorResult> {
-  const response = await actorPost('delete', `${env.apiUrl}/functions/v1/delete-media`, actor, { mediaId: mediaAssetId });
+  const serializedBody = deletionRequest(mediaAssetId);
+  if (serializedBody === null) {
+    return { ok: false, ...failure('delete', 'invalid_response', null, 'invalid_response') };
+  }
+  const response = await actorPost(
+    'delete', `${env.apiUrl}/functions/v1/delete-media`, actor, serializedBody,
+  );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('delete', response) };
   if (response.status !== 200 || response.redirected) {

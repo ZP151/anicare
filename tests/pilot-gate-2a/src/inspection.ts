@@ -77,6 +77,7 @@ export async function inspectFinalizedMedia(
           )::integer as matching_quarantined_asset_count
         from public.media_assets
         where client_media_id = ${input.mediaId}
+          and uploader_id = ${input.ownerId}::uuid
       ), job_counts as (
         select
           count(*)::integer as job_count_for_media_id,
@@ -94,6 +95,7 @@ export async function inspectFinalizedMedia(
           )::integer as matching_finalized_job_count
         from private.media_upload_jobs
         where media_id = ${input.mediaId}
+          and uploader_id = ${input.ownerId}::uuid
       )
       select
         asset_count_for_media_id,
