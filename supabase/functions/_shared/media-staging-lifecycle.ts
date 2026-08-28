@@ -21,7 +21,7 @@ export type CleanupAction = 'none' | 'remove_and_retry' | 'defer_delete' | 'remo
 
 type SignedUploadUrlInput = Readonly<{
   internalSupabaseUrl: string;
-  allowedOrigin: string;
+  publicSupabaseOrigin: string;
   objectPath: string;
   signedUrl: string;
   token: string;
@@ -48,8 +48,8 @@ function canonicalHttpOrigin(value: unknown): string | null {
  */
 export function rewriteVerifiedSignedUploadUrl(input: SignedUploadUrlInput): string | null {
   const internalOrigin = canonicalHttpOrigin(input.internalSupabaseUrl);
-  const clientOrigin = canonicalHttpOrigin(input.allowedOrigin);
-  if (internalOrigin === null || clientOrigin === null ||
+  const publicSupabaseOrigin = canonicalHttpOrigin(input.publicSupabaseOrigin);
+  if (internalOrigin === null || publicSupabaseOrigin === null ||
       typeof input.objectPath !== 'string' || !CANONICAL_STAGING_OBJECT_PATH.test(input.objectPath) ||
       typeof input.token !== 'string' || input.token.length < 1 || input.token.length > 8192 ||
       /[\r\n\0]/.test(input.token) || typeof input.signedUrl !== 'string') return null;
@@ -57,7 +57,7 @@ export function rewriteVerifiedSignedUploadUrl(input: SignedUploadUrlInput): str
   const uploadPath = `/storage/v1/object/upload/sign/media-staging/${input.objectPath}`;
   const query = `?token=${encodeURIComponent(input.token)}`;
   if (input.signedUrl !== `${internalOrigin}${uploadPath}${query}`) return null;
-  return `${clientOrigin}${uploadPath}${query}`;
+  return `${publicSupabaseOrigin}${uploadPath}${query}`;
 }
 
 /**

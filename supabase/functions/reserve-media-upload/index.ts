@@ -113,8 +113,8 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const mediaAllowedOrigin = Deno.env.get('MEDIA_ALLOWED_ORIGIN');
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaAllowedOrigin) {
+  const mediaPublicSupabaseOrigin = Deno.env.get('MEDIA_PUBLIC_SUPABASE_ORIGIN');
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaPublicSupabaseOrigin) {
     return json(request, { error: 'service_unavailable' }, 503);
   }
 
@@ -178,7 +178,7 @@ Deno.serve(async (request) => {
   }
   const clientSignedUploadUrl = rewriteVerifiedSignedUploadUrl({
     internalSupabaseUrl: supabaseUrl,
-    allowedOrigin: mediaAllowedOrigin,
+    publicSupabaseOrigin: mediaPublicSupabaseOrigin,
     objectPath: row.object_path,
     signedUrl: signedUpload.signedUrl,
     token: signedUpload.token,

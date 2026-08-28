@@ -18,6 +18,7 @@ const UUID_JOB = '11111111-1111-4111-8111-111111111111';
 const UUID_MEDIA = '22222222-2222-4222-8222-222222222222';
 const UUID_SIGHTING = '33333333-3333-4333-8333-333333333333';
 const UUID_ASSET = '44444444-4444-4444-8444-444444444444';
+const LOCAL_CORS_ORIGIN = 'http://127.0.0.1:8081';
 
 function localEnvironment(): LocalStackEnvironment {
   const apiUrl = ['http:', '//127.0.0.1:54321'].join('');
@@ -26,7 +27,7 @@ function localEnvironment(): LocalStackEnvironment {
     anonKey: ['local', 'anon', randomUUID()].join('-'),
     serviceRoleKey: ['local', 'service', randomUUID()].join('-'),
     databaseUrl: ['postgresql:', '//', 'postgres', ':', 'postgres', '@127.0.0.1:54322/postgres'].join(''),
-    allowedOrigin: apiUrl,
+    allowedOrigin: LOCAL_CORS_ORIGIN,
     preciseLocationEncryptionKey: Buffer.alloc(32, 17).toString('base64'),
   };
 }
@@ -102,7 +103,7 @@ afterEach(() => {
 });
 
 describe('owner media actors', () => {
-  it('maps the exact owner reservation request and retains only a validated in-memory capability', async () => {
+  it('trusts the validated Supabase API origin when the unrelated CORS origin differs', async () => {
     const env = localEnvironment();
     const owner = actor();
     const input = reserveInput();

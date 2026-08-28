@@ -774,6 +774,7 @@ export async function runPilotGate2A({
     const edgeEnvironment = [
       `PRECISE_LOCATION_ENCRYPTION_KEY=${FIXED_PRECISE_LOCATION_ENCRYPTION_KEY}`,
       `MEDIA_ALLOWED_ORIGIN=${local.apiUrl}`,
+      `MEDIA_PUBLIC_SUPABASE_ORIGIN=${local.apiUrl}`,
       '',
     ].join('\n');
     await writeFile(edgeEnvironmentPath, edgeEnvironment, { encoding: 'utf8', mode: 0o600, flag: 'wx' });

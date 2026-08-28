@@ -95,7 +95,7 @@ export function readLocalStackEnvironment(source: NodeJS.ProcessEnv): LocalStack
 
   exactLocalDatabaseUrl(databaseUrl);
 
-  if (allowedOrigin !== api.origin || origin.origin !== api.origin) {
+  if (apiUrl !== api.origin || allowedOrigin !== origin.origin) {
     return invalidEnvironment();
   }
 

@@ -195,12 +195,12 @@ export async function reserveMedia(
       expectedMediaId: input.mediaId,
       supabaseUrl: env.apiUrl,
       now: new Date(),
-      insecureOrigins: [env.allowedOrigin],
+      insecureOrigins: [env.apiUrl],
     });
     if (!UUID.test(capability.jobId) || capability.path !== `jobs/${capability.jobId}.jpg`) {
       throw new Error('invalid_media_reservation_response');
     }
-    const origin = parseTrustedSupabaseOrigin(env.apiUrl, [env.allowedOrigin]);
+    const origin = parseTrustedSupabaseOrigin(env.apiUrl, [env.apiUrl]);
     return { ...capability, mediaId: input.mediaId, origin };
   } catch {
     throw failure('reserve', 'invalid_response', null, 'invalid_response');

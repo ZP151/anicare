@@ -235,6 +235,7 @@ test('captures startup/status, masks status values, writes only custom Edge env,
   assert.equal(processes.observations.edgeEnvContent, [
     `PRECISE_LOCATION_ENCRYPTION_KEY=${FIXED_LOCATION_KEY}`,
     `MEDIA_ALLOWED_ORIGIN=${STATUS_VALUES.API_URL}`,
+    `MEDIA_PUBLIC_SUPABASE_ORIGIN=${STATUS_VALUES.API_URL}`,
     '',
   ].join('\n'));
   assert.deepEqual(processes.observations.edgeTempEntries, ['edge.env']);

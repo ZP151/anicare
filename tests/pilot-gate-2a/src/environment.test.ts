@@ -8,6 +8,7 @@ const LOCAL_DATABASE_HOST = '127.0.0.1';
 const LOCAL_DATABASE_PORT = '54322';
 const LOCAL_DATABASE_NAME = 'postgres';
 const LOCAL_API_URL = 'http://127.0.0.1:54321';
+const LOCAL_CORS_ORIGIN = 'http://127.0.0.1:8081';
 
 function localDatabaseUrl(overrides: Partial<URL> = {}): string {
   const url = new URL(`postgresql://${LOCAL_DATABASE_HOST}`);
@@ -43,7 +44,7 @@ function localEnvironment(): NodeJS.ProcessEnv {
     SUPABASE_ANON_KEY: localAnonKey(),
     SUPABASE_SERVICE_ROLE_KEY: localServiceRoleKey(),
     DATABASE_URL: localDatabaseUrl(),
-    MEDIA_ALLOWED_ORIGIN: LOCAL_API_URL,
+    MEDIA_ALLOWED_ORIGIN: LOCAL_CORS_ORIGIN,
     PRECISE_LOCATION_ENCRYPTION_KEY: localPreciseLocationEncryptionKey(),
   };
 }
@@ -117,7 +118,7 @@ describe('readLocalStackEnvironment', () => {
 
   it.each([
     'https://127.0.0.1:54321',
-    'http://127.0.0.1:3000',
+    'http://10.0.0.1:8081',
     'http://localhost:54321',
     'http://127.0.0.1:54321/other',
   ])('rejects an unexpected allowed origin', (allowedOrigin) => {
@@ -132,7 +133,7 @@ describe('readLocalStackEnvironment', () => {
       anonKey: localAnonKey(),
       serviceRoleKey: localServiceRoleKey(),
       databaseUrl: localDatabaseUrl(),
-      allowedOrigin: LOCAL_API_URL,
+      allowedOrigin: LOCAL_CORS_ORIGIN,
       preciseLocationEncryptionKey: localPreciseLocationEncryptionKey(),
     });
   });
