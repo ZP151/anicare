@@ -35,6 +35,7 @@ export type EncryptedDatabaseDependencies<T> = Readonly<{
   openDatabase(): Promise<T>;
   applyKey(database: T, key: string): Promise<void>;
   initialize(database: T): Promise<void>;
+  closeDatabase(database: T): Promise<void>;
 }>;
 
 export async function openEncryptedDatabaseWithDependencies<T>(
@@ -44,9 +45,18 @@ export async function openEncryptedDatabaseWithDependencies<T>(
 
   const key = validateDatabaseKey(await dependencies.loadKey());
   const database = await dependencies.openDatabase();
-  await dependencies.applyKey(database, key);
-  await dependencies.initialize(database);
-  return database;
+  try {
+    await dependencies.applyKey(database, key);
+    await dependencies.initialize(database);
+    return database;
+  } catch (error) {
+    try {
+      await dependencies.closeDatabase(database);
+    } catch {
+      // Preserve the original key application or initialization failure.
+    }
+    throw error;
+  }
 }
 
 export function createRetryableSingleFlight<T>(

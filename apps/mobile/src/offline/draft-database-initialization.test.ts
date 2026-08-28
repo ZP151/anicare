@@ -108,6 +108,7 @@ describe('encrypted draft database initialization', () => {
       openDatabase,
       applyKey,
       initialize,
+      closeDatabase: async () => undefined,
     })).rejects.toThrow('secure_offline_storage_unavailable');
 
     expect(loadKey).not.toHaveBeenCalled();
@@ -130,6 +131,7 @@ describe('encrypted draft database initialization', () => {
       openDatabase,
       applyKey,
       initialize: async () => { events.push('initialize'); },
+      closeDatabase: async () => undefined,
     })).resolves.toBe(database);
 
     expect(events).toEqual(['load', 'open', `apply:${key}`, 'initialize']);
@@ -145,6 +147,7 @@ describe('encrypted draft database initialization', () => {
       openDatabase,
       applyKey: async () => undefined,
       initialize: async () => undefined,
+      closeDatabase: async () => undefined,
     })).rejects.toThrow('secure_offline_storage_key_invalid');
 
     expect(openDatabase).not.toHaveBeenCalled();
@@ -166,6 +169,7 @@ describe('encrypted draft database initialization', () => {
       openDatabase,
       applyKey: async () => undefined,
       initialize: async () => undefined,
+      closeDatabase: async () => undefined,
     })).rejects.toThrow('secure_offline_storage_key_invalid');
 
     expect(store).not.toHaveBeenCalled();
@@ -187,6 +191,7 @@ describe('encrypted draft database initialization', () => {
       openDatabase,
       applyKey: async () => undefined,
       initialize: async () => undefined,
+      closeDatabase: async () => undefined,
     }));
 
     await expect(getDatabase()).rejects.toThrow('secure_offline_storage_unavailable');
@@ -207,6 +212,7 @@ describe('encrypted draft database initialization', () => {
       openDatabase,
       applyKey,
       initialize,
+      closeDatabase: async () => undefined,
     }));
 
     await expect(getDatabase()).rejects.toThrow('database_locked');
@@ -215,6 +221,92 @@ describe('encrypted draft database initialization', () => {
     expect(openDatabase).toHaveBeenCalledTimes(2);
     expect(applyKey).toHaveBeenCalledTimes(1);
     expect(initialize).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a database after apply-key failure so a later attempt can succeed', async () => {
+    const firstDatabase = { id: 'first-draft-database' };
+    const secondDatabase = { id: 'second-draft-database' };
+    const openDatabase = jest.fn()
+      .mockResolvedValueOnce(firstDatabase)
+      .mockResolvedValueOnce(secondDatabase);
+    const applyKey = jest.fn()
+      .mockRejectedValueOnce(new Error('apply-key-failed'))
+      .mockResolvedValue(undefined);
+    const closeDatabase = jest.fn(async (_database: typeof firstDatabase | typeof secondDatabase) => undefined);
+    const getDatabase = createRetryableSingleFlight(() => openEncryptedDatabaseWithDependencies({
+      isNative: true,
+      loadKey: async () => 'd'.repeat(64),
+      openDatabase,
+      applyKey,
+      initialize: async () => undefined,
+      closeDatabase,
+    }));
+
+    await expect(getDatabase()).rejects.toThrow('apply-key-failed');
+    expect(closeDatabase).toHaveBeenCalledTimes(1);
+    expect(closeDatabase).toHaveBeenCalledWith(firstDatabase);
+    await expect(getDatabase()).resolves.toBe(secondDatabase);
+  });
+
+  it('closes a database after initialization failure before retrying', async () => {
+    const firstDatabase = { id: 'first-draft-database' };
+    const secondDatabase = { id: 'second-draft-database' };
+    const openDatabase = jest.fn()
+      .mockResolvedValueOnce(firstDatabase)
+      .mockResolvedValueOnce(secondDatabase);
+    const initialize = jest.fn()
+      .mockRejectedValueOnce(new Error('initialize-failed'))
+      .mockResolvedValue(undefined);
+    const closeDatabase = jest.fn(async (_database: typeof firstDatabase | typeof secondDatabase) => undefined);
+    const getDatabase = createRetryableSingleFlight(() => openEncryptedDatabaseWithDependencies({
+      isNative: true,
+      loadKey: async () => 'e'.repeat(64),
+      openDatabase,
+      applyKey: async () => undefined,
+      initialize,
+      closeDatabase,
+    }));
+
+    await expect(getDatabase()).rejects.toThrow('initialize-failed');
+    expect(closeDatabase).toHaveBeenCalledTimes(1);
+    expect(closeDatabase).toHaveBeenCalledWith(firstDatabase);
+    await expect(getDatabase()).resolves.toBe(secondDatabase);
+  });
+
+  it('does not close when opening the database fails', async () => {
+    const openError = new Error('open-failed');
+    const openDatabase = jest.fn(async () => { throw openError; });
+    const closeDatabase = jest.fn(async (_database: typeof database) => undefined);
+
+    await expect(openEncryptedDatabaseWithDependencies({
+      isNative: true,
+      loadKey: async () => 'f'.repeat(64),
+      openDatabase,
+      applyKey: async () => undefined,
+      initialize: async () => undefined,
+      closeDatabase,
+    })).rejects.toBe(openError);
+
+    expect(closeDatabase).not.toHaveBeenCalled();
+  });
+
+  it('preserves the initialization error when closing the database also fails', async () => {
+    const database = { id: 'draft-database' };
+    const initializationError = new Error('initialize-failed');
+    const closeError = new Error('close-failed');
+    const closeDatabase = jest.fn(async (_database: typeof database) => { throw closeError; });
+
+    await expect(openEncryptedDatabaseWithDependencies({
+      isNative: true,
+      loadKey: async () => '0'.repeat(64),
+      openDatabase: async () => database,
+      applyKey: async () => undefined,
+      initialize: async () => { throw initializationError; },
+      closeDatabase,
+    })).rejects.toBe(initializationError);
+
+    expect(closeDatabase).toHaveBeenCalledTimes(1);
+    expect(closeDatabase).toHaveBeenCalledWith(database);
   });
 
   it('shares one promise across concurrent callers and keeps the successful result cached', async () => {

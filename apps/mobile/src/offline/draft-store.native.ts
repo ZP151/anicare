@@ -276,6 +276,7 @@ async function openDraftDatabase() {
       await database.execAsync(`PRAGMA key = "x'${key}'";`);
     },
     initialize: initializeDraftDatabaseSchema,
+    closeDatabase: (database) => database.closeAsync(),
   });
 }
 
