@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  combineMediaLifecycleDatabaseInspection,
   isMediaLifecycleTimeControlInput,
   type MediaLifecycleTimeControlInput,
 } from './inspection.js';
@@ -30,5 +31,30 @@ describe('media lifecycle time control input', () => {
       isMediaLifecycleTimeControlInput(candidate({ ...base, operation: 'expire_reservation', ownerId: 'not-a-uuid' })),
       isMediaLifecycleTimeControlInput(candidate({ ...base, operation: 'expire_reservation', mediaId: 'not-a-uuid' })),
     ]).toEqual([true, true, false, false, false, false, false, false, false]);
+  });
+});
+
+describe('media lifecycle database inspection', () => {
+  it('keeps the owner-media asset count independent from the job asset link', () => {
+    expect(combineMediaLifecycleDatabaseInspection({
+      job_count: 1,
+      job_status: 'deletion_pending',
+      reservation_expired: false,
+      upload_credential_watermark_in_future: true,
+      cleanup_scheduled_in_future: true,
+      cleanup_claimed: false,
+    }, {
+      asset_count: 1,
+      asset_tombstoned: true,
+    })).toEqual({
+      jobCount: 1,
+      assetCount: 1,
+      jobStatus: 'deletion_pending',
+      reservationExpired: false,
+      uploadCredentialWatermarkInFuture: true,
+      cleanupScheduledInFuture: true,
+      cleanupClaimed: false,
+      assetTombstoned: true,
+    });
   });
 });

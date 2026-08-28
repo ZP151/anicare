@@ -247,7 +247,9 @@ export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array
   } catch {
     return { ok: false, ...failure('upload', 'network', null, 'network_error') };
   }
-  if (!response.ok) return { ok: false, ...await httpFailure('upload', response) };
+  if (!response.ok) {
+    return { ok: false, ...failure('upload', 'http', response.status, 'storage_upload_failed') };
+  }
   if (response.status !== 200 || response.redirected) {
     return { ok: false, ...failure('upload', 'invalid_response', null, 'invalid_response') };
   }

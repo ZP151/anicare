@@ -72,16 +72,21 @@ type InspectionRow = Readonly<{
 
 type TimestampUpdateRow = Readonly<{ updated_count: number }>;
 
-type MediaLifecycleInspectionRow = Readonly<{
+type MediaLifecycleJobInspectionRow = Readonly<{
   job_count: number;
-  asset_count: number;
   job_status: string;
   reservation_expired: boolean;
   upload_credential_watermark_in_future: boolean;
   cleanup_scheduled_in_future: boolean;
   cleanup_claimed: boolean;
+}>;
+
+type MediaLifecycleAssetInspectionRow = Readonly<{
+  asset_count: number;
   asset_tombstoned: boolean;
 }>;
+
+type MediaLifecycleDatabaseInspection = Omit<MediaLifecycleInspection, 'stagingObjectExists'>;
 
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -126,14 +131,38 @@ function lifecycleStatus(value: unknown): value is MediaLifecycleInspection['job
   return value === 'missing' || value === 'reserved' || value === 'finalized' || value === 'deletion_pending';
 }
 
-function lifecycleInspectionRow(value: unknown): value is MediaLifecycleInspectionRow {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const row = value as Partial<MediaLifecycleInspectionRow>;
-  return boundedSingleCount(row.job_count) && boundedSingleCount(row.asset_count) &&
-    lifecycleStatus(row.job_status) && typeof row.reservation_expired === 'boolean' &&
-    typeof row.upload_credential_watermark_in_future === 'boolean' &&
-    typeof row.cleanup_scheduled_in_future === 'boolean' && typeof row.cleanup_claimed === 'boolean' &&
-    typeof row.asset_tombstoned === 'boolean';
+function lifecycleJobInspectionRow(value: unknown): value is MediaLifecycleJobInspectionRow {
+  if (!exactObject(value, [
+    'job_count', 'job_status', 'reservation_expired', 'upload_credential_watermark_in_future',
+    'cleanup_scheduled_in_future', 'cleanup_claimed',
+  ])) return false;
+  return boundedSingleCount(value.job_count) && lifecycleStatus(value.job_status) &&
+    typeof value.reservation_expired === 'boolean' &&
+    typeof value.upload_credential_watermark_in_future === 'boolean' &&
+    typeof value.cleanup_scheduled_in_future === 'boolean' && typeof value.cleanup_claimed === 'boolean';
+}
+
+function lifecycleAssetInspectionRow(value: unknown): value is MediaLifecycleAssetInspectionRow {
+  if (!exactObject(value, ['asset_count', 'asset_tombstoned'])) return false;
+  return boundedSingleCount(value.asset_count) && typeof value.asset_tombstoned === 'boolean' &&
+    (value.asset_count === 1 || value.asset_tombstoned === false);
+}
+
+export function combineMediaLifecycleDatabaseInspection(
+  jobValue: unknown,
+  assetValue: unknown,
+): MediaLifecycleDatabaseInspection | null {
+  if (!lifecycleJobInspectionRow(jobValue) || !lifecycleAssetInspectionRow(assetValue)) return null;
+  return {
+    jobCount: jobValue.job_count,
+    assetCount: assetValue.asset_count,
+    jobStatus: jobValue.job_status as MediaLifecycleInspection['jobStatus'],
+    reservationExpired: jobValue.reservation_expired,
+    uploadCredentialWatermarkInFuture: jobValue.upload_credential_watermark_in_future,
+    cleanupScheduledInFuture: jobValue.cleanup_scheduled_in_future,
+    cleanupClaimed: jobValue.cleanup_claimed,
+    assetTombstoned: assetValue.asset_tombstoned,
+  };
 }
 
 function validStoredObjectInput(input: StoredStagingObjectInspectionInput): boolean {
@@ -233,7 +262,7 @@ export async function inspectMediaLifecycle(
     connection: { statement_timeout: 5_000, lock_timeout: 1_000 },
   });
   try {
-    const rows = await sql<MediaLifecycleInspectionRow[]>`
+    const jobRows = await sql<MediaLifecycleJobInspectionRow[]>`
       with target_job as (
         select j.*
         from private.media_upload_jobs j
@@ -242,19 +271,27 @@ export async function inspectMediaLifecycle(
           and j.media_id = ${input.mediaId}
       )
       select
-        count(distinct j.id)::integer as job_count,
-        count(distinct m.id)::integer as asset_count,
+        count(j.id)::integer as job_count,
         coalesce(max(j.status::text), 'missing') as job_status,
         coalesce(bool_or(j.reservation_expires_at <= now()), false) as reservation_expired,
         coalesce(bool_or(j.upload_token_expires_at > now()), false) as upload_credential_watermark_in_future,
         coalesce(bool_or(j.next_cleanup_at > now()), false) as cleanup_scheduled_in_future,
-        coalesce(bool_or(j.cleanup_claimed_at is not null or j.cleanup_claim_id is not null), false) as cleanup_claimed,
-        coalesce(bool_or(m.deleted_at is not null), false) as asset_tombstoned
+        coalesce(bool_or(j.cleanup_claimed_at is not null or j.cleanup_claim_id is not null), false) as cleanup_claimed
       from target_job j
-      left join public.media_assets m on m.id = j.media_asset_id
     `;
-    const row = rows.length === 1 ? rows[0] : undefined;
-    if (!lifecycleInspectionRow(row)) throw new Error('media_inspection_failed');
+    const assetRows = await sql<MediaLifecycleAssetInspectionRow[]>`
+      select
+        count(m.id)::integer as asset_count,
+        coalesce(bool_or(m.deleted_at is not null), false) as asset_tombstoned
+      from public.media_assets m
+      where m.uploader_id = ${input.ownerId}::uuid
+        and m.client_media_id = ${input.mediaId}
+    `;
+    const databaseInspection = combineMediaLifecycleDatabaseInspection(
+      jobRows.length === 1 ? jobRows[0] : undefined,
+      assetRows.length === 1 ? assetRows[0] : undefined,
+    );
+    if (!databaseInspection) throw new Error('media_inspection_failed');
 
     const { data: stagingObjectExists } = await inspectionClient(env)
       .storage
@@ -263,14 +300,7 @@ export async function inspectMediaLifecycle(
     if (typeof stagingObjectExists !== 'boolean') throw new Error('media_inspection_failed');
 
     return {
-      jobCount: row.job_count,
-      assetCount: row.asset_count,
-      jobStatus: row.job_status as MediaLifecycleInspection['jobStatus'],
-      reservationExpired: row.reservation_expired,
-      uploadCredentialWatermarkInFuture: row.upload_credential_watermark_in_future,
-      cleanupScheduledInFuture: row.cleanup_scheduled_in_future,
-      cleanupClaimed: row.cleanup_claimed,
-      assetTombstoned: row.asset_tombstoned,
+      ...databaseInspection,
       stagingObjectExists,
     };
   } catch {

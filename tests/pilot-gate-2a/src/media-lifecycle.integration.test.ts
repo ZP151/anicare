@@ -12,7 +12,7 @@ import {
 } from './actors.js';
 import { readLocalStackEnvironment, type LocalStackEnvironment } from './environment.js';
 import { createSyntheticScenario, destroySyntheticScenario } from './fixtures.js';
-import { isExactMediaBoundaryFailure } from './media-failure-shape.js';
+import { isExactActorResultFailure } from './media-failure-shape.js';
 import {
   controlMediaLifecycleTimestamps,
   inspectMediaLifecycle,
@@ -85,13 +85,15 @@ async function invokeCleanup(env: LocalStackEnvironment): Promise<CleanupResult>
 }
 
 function strangerDeleteDenied(value: ActorResult): boolean {
-  return isExactMediaBoundaryFailure(value, {
+  return isExactActorResultFailure(value, {
     stage: 'delete', status: 403, code: 'media_not_found_or_forbidden',
   });
 }
 
 function signedReplayFailed(value: ActorResult): boolean {
-  return !value.ok && value.stage === 'upload' && value.kind === 'http' && value.status !== null;
+  return isExactActorResultFailure(value, {
+    stage: 'upload', status: 409, code: 'storage_upload_failed',
+  });
 }
 
 describe('media expiry, deletion and cleanup lifecycle', () => {
@@ -135,17 +137,14 @@ describe('media expiry, deletion and cleanup lifecycle', () => {
       });
       expect(strangerDeleteDenied(await deleteMedia(scenario.stranger, reservation.jobId, env))).toBe(true);
 
-      expect(await finalizeMedia(scenario.owner, {
+      const expiredFinalization = await finalizeMedia(scenario.owner, {
         sightingId: scenario.ownerSightingId,
         mediaId,
         sha256: jpeg.sha256,
-      }, env)).toEqual({
-        ok: false,
-        stage: 'finalize',
-        kind: 'http',
-        status: 409,
-        code: 'media_finalization_conflict',
-      });
+      }, env);
+      expect(isExactActorResultFailure(expiredFinalization, {
+        stage: 'finalize', status: 409, code: 'media_finalization_conflict',
+      })).toBe(true);
 
       const firstCleanup = await invokeCleanup(env);
       expect(firstCleanup.processed).toBeGreaterThan(0);

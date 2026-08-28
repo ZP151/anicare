@@ -273,6 +273,29 @@ describe('owner media actors', () => {
     expect(new Uint8Array(init?.body as ArrayBuffer)).toEqual(bytes);
   });
 
+  it('normalizes a non-upsert Storage conflict to the pinned upload failure', async () => {
+    const env = localEnvironment();
+    const capability = reservation(env);
+    const payloadMarker = ['storage', 'conflict', randomUUID()].join('-');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      statusCode: '409',
+      error: 'Conflict',
+      message: payloadMarker,
+    }), { status: 409 })));
+
+    const result = await putSignedMedia(capability, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    expect(result).toEqual({
+      ok: false,
+      stage: 'upload',
+      kind: 'http',
+      status: 409,
+      code: 'storage_upload_failed',
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized.includes(payloadMarker)).toBe(false);
+    expect(serialized.includes(capability.token)).toBe(false);
+  });
+
   it('uses only the validated credential usability for upload preflight', async () => {
     const env = localEnvironment();
     const capability = reservation(env);
