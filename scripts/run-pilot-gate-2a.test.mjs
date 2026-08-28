@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -348,13 +349,14 @@ test('stops the serialized integration group at the first failed file and record
   await clearDiagnostic();
 });
 
-test('uses one monotonic integration deadline and refuses to start a file after the budget is exhausted', async () => {
+test('uses the module monotonic clock and refuses to start a file after the budget is exhausted', async (t) => {
   await clearDiagnostic();
   const root = path.resolve(import.meta.dirname, '..');
   const processes = fakeProcesses();
   const monotonicTimes = [0, 0, 15 * 60_000];
   let nowCalls = 0;
-  const now = () => monotonicTimes[Math.min(nowCalls++, monotonicTimes.length - 1)];
+  t.mock.method(performance, 'now', () => monotonicTimes[Math.min(nowCalls++, monotonicTimes.length - 1)]);
+  const callerClock = () => -999_999_999;
 
   await assert.rejects(
     runPilotGate2A({
@@ -362,7 +364,7 @@ test('uses one monotonic integration deadline and refuses to start a file after 
       processAdapter: processes.adapter,
       outputAdapter: outputRecorder().adapter,
       parentEnvironment: parentEnvironment(),
-      now,
+      now: callerClock,
     }),
     /Pilot Gate 2A failed at integration-media-happy-path/,
   );

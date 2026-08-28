@@ -707,13 +707,16 @@ function integrationStageForFile(testPath) {
   return `integration-${basename}`;
 }
 
+function monotonicNow() {
+  return performance.now();
+}
+
 export async function runPilotGate2A({
   repoRoot,
   processAdapter = createSystemProcessAdapter(),
   outputAdapter,
   parentEnvironment = process.env,
   signal,
-  now = () => performance.now(),
 }) {
   const output = outputAdapter ?? defaultOutputAdapter(parentEnvironment);
   let stage = 'project-validation';
@@ -822,11 +825,11 @@ export async function runPilotGate2A({
     assertEdgeProcessRunning(edgeProcess);
     output.info('Pilot Gate 2A readiness passed.');
 
-    const integrationDeadline = now() + STAGE_TIMEOUTS.integration;
+    const integrationDeadline = monotonicNow() + STAGE_TIMEOUTS.integration;
     const integrationFiles = inputs.integrationTests.filter((testPath) => testPath !== READINESS_TEST);
     for (const integrationFile of integrationFiles) {
       stage = integrationStageForFile(integrationFile);
-      const remaining = integrationDeadline - now();
+      const remaining = integrationDeadline - monotonicNow();
       if (remaining <= 0) throw new StageFailure(stage);
       await capturedStage(
         processAdapter,
