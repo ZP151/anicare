@@ -93,11 +93,13 @@ export async function fetchWithTimeout(
     );
     const body = responseBody(response);
     const bytes = await settleBeforeAbort(body.read, controller.signal, body.cancel);
-    return new Response(bytes.byteLength === 0 ? null : (bytes as unknown as BodyInit), {
+    const buffered = new Response(bytes.byteLength === 0 ? null : (bytes as unknown as BodyInit), {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
     });
+    Object.defineProperty(buffered, 'redirected', { value: response.redirected });
+    return buffered;
   } finally {
     clearTimeout(timeout);
     callerSignal?.removeEventListener('abort', abortForCaller);
