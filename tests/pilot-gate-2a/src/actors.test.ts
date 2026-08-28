@@ -184,6 +184,27 @@ describe('owner media actors', () => {
     });
   });
 
+  it('rejects a stable non-UUID reservation job before retaining its capability', async () => {
+    const env = localEnvironment();
+    const owner = actor();
+    const response = reservationResponse(env);
+    const stableJobId = ['job', '12345678'].join('-');
+    response.body.jobId = stableJobId;
+    const nonUuidUrl = new URL(
+      `/storage/v1/object/upload/sign/media-staging/jobs/${stableJobId}.jpg`,
+      env.apiUrl,
+    );
+    nonUuidUrl.searchParams.set('token', response.body.upload.token);
+    response.body.upload.signedUrl = nonUuidUrl.toString();
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(response.body), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await reservationFailure(reserveMedia(owner, reserveInput(), env))).toEqual({
+      stage: 'reserve', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['a malformed digest', () => ({ ...reserveInput(), sha256: 'g'.repeat(64) })],
     ['an oversized synthetic receipt', () => ({
@@ -240,17 +261,15 @@ describe('owner media actors', () => {
     const expectedUploadUrl = `${capability.origin}/storage/v1/object/upload/sign/media-staging/${capability.path}` +
       `?token=${encodeURIComponent(capability.token)}`;
     expect(url === expectedUploadUrl).toBe(true);
-    expect(init).toMatchObject({
-      method: 'PUT',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'image/jpeg',
-        'x-upsert': 'false',
-        'Cache-Control': 'no-cache',
-      },
+    expect({ method: init?.method, redirect: init?.redirect, cache: init?.cache }).toEqual({
+      method: 'PUT', redirect: 'error', cache: 'no-store',
     });
-    expect(init?.headers).not.toHaveProperty('Authorization');
+    const headers = new Headers(init?.headers);
+    expect([...headers.keys()].sort()).toEqual(['cache-control', 'content-type', 'x-upsert']);
+    expect(headers.has('authorization')).toBe(false);
+    expect(headers.get('cache-control')).toBe('no-cache');
+    expect(headers.get('content-type')).toBe('image/jpeg');
+    expect(headers.get('x-upsert')).toBe('false');
     expect(new Uint8Array(init?.body as ArrayBuffer)).toEqual(bytes);
   });
 
@@ -280,6 +299,25 @@ describe('owner media actors', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(putSignedMedia(unsafe, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]))).resolves.toEqual({
+      ok: false, stage: 'upload', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a forged stable non-UUID job before upload I/O', async () => {
+    const env = localEnvironment();
+    const stableJobId = ['job', '12345678'].join('-');
+    const capability = {
+      ...reservation(env),
+      jobId: stableJobId,
+      path: `jobs/${stableJobId}.jpg`,
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      Key: ['media-staging', capability.path].join('/'),
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(putSignedMedia(capability, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]))).resolves.toEqual({
       ok: false, stage: 'upload', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -352,6 +390,27 @@ describe('owner media actors', () => {
       ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
     await expect(deleteMedia(owner, ['not', 'a', 'uuid'].join('-'), env)).resolves.toEqual({
+      ok: false, stage: 'delete', kind: 'invalid_response', status: null, code: 'invalid_response',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an object coercible to a UUID', { toString: () => UUID_ASSET }],
+    ['an object whose string coercion throws', { toString: () => { throw new Error('coercion_failed'); } }],
+  ])('rejects %s as a deletion ID before string coercion or I/O', async (_name, value) => {
+    const env = localEnvironment();
+    const owner = actor();
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ deleted: true }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    let outcome: unknown;
+    try {
+      outcome = await deleteMedia(owner, value as unknown as string, env);
+    } catch {
+      outcome = 'delete_threw';
+    }
+
+    expect(outcome).toEqual({
       ok: false, stage: 'delete', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
     expect(fetchMock).not.toHaveBeenCalled();

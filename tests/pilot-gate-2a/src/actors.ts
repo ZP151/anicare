@@ -133,7 +133,7 @@ function finalizationRequest(input: FinalizeInput): string | null {
 
 function deletionRequest(mediaAssetId: string): string | null {
   const input: unknown = { mediaAssetId };
-  return exactObject(input, ['mediaAssetId']) && UUID.test(String(input.mediaAssetId))
+  return exactObject(input, ['mediaAssetId']) && typeof input.mediaAssetId === 'string' && UUID.test(input.mediaAssetId)
     ? serializeRequest({ mediaId: input.mediaAssetId })
     : null;
 }
@@ -196,6 +196,9 @@ export async function reserveMedia(
       now: new Date(),
       insecureOrigins: [env.allowedOrigin],
     });
+    if (!UUID.test(capability.jobId) || capability.path !== `jobs/${capability.jobId}.jpg`) {
+      throw new Error('invalid_media_reservation_response');
+    }
     const origin = parseTrustedSupabaseOrigin(env.apiUrl, [env.allowedOrigin]);
     return { ...capability, mediaId: input.mediaId, origin };
   } catch {
@@ -205,7 +208,7 @@ export async function reserveMedia(
 
 function canonicalUploadUrl(reservation: Reservation): string | null {
   if (!exactObject(reservation, ['jobId', 'path', 'token', 'usableUntil', 'mediaId', 'origin']) ||
-      !isStableMediaId(reservation.jobId) || !isStableMediaId(reservation.mediaId) ||
+      !UUID.test(reservation.jobId) || !isStableMediaId(reservation.mediaId) ||
       reservation.path !== `jobs/${reservation.jobId}.jpg` ||
       typeof reservation.token !== 'string' || reservation.token.length < 1 ||
       reservation.token.length > 8192 || /[\r\n]/.test(reservation.token)) return null;
