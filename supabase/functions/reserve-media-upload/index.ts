@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   canonicalizeTimestamp,
   deriveConservativeUploadCredentialUsableUntil,
+  rewriteVerifiedSignedUploadUrl,
 } from '../_shared/media-staging-lifecycle.ts';
 
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
@@ -112,7 +113,10 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) return json(request, { error: 'service_unavailable' }, 503);
+  const mediaAllowedOrigin = Deno.env.get('MEDIA_ALLOWED_ORIGIN');
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaAllowedOrigin) {
+    return json(request, { error: 'service_unavailable' }, 503);
+  }
 
   let payload: z.infer<typeof requestSchema>;
   try {
@@ -172,6 +176,16 @@ Deno.serve(async (request) => {
   if (signedUploadError || !signedUpload?.signedUrl || !signedUpload.token) {
     return json(request, { error: 'service_unavailable' }, 503);
   }
+  const clientSignedUploadUrl = rewriteVerifiedSignedUploadUrl({
+    internalSupabaseUrl: supabaseUrl,
+    allowedOrigin: mediaAllowedOrigin,
+    objectPath: row.object_path,
+    signedUrl: signedUpload.signedUrl,
+    token: signedUpload.token,
+  });
+  if (clientSignedUploadUrl === null) {
+    return json(request, { error: 'service_unavailable' }, 503);
+  }
 
   // Storage's fixed token lifetime starts during this call but the API does
   // not report the precise mint instant. The pre-call lower bound is safe to
@@ -193,6 +207,6 @@ Deno.serve(async (request) => {
     // This response is deliberately this request's pre-mint bound, not the
     // monotonic cleanup watermark returned by the recording RPC.
     uploadCredentialUsableUntil,
-    upload: { signedUrl: signedUpload.signedUrl, token: signedUpload.token },
+    upload: { signedUrl: clientSignedUploadUrl, token: signedUpload.token },
   }, 201);
 });

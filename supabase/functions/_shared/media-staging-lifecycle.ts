@@ -5,6 +5,7 @@ export const UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
 export const CLEANUP_LEASE_MS = 5 * 60 * 1000;
 
 const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
+const CANONICAL_STAGING_OBJECT_PATH = /^jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
 
 export type CleanupCandidate = Readonly<{
   id: string;
@@ -17,6 +18,47 @@ export type CleanupCandidate = Readonly<{
 }>;
 
 export type CleanupAction = 'none' | 'remove_and_retry' | 'defer_delete' | 'remove_and_purge';
+
+type SignedUploadUrlInput = Readonly<{
+  internalSupabaseUrl: string;
+  allowedOrigin: string;
+  objectPath: string;
+  signedUrl: string;
+  token: string;
+}>;
+
+function canonicalHttpOrigin(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.username === '' && parsed.password === '' && parsed.pathname === '/' &&
+      parsed.search === '' && parsed.hash === '' && value === parsed.origin
+      ? parsed.origin
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Storage derives signed URLs from the internal service origin used by Edge.
+ * Verify that exact internal capability before exposing the same path and
+ * query through the separately configured client-facing origin.
+ */
+export function rewriteVerifiedSignedUploadUrl(input: SignedUploadUrlInput): string | null {
+  const internalOrigin = canonicalHttpOrigin(input.internalSupabaseUrl);
+  const clientOrigin = canonicalHttpOrigin(input.allowedOrigin);
+  if (internalOrigin === null || clientOrigin === null ||
+      typeof input.objectPath !== 'string' || !CANONICAL_STAGING_OBJECT_PATH.test(input.objectPath) ||
+      typeof input.token !== 'string' || input.token.length < 1 || input.token.length > 8192 ||
+      /[\r\n\0]/.test(input.token) || typeof input.signedUrl !== 'string') return null;
+
+  const uploadPath = `/storage/v1/object/upload/sign/media-staging/${input.objectPath}`;
+  const query = `?token=${encodeURIComponent(input.token)}`;
+  if (input.signedUrl !== `${internalOrigin}${uploadPath}${query}`) return null;
+  return `${clientOrigin}${uploadPath}${query}`;
+}
 
 /**
  * Storage only tells us after minting; start the two-hour window immediately

@@ -6,6 +6,7 @@ import {
   cleanupAction,
   deriveConservativeUploadCredentialUsableUntil,
   extendCredentialUsableUntilWatermark,
+  rewriteVerifiedSignedUploadUrl,
   selectFairCleanupJobs,
   type CleanupCandidate,
 } from './media-staging-lifecycle.js';
@@ -38,6 +39,80 @@ describe('media staging lifecycle', () => {
     expect(canonicalizeTimestamp('2026-08-27T12:34:56.123456+00:00'))
       .toBe('2026-08-27T12:34:56.123Z');
     expect(canonicalizeTimestamp('2026-08-27T12:34:56.1234567+00:00')).toBeNull();
+  });
+
+  it('rewrites only a verified internal Storage upload URL to the configured public origin', () => {
+    const jobId = '11111111-2222-4333-8444-555555555555';
+    const objectPath = `jobs/${jobId}.jpg`;
+    const token = 'synthetic-upload-capability%scope';
+    const internalSupabaseUrl = 'http://kong:8000';
+    const allowedOrigin = 'http://127.0.0.1:54321';
+    const expectedPath = `/storage/v1/object/upload/sign/media-staging/${objectPath}`;
+    const rewritten = rewriteVerifiedSignedUploadUrl({
+      internalSupabaseUrl,
+      allowedOrigin,
+      objectPath,
+      signedUrl: `${internalSupabaseUrl}${expectedPath}?token=${encodeURIComponent(token)}`,
+      token,
+    });
+
+    expect(rewritten !== null).toBe(true);
+    if (rewritten === null) return;
+    const parsed = new URL(rewritten);
+    expect(parsed.origin).toBe(allowedOrigin);
+    expect(parsed.pathname).toBe(expectedPath);
+    expect(parsed.searchParams.size).toBe(1);
+    expect(parsed.searchParams.get('token') === token).toBe(true);
+    expect(rewritten === `${allowedOrigin}${expectedPath}?token=${encodeURIComponent(token)}`).toBe(true);
+  });
+
+  it.each([
+    ['untrusted source origin', 'http://untrusted.invalid:8000/storage/v1/object/upload/sign/media-staging/jobs/11111111-2222-4333-8444-555555555555.jpg?token=synthetic-upload-capability_123'],
+    ['wrong object path', 'http://kong:8000/storage/v1/object/upload/sign/media-staging/jobs/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.jpg?token=synthetic-upload-capability_123'],
+    ['additional query parameter', 'http://kong:8000/storage/v1/object/upload/sign/media-staging/jobs/11111111-2222-4333-8444-555555555555.jpg?token=synthetic-upload-capability_123&download=true'],
+    ['different capability', 'http://kong:8000/storage/v1/object/upload/sign/media-staging/jobs/11111111-2222-4333-8444-555555555555.jpg?token=different-capability'],
+    ['fragment', 'http://kong:8000/storage/v1/object/upload/sign/media-staging/jobs/11111111-2222-4333-8444-555555555555.jpg?token=synthetic-upload-capability_123#fragment'],
+    ['relative URL', '/storage/v1/object/upload/sign/media-staging/jobs/11111111-2222-4333-8444-555555555555.jpg?token=synthetic-upload-capability_123'],
+  ])('rejects a signed upload URL with %s', (_case, signedUrl) => {
+    expect(rewriteVerifiedSignedUploadUrl({
+      internalSupabaseUrl: 'http://kong:8000',
+      allowedOrigin: 'http://127.0.0.1:54321',
+      objectPath: 'jobs/11111111-2222-4333-8444-555555555555.jpg',
+      signedUrl,
+      token: 'synthetic-upload-capability_123',
+    })).toBeNull();
+  });
+
+  it.each([
+    ['internal path', 'http://kong:8000/rest/v1', 'http://127.0.0.1:54321'],
+    ['internal credentials', 'http://user@kong:8000', 'http://127.0.0.1:54321'],
+    ['public trailing slash', 'http://kong:8000', 'http://127.0.0.1:54321/'],
+    ['public query', 'http://kong:8000', 'http://127.0.0.1:54321?source=internal'],
+    ['unsupported public protocol', 'http://kong:8000', 'ftp://127.0.0.1:54321'],
+  ])('rejects a non-canonical %s origin', (_case, internalSupabaseUrl, allowedOrigin) => {
+    const objectPath = 'jobs/11111111-2222-4333-8444-555555555555.jpg';
+    const token = 'synthetic-upload-capability_123';
+    expect(rewriteVerifiedSignedUploadUrl({
+      internalSupabaseUrl,
+      allowedOrigin,
+      objectPath,
+      signedUrl: `http://kong:8000/storage/v1/object/upload/sign/media-staging/${objectPath}?token=${token}`,
+      token,
+    })).toBeNull();
+  });
+
+  it.each([
+    ['non-canonical object path', 'jobs/../outside.jpg', 'synthetic-upload-capability_123'],
+    ['empty capability', 'jobs/11111111-2222-4333-8444-555555555555.jpg', ''],
+    ['control character in capability', 'jobs/11111111-2222-4333-8444-555555555555.jpg', 'synthetic\ncapability'],
+  ])('rejects a %s even when the signed URL otherwise agrees', (_case, objectPath, token) => {
+    expect(rewriteVerifiedSignedUploadUrl({
+      internalSupabaseUrl: 'http://kong:8000',
+      allowedOrigin: 'http://127.0.0.1:54321',
+      objectPath,
+      signedUrl: `http://kong:8000/storage/v1/object/upload/sign/media-staging/${objectPath}?token=${encodeURIComponent(token)}`,
+      token,
+    })).toBeNull();
   });
 
   it('returns each overlapping mint its own conservative bound while the cleanup watermark only grows', () => {
