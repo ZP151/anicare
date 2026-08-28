@@ -589,6 +589,39 @@ export function sanitizeRuntimeOutput(value, knownSecrets = []) {
   return output;
 }
 
+export function extractPgTapFailureMarkers(value, knownSecrets = []) {
+  const secrets = normalizeKnownSecrets(knownSecrets);
+  const source = typeof value === 'string' ? value : '';
+  const markers = [];
+  const seen = new Set();
+  const append = (marker) => {
+    if (markers.length >= 24 || seen.has(marker)) return;
+    seen.add(marker);
+    markers.push(marker);
+  };
+
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+    const file = line.match(/(?:^|[\\/])([0-9]{3}_[a-z0-9_]+\.sql)\b/i)?.[1];
+    if (file) append(`pgtap_file=${file.toLowerCase()}`);
+
+    const assertionIndex = line.toLowerCase().indexOf('not ok ');
+    if (assertionIndex >= 0) {
+      const assertion = sanitizeLine(line.slice(assertionIndex), secrets);
+      if (assertion && assertion !== '[redacted]' && /^not ok \d{1,4}(?: - .+)?$/i.test(assertion)) {
+        append(`pgtap_assertion=${assertion}`);
+      }
+    }
+
+    const summaryMatch = line.match(/\bFailed tests?\s+\d{1,4}(?:-\d{1,4})?\b/i);
+    if (summaryMatch) {
+      const summary = sanitizeLine(summaryMatch[0], secrets);
+      if (summary && summary !== '[redacted]') append(`pgtap_summary=${summary}`);
+    }
+  }
+  return markers;
+}
+
 export function failureDiagnosticPath() {
   return path.join(tmpdir(), FAILURE_DIAGNOSTIC_FILENAME);
 }
@@ -623,6 +656,7 @@ function buildFailureDiagnostic(failure, edgeSnapshot, secrets) {
     : '';
   const lines = [
     `stage=${failure.stage}`,
+    ...(failure.stage === 'pgtap' ? extractPgTapFailureMarkers(childOutput, secrets) : []),
     `child_output=${captured ? 'sanitized' : 'not-retained'}`,
     sanitizeRuntimeOutput(childOutput, secrets),
     `edge_output=${edgeSnapshot ? 'sanitized' : 'not-started'}`,

@@ -13,6 +13,7 @@ import {
   removePilotGate2AFailureDiagnostic,
   runPilotGate2A,
   sanitizeRuntimeOutput,
+  extractPgTapFailureMarkers,
   stopPilotGate2AStack,
 } from './run-pilot-gate-2a.mjs';
 
@@ -567,6 +568,26 @@ test('runtime sanitizer redacts every canonical UUID shape including v7, Nil, an
 
   for (const uuid of canonicalUuids) assert.equal(sanitized.includes(uuid), false);
   assert.deepEqual(sanitized.split('\n'), canonicalUuids.map(() => '[redacted]'));
+});
+
+test('pgTAP diagnostics retain only bounded source and failed assertion markers', () => {
+  const output = [
+    '/home/runner/work/anicare/anicare/supabase/tests/011_identity_review_control_plane.sql ..',
+    'not ok 27 - reviewer account erasure anonymizes the reviewer',
+    'detail 11111111-2222-4333-8444-555555555555 latitude=1.3521 token=private',
+    'Failed test 27',
+  ].join('\n');
+
+  const markers = extractPgTapFailureMarkers(output);
+
+  assert.deepEqual(markers, [
+    'pgtap_file=011_identity_review_control_plane.sql',
+    'pgtap_assertion=not ok 27 - reviewer account erasure anonymizes the reviewer',
+    'pgtap_summary=Failed test 27',
+  ]);
+  assert.equal(markers.join('\n').includes('11111111-2222-4333-8444-555555555555'), false);
+  assert.equal(markers.join('\n').includes('1.3521'), false);
+  assert.equal(markers.join('\n').includes('private'), false);
 });
 
 test('real abort kills a TERM-resistant descendant tree promptly without waiting for inherited pipes to close', async (t) => {
