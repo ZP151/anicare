@@ -26,7 +26,7 @@ That evidence does not prove that Auth, Edge Runtime, Storage and Postgres compo
 1. two independent confirmed Auth users can obtain and use real access tokens;
 2. an owning adult can reserve, upload and finalize a policy-valid JPEG;
 3. another authenticated adult cannot act on the owner's sighting, reservation or media;
-4. signed upload capability replay, expiry and non-upsert behavior are enforced by the composed stack;
+4. signed upload capability replay, reservation expiry, recorded token-lifetime deferral and non-upsert behavior are enforced by the composed stack;
 5. reservation, finalization and deletion races converge on one valid database outcome;
 6. deletion and staging cleanup coordinate with outstanding signed capabilities without recreating deleted media.
 
@@ -35,7 +35,7 @@ That evidence does not prove that Auth, Edge Runtime, Storage and Postgres compo
 - All people, sightings, IDs, receipts and images are synthetic and generated per run.
 - The JPEG fixture is deterministic, contains no EXIF or location metadata, and is small enough for source control or deterministic in-memory construction.
 - Actor operations use only that actor's access token and public HTTP endpoints. Service-role access is confined to fixture setup, bounded state inspection and clock-state manipulation that production clients cannot perform.
-- The service-role key, user passwords, access tokens, signed URLs, upload tokens, precise coordinates and database connection strings must never be printed, persisted as artifacts, snapshotted, or written to Git.
+- The service-role key, user passwords, access tokens, signed URLs, upload tokens, precise coordinates and database connection strings must never be printed, persisted to disk/artifacts, snapshotted, or written to Git.
 - No test-only production RPC, RLS policy, Edge route or environment-triggered authorization bypass is allowed.
 - The harness must assert database state through stable semantic predicates rather than retaining response bodies containing capabilities.
 - Every CI run tears down the local stack, even after a failing assertion. Teardown targets only the repository-scoped Supabase project.
@@ -45,7 +45,7 @@ That evidence does not prove that Auth, Edge Runtime, Storage and Postgres compo
 
 ### 1. Dedicated integration workspace
 
-Add a small Node 22 workspace under `tests/pilot-gate-2a` with its own package metadata, strict TypeScript configuration and Vitest integration suite. Reuse the repository's existing `@supabase/supabase-js` version rather than introducing an HTTP abstraction or a second client library.
+Add a small Node 22 workspace under `tests/pilot-gate-2a` with its own package metadata, strict TypeScript configuration and separate Vitest unit/integration configurations. Ordinary repository tests run only the unit configuration. Integration files run serially against the shared disposable stack; concurrency exists only inside explicit barrier scenarios. Reuse the repository's existing `@supabase/supabase-js` version rather than introducing an HTTP abstraction or a second client library.
 
 The workspace contains four boundaries:
 
@@ -61,15 +61,15 @@ Actor results are normalized to status and bounded error codes. Raw headers, bod
 Extend the existing `database-contracts` job after pgTAP and lint:
 
 1. start the pinned Supabase `2.84.2` local stack;
-2. obtain local API URL, anonymous key, service-role key and database URL from `supabase status` in a masked CI step;
-3. provide only those values plus a fixed test-only location-encryption key and allowed origin to the Edge Runtime;
+2. capture `supabase start` and `supabase status` output without forwarding it, parse local API URL, anonymous key, service-role key and database URL in process memory, then register CI masks before invoking any downstream command;
+3. provide credentials to the harness only through the same process environment; write only the fixed synthetic location-encryption key and allowed origin to the temporary Edge env file;
 4. serve all repository Edge functions through the local Edge Runtime;
 5. wait on a bounded readiness probe;
 6. run the Gate 2A integration workspace;
 7. upload only sanitized runtime logs on failure if they contain no headers, secrets, URLs with query strings or request bodies;
 8. stop the repository-scoped local stack in an unconditional final step.
 
-The harness must refuse non-loopback Supabase URLs by default. A separate, explicit future command will be required for hosted Gate 2B; the Gate 2A command cannot accidentally point at a remote project.
+The harness must refuse non-loopback Supabase URLs by default. HTTP API/origin URLs must contain no userinfo. The local database URL necessarily contains credentials, so it is accepted only when its scheme, expected local userinfo, loopback host, port and database name match the disposable stack exactly; it is never stringified or echoed. A separate, explicit future command will be required for hosted Gate 2B; the Gate 2A command cannot accidentally point at a remote project.
 
 ### 3. Synthetic identities and sightings
 
@@ -99,25 +99,25 @@ The mandatory suite covers:
 
 - user B cannot reserve for user A's sighting;
 - user B cannot finalize or delete user A's media;
-- a media ID reserved by one user cannot be rebound to another user or sighting;
+- a media identity `(uploader_id, client_media_id)` cannot be rebound to another sighting or upload job; another owner may independently reuse the same client media ID on their own sighting;
 - a second signed PUT to the same non-upsert path fails and leaves the original object unchanged;
 - a finalized capability cannot create a second asset;
 - a forced-expired reservation cannot be finalized;
-- a forced-expired upload credential is handled by cleanup, and replay after deletion/cleanup cannot restore a live asset;
+- deletion remains deferred while an actually minted upload credential may still be valid, and replay cannot overwrite its retained non-upsert object;
 - direct anonymous and authenticated reads of private staging/final media are denied.
 
-Expiry is induced only by the privileged test control plane updating existing time columns in the disposable local database. The production API remains unaware of test clocks.
+Reservation expiry is induced only by the privileged test control plane updating existing database time columns. That does not expire an already minted Storage JWT: `upload_token_expires_at` is a conservative cleanup watermark, not the Storage service's signing clock. Gate 2A therefore does not delete the retained object early and does not claim real post-token-expiry replay evidence. A true post-expiry cleanup/replay test requires either waiting beyond the fixed Storage token lifetime or a separately approved Storage clock/token control in a later gate.
 
 ### 6. Concurrency and convergence
 
 Use synchronized `Promise.allSettled` starts for small, bounded races:
 
-- two reserves for the same media identity;
+- two reserves for the same media identity, both of which may idempotently return the same job/path with independently minted signed tokens;
 - two finalizations for the same uploaded object;
-- delete racing with a repeated finalization;
+- delete racing with a repeated finalization, which must converge to a tombstoned asset and `deletion_pending` job rather than an active quarantined asset;
 - two cleanup invocations claiming the same expired staging job.
 
-Assertions focus on convergence: at most one live job/asset for the logical media identity, no owner change, no duplicate finalized asset, valid terminal job state, and no public object exposure. Exact winning request order is intentionally unspecified.
+Assertions focus on convergence: exactly one job/path for the logical media identity, at most one finalized asset, no owner change, no duplicate finalized asset, the scenario-specific terminal job state, and no public object exposure. Exact winning request order is intentionally unspecified.
 
 ### 7. Failure diagnostics
 
@@ -144,7 +144,7 @@ Local source verification must include the integration workspace's lint, typeche
 - A fresh CI runner starts the local Supabase stack and all repository Edge functions without persistent secrets.
 - Two confirmed synthetic adults obtain distinct sessions and remain isolated throughout the suite.
 - Real reserve, signed PUT, finalize and delete/cleanup flows succeed for the owner and fail closed for the non-owner.
-- Replay, expiry, idempotency and four bounded race scenarios converge without duplicate assets, owner drift or public object exposure.
+- Replay, reservation expiry, token-lifetime deletion deferral, idempotency and four bounded race scenarios converge without duplicate assets, owner drift or public object exposure.
 - Test-only privileged access adds no production endpoint, policy, RPC or runtime branch.
 - Logs and artifacts contain no access token, service-role key, signed token, signed URL, precise coordinate, raw request body or unredacted Storage path.
 - The existing pgTAP, Deno, mobile, admin, AI and repository-wide verification gates remain green.
@@ -154,4 +154,4 @@ Local source verification must include the integration workspace's lint, typeche
 
 Land reviewable commits in this order: harness skeleton and redaction guard, local-stack/auth fixtures, owner flow, isolation/replay/expiry, concurrency/cleanup, CI orchestration and documentation. The integration workspace is additive; if CI orchestration is unstable, revert only the orchestration commit while retaining independently testable harness code. Never resolve flakiness by weakening authorization or accepting multiple terminal database outcomes.
 
-Promotion to Pilot Gate 2B requires this suite to pass on a fresh GitHub Actions runner and a separately approved hosted-test-data and secrets plan. Promotion to physical-device testing still requires EAS authentication, controlled credentials, registered devices and a user-approved test protocol.
+Promotion to Pilot Gate 2B requires this suite to pass on a fresh GitHub Actions runner and a separately approved hosted-test-data and secrets plan. Real post-Storage-token-expiry cleanup/replay evidence remains open until a two-hour wait or approved clock/token control is available. Promotion to physical-device testing still requires EAS authentication, controlled credentials, registered devices and a user-approved test protocol.
