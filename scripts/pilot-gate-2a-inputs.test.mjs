@@ -230,7 +230,7 @@ test('an empty setup file cannot satisfy the mandatory global fetch-boundary ins
   );
 });
 
-test('builds explicit readiness and complete-suite arguments from discovered files', () => {
+test('builds explicit readiness and one-file integration arguments without repeating readiness', () => {
   const integrationTests = [
     'tests/pilot-gate-2a/src/media-a.integration.test.ts',
     'tests/pilot-gate-2a/src/media-b.integration.test.ts',
@@ -249,8 +249,21 @@ test('builds explicit readiness and complete-suite arguments from discovered fil
     '--config', 'vitest.integration.config.ts',
     'src/media-a.integration.test.ts',
     'src/media-b.integration.test.ts',
-    'src/readiness.integration.test.ts',
   ]);
+  assert.deepEqual(buildPilotGate2ATestArgs(integrationTests, {
+    integrationFile: 'tests/pilot-gate-2a/src/media-b.integration.test.ts',
+  }), [
+    '--filter', '@animalhelper/pilot-gate-2a',
+    'exec', 'vitest', 'run',
+    '--config', 'vitest.integration.config.ts',
+    'src/media-b.integration.test.ts',
+  ]);
+  assert.throws(
+    () => buildPilotGate2ATestArgs(integrationTests, {
+      integrationFile: 'tests/pilot-gate-2a/src/readiness.integration.test.ts',
+    }),
+    /readiness test cannot be included in full integration/,
+  );
 });
 
 test('discovers the complete repository Gate 2A source contract', () => {

@@ -74,7 +74,9 @@ function commandStage(command, args) {
     const integrationFiles = args.filter((value) => value.endsWith('.integration.test.ts'));
     return integrationFiles.length === 1 && integrationFiles[0] === 'src/readiness.integration.test.ts'
       ? 'readiness'
-      : 'integration';
+      : integrationFiles.length === 1
+        ? `integration-${path.basename(integrationFiles[0], '.integration.test.ts')}`
+        : 'integration';
   }
   return 'unknown';
 }
@@ -89,6 +91,7 @@ function fakeProcesses({
   failedStderr = '',
   edgeStdout = 'Edge runtime ready\n',
   edgeStderr = '',
+  integrationDelayMs = 0,
 } = {}) {
   const calls = [];
   const observations = { edgeEnvContent: null, edgeTempEntries: null, edgeEnvPath: null };
@@ -101,6 +104,9 @@ function fakeProcesses({
       async capture(command, args, options) {
         const stage = commandStage(command, args);
         calls.push({ kind: 'capture', stage, command, args: [...args], options: { ...options, env: { ...options.env } } });
+        if (stage.startsWith('integration-') && integrationDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, integrationDelayMs));
+        }
         if (stage === 'start') {
           return { exitCode: failAt === stage ? 1 : 0, stdout: startStdout, stderr: startStderr, truncated: false };
         }
@@ -207,7 +213,7 @@ function forceKillFixtureTree(parentPid, grandchildPid) {
 test('captures startup/status, masks status values, writes only custom Edge env, and runs children with minimum environments', async () => {
   await clearDiagnostic();
   const root = path.resolve(import.meta.dirname, '..');
-  const processes = fakeProcesses();
+  const processes = fakeProcesses({ integrationDelayMs: 2 });
   const output = outputRecorder();
 
   await runPilotGate2A({
@@ -253,10 +259,31 @@ test('captures startup/status, masks status values, writes only custom Edge env,
     'capture:lint',
     'start:edge',
     'capture:readiness',
-    'capture:integration',
+    'capture:integration-media-concurrency',
+    'capture:integration-media-happy-path',
+    'capture:integration-media-isolation',
+    'capture:integration-media-lifecycle',
+    'capture:integration-media-replay',
     'stop-child:edge',
     'capture:stop',
   ]);
+  const integrationCalls = processes.calls.filter(({ stage }) => stage.startsWith('integration-'));
+  assert.deepEqual(
+    integrationCalls.map(({ args }) => args.at(-1)),
+    [
+      'src/media-concurrency.integration.test.ts',
+      'src/media-happy-path.integration.test.ts',
+      'src/media-isolation.integration.test.ts',
+      'src/media-lifecycle.integration.test.ts',
+      'src/media-replay.integration.test.ts',
+    ],
+  );
+  assert.equal(integrationCalls.some(({ args }) => args.includes('src/readiness.integration.test.ts')), false);
+  assert.ok(integrationCalls.every(({ args }) => args.filter((value) => value.endsWith('.integration.test.ts')).length === 1));
+  assert.ok(integrationCalls.every(({ options }) => options.timeoutMs <= 15 * 60_000));
+  for (let index = 1; index < integrationCalls.length; index += 1) {
+    assert.ok(integrationCalls[index].options.timeoutMs < integrationCalls[index - 1].options.timeoutMs);
+  }
   const statusCall = processes.calls.find(({ stage }) => stage === 'status');
   assert.deepEqual(statusCall.args, ['status', '-o', 'env']);
   const stopCall = processes.calls.find(({ stage }) => stage === 'stop');
@@ -271,7 +298,14 @@ test('captures startup/status, masks status values, writes only custom Edge env,
     assert.equal(call.options.env.DATABASE_URL, undefined);
     assert.equal(call.options.env.PATH, '/synthetic/bin');
   }
-  for (const stage of ['readiness', 'integration']) {
+  for (const stage of [
+    'readiness',
+    'integration-media-concurrency',
+    'integration-media-happy-path',
+    'integration-media-isolation',
+    'integration-media-lifecycle',
+    'integration-media-replay',
+  ]) {
     const call = processes.calls.find((candidate) => candidate.stage === stage);
     assert.equal(call.options.env.UNRELATED_SECRET, undefined);
     assert.equal(call.options.env.SUPABASE_URL, STATUS_VALUES.API_URL);
@@ -283,6 +317,35 @@ test('captures startup/status, masks status values, writes only custom Edge env,
     assert.equal(call.options.env.JWT_SECRET, undefined);
     assert.equal(call.options.env.SECRET_KEY, undefined);
   }
+});
+
+test('stops the serialized integration group at the first failed file and records only its safe stage slug', async () => {
+  await clearDiagnostic();
+  const root = path.resolve(import.meta.dirname, '..');
+  const processes = fakeProcesses({
+    failAt: 'integration-media-isolation',
+    failedStdout: 'failure from the isolation contract\n',
+  });
+
+  await assert.rejects(
+    runPilotGate2A({
+      repoRoot: root,
+      processAdapter: processes.adapter,
+      outputAdapter: outputRecorder().adapter,
+      parentEnvironment: parentEnvironment(),
+    }),
+    /Pilot Gate 2A failed at integration-media-isolation/,
+  );
+
+  assert.deepEqual(
+    processes.calls.filter(({ stage }) => stage.startsWith('integration-')).map(({ stage }) => stage),
+    ['integration-media-concurrency', 'integration-media-happy-path', 'integration-media-isolation'],
+  );
+  const diagnostic = await readFile(failureDiagnosticPath(), 'utf8');
+  assert.match(diagnostic, /^stage=integration-media-isolation$/m);
+  assert.equal(diagnostic.includes('media-isolation.integration.test.ts'), false);
+  assert.equal(diagnostic.includes('failure from the isolation contract'), true);
+  await clearDiagnostic();
 });
 
 test('suppresses unmasked startup and status output on their failure paths while still stopping the scoped stack', async (t) => {
@@ -355,13 +418,13 @@ test('rejects a remote status URL before any downstream process or visible outpu
   await clearDiagnostic();
 });
 
-test('sanitizes failed child and Edge logs against secrets, bearer tokens, queries, UUIDs, and paths before retention', async () => {
+test('reports a fixed file slug and sanitizes failed child and Edge logs before retention', async () => {
   await clearDiagnostic();
   const root = path.resolve(import.meta.dirname, '..');
   const bearer = 'header.payload.signature';
   const uuid = '11111111-2222-4333-8444-555555555555';
   const processes = fakeProcesses({
-    failAt: 'integration',
+    failAt: 'integration-media-concurrency',
     failedStdout: `contract failed safely\nBearer ${bearer}\n{"body":"private"}\n`,
     failedStderr: `request http://127.0.0.1/upload?token=signed-value C:\\runner\\work\\secret\n`,
     edgeStdout: `Edge worker stopped\n${STATUS_VALUES.SERVICE_ROLE_KEY}\n${FIXED_LOCATION_KEY}\n/jobs/${uuid}.jpg\n`,
@@ -376,11 +439,12 @@ test('sanitizes failed child and Edge logs against secrets, bearer tokens, queri
       outputAdapter: output.adapter,
       parentEnvironment: parentEnvironment(),
     }),
-    /Pilot Gate 2A failed at integration/,
+    /Pilot Gate 2A failed at integration-media-concurrency/,
   );
 
   const diagnostic = await readFile(failureDiagnosticPath(), 'utf8');
-  assert.match(diagnostic, /stage=integration/);
+  assert.match(diagnostic, /stage=integration-media-concurrency/);
+  assert.doesNotMatch(diagnostic, /stage=.*[\\/].*|stage=.*\.integration\.test\.ts|stage=.*(?:https?|uuid|token)/i);
   assert.match(diagnostic, /contract failed safely/);
   assert.match(diagnostic, /Edge worker stopped/);
   for (const forbidden of [

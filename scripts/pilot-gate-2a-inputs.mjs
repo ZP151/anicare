@@ -9,7 +9,7 @@ const FETCH_GUARD = `${INTEGRATION_DIRECTORY}/local-fetch-guard.ts`;
 const INTEGRATION_SETUP = `${INTEGRATION_DIRECTORY}/integration-setup.ts`;
 const ENDPOINT_MANIFEST = 'tests/pilot-gate-2a/edge-endpoints.json';
 const INTEGRATION_CONFIG = 'tests/pilot-gate-2a/vitest.integration.config.ts';
-const READINESS_TEST = `${INTEGRATION_DIRECTORY}/readiness.integration.test.ts`;
+export const READINESS_TEST = `${INTEGRATION_DIRECTORY}/readiness.integration.test.ts`;
 const PACKAGE_SOURCE_PREFIX = 'tests/pilot-gate-2a/';
 
 const REVIEWED_GATE_2A_ENDPOINTS = Object.freeze({
@@ -344,8 +344,21 @@ export function validatePilotGate2AInputs(inputs) {
   return inputs;
 }
 
-export function buildPilotGate2ATestArgs(integrationTests, { readinessOnly = false } = {}) {
-  const selected = readinessOnly ? [READINESS_TEST] : [...integrationTests];
+export function buildPilotGate2ATestArgs(
+  integrationTests,
+  { readinessOnly = false, integrationFile = null } = {},
+) {
+  if (integrationFile === READINESS_TEST) {
+    throw new Error('readiness test cannot be included in full integration');
+  }
+  if (integrationFile !== null && !integrationTests.includes(integrationFile)) {
+    throw new Error('Gate 2A integration test is not discoverable');
+  }
+  const selected = readinessOnly
+    ? [READINESS_TEST]
+    : integrationFile === null
+      ? [...integrationTests].filter((testPath) => testPath !== READINESS_TEST)
+      : [integrationFile];
   if (!integrationTests.includes(READINESS_TEST)) {
     throw new Error('Gate 2A readiness test is not discoverable');
   }

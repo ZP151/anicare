@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildPilotGate2ATestArgs,
   discoverPilotGate2AInputs,
+  READINESS_TEST,
   validatePilotGate2AInputs,
 } from './pilot-gate-2a-inputs.mjs';
 
@@ -697,6 +698,14 @@ function normalizedFailure(error, fallbackStage) {
   return new StageFailure(fallbackStage);
 }
 
+function integrationStageForFile(testPath) {
+  const basename = path.posix.basename(testPath, '.integration.test.ts');
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(basename)) {
+    throw new StageFailure('integration-input');
+  }
+  return `integration-${basename}`;
+}
+
 export async function runPilotGate2A({
   repoRoot,
   processAdapter = createSystemProcessAdapter(),
@@ -811,15 +820,21 @@ export async function runPilotGate2A({
     assertEdgeProcessRunning(edgeProcess);
     output.info('Pilot Gate 2A readiness passed.');
 
-    stage = 'integration';
-    await capturedStage(
-      processAdapter,
-      stage,
-      'pnpm',
-      buildPilotGate2ATestArgs(inputs.integrationTests),
-      { cwd: repoRoot, env: integrationEnvironment, signal, timeoutMs: STAGE_TIMEOUTS.integration },
-    );
-    assertEdgeProcessRunning(edgeProcess);
+    const integrationDeadline = Date.now() + STAGE_TIMEOUTS.integration;
+    const integrationFiles = inputs.integrationTests.filter((testPath) => testPath !== READINESS_TEST);
+    for (const integrationFile of integrationFiles) {
+      stage = integrationStageForFile(integrationFile);
+      const remaining = integrationDeadline - Date.now();
+      if (remaining <= 0) throw new StageFailure(stage);
+      await capturedStage(
+        processAdapter,
+        stage,
+        'pnpm',
+        buildPilotGate2ATestArgs(inputs.integrationTests, { integrationFile }),
+        { cwd: repoRoot, env: integrationEnvironment, signal, timeoutMs: remaining },
+      );
+      assertEdgeProcessRunning(edgeProcess);
+    }
     output.info('Pilot Gate 2A integration suite passed.');
   } catch (error) {
     failure = normalizedFailure(error, stage);
