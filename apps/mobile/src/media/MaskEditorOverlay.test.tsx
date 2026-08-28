@@ -54,6 +54,10 @@ async function release(view: OverlayView, x: number, y: number) {
   await fireEvent(view.getByTestId('mask-editor-overlay'), 'responderRelease', pointer(x, y));
 }
 
+async function terminate(view: OverlayView, x: number, y: number) {
+  await fireEvent(view.getByTestId('mask-editor-overlay'), 'responderTerminate', pointer(x, y));
+}
+
 describe('MaskEditorOverlay', () => {
   it('adds and selects one bounded default mask after an empty image tap', async () => {
     const view = await renderOverlay();
@@ -65,6 +69,17 @@ describe('MaskEditorOverlay', () => {
     expect(view.onSelectionChange).toHaveBeenCalledWith('mask-created');
     expect(view.onMutationCommit).toHaveBeenCalledWith(expected);
     expect(view.onMutationPreview).not.toHaveBeenCalled();
+  });
+
+  it('emits nothing when a pending empty-image add is terminated', async () => {
+    const view = await renderOverlay();
+
+    await grant(view, 100, 50);
+    await terminate(view, 100, 50);
+
+    expect(view.onSelectionChange).not.toHaveBeenCalled();
+    expect(view.onMutationPreview).not.toHaveBeenCalled();
+    expect(view.onMutationCommit).not.toHaveBeenCalled();
   });
 
   it('selects a touched mask without adding or mutating it', async () => {
@@ -102,6 +117,19 @@ describe('MaskEditorOverlay', () => {
     expect(view.onMutationPreview).toHaveBeenCalledWith(expected);
     expect(view.onMutationCommit).toHaveBeenCalledTimes(1);
     expect(view.onMutationCommit).toHaveBeenCalledWith(expected);
+  });
+
+  it('does not commit a selected-mask drag after responder termination', async () => {
+    const view = await renderOverlay({ masks: [firstMask], selectedMaskId: 'mask-one' });
+
+    await grant(view, 70, 40);
+    await move(view, 90, 40);
+    await terminate(view, 90, 40);
+
+    expect(view.onMutationPreview).toHaveBeenCalledWith([
+      { id: 'mask-one', rect: { x: 0.3, y: 0.2, width: 0.3, height: 0.4 } },
+    ]);
+    expect(view.onMutationCommit).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -178,6 +206,31 @@ describe('MaskEditorOverlay', () => {
     expect(view.onSelectionChange).not.toHaveBeenCalled();
     expect(view.onMutationPreview).not.toHaveBeenCalled();
     expect(view.onMutationCommit).not.toHaveBeenCalled();
+  });
+
+  it('defers clearing a missing selection until the overlay is enabled', async () => {
+    const view = await renderOverlay({ masks: [], selectedMaskId: 'mask-one', disabled: true });
+
+    expect(view.onSelectionChange).not.toHaveBeenCalled();
+
+    await view.rerender(
+      <MaskEditorOverlay
+        imageWidth={200}
+        imageHeight={100}
+        frameWidth={200}
+        frameHeight={100}
+        masks={[]}
+        selectedMaskId="mask-one"
+        disabled={false}
+        createMaskId={() => 'mask-created'}
+        onSelectionChange={view.onSelectionChange}
+        onMutationPreview={view.onMutationPreview}
+        onMutationCommit={view.onMutationCommit}
+      />,
+    );
+
+    expect(view.onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(view.onSelectionChange).toHaveBeenCalledWith(null);
   });
 
   it.each([

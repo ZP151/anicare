@@ -90,8 +90,8 @@ export function MaskEditorOverlay({
   );
 
   useEffect(() => {
-    if (selectedMaskId !== null && !selectedMask) onSelectionChange(null);
-  }, [onSelectionChange, selectedMask, selectedMaskId]);
+    if (!disabled && selectedMaskId !== null && !selectedMask) onSelectionChange(null);
+  }, [disabled, onSelectionChange, selectedMask, selectedMaskId]);
 
   const frame = { imageWidth, imageHeight, frameWidth, frameHeight };
 
@@ -167,6 +167,10 @@ export function MaskEditorOverlay({
     if (active.previewed || finalMasks !== active.masks) onMutationCommit(finalMasks);
   }
 
+  function terminateResponder() {
+    activeGesture.current = null;
+  }
+
   function commitAdjustment(action: AccessibleMaskAction) {
     if (disabled || !selectedMask) return;
     const nextMask = adjustMask(selectedMask, action);
@@ -193,7 +197,7 @@ export function MaskEditorOverlay({
           onResponderGrant={beginResponder}
           onResponderMove={moveResponder}
           onResponderRelease={endResponder}
-          onResponderTerminate={endResponder}
+          onResponderTerminate={terminateResponder}
         >
           {masks.map((mask) => {
             const rect = normalizedRectToPreview(mask.rect, frame);
