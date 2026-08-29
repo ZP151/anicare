@@ -345,11 +345,18 @@ This is the next implementation slice. It is complete only when local pgTAP, Edg
 
 ### A2 — Mobile continuation and narrow admin review
 
+- Start only after the Sprint 3A five-tab function/state inventory and the
+  Sprint 3B visual direction/token system in `docs/iteration-plan.md` are
+  approved; identity assistance must extend a complete product journey rather
+  than add another isolated shell page.
 - Preserve encrypted sighting/media continuation state.
 - Add optional request/status/candidate-selection UI.
 - Add platform-admin queue/detail RPCs and admin pages.
 - Add audited 60-second reviewer media authorization.
 - Remove broad identity-table reviewer reads and add concurrency/erasure tests.
+- Apply the approved Impeccable/Emil-guided design system, purposeful native
+  motion, real iconography, accessible glass fallbacks and complete
+  loading/empty/offline/error/cancel/resume states.
 
 ### A3 — Live cat-face provider and pilot evidence
 
@@ -444,4 +451,6 @@ The implementation plan derived from this design must:
 5. keep the synthetic provider and live-inference feature flag off by default;
 6. identify every external/manual gate separately from locally verifiable work;
 7. include the broker credential, fetch contract, cleanup ownership, and migration/rollback sequence;
-8. stop for review after A1 before starting A2.
+8. treat the Sprint 3A product-completeness and Sprint 3B visual-quality gates
+   as prerequisites for A2 UI completion;
+9. stop for review after A1 before starting A2.
