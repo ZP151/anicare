@@ -79,6 +79,13 @@ page map so every main tab supports a useful task, a next action and a way back.
 
 ### Community map and area detail
 
+- Use Google Maps Platform through the native Maps SDKs as the production
+  basemap on iOS and Android. Inject separate restricted keys at native build
+  time, keep Google attribution visible, and never commit the keys. Google map
+  content is context only: do not plot exact cat pins, center the camera on a
+  sighting or user coordinate, expose routes, or persist Google content. The
+  art-directed atlas remains a visibly labelled fallback for web, offline,
+  missing-key and provider-unavailable states.
 - Implement a coarse-cell map/list switch, legend, visible time-window label,
   recenter action and the same safety filters as Nearby.
 - Make a cell selection open an area-detail surface with delayed aggregate
