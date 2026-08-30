@@ -5,6 +5,8 @@ const mockGetSupabaseClient = jest.fn();
 const mockListPublicSightings = jest.fn();
 const mockPush = jest.fn();
 const mockNearbyMapMount = jest.fn();
+const mockRequestForegroundPermissionsAsync = jest.fn();
+const mockGetCurrentPositionAsync = jest.fn();
 
 jest.mock('./supabase', () => ({ getSupabaseClient: () => mockGetSupabaseClient() }));
 jest.mock('./feed', () => ({
@@ -12,6 +14,10 @@ jest.mock('./feed', () => ({
 }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+}));
+jest.mock('expo-location', () => ({
+  requestForegroundPermissionsAsync: (...args: unknown[]) => mockRequestForegroundPermissionsAsync(...args),
+  getCurrentPositionAsync: (...args: unknown[]) => mockGetCurrentPositionAsync(...args),
 }));
 jest.mock('../maps/NearbyMap', () => {
   const React = require('react');
@@ -83,6 +89,8 @@ describe('fail-closed feed screens', () => {
     mockListPublicSightings.mockReset();
     mockPush.mockReset();
     mockNearbyMapMount.mockReset();
+    mockRequestForegroundPermissionsAsync.mockReset();
+    mockGetCurrentPositionAsync.mockReset();
   });
 
   it('keeps the privacy-safe map available in demo mode without exposing H3-like values', async () => {
@@ -136,8 +144,12 @@ describe('fail-closed feed screens', () => {
 
     mockListPublicSightings.mockResolvedValueOnce(livePage);
     const liveMap = await render(<MapScreen />);
-    await waitFor(() => expect(liveMap.getByText('Privacy-safe map')).toBeTruthy());
+    await fireEvent.press(liveMap.getByRole('button', { name: 'Show area list' }));
+    await waitFor(() => expect(liveMap.getByRole('button', { name: 'Open Community area 1' })).toBeTruthy());
     expect(liveMap.queryByText(/8928308280fffff/)).toBeNull();
+    await fireEvent.press(liveMap.getByRole('button', { name: 'Open Community area 1' }));
+    await fireEvent.press(liveMap.getByRole('button', { name: 'View Pepper' }));
+    expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/00000000-0000-4000-8000-000000000102');
     await liveMap.unmount();
 
     mockListPublicSightings.mockRejectedValueOnce(new Error('offline'));
@@ -158,6 +170,8 @@ describe('fail-closed feed screens', () => {
     await fireEvent.press(map.getByRole('button', { name: 'Reset broad map view' }));
     await waitFor(() => expect(mockNearbyMapMount).toHaveBeenCalledTimes(2));
     expect(map.getByText('Privacy-safe map')).toBeTruthy();
+    expect(mockRequestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
 
     await fireEvent.press(map.getByRole('button', { name: 'Show area list' }));
     expect(map.getByRole('button', { name: 'Show map' })).toBeTruthy();
