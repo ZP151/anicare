@@ -13,13 +13,14 @@ const safeRow = {
   verification: 'community_confirmed' as const,
   publicCellId: '8928308280fffff',
   timeBucket: 'today' as const,
-  coverMediaId: null,
+  coverMediaId: '00000000-0000-4000-8000-000000000999',
   cursor: '00000000-0000-4000-8000-000000000101',
 };
 
 describe('privacy-safe Google Maps presentation', () => {
   it('projects only fields safe for the selected-cat layer', () => {
     const result = toPublicMapPresentation(safeRow);
+    const serialized = JSON.stringify(result);
 
     expect(result).toEqual({
       alias: 'Mochi',
@@ -27,7 +28,11 @@ describe('privacy-safe Google Maps presentation', () => {
       timeLabel: 'Seen in the latest delayed window',
       animalId: '00000000-0000-4000-8000-000000000102',
     });
-    expect(JSON.stringify(result)).not.toMatch(/892830|publicCell|sightingId|coverMedia|cursor/);
+    expect(serialized).not.toMatch(/publicCell|sightingId|coverMedia|cursor/);
+    expect(serialized).not.toContain(safeRow.publicCellId);
+    expect(serialized).not.toContain(safeRow.sightingId);
+    expect(serialized).not.toContain(safeRow.coverMediaId);
+    expect(serialized).not.toContain(safeRow.cursor);
   });
 
   it('uses only a broad public camera and protects map attribution space', () => {
@@ -124,7 +129,16 @@ describe('privacy-safe Google Maps presentation', () => {
       },
     ]);
 
-    expect(JSON.stringify(result)).not.toMatch(/8928308280ffff|publicCellId|sightingId|coverMediaId|cursor/);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(/publicCellId|sightingId|coverMediaId|cursor/);
+    expect(serialized).not.toContain('8928308280fffff');
+    expect(serialized).not.toContain('8928308280ffffe');
+    expect(serialized).not.toContain('00000000-0000-4000-8000-000000000101');
+    expect(serialized).not.toContain('00000000-0000-4000-8000-000000000111');
+    expect(serialized).not.toContain('00000000-0000-4000-8000-000000000114');
+    expect(serialized).not.toContain('00000000-0000-4000-8000-000000000116');
+    expect(serialized).not.toContain('00000000-0000-4000-8000-000000000113');
+    expect(serialized).not.toContain('00000000-0000-4000-8000-000000000999');
   });
 
   it('builds no summaries from no rows', () => {
