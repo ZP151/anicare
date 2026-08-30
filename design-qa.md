@@ -54,3 +54,37 @@ Release-risk tracker:
 - Remaining report-action and inactive-tab chrome drift — owner: mobile design; disposition: carry into the configured-native responsive polish pass, with no functional or privacy release blocker in the current closed pilot.
 
 final result: blocked
+
+## Community Map and area detail verification — 2026-08-31
+
+### Automated behavior evidence
+
+- `pnpm --filter @animalhelper/mobile test` passed: 47 suites / 542 tests.
+- `pnpm --filter @animalhelper/mobile typecheck` passed with no TypeScript errors.
+- `pnpm --filter @animalhelper/mobile build` passed and exported 15 web routes, including `/map` and `/(tabs)/map`.
+- `pnpm validate:pilot-policies` passed with `native_config_policy_ok` and `pilot_build_policy_ok`.
+- The required scan for `892830`, `publicCellId`, `showsUserLocation`, `showsMyLocationButton`, `Marker`, `Polyline`, and `Directions` returned no matches in `apps/mobile/app/(tabs)/map.tsx` or `apps/mobile/src/components/CoarseAreaDetailSheet.tsx`.
+- Focused automated coverage includes the native/web map adapters, public map policy, coarse-area detail sheet, report context, native configuration, and pilot-build policy.
+
+### Web fallback visual and interaction evidence
+
+The Expo Web preview ran at `http://localhost:8087/map` with a 390×844 phone viewport. This is evidence for layout, fallback state, and interactions only; it does not prove a configured native Google Maps provider.
+
+- Map fallback: `apps/mobile/.impeccable/review/community-map-web-map-390x844.png`.
+- Coarse-area list: `apps/mobile/.impeccable/review/community-map-web-list-390x844.png`.
+- Open area detail: `apps/mobile/.impeccable/review/community-map-web-area-detail-390x844.png`.
+- Scrolled detail actions and contract-blocked follow state: `apps/mobile/.impeccable/review/community-map-web-area-detail-actions-390x844.png`.
+
+Each PNG was reopened at original detail after capture and validated as a genuine 390×844 browser capture. The bounded Impeccable/Emil/Apple review found a clear routine-screen hierarchy, readable states, reachable scroll content, and minimum platform-target sizing in the implemented controls. The intentionally generic atlas labels preserve the approved visual direction without reproducing exact-looking block, transit, pin, or route details. No implementation change was justified by the evidence.
+
+Interaction checks passed for Map/List switching, `Show area list`, `Show map`, `Choose area manually`, broad-view reset, opening `Community area 1`, opening `View Demo Meow One` at `/cat/demo-community-cat-1`, and `Report from Community area 1` at `/report?source=community-map`. `Follow area` remains visibly disabled with its reason because hosted area-follow support and its contract are not yet available. The browser console returned zero warnings and zero errors after the full interaction pass.
+
+### Unavailable native-device evidence and release risks
+
+- This Windows host reported `ADB_NOT_FOUND` and `ANDROID_HOME_NOT_SET`; no Android emulator or connected Android device was available.
+- An iOS simulator is unavailable on this Windows host.
+- Configured native Google Maps rendering therefore remains an explicit release gate. A later iOS/Android simulator or device pass must verify the provider, adaptive platform chrome, dark appearance, text scaling, and native gestures without enabling user location, exact cat pins, routes, directions, or public source-cell rendering.
+- Area follow remains contract-blocked and is not represented as a working capability.
+- The existing Nearby Impeccable hero gate remains open and unforced; this Map verification does not weaken its privacy-safe accepted deviations.
+
+Community Map web fallback result: passed. Native configured-provider release gate: blocked by unavailable native-device evidence.
