@@ -122,6 +122,39 @@ insert into public.animals (id, primary_alias, profile_created_by, visibility) v
   ('00000000-0000-4000-8000-000000001821', 'Candidate Two', '00000000-0000-4000-8000-000000001800', 'limited'),
   ('00000000-0000-4000-8000-000000001822', 'Candidate Three', '00000000-0000-4000-8000-000000001800', 'limited');
 
+insert into public.media_assets (
+  id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
+  redaction_confirmed_at, training_eligible, client_media_id, byte_length,
+  width, height, recipe_version, detector_versions, status, reviewed_at
+) values (
+  '00000000-0000-4000-8000-000000001881',
+  '00000000-0000-4000-8000-000000001811',
+  '00000000-0000-4000-8000-000000001800',
+  'media-staging',
+  'jobs/00000000-0000-4000-8000-000000001880.jpg',
+  repeat('e', 64), now(), false, 'identity-media-1860', 4096, 512, 512,
+  'jpeg-srgb-2048-q88.v1',
+  '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+  'quarantined', now()
+);
+
+insert into private.media_upload_jobs (
+  id, uploader_id, sighting_id, media_id, sha256, byte_length, width, height,
+  recipe_version, detector_versions, confirmed_at_local, object_path, status,
+  reserved_at, reservation_expires_at, upload_token_expires_at, next_cleanup_at,
+  finalized_at, media_asset_id
+) values (
+  '00000000-0000-4000-8000-000000001880',
+  '00000000-0000-4000-8000-000000001800',
+  '00000000-0000-4000-8000-000000001811',
+  'identity-media-1860', repeat('e', 64), 4096, 512, 512,
+  'jpeg-srgb-2048-q88.v1',
+  '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+  now(), 'jobs/00000000-0000-4000-8000-000000001880.jpg', 'finalized',
+  now(), now() + interval '10 minutes', now() + interval '2 hours',
+  'infinity'::timestamptz, now(), '00000000-0000-4000-8000-000000001881'
+);
+
 insert into public.identity_proposals (id, sighting_id, proposer_id, source, status, reasons)
 values (
   '00000000-0000-4000-8000-000000001830', '00000000-0000-4000-8000-000000001812',
@@ -176,11 +209,13 @@ select throws_ok(
       '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('b', 64))$$,
   '23505', null, 'a sighting cannot have two actionable jobs'
 );
+set local session_replication_role = replica;
 select lives_ok(
   $$update private.identity_assistance_jobs set status = 'failed', failed_at = now(), failure_code = 'internal_error'
     where id = '00000000-0000-4000-8000-000000001840'$$,
   'a terminal failed job is valid'
 );
+set local session_replication_role = origin;
 select lives_ok(
   $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
     values ('00000000-0000-4000-8000-000000001842', '00000000-0000-4000-8000-000000001810',
@@ -315,10 +350,22 @@ select throws_ok(
 );
 
 select lives_ok(
-  $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
-    values ('00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001811',
-      '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('e', 64))$$,
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, media_asset_id, requester_id, status, notice_version,
+      input_sha256, attempt_count, lease_id, lease_expires_at, processing_at
+    ) values (
+      '00000000-0000-4000-8000-000000001860',
+      '00000000-0000-4000-8000-000000001811',
+      '00000000-0000-4000-8000-000000001881',
+      '00000000-0000-4000-8000-000000001800', 'processing', 'notice.v1',
+      repeat('e', 64), 1, '00000000-0000-4000-8000-000000001898',
+      now() + interval '2 minutes', now()
+    )$$,
   'candidate fixture job is valid'
+);
+select set_config(
+  'private.identity_assistance_candidate_writer',
+  '00000000-0000-4000-8000-000000001860', true
 );
 select throws_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
@@ -330,15 +377,15 @@ select throws_ok(
     values ('00000000-0000-4000-8000-000000001860', 4, '00000000-0000-4000-8000-000000001820', 'likely', array['face_pattern_similar']::private.identity_assistance_reason_code[])$$,
   '23514', null, 'candidate rank four is rejected'
 );
-select lives_ok(
-  $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
-    values ('00000000-0000-4000-8000-000000001861', '00000000-0000-4000-8000-000000001814',
-      '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('f', 64))$$,
-  'null-reason candidate fixture job is valid'
+select is(
+  (select status::text from private.identity_assistance_jobs
+    where id = '00000000-0000-4000-8000-000000001860'),
+  'processing',
+  'candidate probes use a processing job'
 );
 select throws_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
-    values ('00000000-0000-4000-8000-000000001861', 1, '00000000-0000-4000-8000-000000001820', 'likely', array[null]::private.identity_assistance_reason_code[])$$,
+    values ('00000000-0000-4000-8000-000000001860', 1, '00000000-0000-4000-8000-000000001820', 'likely', array[null]::private.identity_assistance_reason_code[])$$,
   '23514', null, 'candidate reason arrays reject null elements'
 );
 select lives_ok(
@@ -368,19 +415,20 @@ select throws_ok(
 );
 select throws_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
-    values ('00000000-0000-4000-8000-000000001842', 1, '00000000-0000-4000-8000-000000001820', 'likely', array[]::private.identity_assistance_reason_code[])$$,
+    values ('00000000-0000-4000-8000-000000001860', 1, '00000000-0000-4000-8000-000000001820', 'likely', array[]::private.identity_assistance_reason_code[])$$,
   '23514', null, 'candidate reasons cannot be empty'
 );
 select throws_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
-    values ('00000000-0000-4000-8000-000000001842', 1, '00000000-0000-4000-8000-000000001820', 'likely', array['face_pattern_similar', 'ear_shape_similar', 'coat_marking_similar', 'view_angle_limited', 'image_quality_limited']::private.identity_assistance_reason_code[])$$,
+    values ('00000000-0000-4000-8000-000000001860', 1, '00000000-0000-4000-8000-000000001820', 'likely', array['face_pattern_similar', 'ear_shape_similar', 'coat_marking_similar', 'view_angle_limited', 'image_quality_limited']::private.identity_assistance_reason_code[])$$,
   '23514', null, 'candidate reasons are bounded at four'
 );
 select throws_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
-    values ('00000000-0000-4000-8000-000000001842', 1, '00000000-0000-4000-8000-000000001820', 'likely', array['fabricated']::private.identity_assistance_reason_code[])$$,
+    values ('00000000-0000-4000-8000-000000001860', 1, '00000000-0000-4000-8000-000000001820', 'likely', array['fabricated']::private.identity_assistance_reason_code[])$$,
   '22P02', null, 'fabricated candidate reason codes are rejected'
 );
+select set_config('private.identity_assistance_candidate_writer', '', true);
 
 select lives_ok(
   $$insert into private.identity_assistance_requests (actor_id, request_id, payload_sha256, operation, job_id)
@@ -520,8 +568,12 @@ delete from private.identity_assistance_status_reads where actor_id = '00000000-
 delete from private.identity_assistance_events where request_id = '00000000-0000-4000-8000-000000001876';
 delete from private.identity_assistance_service_requests where request_id between '00000000-0000-4000-8000-000000001873' and '00000000-0000-4000-8000-000000001875';
 delete from private.identity_assistance_requests where actor_id = '00000000-0000-4000-8000-000000001800';
+set local session_replication_role = replica;
 delete from private.identity_assistance_candidates where job_id in ('00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001842');
 delete from private.identity_assistance_jobs where id in ('00000000-0000-4000-8000-000000001840', '00000000-0000-4000-8000-000000001842', '00000000-0000-4000-8000-000000001853', '00000000-0000-4000-8000-000000001854', '00000000-0000-4000-8000-000000001855', '00000000-0000-4000-8000-000000001856', '00000000-0000-4000-8000-000000001857', '00000000-0000-4000-8000-000000001858', '00000000-0000-4000-8000-000000001859', '00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001861', '00000000-0000-4000-8000-000000001862', '00000000-0000-4000-8000-000000001863', '00000000-0000-4000-8000-000000001870', '00000000-0000-4000-8000-000000001871', '00000000-0000-4000-8000-000000001872');
+delete from private.media_upload_jobs where id = '00000000-0000-4000-8000-000000001880';
+delete from public.media_assets where id = '00000000-0000-4000-8000-000000001881';
+set local session_replication_role = origin;
 delete from public.identity_proposals where id in ('00000000-0000-4000-8000-000000001830', '00000000-0000-4000-8000-000000001831', '00000000-0000-4000-8000-000000001832', '00000000-0000-4000-8000-000000001833');
 delete from public.animals where id in ('00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001822');
 delete from public.sightings where id in ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001814', '00000000-0000-4000-8000-000000001815', '00000000-0000-4000-8000-000000001816', '00000000-0000-4000-8000-000000001817', '00000000-0000-4000-8000-000000001818', '00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001821');
