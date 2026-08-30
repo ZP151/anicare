@@ -1015,9 +1015,7 @@ select lives_ok(
     perform extensions.dblink_exec(
       'identity_guard_setup',
       $remote$
-      do $setup$
-      begin
-        perform pg_catalog.set_config('session_replication_role', 'replica', true);
+        set session_replication_role = replica;
         insert into public.user_profiles (id, public_name, adult_confirmed_at)
         values ('00000000-0000-4000-8000-000000003000',
           'Identity Guard Race Owner', pg_catalog.now());
@@ -1101,8 +1099,6 @@ select lives_ok(
             '00000000-0000-4000-8000-000000003000', 'processing', 'notice.v1',
             repeat('b', 64), 1, '00000000-0000-4000-8000-000000003352',
             pg_catalog.now() + interval '2 minutes', pg_catalog.now());
-      end
-      $setup$;
       $remote$
     );
   exception
@@ -1398,9 +1394,7 @@ select lives_ok(
     perform extensions.dblink_exec(
       'identity_guard_setup',
       $remote$
-      do $cleanup$
-      begin
-        perform pg_catalog.set_config('session_replication_role', 'replica', true);
+        set session_replication_role = replica;
         delete from private.identity_assistance_candidates
          where job_id in (
            '00000000-0000-4000-8000-000000003301',
@@ -1433,8 +1427,6 @@ select lives_ok(
          );
         delete from public.user_profiles
          where id = '00000000-0000-4000-8000-000000003000';
-      end
-      $cleanup$;
       $remote$
     );
     perform extensions.dblink_disconnect('identity_guard_setup');
