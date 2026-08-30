@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Scaffold reference: sheltered-link-atlas-a.png</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@700&family=Rosario:wght@700&display=swap">
+  <link rel="stylesheet" href="layout.css">
+  <style>html,body{margin:0}body{background:#edede4}.region{box-sizing:border-box}.region.text p{white-space:pre-wrap}</style>
+</head>
+<body>
+<!-- Reference only. Every region sits at its measured box inside a comp-aspect frame. Take the boxes (layout.css), keep your own semantic structure. -->
+<main class="comp-frame" style="max-width:853px">
+  <div class="r-paper-ground region texture" data-region="paper-ground" style="background-image:url('..\..\..\assets\plates\paper-ground.png');background-repeat:repeat"></div>
+  <div class="r-nearby-title region text" data-region="nearby-title"><!-- Nearby screen title --><p style="font-size:var(--r-nearby-title-font);font-family:var(--r-nearby-title-family),sans-serif;font-weight:var(--r-nearby-title-weight);line-height:1.05;margin:0">nearby-title</p></div>
+  <div class="r-safety-button region control" data-region="safety-button"><!-- circular safety and privacy control with shield-check icon: rebuild the control's chrome from the crop (comp-spec.mjs --crop safety-button); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <figure class="r-coarse-atlas region plate" data-region="coarse-atlas"><img src="..\..\..\assets\plates\coarse-atlas.png" alt="" style="width:100%;height:100%;object-fit:contain;object-position:center"></figure>
+  <div class="r-atlas-zone-north region text" data-region="atlas-zone-north"><!-- generic north area label, never a real block number --><p style="font-size:var(--r-atlas-zone-north-font);line-height:1.05;margin:0">atlas-zone-north</p></div>
+  <div class="r-atlas-zone-west region text" data-region="atlas-zone-west"><!-- generic west area label, never a real block number --><p style="font-size:var(--r-atlas-zone-west-font);line-height:1.05;margin:0">atlas-zone-west</p></div>
+  <div class="r-atlas-zone-east region text" data-region="atlas-zone-east"><!-- generic east area label, never a real block number --><p style="font-size:var(--r-atlas-zone-east-font);line-height:1.05;margin:0">atlas-zone-east</p></div>
+  <div class="r-atlas-green-label region text" data-region="atlas-green-label"><!-- generic communal green label --><p style="font-size:var(--r-atlas-green-label-font);line-height:1.05;margin:0">atlas-green-label</p></div>
+  <div class="r-atlas-edge-label region text" data-region="atlas-edge-label"><!-- generic public-edge label without route or station details --><p style="font-size:var(--r-atlas-edge-label-font);line-height:1.05;margin:0">atlas-edge-label</p></div>
+  <div class="r-privacy-banner region chrome" data-region="privacy-banner"><!-- translucent privacy notice surface over atlas --></div>
+  <div class="r-privacy-title region text" data-region="privacy-title"><!-- Coarse neighbourhood view. --><p style="font-size:var(--r-privacy-title-font);line-height:1.05;margin:0">privacy-title</p></div>
+  <div class="r-privacy-copy region text" data-region="privacy-copy"><!-- Exact locations are protected. --><p style="font-size:var(--r-privacy-copy-font);line-height:1.05;margin:0">privacy-copy</p></div>
+  <div class="r-cat-sheet region chrome" data-region="cat-sheet"><!-- anchored selected-cat bottom sheet --></div>
+  <div class="r-sheet-handle region control" data-region="sheet-handle"><!-- sheet drag indicator: rebuild the control's chrome from the crop (comp-spec.mjs --crop sheet-handle); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <figure class="r-cat-portrait region plate" data-region="cat-portrait"><img src="..\..\..\assets\plates\cat-portrait.png" alt="" style="width:100%;height:100%;object-fit:contain;object-position:center"></figure>
+  <div class="r-cat-name region text" data-region="cat-name"><!-- Mochi · 麻糬 --><p style="font-size:var(--r-cat-name-font);font-family:var(--r-cat-name-family),sans-serif;font-weight:var(--r-cat-name-weight);line-height:1.05;margin:0">cat-name</p></div>
+  <div class="r-confirmed-status region text" data-region="confirmed-status"><!-- Community confirmed status with shield icon --><p style="font-size:var(--r-confirmed-status-font);line-height:1.05;margin:0">confirmed-status</p></div>
+  <div class="r-seen-status region text" data-region="seen-status"><!-- Seen this afternoon status with clock icon --><p style="font-size:var(--r-seen-status-font);line-height:1.05;margin:0">seen-status</p></div>
+  <div class="r-view-cat region control" data-region="view-cat"><!-- primary View cat action: rebuild the control's chrome from the crop (comp-spec.mjs --crop view-cat); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-report-sighting region control" data-region="report-sighting"><!-- secondary Report sighting action: rebuild the control's chrome from the crop (comp-spec.mjs --crop report-sighting); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-tab-bar region chrome" data-region="tab-bar"><!-- five-destination bottom navigation --></div>
+  <div class="r-tab-nearby region control" data-region="tab-nearby"><!-- selected Nearby destination: rebuild the control's chrome from the crop (comp-spec.mjs --crop tab-nearby); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-tab-map region control" data-region="tab-map"><!-- Map destination: rebuild the control's chrome from the crop (comp-spec.mjs --crop tab-map); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-tab-report region control" data-region="tab-report"><!-- Report destination: rebuild the control's chrome from the crop (comp-spec.mjs --crop tab-report); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-tab-following region control" data-region="tab-following"><!-- Following destination: rebuild the control's chrome from the crop (comp-spec.mjs --crop tab-following); its ink box, border, fill, radius, and label size are the comp's --></div>
+  <div class="r-tab-profile region control" data-region="tab-profile"><!-- Profile destination: rebuild the control's chrome from the crop (comp-spec.mjs --crop tab-profile); its ink box, border, fill, radius, and label size are the comp's --></div>
+</main>
+</body>
+</html>

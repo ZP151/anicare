@@ -1,0 +1,14 @@
+Use case: ui-mockup
+Asset type: north-star mobile app screen for Whisker Commons
+Primary request: Create a realistic production-quality 390 x 844 mobile app screen for the “Sheltered Link Atlas” visual direction. This is an adaptive iOS/Android community-cat app used outdoors in Singapore. Show the hero discovery state: a privacy-safe coarse neighbourhood atlas in the upper half, one selected cat named “Mochi · 麻糬”, a concise last-seen time bucket and care state, one clear “View cat” action, and a secondary “Report sighting” action. The app helps residents discover and care for community cats while protecting exact locations.
+Input images: Images 1–3 are reference screenshots of the current product and its real information architecture. Preserve its product facts and five-tab navigation concept, but replace its generic visual language completely.
+Style/medium: realistic shippable React Native product UI, not concept art, not a marketing page.
+Composition/framing: 390 x 844 portrait app content only. Coarse-area atlas is the dominant field, with simplified estate blocks and covered-linkway geometry but no exact pins or route. A compact selected-cat sheet is anchored above the bottom navigation. Clear one-handed hierarchy and safe-area spacing.
+Color palette: deep mineral blue-green #123B46, community teal #2E756C, warm paper #F1EBDD, sparing vermilion #D55B3E, pale aqua #B8D8D0.
+Materials/textures: Singapore estate directory and covered-linkway wayfinding; enamel panel precision, subtle weathered-map tactility, selective liquid-glass only for floating bottom navigation and the anchored action sheet. Provide a visually solid Android/reduced-transparency equivalent.
+Typography: platform-system sans, compact and highly legible; routine task screen, no oversized marketing headline.
+Text (verbatim where visible): “Nearby”, “Mochi · 麻糬”, “Community confirmed”, “Seen this afternoon”, “View cat”, “Report sighting”. No engineering or demo-mode copy.
+Icons: coherent native-capable outline icon family; no emoji, no text-symbol icons, no handcrafted decorative SVG look.
+Interaction implication: tabs switch instantly with no sliding; the sheet can be dragged but remains interruptible; only press and spatial state feedback are implied.
+Constraints: exact cat location is never shown; show only coarse safe geography; no AI score; no exact coordinates; no social engagement counts; no paywall; no donation prompt. Use one realistic community-cat photograph fitted naturally to its slot. No card stack. No device bezel, phone body, notch, Dynamic Island, OS status bar, home indicator, browser chrome, rounded device mask, device shadow, watermark, or extra screens.
+Avoid: generic AI dashboard, glassmorphism everywhere, gradients as decoration, giant rounded cards, pill-shaped everything, huge headings, emoji, fake metrics, crowded feature inventory.

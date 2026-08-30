@@ -1,0 +1,271 @@
+{
+  "tool": "build-phase",
+  "version": 2,
+  "startedAt": "2026-08-29T06:29:53.451Z",
+  "comp": ".impeccable\\mocks\\sheltered-link-atlas-a.png",
+  "direction": "6f2aa683",
+  "breakpoint": "853x1844",
+  "artifact": null,
+  "phase": "hero",
+  "phases": {
+    "comps": {
+      "status": "closed",
+      "openedAt": "2026-08-29T06:29:53.450Z",
+      "closedAt": "2026-08-30T09:54:37.760Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "3 comps, 1 approved",
+        "approved": ".impeccable\\mocks\\sheltered-link-atlas-a.png",
+        "at": "2026-08-30T09:54:37.759Z"
+      },
+      "forced": null
+    },
+    "spec": {
+      "status": "closed",
+      "openedAt": "2026-08-30T09:54:37.827Z",
+      "closedAt": "2026-08-30T09:57:14.558Z",
+      "attempts": 3,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "21 regions, 3 plates, 6 text regions measured",
+        "at": "2026-08-30T09:57:14.557Z"
+      },
+      "forced": null
+    },
+    "plates": {
+      "status": "closed",
+      "openedAt": "2026-08-30T09:57:14.558Z",
+      "closedAt": "2026-08-30T10:10:01.110Z",
+      "attempts": 5,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "3/3 plates",
+        "at": "2026-08-30T10:10:01.109Z"
+      },
+      "forced": null
+    },
+    "hero": {
+      "status": "open",
+      "openedAt": "2026-08-30T10:10:01.110Z",
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "hero overall 68.9% < 72% (structure 57%, color 80%, detail 61%)",
+          "region atlas-zone-west is missing (detail 4%, structure 63%): the comp shows material the build does not",
+          "region atlas-zone-east is missing (detail 7%, structure 70%): the comp shows material the build does not",
+          "region confirmed-status is missing (detail 0%, structure 79%): the comp shows material the build does not",
+          "region tab-nearby is missing (detail 0%, structure 73%): the comp shows material the build does not",
+          "region tab-following is missing (detail 0%, structure 82%): the comp shows material the build does not",
+          "region tab-profile is missing (detail 0%, structure 84%): the comp shows material the build does not",
+          "region atlas-edge-label (text) is contradicted (structure 42%, detail added 22%): the composition of this text region differs from the comp; re-derive it from the spec box",
+          "region cat-name (text) is contradicted (structure 49%, detail added 23%): the composition of this text region differs from the comp; re-derive it from the spec box",
+          "region view-cat (control) is contradicted (structure 53%, detail added 23%): this control does not read as the comp's: rebuild its chrome from the crop (border, fill, radius, chevron or arrow, label size) rather than from a component default",
+          "region report-sighting (control) is contradicted (structure 42%, detail added 52%): this control does not read as the comp's: rebuild its chrome from the crop (border, fill, radius, chevron or arrow, label size) rather than from a component default",
+          "region tab-map (control) is contradicted (structure 77%, detail added 9%): this control does not read as the comp's: rebuild its chrome from the crop (border, fill, radius, chevron or arrow, label size) rather than from a component default",
+          "region tab-report (control) is contradicted (structure 73%, detail added 9%): this control does not read as the comp's: rebuild its chrome from the crop (border, fill, radius, chevron or arrow, label size) rather than from a component default",
+          "region tab-nearby: its ink sits in a 73x86px box in the comp and 52x56px in the build (padding, row height, or size); match the box, not only the position",
+          "region tab-map: its ink sits in a 45x83px box in the comp and 49x54px in the build (padding, row height, or size); match the box, not only the position",
+          "region tab-report: its ink sits in a 67x86px box in the comp and 66x54px in the build (padding, row height, or size); match the box, not only the position",
+          "region tab-following: its ink sits in a 95x81px box in the comp and 6x10px in the build (padding, row height, or size); match the box, not only the position",
+          "READINGS, each one CSS edit (8 of 9, the rest after these):",
+          "text confirmed-status: cap height 7px in the build, 20.1px in the comp (-65%); set font-size so the cap height renders at 20.1px",
+          "text atlas-edge-label: the face renders 43% heavier than the comp's (ink density 0.69 vs 0.48); drop a weight step or use the ranked face",
+          "text atlas-green-label: ink is #7f7c73 in the build, #56724d in the comp; use the comp's colour",
+          "text privacy-copy: ink is #90a2a0 in the build, #354446 in the comp; use the comp's colour",
+          "text confirmed-status: ink is #a5bcb8 in the build, #10554c in the comp; use the comp's colour",
+          "text privacy-title: its first line starts 14px lower than in the comp (20px vs 6px into the region box); the spacing above it is too large",
+          "control view-cat: its rule sits 90px into the box in the comp and 35px in the build (-55px), so the strip is shorter than the comp's; match the height, not only the position",
+          "control report-sighting: its rule sits 82px into the box in the comp and 6px in the build (-76px), so the strip is shorter than the comp's; match the height, not only the position",
+          "plate coarse-atlas is clipped at the bottom: the comp's artwork keeps a margin there (ink box 853x848 at 0,32 in the region) and the build's runs to the edge (850x944 at 2,15); size the box to the artwork's aspect and use object-fit: contain, or place the <img> at the artwork's own size, never cover on a narrower box",
+          "the build carries ink in 5 grid cells where the comp is calm (G1, I1, J1, G5, I6); nothing exists on the page that the comp does not show (a kicker, an extra nav item, a divider, a second row of controls); remove it or name it in a stated decision after the hero passes"
+        ],
+        "summary": "hero 69% (drift)",
+        "score": 0.6892,
+        "verdict": "drift",
+        "report": ".impeccable\\review\\diff\\hero\\report.json",
+        "sideBySide": ".impeccable\\review\\diff\\hero\\side-by-side.png",
+        "worst": [
+          "report-sighting contradicted 38%",
+          "view-cat contradicted 41%",
+          "atlas-zone-north drift 41%"
+        ],
+        "worstIds": [
+          "report-sighting",
+          "view-cat",
+          "atlas-zone-north"
+        ],
+        "worstCrops": [
+          {
+            "id": "report-sighting",
+            "verdict": "contradicted",
+            "score": {
+              "overall": 0.377,
+              "structure": 0.417,
+              "color": 0.5405,
+              "colorIntersection": 0.2307,
+              "paletteMatch": 0.7073,
+              "detail": 0.0012,
+              "detailRaw": 0.2616,
+              "detailAdded": 0.5208,
+              "bands": 0.4489
+            },
+            "file": ".impeccable\\review\\diff\\hero\\regions\\report-sighting.png"
+          },
+          {
+            "id": "view-cat",
+            "verdict": "contradicted",
+            "score": {
+              "overall": 0.4101,
+              "structure": 0.5285,
+              "color": 0.412,
+              "colorIntersection": 0.1018,
+              "paletteMatch": 0.5791,
+              "detail": 0.1406,
+              "detailRaw": 0.2551,
+              "detailAdded": 0.2292,
+              "bands": 0.2833
+            },
+            "file": ".impeccable\\review\\diff\\hero\\regions\\view-cat.png"
+          },
+          {
+            "id": "atlas-zone-north",
+            "verdict": "drift",
+            "score": {
+              "overall": 0.4136,
+              "structure": 0.501,
+              "color": 0.5554,
+              "colorIntersection": 0.1791,
+              "paletteMatch": 0.7581,
+              "detail": 0.0368,
+              "detailRaw": 0.2087,
+              "detailAdded": 0.3438,
+              "bands": 0.1867
+            },
+            "file": ".impeccable\\review\\diff\\hero\\regions\\atlas-zone-north.png"
+          }
+        ],
+        "advisories": [],
+        "regionVerdicts": {
+          "paper-ground": "match",
+          "nearby-title": "drift",
+          "safety-button": "drift",
+          "coarse-atlas": "drift",
+          "atlas-zone-north": "drift",
+          "atlas-zone-west": "missing",
+          "atlas-zone-east": "missing",
+          "atlas-green-label": "drift",
+          "atlas-edge-label": "contradicted",
+          "privacy-banner": "drift",
+          "privacy-title": "drift",
+          "privacy-copy": "drift",
+          "cat-sheet": "drift",
+          "sheet-handle": "match",
+          "cat-portrait": "drift",
+          "cat-name": "contradicted",
+          "confirmed-status": "missing",
+          "seen-status": "drift",
+          "view-cat": "contradicted",
+          "report-sighting": "contradicted",
+          "tab-bar": "contradicted",
+          "tab-nearby": "missing",
+          "tab-map": "contradicted",
+          "tab-report": "contradicted",
+          "tab-following": "missing",
+          "tab-profile": "missing"
+        },
+        "at": "2026-08-30T10:56:23.906Z"
+      },
+      "forced": null,
+      "records": 7,
+      "readingsSeen": {
+        "text atlas-zone-north: cap height 8.6px in the build, 18.2px in the comp (-53%); set font-size so the cap height renders at 18.2px": 1,
+        "text privacy-title: cap height 9.5px in the build, 19.4px in the comp (-51%); set font-size so the cap height renders at 19.4px": 1,
+        "text privacy-copy: letter-spacing is tighter than the comp's (gap 0.050 vs 0.102 of the cap height); set letter-spacing to open it by about 1px": 1,
+        "text confirmed-status: cap height 8.7px in the build, 20.1px in the comp (-57%); set font-size so the cap height renders at 20.1px": 1,
+        "text privacy-copy: the face renders 30% heavier than the comp's (ink density 0.58 vs 0.44); drop a weight step or use the ranked face": 1,
+        "text atlas-zone-north: ink is #b2b0a1 in the build, #555858 in the comp; use the comp's colour": 1,
+        "text privacy-copy: ink is #758c85 in the build, #354446 in the comp; use the comp's colour": 1,
+        "text confirmed-status: ink is #688582 in the build, #10554c in the comp; use the comp's colour": 1,
+        "text atlas-zone-north: its first line starts 20px higher than in the comp (0px vs 20px into the region box); the spacing above it is too small": 1,
+        "text privacy-title: its first line starts 16px lower than in the comp (22px vs 6px into the region box); the spacing above it is too large": 1,
+        "control view-cat: its rule sits 90px into the box in the comp and 37px in the build (-53px), so the strip is shorter than the comp's; match the height, not only the position": 1,
+        "control report-sighting: its rule sits 82px into the box in the comp and 8px in the build (-74px), so the strip is shorter than the comp's; match the height, not only the position": 1,
+        "text confirmed-status: cap height 7px in the build, 20.1px in the comp (-65%); set font-size so the cap height renders at 20.1px": 3,
+        "text privacy-copy: ink is #9ab0a9 in the build, #354446 in the comp; use the comp's colour": 1,
+        "text confirmed-status: ink is #aabebd in the build, #10554c in the comp; use the comp's colour": 1,
+        "text privacy-title: its first line starts 14px lower than in the comp (20px vs 6px into the region box); the spacing above it is too large": 3,
+        "control view-cat: its rule sits 90px into the box in the comp and 35px in the build (-55px), so the strip is shorter than the comp's; match the height, not only the position": 3,
+        "control report-sighting: its rule sits 82px into the box in the comp and 6px in the build (-76px), so the strip is shorter than the comp's; match the height, not only the position": 3,
+        "chrome tab-bar: its ink is 56px tall in the build and 86px in the comp (-30px); match the height, not only the position": 3,
+        "text privacy-copy: ink is #90a2a0 in the build, #354446 in the comp; use the comp's colour": 2,
+        "text confirmed-status: ink is #a5bcb8 in the build, #10554c in the comp; use the comp's colour": 2,
+        "text atlas-edge-label: the face renders 43% heavier than the comp's (ink density 0.69 vs 0.48); drop a weight step or use the ranked face": 1,
+        "text atlas-green-label: ink is #7f7c73 in the build, #56724d in the comp; use the comp's colour": 1
+      }
+    },
+    "sections": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "motion": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "responsive": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "review": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    }
+  },
+  "finish": null,
+  "plates": {
+    "paper-ground": {
+      "status": "ok",
+      "score": 0.8448,
+      "size": "1254x1254"
+    },
+    "coarse-atlas": {
+      "status": "ok",
+      "score": 0.6048,
+      "size": "1280x1384"
+    },
+    "cat-portrait": {
+      "status": "ok",
+      "score": 0.5553,
+      "size": "1033x1523"
+    }
+  }
+}

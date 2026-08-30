@@ -1,0 +1,977 @@
+{
+  "tool": "comp-diff",
+  "version": 1,
+  "createdAt": "2026-08-30T10:56:23.307Z",
+  "label": "hero",
+  "comp": ".impeccable\\mocks\\sheltered-link-atlas-a.png",
+  "build": ".impeccable/review/hero-repro.png",
+  "spec": ".impeccable\\build\\spec.json",
+  "compSize": "853x1844",
+  "buildSize": "853x1844",
+  "align": "top",
+  "overall": 0.6892,
+  "verdict": "drift",
+  "scores": {
+    "overall": 0.6892,
+    "structure": 0.5669,
+    "color": 0.7988,
+    "colorIntersection": 0.6306,
+    "paletteMatch": 0.8894,
+    "detail": 0.6123,
+    "detailRaw": 0.6852,
+    "detailAdded": 0.1458,
+    "bands": 0.92
+  },
+  "palette": {
+    "comp": [
+      {
+        "hex": "#edede4",
+        "coverage": 0.6942
+      },
+      {
+        "hex": "#d1d0ba",
+        "coverage": 0.1751
+      },
+      {
+        "hex": "#b9bfbe",
+        "coverage": 0.0558
+      },
+      {
+        "hex": "#49452d",
+        "coverage": 0.0286
+      },
+      {
+        "hex": "#185957",
+        "coverage": 0.0267
+      },
+      {
+        "hex": "#b19161",
+        "coverage": 0.0196
+      }
+    ],
+    "build": [
+      {
+        "hex": "#ebeae2",
+        "coverage": 0.7811
+      },
+      {
+        "hex": "#d0d1b3",
+        "coverage": 0.0988
+      },
+      {
+        "hex": "#a5b4ae",
+        "coverage": 0.047
+      },
+      {
+        "hex": "#343317",
+        "coverage": 0.0333
+      },
+      {
+        "hex": "#2a7767",
+        "coverage": 0.0243
+      },
+      {
+        "hex": "#a37e4b",
+        "coverage": 0.0155
+      }
+    ]
+  },
+  "regions": [
+    {
+      "id": "paper-ground",
+      "x": 0.35,
+      "y": 0.01,
+      "w": 0.15,
+      "h": 0.05,
+      "kind": "texture",
+      "score": {
+        "overall": 0.8343,
+        "structure": 0.9983,
+        "color": 0.5272,
+        "colorIntersection": 0,
+        "paletteMatch": 0.811,
+        "detail": 1,
+        "detailRaw": 1,
+        "detailAdded": 0,
+        "bands": 1
+      },
+      "verdict": "match",
+      "inkBox": {
+        "comp": null,
+        "build": null
+      }
+    },
+    {
+      "id": "nearby-title",
+      "x": 0.0574,
+      "y": 0.0315,
+      "w": 0.211,
+      "h": 0.0228,
+      "kind": "text",
+      "score": {
+        "overall": 0.5413,
+        "structure": 0.5114,
+        "color": 0.5517,
+        "colorIntersection": 0.1759,
+        "paletteMatch": 0.7541,
+        "detail": 0.5622,
+        "detailRaw": 0.6872,
+        "detailAdded": 0.25,
+        "bands": 0.6333
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 2,
+          "y": 6,
+          "w": 130,
+          "h": 37
+        },
+        "build": {
+          "x": 0,
+          "y": 2,
+          "w": 148,
+          "h": 43
+        }
+      }
+    },
+    {
+      "id": "safety-button",
+      "x": 0.8593,
+      "y": 0.0184,
+      "w": 0.0926,
+      "h": 0.0434,
+      "kind": "control",
+      "score": {
+        "overall": 0.6509,
+        "structure": 0.6309,
+        "color": 0.8272,
+        "colorIntersection": 0.6694,
+        "paletteMatch": 0.9122,
+        "detail": 0.3872,
+        "detailRaw": 0.481,
+        "detailAdded": 0.1875,
+        "bands": 1
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 21,
+          "y": 21,
+          "w": 37,
+          "h": 42
+        },
+        "build": {
+          "x": 9,
+          "y": 17,
+          "w": 37,
+          "h": 45
+        }
+      }
+    },
+    {
+      "id": "coarse-atlas",
+      "x": 0,
+      "y": 0.0786,
+      "w": 1,
+      "h": 0.5201,
+      "kind": "image",
+      "score": {
+        "overall": 0.5684,
+        "structure": 0.5732,
+        "color": 0.8522,
+        "colorIntersection": 0.7224,
+        "paletteMatch": 0.9221,
+        "detail": 0.4436,
+        "detailRaw": 0.5373,
+        "detailAdded": 0.1875,
+        "bands": 0.6578
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 32,
+          "w": 853,
+          "h": 848
+        },
+        "build": {
+          "x": 2,
+          "y": 15,
+          "w": 850,
+          "h": 944
+        }
+      }
+    },
+    {
+      "id": "atlas-zone-north",
+      "x": 0.48,
+      "y": 0.145,
+      "w": 0.18,
+      "h": 0.024,
+      "kind": "text",
+      "score": {
+        "overall": 0.4136,
+        "structure": 0.501,
+        "color": 0.5554,
+        "colorIntersection": 0.1791,
+        "paletteMatch": 0.7581,
+        "detail": 0.0368,
+        "detailRaw": 0.2087,
+        "detailAdded": 0.3438,
+        "bands": 0.1867
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 6,
+          "y": 21,
+          "w": 89,
+          "h": 19
+        },
+        "build": {
+          "x": 23,
+          "y": 0,
+          "w": 131,
+          "h": 36
+        }
+      }
+    },
+    {
+      "id": "atlas-zone-west",
+      "x": 0.1,
+      "y": 0.337,
+      "w": 0.17,
+      "h": 0.024,
+      "kind": "text",
+      "score": {
+        "overall": 0.4973,
+        "structure": 0.6339,
+        "color": 0.6975,
+        "colorIntersection": 0.5211,
+        "paletteMatch": 0.7925,
+        "detail": 0.0398,
+        "detailRaw": 0.071,
+        "detailAdded": 0.0625,
+        "bands": 0
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 2,
+          "y": 0,
+          "w": 143,
+          "h": 48
+        },
+        "build": {
+          "x": 28,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        }
+      }
+    },
+    {
+      "id": "atlas-zone-east",
+      "x": 0.7,
+      "y": 0.307,
+      "w": 0.18,
+      "h": 0.024,
+      "kind": "text",
+      "score": {
+        "overall": 0.5196,
+        "structure": 0.6986,
+        "color": 0.64,
+        "colorIntersection": 0.3945,
+        "paletteMatch": 0.7722,
+        "detail": 0.0686,
+        "detailRaw": 0.1103,
+        "detailAdded": 0.0833,
+        "bands": 0
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 3,
+          "y": 10,
+          "w": 90,
+          "h": 18
+        },
+        "build": {
+          "x": 2,
+          "y": 0,
+          "w": 99,
+          "h": 1
+        }
+      }
+    },
+    {
+      "id": "atlas-green-label",
+      "x": 0.36,
+      "y": 0.36,
+      "w": 0.24,
+      "h": 0.037,
+      "kind": "text",
+      "score": {
+        "overall": 0.6488,
+        "structure": 0.8751,
+        "color": 0.4223,
+        "colorIntersection": 0.0885,
+        "paletteMatch": 0.602,
+        "detail": 0.3045,
+        "detailRaw": 0.3618,
+        "detailAdded": 0.1146,
+        "bands": 0.6
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 47,
+          "y": 1,
+          "w": 51,
+          "h": 14
+        },
+        "build": {
+          "x": 4,
+          "y": 0,
+          "w": 180,
+          "h": 6
+        }
+      }
+    },
+    {
+      "id": "atlas-edge-label",
+      "x": 0.07,
+      "y": 0.455,
+      "w": 0.18,
+      "h": 0.026,
+      "kind": "text",
+      "score": {
+        "overall": 0.4508,
+        "structure": 0.4244,
+        "color": 0.6929,
+        "colorIntersection": 0.408,
+        "paletteMatch": 0.8462,
+        "detail": 0.1632,
+        "detailRaw": 0.2726,
+        "detailAdded": 0.2188,
+        "bands": 0.4091
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 2,
+          "w": 126,
+          "h": 38
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 153,
+          "h": 46
+        }
+      }
+    },
+    {
+      "id": "privacy-banner",
+      "x": 0.0481,
+      "y": 0.4978,
+      "w": 0.9027,
+      "h": 0.077,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.5899,
+        "structure": 0.8067,
+        "color": 0.8931,
+        "colorIntersection": 0.7832,
+        "paletteMatch": 0.9523,
+        "detail": 0.1332,
+        "detailRaw": 0.3364,
+        "detailAdded": 0.4063,
+        "bands": 0.34
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 36,
+          "y": 34,
+          "w": 409,
+          "h": 108
+        },
+        "build": {
+          "x": 37,
+          "y": 0,
+          "w": 561,
+          "h": 120
+        }
+      }
+    },
+    {
+      "id": "privacy-title",
+      "x": 0.1454,
+      "y": 0.5152,
+      "w": 0.61,
+      "h": 0.021,
+      "kind": "text",
+      "score": {
+        "overall": 0.5813,
+        "structure": 0.6435,
+        "color": 0.8471,
+        "colorIntersection": 0.7349,
+        "paletteMatch": 0.9075,
+        "detail": 0.025,
+        "detailRaw": 0.1708,
+        "detailAdded": 0.2917,
+        "bands": 0.44
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 1,
+          "y": 11,
+          "w": 361,
+          "h": 26
+        },
+        "build": {
+          "x": 15,
+          "y": 25,
+          "w": 393,
+          "h": 23
+        }
+      }
+    },
+    {
+      "id": "privacy-copy",
+      "x": 0.1454,
+      "y": 0.5418,
+      "w": 0.55,
+      "h": 0.021,
+      "kind": "text",
+      "score": {
+        "overall": 0.5701,
+        "structure": 0.6513,
+        "color": 0.8444,
+        "colorIntersection": 0.7149,
+        "paletteMatch": 0.9141,
+        "detail": 0,
+        "detailRaw": 0.2426,
+        "detailAdded": 0.5,
+        "bands": 0.3333
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 2,
+          "y": 6,
+          "w": 359,
+          "h": 26
+        },
+        "build": {
+          "x": 16,
+          "y": 0,
+          "w": 453,
+          "h": 44
+        }
+      }
+    },
+    {
+      "id": "cat-sheet",
+      "x": 0,
+      "y": 0.5987,
+      "w": 1,
+      "h": 0.3064,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.6361,
+        "structure": 0.4865,
+        "color": 0.8042,
+        "colorIntersection": 0.7531,
+        "paletteMatch": 0.8317,
+        "detail": 0.5926,
+        "detailRaw": 0.6812,
+        "detailAdded": 0.1771,
+        "bands": 0.7773
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 0,
+          "w": 853,
+          "h": 563
+        },
+        "build": {
+          "x": 42,
+          "y": 0,
+          "w": 811,
+          "h": 539
+        }
+      }
+    },
+    {
+      "id": "sheet-handle",
+      "x": 0.4537,
+      "y": 0.6117,
+      "w": 0.0938,
+      "h": 0.0049,
+      "kind": "control",
+      "score": {
+        "overall": 0.8557,
+        "structure": 0.9912,
+        "color": 0.9012,
+        "colorIntersection": 0.8198,
+        "paletteMatch": 0.9451,
+        "detail": 0.4712,
+        "detailRaw": 0.5285,
+        "detailAdded": 0.1146,
+        "bands": 0
+      },
+      "verdict": "match",
+      "inkBox": {
+        "comp": null,
+        "build": {
+          "x": 15,
+          "y": 0,
+          "w": 36,
+          "h": 1
+        }
+      }
+    },
+    {
+      "id": "cat-portrait",
+      "x": 0.0586,
+      "y": 0.635,
+      "w": 0.3458,
+      "h": 0.2359,
+      "kind": "image",
+      "score": {
+        "overall": 0.6103,
+        "structure": 0.4883,
+        "color": 0.6883,
+        "colorIntersection": 0.6464,
+        "paletteMatch": 0.7109,
+        "detail": 0.6145,
+        "detailRaw": 0.6249,
+        "detailAdded": 0.0208,
+        "bands": 0.8667
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 0,
+          "w": 295,
+          "h": 435
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 295,
+          "h": 435
+        }
+      }
+    },
+    {
+      "id": "cat-name",
+      "x": 0.4502,
+      "y": 0.648,
+      "w": 0.49,
+      "h": 0.036,
+      "kind": "text",
+      "score": {
+        "overall": 0.5108,
+        "structure": 0.4887,
+        "color": 0.8957,
+        "colorIntersection": 0.8121,
+        "paletteMatch": 0.9408,
+        "detail": 0.1731,
+        "detailRaw": 0.2876,
+        "detailAdded": 0.2292,
+        "bands": 0.1657
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 7,
+          "y": 7,
+          "w": 262,
+          "h": 41
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 418,
+          "h": 66
+        }
+      }
+    },
+    {
+      "id": "confirmed-status",
+      "x": 0.457,
+      "y": 0.692,
+      "w": 0.46,
+      "h": 0.025,
+      "kind": "text",
+      "score": {
+        "overall": 0.6302,
+        "structure": 0.792,
+        "color": 0.9366,
+        "colorIntersection": 0.8935,
+        "paletteMatch": 0.9598,
+        "detail": 0,
+        "detailRaw": 0.1396,
+        "detailAdded": 0.3333,
+        "bands": 0
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 4,
+          "y": 1,
+          "w": 293,
+          "h": 31
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 342,
+          "h": 48
+        }
+      }
+    },
+    {
+      "id": "seen-status",
+      "x": 0.457,
+      "y": 0.724,
+      "w": 0.42,
+      "h": 0.025,
+      "kind": "text",
+      "score": {
+        "overall": 0.7685,
+        "structure": 0.9034,
+        "color": 0.9297,
+        "colorIntersection": 0.9097,
+        "paletteMatch": 0.9404,
+        "detail": 0.1626,
+        "detailRaw": 0.1626,
+        "detailAdded": 0,
+        "bands": 0.6
+      },
+      "verdict": "drift",
+      "inkBox": {
+        "comp": {
+          "x": 2,
+          "y": 0,
+          "w": 276,
+          "h": 24
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 282,
+          "h": 9
+        }
+      }
+    },
+    {
+      "id": "view-cat",
+      "x": 0.45,
+      "y": 0.757,
+      "w": 0.489,
+      "h": 0.052,
+      "kind": "control",
+      "score": {
+        "overall": 0.4101,
+        "structure": 0.5285,
+        "color": 0.412,
+        "colorIntersection": 0.1018,
+        "paletteMatch": 0.5791,
+        "detail": 0.1406,
+        "detailRaw": 0.2551,
+        "detailAdded": 0.2292,
+        "bands": 0.2833
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 0,
+          "w": 417,
+          "h": 96
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 417,
+          "h": 96
+        }
+      }
+    },
+    {
+      "id": "report-sighting",
+      "x": 0.45,
+      "y": 0.825,
+      "w": 0.489,
+      "h": 0.052,
+      "kind": "control",
+      "score": {
+        "overall": 0.377,
+        "structure": 0.417,
+        "color": 0.5405,
+        "colorIntersection": 0.2307,
+        "paletteMatch": 0.7073,
+        "detail": 0.0012,
+        "detailRaw": 0.2616,
+        "detailAdded": 0.5208,
+        "bands": 0.4489
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 0,
+          "y": 0,
+          "w": 416,
+          "h": 85
+        },
+        "build": {
+          "x": 0,
+          "y": 0,
+          "w": 417,
+          "h": 94
+        }
+      }
+    },
+    {
+      "id": "tab-bar",
+      "x": 0,
+      "y": 0.9046,
+      "w": 1,
+      "h": 0.0954,
+      "kind": "chrome",
+      "score": {
+        "overall": 0.5205,
+        "structure": 0.7479,
+        "color": 0.4656,
+        "colorIntersection": 0.0382,
+        "paletteMatch": 0.6957,
+        "detail": 0.0892,
+        "detailRaw": 0.1621,
+        "detailAdded": 0.1458,
+        "bands": 0.8
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 62,
+          "y": 27,
+          "w": 728,
+          "h": 86
+        },
+        "build": {
+          "x": 31,
+          "y": 39,
+          "w": 504,
+          "h": 56
+        }
+      }
+    },
+    {
+      "id": "tab-nearby",
+      "x": 0.03,
+      "y": 0.916,
+      "w": 0.14,
+      "h": 0.068,
+      "kind": "control",
+      "score": {
+        "overall": 0.4923,
+        "structure": 0.7296,
+        "color": 0.4658,
+        "colorIntersection": 0.0556,
+        "paletteMatch": 0.6867,
+        "detail": 0.0048,
+        "detailRaw": 0.0777,
+        "detailAdded": 0.1458,
+        "bands": 0.4
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 36,
+          "y": 6,
+          "w": 73,
+          "h": 86
+        },
+        "build": {
+          "x": 5,
+          "y": 18,
+          "w": 52,
+          "h": 56
+        }
+      }
+    },
+    {
+      "id": "tab-map",
+      "x": 0.23,
+      "y": 0.916,
+      "w": 0.14,
+      "h": 0.068,
+      "kind": "control",
+      "score": {
+        "overall": 0.5486,
+        "structure": 0.7668,
+        "color": 0.4832,
+        "colorIntersection": 0.0688,
+        "paletteMatch": 0.7063,
+        "detail": 0.1722,
+        "detailRaw": 0.2191,
+        "detailAdded": 0.0938,
+        "bands": 0.4
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 43,
+          "y": 9,
+          "w": 45,
+          "h": 83
+        },
+        "build": {
+          "x": 63,
+          "y": 19,
+          "w": 49,
+          "h": 54
+        }
+      }
+    },
+    {
+      "id": "tab-report",
+      "x": 0.43,
+      "y": 0.916,
+      "w": 0.14,
+      "h": 0.068,
+      "kind": "control",
+      "score": {
+        "overall": 0.5253,
+        "structure": 0.7305,
+        "color": 0.4851,
+        "colorIntersection": 0.0812,
+        "paletteMatch": 0.7026,
+        "detail": 0.1339,
+        "detailRaw": 0.1807,
+        "detailAdded": 0.0938,
+        "bands": 0.3
+      },
+      "verdict": "contradicted",
+      "inkBox": {
+        "comp": {
+          "x": 26,
+          "y": 6,
+          "w": 67,
+          "h": 86
+        },
+        "build": {
+          "x": 0,
+          "y": 20,
+          "w": 66,
+          "h": 54
+        }
+      }
+    },
+    {
+      "id": "tab-following",
+      "x": 0.62,
+      "y": 0.916,
+      "w": 0.16,
+      "h": 0.068,
+      "kind": "control",
+      "score": {
+        "overall": 0.5308,
+        "structure": 0.8153,
+        "color": 0.4684,
+        "colorIntersection": 0.0455,
+        "paletteMatch": 0.6961,
+        "detail": 0,
+        "detailRaw": 0.0017,
+        "detailAdded": 0.0104,
+        "bands": 0.4
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 17,
+          "y": 11,
+          "w": 95,
+          "h": 81
+        },
+        "build": {
+          "x": 0,
+          "y": 62,
+          "w": 6,
+          "h": 10
+        }
+      }
+    },
+    {
+      "id": "tab-profile",
+      "x": 0.82,
+      "y": 0.916,
+      "w": 0.15,
+      "h": 0.068,
+      "kind": "control",
+      "score": {
+        "overall": 0.5384,
+        "structure": 0.844,
+        "color": 0.4531,
+        "colorIntersection": 0.0332,
+        "paletteMatch": 0.6792,
+        "detail": 0.0002,
+        "detailRaw": 0.0002,
+        "detailAdded": 0,
+        "bands": 0.4
+      },
+      "verdict": "missing",
+      "inkBox": {
+        "comp": {
+          "x": 28,
+          "y": 8,
+          "w": 63,
+          "h": 79
+        },
+        "build": null
+      }
+    }
+  ],
+  "files": {
+    "sideBySide": ".impeccable\\review\\diff\\hero\\side-by-side.png",
+    "heatmap": ".impeccable\\review\\diff\\hero\\heatmap.png",
+    "regionFiles": [
+      ".impeccable\\review\\diff\\hero\\regions\\paper-ground.png",
+      ".impeccable\\review\\diff\\hero\\regions\\nearby-title.png",
+      ".impeccable\\review\\diff\\hero\\regions\\safety-button.png",
+      ".impeccable\\review\\diff\\hero\\regions\\coarse-atlas.png",
+      ".impeccable\\review\\diff\\hero\\regions\\atlas-zone-north.png",
+      ".impeccable\\review\\diff\\hero\\regions\\atlas-zone-west.png",
+      ".impeccable\\review\\diff\\hero\\regions\\atlas-zone-east.png",
+      ".impeccable\\review\\diff\\hero\\regions\\atlas-green-label.png",
+      ".impeccable\\review\\diff\\hero\\regions\\atlas-edge-label.png",
+      ".impeccable\\review\\diff\\hero\\regions\\privacy-banner.png",
+      ".impeccable\\review\\diff\\hero\\regions\\privacy-title.png",
+      ".impeccable\\review\\diff\\hero\\regions\\privacy-copy.png",
+      ".impeccable\\review\\diff\\hero\\regions\\cat-sheet.png",
+      ".impeccable\\review\\diff\\hero\\regions\\sheet-handle.png",
+      ".impeccable\\review\\diff\\hero\\regions\\cat-portrait.png",
+      ".impeccable\\review\\diff\\hero\\regions\\cat-name.png",
+      ".impeccable\\review\\diff\\hero\\regions\\confirmed-status.png",
+      ".impeccable\\review\\diff\\hero\\regions\\seen-status.png",
+      ".impeccable\\review\\diff\\hero\\regions\\view-cat.png",
+      ".impeccable\\review\\diff\\hero\\regions\\report-sighting.png",
+      ".impeccable\\review\\diff\\hero\\regions\\tab-bar.png",
+      ".impeccable\\review\\diff\\hero\\regions\\tab-nearby.png",
+      ".impeccable\\review\\diff\\hero\\regions\\tab-map.png",
+      ".impeccable\\review\\diff\\hero\\regions\\tab-report.png",
+      ".impeccable\\review\\diff\\hero\\regions\\tab-following.png",
+      ".impeccable\\review\\diff\\hero\\regions\\tab-profile.png"
+    ]
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "title": "Choose Whisker Commons' mobile visual world",
+  "question": "Choose the world that should carry Nearby, cat identity, reporting and care continuity across the app.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Sheltered Link Atlas",
+      "kicker": "THE ROLL",
+      "lineage": "Singapore estate directories, covered-linkway maps and maintenance wayfinding",
+      "thesis": "The neighbourhood is a legible safety atlas, with community cats appearing as living places rather than social-media cards.",
+      "palette": ["#123B46", "#2E756C", "#F1EBDD", "#D55B3E", "#B8D8D0"],
+      "materials": ["enamel wayfinding panels", "weathered map paper", "selective system glass"],
+      "viewport": "A coarse-area atlas fills the upper half; a single selected cat and its latest safe activity rise in a compact anchored sheet above a translucent native tab bar.",
+      "risk": "The map grammar can feel civic or infrastructural unless cat photography and care language keep it humane.",
+      "raised": [
+        {
+          "from": "reference rail",
+          "raise": "One-pixel rules and keyed state marks make dense activity scannable without card stacks."
+        },
+        {
+          "from": "depot blind",
+          "raise": "Stale and interrupted data receive one unmistakable seam instead of another warning box."
+        },
+        {
+          "from": "cyclorama cues",
+          "raise": "Every time and freshness phase is named and patterned, never carried by colour alone."
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/sheltered-link-atlas.png"
+    },
+    {
+      "id": "model-pick",
+      "label": "Care Handover Ledger",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "volunteer shift handovers, clinic observation sheets and field notebooks",
+      "thesis": "Every sighting becomes a concise handover note that another neighbour can understand and continue.",
+      "palette": ["#13252A", "#F3F0E7", "#376D9A", "#E06B3C", "#8EA49A"],
+      "materials": ["ruled waterproof paper", "photo contact prints", "inked status stamps"],
+      "viewport": "A dense but calm latest-activity ledger leads with a real cat portrait, followed by ruled handover rows, one follow action and a persistent report control.",
+      "risk": "This is the most familiar and operationally clear direction, so weak execution could slide back into generic editorial UI.",
+      "comp": ".impeccable/mocks/decision/care-handover-ledger.png"
+    },
+    {
+      "id": "challenger-wpa",
+      "label": "Neighbourhood Field Poster",
+      "verdict": "competitive",
+      "lineage": "WPA national-park travel posters translated into Singapore community-cat field guides",
+      "thesis": "Each coarse area is a bold field plate where one cat, one care status and one next action own the screen.",
+      "palette": ["#0E5C63", "#E2A33A", "#7B3F2E", "#F4E7C5", "#203D35"],
+      "materials": ["four-ink silkscreen", "flat landscape planes", "caption strips"],
+      "viewport": "A full-bleed cat-and-estate field plate sits above a block-caption identity strip, with compact safe-area facts and one action instead of a feed of cards.",
+      "case": "It wins audience warmth and memorability while preserving a clear discovery action, but carries less information density than the assigned atlas.",
+      "risk": "It can become tourism nostalgia or illustration-first decoration if the status system does not stay operational.",
+      "comp": ".impeccable/mocks/decision/neighbourhood-field-poster.png",
+      "hero": "https://impeccable.style/worlds/cards/posters-covers-sleeves-wpa-park-poster-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/posters-covers-sleeves-wpa-park-poster.webp"
+    },
+    {
+      "id": "challenger-reference",
+      "label": "Reference Rail",
+      "verdict": "declined",
+      "lineage": "reference-setting pages drawn by a ruling engine",
+      "thesis": "Identity evidence is arranged around one fixed provenance rail.",
+      "palette": ["#171B1B", "#E9E1CF", "#A84432"],
+      "materials": ["one-pixel rules", "annotation brackets", "unbleached stock"],
+      "viewport": "Two short columns surround a keyed identity rail with evidence annotations in the margin.",
+      "case": "Strong information discipline, but too text-centric for a quick outdoor discovery screen.",
+      "kept": "Exact ruling and printed state marks.",
+      "risk": "Reads like an archival review tool instead of a neighbour-facing mobile app.",
+      "hero": "https://impeccable.style/worlds/cards/rw-centre-rail-reference-setting-hero.webp"
+    },
+    {
+      "id": "challenger-depot",
+      "label": "Depot Blind",
+      "verdict": "declined",
+      "lineage": "destination blinds and stitched depot rolls",
+      "thesis": "Updates step through a fixed window and faults stop visibly at one seam.",
+      "palette": ["#173F32", "#F0C847", "#EFE7D2"],
+      "materials": ["dyed duck cloth", "stitched rules", "backlit legends"],
+      "viewport": "A fixed status window shows one cat update while an eyelet index changes area.",
+      "case": "Excellent stale/error language, but poor fit for photos, maps and flexible report content.",
+      "kept": "One explicit seam for interrupted or stale state.",
+      "risk": "The transit metaphor would overpower care and identity.",
+      "hero": "https://impeccable.style/worlds/cards/operate-c-depot-blind-courses-hero.webp"
+    },
+    {
+      "id": "challenger-seven-segment",
+      "label": "Seven-Segment Commons",
+      "verdict": "declined",
+      "lineage": "scoreboards, bedside clocks and public price totems",
+      "thesis": "Delayed activity occupies a rigid mask where active and unavailable states are equally designed.",
+      "palette": ["#121617", "#E85E4F", "#E3A93C", "#86A987"],
+      "materials": ["matte display glass", "lit cells", "ghost segments"],
+      "viewport": "A fixed grid shows safe time buckets, area and identity state as illuminated cells.",
+      "case": "Clear state transitions, but too machine-like for care and too rigid for bilingual copy.",
+      "kept": "Inactive and unavailable states are designed, not left blank.",
+      "risk": "Feels like monitoring infrastructure rather than a community commons."
+    },
+    {
+      "id": "challenger-rain",
+      "label": "Gravity Rain Garden",
+      "verdict": "declined",
+      "lineage": "surreal vector-field gardens",
+      "thesis": "Activity paths reveal how a coarse area relates without implying an exact route.",
+      "palette": ["#334A46", "#6A9BCD", "#C65E4A", "#E8E9DC"],
+      "materials": ["directional rain", "vector fields", "garden silhouettes"],
+      "viewport": "One dominant area field bends delayed activity toward a selected cat while a level legend explains the safe abstraction.",
+      "case": "The causal map is expressive, but simulation and motion would obscure the fast outdoor task.",
+      "kept": "Directional relationships remain visible without revealing a route.",
+      "risk": "High motion cost and weak platform familiarity."
+    },
+    {
+      "id": "challenger-cyclorama",
+      "label": "Dawn Cue Commons",
+      "verdict": "declined",
+      "lineage": "theatre cyclorama lighting cues",
+      "thesis": "Freshness and care status move through named atmospheric phases.",
+      "palette": ["#101720", "#315AA0", "#D97979", "#F5F3EA"],
+      "materials": ["horizon light bands", "cue labels", "matte black stage"],
+      "viewport": "A selected cat stands against a banded freshness horizon with a scrubbable but text-equivalent cue timeline.",
+      "case": "Powerful phase language, but dark theatrical atmosphere lowers everyday trust and map clarity.",
+      "kept": "Named freshness phases with pattern equivalents.",
+      "risk": "The dramatic light world is too distant from daily neighbourhood use."
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "comp",
+    "toggle": true
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "A polished pet-community feed with white cards, soft green accents and photo-led profiles.",
+    "palette": ["#FFFFFF", "#173C2C", "#DCEBDD", "#F4F7F1"],
+    "materials": ["rounded white cards", "soft shadows", "photo tiles"],
+    "viewport": "A heading, privacy notice and vertical stack of cat cards above a conventional bottom tab bar.",
+    "risk": "Clear and familiar, but intentionally indistinguishable from the category and close to the current AI-like baseline.",
+    "comp": ".impeccable/mocks/decision/canon-current.png"
+  },
+  "steer": true
+}
