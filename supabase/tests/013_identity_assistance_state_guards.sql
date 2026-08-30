@@ -1,4 +1,5 @@
 begin;
+create extension if not exists dblink with schema extensions;
 select no_plan();
 
 select has_table('private', 'identity_assistance_claim_results',
@@ -89,7 +90,9 @@ from roles cross join privileges;
 
 set local session_replication_role = replica;
 insert into public.user_profiles (id, public_name, adult_confirmed_at)
-values ('00000000-0000-4000-8000-000000001800', 'Identity Guard Owner', pg_catalog.now());
+values
+  ('00000000-0000-4000-8000-000000001800', 'Identity Guard Owner', pg_catalog.now()),
+  ('00000000-0000-4000-8000-000000001801', 'Identity Guard Other', pg_catalog.now());
 set local session_replication_role = origin;
 
 insert into public.sightings (
@@ -99,7 +102,7 @@ select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1800 + fixture)::te
        '00000000-0000-4000-8000-000000001800', pg_catalog.now(),
        '8928308280fffff', 'morning', 'normal', 'limited',
        'identity-guard-' || fixture::text
-  from generate_series(1, 30) as fixtures(fixture);
+  from generate_series(1, 40) as fixtures(fixture);
 
 insert into public.media_assets (
   id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
@@ -116,7 +119,7 @@ select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1900 + fixture)::te
        4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
        '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
        'quarantined', pg_catalog.now()
-  from generate_series(1, 30) as fixtures(fixture);
+  from generate_series(1, 40) as fixtures(fixture);
 
 insert into private.media_upload_jobs (
   id, uploader_id, sighting_id, media_id, sha256, byte_length, width, height,
@@ -137,7 +140,7 @@ select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1950 + fixture)::te
        pg_catalog.now() + interval '2 hours', 'infinity'::timestamptz,
        pg_catalog.now(),
        pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1900 + fixture)::text, 12, '0'))::uuid
-  from generate_series(1, 30) as fixtures(fixture);
+  from generate_series(1, 40) as fixtures(fixture);
 
 insert into public.animals (id, primary_alias, profile_created_by, visibility)
 select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1800 + fixture)::text, 12, '0'))::uuid,
@@ -151,7 +154,10 @@ insert into private.identity_assistance_jobs (
   ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001801', '00000000-0000-4000-8000-000000001901', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('a', 64)),
   ('00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001802', null, null, 'notice.v1', repeat('b', 64)),
   ('00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001803', '00000000-0000-4000-8000-000000001903', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('c', 64)),
-  ('00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001911', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('d', 64));
+  ('00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001911', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('d', 64)),
+  ('00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001831', null, null, 'notice.v1', repeat('a', 64)),
+  ('00000000-0000-4000-8000-000000001861', '00000000-0000-4000-8000-000000001832', null, null, 'notice.v1', repeat('b', 64)),
+  ('00000000-0000-4000-8000-000000001862', '00000000-0000-4000-8000-000000001833', null, null, 'notice.v1', repeat('c', 64));
 
 insert into private.identity_assistance_jobs (
   id, sighting_id, media_asset_id, requester_id, status, notice_version,
@@ -175,8 +181,8 @@ insert into private.identity_assistance_jobs (
   input_sha256, attempt_count, model_version, callback_contract_version,
   new_cat_recommended, completed_at, selected_at
 ) values
-  ('00000000-0000-4000-8000-000000001818', '00000000-0000-4000-8000-000000001809', '00000000-0000-4000-8000-000000001909', '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('a', 64), 1, 'model.v1', 'identify-callback.v1', false, pg_catalog.now(), null),
-  ('00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001910', '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('b', 64), 1, 'model.v1', 'identify-callback.v1', false, pg_catalog.now(), null),
+  ('00000000-0000-4000-8000-000000001818', '00000000-0000-4000-8000-000000001809', '00000000-0000-4000-8000-000000001909', '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('a', 64), 1, 'model.v1', 'identify-callback.v1', false, '2026-08-31 00:00:00+00', null),
+  ('00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001910', '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('b', 64), 1, 'model.v1', 'identify-callback.v1', false, '2026-08-31 00:00:00+00', null),
   ('00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001912', '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('c', 64), 1, 'model.v1', 'identify-callback.v1', false, pg_catalog.now(), pg_catalog.now()),
   ('00000000-0000-4000-8000-000000001824', '00000000-0000-4000-8000-000000001814', '00000000-0000-4000-8000-000000001914', '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('d', 64), 1, 'model.v1', 'identify-callback.v1', true, pg_catalog.now(), null);
 
@@ -233,6 +239,95 @@ select throws_ok(
       repeat('1', 64), 'model.v1', 'identify-callback.v1', false, pg_catalog.now())$$,
   '42501', 'identity_assistance_job_binding_required',
   'actionable succeeded jobs require requester and canonical media binding'
+);
+
+select throws_ok(
+  $$insert into private.identity_assistance_jobs
+      (id, sighting_id, media_asset_id, requester_id, status, notice_version,
+       input_sha256, attempt_count, lease_id, lease_expires_at, processing_at)
+    values ('00000000-0000-4000-8000-000000001870',
+      '00000000-0000-4000-8000-000000001834',
+      '00000000-0000-4000-8000-000000001935',
+      '00000000-0000-4000-8000-000000001800', 'processing', 'notice.v1',
+      repeat('d', 64), 1, '00000000-0000-4000-8000-000000002070',
+      pg_catalog.now() + interval '2 minutes', pg_catalog.now())$$,
+  '42501', 'identity_assistance_job_binding_invalid',
+  'processing binding rejects media from another sighting'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs
+      (id, sighting_id, media_asset_id, requester_id, status, notice_version,
+       input_sha256, attempt_count, lease_id, lease_expires_at, processing_at)
+    values ('00000000-0000-4000-8000-000000001871',
+      '00000000-0000-4000-8000-000000001835',
+      '00000000-0000-4000-8000-000000001935',
+      '00000000-0000-4000-8000-000000001801', 'processing', 'notice.v1',
+      repeat('d', 64), 1, '00000000-0000-4000-8000-000000002071',
+      pg_catalog.now() + interval '2 minutes', pg_catalog.now())$$,
+  '42501', 'identity_assistance_job_binding_invalid',
+  'processing binding rejects media finalized by another uploader'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs
+      (id, sighting_id, media_asset_id, requester_id, status, notice_version,
+       input_sha256, attempt_count, lease_id, lease_expires_at, processing_at)
+    values ('00000000-0000-4000-8000-000000001872',
+      '00000000-0000-4000-8000-000000001836',
+      '00000000-0000-4000-8000-000000001936',
+      '00000000-0000-4000-8000-000000001800', 'processing', 'notice.v1',
+      repeat('a', 64), 1, '00000000-0000-4000-8000-000000002072',
+      pg_catalog.now() + interval '2 minutes', pg_catalog.now())$$,
+  '42501', 'identity_assistance_job_binding_invalid',
+  'processing binding rejects a mismatched canonical media hash'
+);
+update public.media_assets
+   set client_media_id = null, recipe_version = 'legacy.v0'
+ where id = '00000000-0000-4000-8000-000000001937';
+select throws_ok(
+  $$insert into private.identity_assistance_jobs
+      (id, sighting_id, media_asset_id, requester_id, status, notice_version,
+       input_sha256, attempt_count, lease_id, lease_expires_at, processing_at)
+    values ('00000000-0000-4000-8000-000000001873',
+      '00000000-0000-4000-8000-000000001837',
+      '00000000-0000-4000-8000-000000001937',
+      '00000000-0000-4000-8000-000000001800', 'processing', 'notice.v1',
+      repeat('f', 64), 1, '00000000-0000-4000-8000-000000002073',
+      pg_catalog.now() + interval '2 minutes', pg_catalog.now())$$,
+  '42501', 'identity_assistance_job_binding_invalid',
+  'processing binding rejects a non-canonical asset recipe'
+);
+update private.media_upload_jobs
+   set status = 'deletion_pending'
+ where id = '00000000-0000-4000-8000-000000001988';
+select throws_ok(
+  $$insert into private.identity_assistance_jobs
+      (id, sighting_id, media_asset_id, requester_id, status, notice_version,
+       input_sha256, attempt_count, lease_id, lease_expires_at, processing_at)
+    values ('00000000-0000-4000-8000-000000001874',
+      '00000000-0000-4000-8000-000000001838',
+      '00000000-0000-4000-8000-000000001938',
+      '00000000-0000-4000-8000-000000001800', 'processing', 'notice.v1',
+      repeat('0', 64), 1, '00000000-0000-4000-8000-000000002074',
+      pg_catalog.now() + interval '2 minutes', pg_catalog.now())$$,
+  '42501', 'identity_assistance_job_binding_invalid',
+  'processing binding rejects a non-finalized upload job'
+);
+update public.media_assets
+   set deleted_at = pg_catalog.now()
+ where id = '00000000-0000-4000-8000-000000001939';
+select throws_ok(
+  $$insert into private.identity_assistance_jobs
+      (id, sighting_id, media_asset_id, requester_id, status, notice_version,
+       input_sha256, attempt_count, model_version, callback_contract_version,
+       new_cat_recommended, completed_at)
+    values ('00000000-0000-4000-8000-000000001875',
+      '00000000-0000-4000-8000-000000001839',
+      '00000000-0000-4000-8000-000000001939',
+      '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1',
+      repeat('1', 64), 1, 'model.v1', 'identify-callback.v1', false,
+      pg_catalog.now())$$,
+  '42501', 'identity_assistance_job_binding_invalid',
+  'actionable success rejects a tombstoned canonical media asset'
 );
 
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001810', true);
@@ -367,40 +462,109 @@ select lives_ok(
   'processing jobs may be cancelled'
 );
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001818', true);
-select lives_ok(
-  $$update private.identity_assistance_jobs
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs
        set status = 'cancelled', input_sha256 = null, model_version = null,
            callback_contract_version = null, new_cat_recommended = null,
            completed_at = null, cancelled_at = pg_catalog.now()
-     where id = '00000000-0000-4000-8000-000000001818'$$,
-  'an actionable succeeded job may be cancelled with terminal cleanup'
+     where id = '00000000-0000-4000-8000-000000001818';
+    raise exception 'completion_provenance_was_erased' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_completion_immutable',
+  'post-success cancellation cannot clear completion provenance'
 );
-select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001819', true);
 select lives_ok(
   $$update private.identity_assistance_jobs
-       set status = 'expired', input_sha256 = null, model_version = null,
-           callback_contract_version = null, new_cat_recommended = null,
-           completed_at = null, expires_at = pg_catalog.now()
+       set status = 'cancelled', input_sha256 = null,
+           cancelled_at = pg_catalog.now()
+     where id = '00000000-0000-4000-8000-000000001818'$$,
+  'an actionable succeeded job may be cancelled without erasing completion facts'
+);
+select ok(
+  (select model_version = 'model.v1'
+      and callback_contract_version = 'identify-callback.v1'
+      and new_cat_recommended is false
+      and completed_at = '2026-08-31 00:00:00+00'::timestamptz
+     from private.identity_assistance_jobs
+    where id = '00000000-0000-4000-8000-000000001818'),
+  'post-success cancellation preserves all four completion fields exactly'
+);
+select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001819', true);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs
+       set status = 'expired', input_sha256 = null, model_version = 'model.v2',
+           expires_at = pg_catalog.now()
+     where id = '00000000-0000-4000-8000-000000001819';
+    raise exception 'completion_provenance_was_rewritten' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_completion_immutable',
+  'post-success expiry cannot rewrite completion provenance'
+);
+select lives_ok(
+  $$update private.identity_assistance_jobs
+       set status = 'expired', input_sha256 = null,
+           expires_at = pg_catalog.now()
      where id = '00000000-0000-4000-8000-000000001819'$$,
-  'an actionable succeeded job may expire with terminal cleanup'
+  'an actionable succeeded job may expire without erasing completion facts'
+);
+select ok(
+  (select model_version = 'model.v1'
+      and callback_contract_version = 'identify-callback.v1'
+      and new_cat_recommended is false
+      and completed_at = '2026-08-31 00:00:00+00'::timestamptz
+     from private.identity_assistance_jobs
+    where id = '00000000-0000-4000-8000-000000001819'),
+  'post-success expiry preserves all four completion fields exactly'
 );
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001820', true);
 select throws_ok(
   $$update private.identity_assistance_jobs
-       set status = 'expired', input_sha256 = null, model_version = null,
-           callback_contract_version = null, new_cat_recommended = null,
-           completed_at = null, expires_at = pg_catalog.now()
+       set status = 'expired', input_sha256 = null,
+           expires_at = pg_catalog.now()
      where id = '00000000-0000-4000-8000-000000001820'$$,
   '42501', 'identity_assistance_job_transition_forbidden',
   'selected succeeded jobs cannot be expired as unselected results'
 );
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001821', true);
-select throws_ok(
+select lives_ok(
   $$update private.identity_assistance_jobs
        set status = 'failed', failed_at = pg_catalog.now(), failure_code = 'internal_error'
      where id = '00000000-0000-4000-8000-000000001821'$$,
+  'requested jobs may fail before processing under the approved state machine'
+);
+select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001860', true);
+select lives_ok(
+  $$update private.identity_assistance_jobs
+       set status = 'cancelled', input_sha256 = null, cancelled_at = pg_catalog.now()
+     where id = '00000000-0000-4000-8000-000000001860'$$,
+  'requested jobs may be cancelled before processing'
+);
+select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001861', true);
+select lives_ok(
+  $$update private.identity_assistance_jobs
+       set status = 'expired', input_sha256 = null, expires_at = pg_catalog.now()
+     where id = '00000000-0000-4000-8000-000000001861'$$,
+  'requested jobs may expire before processing'
+);
+select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001862', true);
+select throws_ok(
+  $$update private.identity_assistance_jobs
+       set status = 'succeeded', model_version = 'model.v1',
+           callback_contract_version = 'identify-callback.v1',
+           new_cat_recommended = false, completed_at = pg_catalog.now()
+     where id = '00000000-0000-4000-8000-000000001862'$$,
   '42501', 'identity_assistance_job_transition_forbidden',
-  'requested jobs cannot skip processing into failure'
+  'requested jobs still cannot skip processing into success'
 );
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001822', true);
 select throws_ok(
@@ -443,6 +607,105 @@ select throws_ok(
   '42501', 'identity_assistance_job_completion_immutable',
   'successful completion time is immutable'
 );
+select lives_ok(
+  $$update private.identity_assistance_jobs
+       set selected_at = '2026-08-31 00:01:00+00'
+     where id = '00000000-0000-4000-8000-000000001824'$$,
+  'selection time may be recorded once'
+);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs set selected_at = null
+     where id = '00000000-0000-4000-8000-000000001824';
+    raise exception 'selected_result_became_actionable' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_lifecycle_immutable',
+  'a selected result cannot become actionable again'
+);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs
+       set selected_at = '2026-08-31 00:02:00+00'
+     where id = '00000000-0000-4000-8000-000000001824';
+    raise exception 'selection_time_was_rewritten' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_lifecycle_immutable',
+  'a recorded selection time cannot change'
+);
+select lives_ok(
+  $$update private.identity_assistance_jobs
+       set withdrawn_at = '2026-08-31 00:03:00+00'
+     where id = '00000000-0000-4000-8000-000000001824'$$,
+  'withdrawal time may be recorded once'
+);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs set withdrawn_at = null
+     where id = '00000000-0000-4000-8000-000000001824';
+    raise exception 'withdrawal_was_cleared' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_lifecycle_immutable',
+  'a recorded withdrawal cannot be cleared'
+);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs
+       set withdrawn_at = '2026-08-31 00:04:00+00'
+     where id = '00000000-0000-4000-8000-000000001824';
+    raise exception 'withdrawal_time_was_rewritten' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_lifecycle_immutable',
+  'a recorded withdrawal time cannot change'
+);
+select lives_ok(
+  $$update private.identity_assistance_jobs
+       set result_invalidated_at = '2026-08-31 00:05:00+00'
+     where id = '00000000-0000-4000-8000-000000001824'$$,
+  'result invalidation time may be recorded once'
+);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs set result_invalidated_at = null
+     where id = '00000000-0000-4000-8000-000000001824';
+    raise exception 'result_invalidation_was_cleared' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_lifecycle_immutable',
+  'a result invalidation time cannot be cleared'
+);
+select throws_ok(
+  $sql$
+  do $body$
+  begin
+    update private.identity_assistance_jobs
+       set result_invalidated_at = '2026-08-31 00:06:00+00'
+     where id = '00000000-0000-4000-8000-000000001824';
+    raise exception 'result_invalidation_time_was_rewritten' using errcode = 'P0001';
+  end
+  $body$;
+  $sql$,
+  '42501', 'identity_assistance_job_lifecycle_immutable',
+  'a result invalidation time cannot change'
+);
 select set_config('private.identity_assistance_job_writer', '', true);
 
 select throws_ok(
@@ -462,6 +725,19 @@ select throws_ok(
       array['view_angle_limited']::private.identity_assistance_reason_code[])$$,
   '42501', 'identity_assistance_candidate_job_not_processing',
   'candidate insertion requires a processing job'
+);
+update public.animals
+   set visibility = 'hidden'
+ where id = '00000000-0000-4000-8000-000000001840';
+select set_config('private.identity_assistance_candidate_writer', '00000000-0000-4000-8000-000000001825', true);
+select throws_ok(
+  $$insert into private.identity_assistance_candidates
+      (job_id, rank, animal_id, confidence_band, reason_codes)
+    values ('00000000-0000-4000-8000-000000001825', 2,
+      '00000000-0000-4000-8000-000000001840', 'weak',
+      array['image_quality_limited']::private.identity_assistance_reason_code[])$$,
+  '42501', 'identity_assistance_candidate_unavailable',
+  'candidate insertion rejects an unavailable animal after locking'
 );
 select set_config('private.identity_assistance_candidate_writer', '00000000-0000-4000-8000-000000001824', true);
 select throws_ok(
@@ -723,6 +999,424 @@ select is(
     where job_id = '00000000-0000-4000-8000-000000001830'),
   0::bigint,
   'processing result invalidation purges its partial candidate set'
+);
+
+select lives_ok(
+  $orchestrator$
+  do $main$
+  begin
+    perform extensions.dblink_connect(
+      'identity_guard_setup',
+      'dbname=' || pg_catalog.current_database()
+        || ' application_name=identity_guard_setup'
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
+      do $setup$
+      begin
+        perform pg_catalog.set_config('session_replication_role', 'replica', true);
+        insert into public.user_profiles (id, public_name, adult_confirmed_at)
+        values ('00000000-0000-4000-8000-000000003000',
+          'Identity Guard Race Owner', pg_catalog.now());
+        insert into public.sightings (
+          id, reporter_id, occurred_at, public_cell_id, time_bucket, risk,
+          visibility, client_dedupe_key
+        ) values
+          ('00000000-0000-4000-8000-000000003001',
+            '00000000-0000-4000-8000-000000003000', pg_catalog.now(),
+            '8928308280fffff', 'morning', 'normal', 'limited',
+            'identity-guard-race-hide'),
+          ('00000000-0000-4000-8000-000000003002',
+            '00000000-0000-4000-8000-000000003000', pg_catalog.now(),
+            '8928308280fffff', 'morning', 'normal', 'limited',
+            'identity-guard-race-delete');
+        insert into public.media_assets (
+          id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
+          redaction_confirmed_at, training_eligible, client_media_id,
+          byte_length, width, height, recipe_version, detector_versions,
+          status, reviewed_at
+        ) values
+          ('00000000-0000-4000-8000-000000003101',
+            '00000000-0000-4000-8000-000000003001',
+            '00000000-0000-4000-8000-000000003000', 'media-staging',
+            'jobs/00000000-0000-4000-8000-000000003151.jpg', repeat('a', 64),
+            pg_catalog.now(), false, 'identity-race-hide', 4096, 512, 512,
+            'jpeg-srgb-2048-q88.v1',
+            '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+            'quarantined', pg_catalog.now()),
+          ('00000000-0000-4000-8000-000000003102',
+            '00000000-0000-4000-8000-000000003002',
+            '00000000-0000-4000-8000-000000003000', 'media-staging',
+            'jobs/00000000-0000-4000-8000-000000003152.jpg', repeat('b', 64),
+            pg_catalog.now(), false, 'identity-race-delete', 4096, 512, 512,
+            'jpeg-srgb-2048-q88.v1',
+            '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+            'quarantined', pg_catalog.now());
+        insert into private.media_upload_jobs (
+          id, uploader_id, sighting_id, media_id, sha256, byte_length, width,
+          height, recipe_version, detector_versions, confirmed_at_local,
+          object_path, status, reserved_at, reservation_expires_at,
+          upload_token_expires_at, next_cleanup_at, finalized_at, media_asset_id
+        ) values
+          ('00000000-0000-4000-8000-000000003151',
+            '00000000-0000-4000-8000-000000003000',
+            '00000000-0000-4000-8000-000000003001', 'identity-race-hide',
+            repeat('a', 64), 4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
+            '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+            pg_catalog.now(), 'jobs/00000000-0000-4000-8000-000000003151.jpg',
+            'finalized', pg_catalog.now(), pg_catalog.now() + interval '10 minutes',
+            pg_catalog.now() + interval '2 hours', 'infinity'::timestamptz,
+            pg_catalog.now(), '00000000-0000-4000-8000-000000003101'),
+          ('00000000-0000-4000-8000-000000003152',
+            '00000000-0000-4000-8000-000000003000',
+            '00000000-0000-4000-8000-000000003002', 'identity-race-delete',
+            repeat('b', 64), 4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
+            '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+            pg_catalog.now(), 'jobs/00000000-0000-4000-8000-000000003152.jpg',
+            'finalized', pg_catalog.now(), pg_catalog.now() + interval '10 minutes',
+            pg_catalog.now() + interval '2 hours', 'infinity'::timestamptz,
+            pg_catalog.now(), '00000000-0000-4000-8000-000000003102');
+        insert into public.animals (id, primary_alias, profile_created_by, visibility)
+        values
+          ('00000000-0000-4000-8000-000000003201', 'Race Hide Candidate',
+            '00000000-0000-4000-8000-000000003000', 'limited'),
+          ('00000000-0000-4000-8000-000000003202', 'Race Delete Candidate',
+            '00000000-0000-4000-8000-000000003000', 'limited');
+        insert into private.identity_assistance_jobs (
+          id, sighting_id, media_asset_id, requester_id, status, notice_version,
+          input_sha256, attempt_count, lease_id, lease_expires_at, processing_at
+        ) values
+          ('00000000-0000-4000-8000-000000003301',
+            '00000000-0000-4000-8000-000000003001',
+            '00000000-0000-4000-8000-000000003101',
+            '00000000-0000-4000-8000-000000003000', 'processing', 'notice.v1',
+            repeat('a', 64), 1, '00000000-0000-4000-8000-000000003351',
+            pg_catalog.now() + interval '2 minutes', pg_catalog.now()),
+          ('00000000-0000-4000-8000-000000003302',
+            '00000000-0000-4000-8000-000000003002',
+            '00000000-0000-4000-8000-000000003102',
+            '00000000-0000-4000-8000-000000003000', 'processing', 'notice.v1',
+            repeat('b', 64), 1, '00000000-0000-4000-8000-000000003352',
+            pg_catalog.now() + interval '2 minutes', pg_catalog.now());
+      end
+      $setup$;
+      $remote$
+    );
+  end
+  $main$;
+  $orchestrator$,
+  'two-session race fixtures are committed outside the pgTAP transaction'
+);
+
+select lives_ok(
+  $orchestrator$
+  do $main$
+  declare
+    wait_deadline timestamptz;
+  begin
+    perform pg_catalog.pg_advisory_lock(20260831, 41);
+    perform extensions.dblink_connect(
+      'identity_candidate_hide',
+      'dbname=' || pg_catalog.current_database()
+        || ' application_name=identity_candidate_hide'
+    );
+    perform extensions.dblink_connect(
+      'identity_animal_hide',
+      'dbname=' || pg_catalog.current_database()
+        || ' application_name=identity_animal_hide'
+    );
+    perform extensions.dblink_send_query(
+      'identity_candidate_hide',
+      $candidate$
+      with writer_context as materialized (
+        select
+          pg_catalog.set_config(
+            'private.identity_assistance_candidate_writer',
+            '00000000-0000-4000-8000-000000003301', false
+          ) as candidate_context,
+          pg_catalog.set_config(
+            'private.identity_assistance_job_writer',
+            '00000000-0000-4000-8000-000000003301', false
+          ) as job_context
+      ), inserted as (
+        insert into private.identity_assistance_candidates (
+          job_id, rank, animal_id, confidence_band, reason_codes
+        )
+        select '00000000-0000-4000-8000-000000003301', 1,
+          '00000000-0000-4000-8000-000000003201', 'likely',
+          array['face_pattern_similar']::private.identity_assistance_reason_code[]
+        from writer_context
+        returning 1
+      ), gate as materialized (
+        select pg_catalog.pg_advisory_lock(20260831, 41) from inserted
+      ), completed as (
+        update private.identity_assistance_jobs
+           set status = 'succeeded', lease_id = null, lease_expires_at = null,
+               model_version = 'model.v1',
+               callback_contract_version = 'identify-callback.v1',
+               new_cat_recommended = false, completed_at = pg_catalog.now()
+         where id = '00000000-0000-4000-8000-000000003301'
+           and exists (select 1 from gate)
+        returning 1
+      )
+      select pg_catalog.count(*)::bigint from completed
+      $candidate$
+    );
+
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    loop
+      exit when exists (
+        select 1 from pg_catalog.pg_stat_activity
+         where application_name = 'identity_candidate_hide'
+           and wait_event_type = 'Lock'
+      );
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'candidate_hide_gate_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+
+    perform extensions.dblink_send_query(
+      'identity_animal_hide',
+      $animal$
+      with changed as (
+        update public.animals set visibility = 'hidden'
+         where id = '00000000-0000-4000-8000-000000003201'
+        returning 1
+      )
+      select pg_catalog.count(*)::bigint from changed
+      $animal$
+    );
+
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    loop
+      exit when extensions.dblink_is_busy('identity_animal_hide') = 0
+        or exists (
+          select 1 from pg_catalog.pg_stat_activity
+           where application_name = 'identity_animal_hide'
+             and wait_event_type = 'Lock'
+        );
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'animal_hide_race_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+
+    perform pg_catalog.pg_advisory_unlock(20260831, 41);
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    while extensions.dblink_is_busy('identity_candidate_hide') = 1
+       or extensions.dblink_is_busy('identity_animal_hide') = 1 loop
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'animal_hide_completion_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+
+    perform * from extensions.dblink_get_result('identity_candidate_hide')
+      as candidate_result(completed bigint);
+    perform * from extensions.dblink_get_result('identity_animal_hide')
+      as animal_result(changed bigint);
+    perform extensions.dblink_disconnect('identity_candidate_hide');
+    perform extensions.dblink_disconnect('identity_animal_hide');
+  end
+  $main$;
+  $orchestrator$,
+  'candidate completion and animal hide execute in two real serialized sessions'
+);
+select is(
+  (select visibility::text from public.animals
+    where id = '00000000-0000-4000-8000-000000003201'),
+  'hidden',
+  'concurrent candidate completion does not block the animal hide'
+);
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_candidates
+    where animal_id = '00000000-0000-4000-8000-000000003201'),
+  0::bigint,
+  'candidate completion racing a hide leaves no hidden-animal candidate'
+);
+
+select lives_ok(
+  $orchestrator$
+  do $main$
+  declare
+    wait_deadline timestamptz;
+  begin
+    perform pg_catalog.pg_advisory_lock(20260831, 42);
+    perform extensions.dblink_connect(
+      'identity_candidate_delete',
+      'dbname=' || pg_catalog.current_database()
+        || ' application_name=identity_candidate_delete'
+    );
+    perform extensions.dblink_connect(
+      'identity_animal_delete',
+      'dbname=' || pg_catalog.current_database()
+        || ' application_name=identity_animal_delete'
+    );
+    perform extensions.dblink_send_query(
+      'identity_candidate_delete',
+      $candidate$
+      with writer_context as materialized (
+        select
+          pg_catalog.set_config(
+            'private.identity_assistance_candidate_writer',
+            '00000000-0000-4000-8000-000000003302', false
+          ) as candidate_context,
+          pg_catalog.set_config(
+            'private.identity_assistance_job_writer',
+            '00000000-0000-4000-8000-000000003302', false
+          ) as job_context
+      ), inserted as (
+        insert into private.identity_assistance_candidates (
+          job_id, rank, animal_id, confidence_band, reason_codes
+        )
+        select '00000000-0000-4000-8000-000000003302', 1,
+          '00000000-0000-4000-8000-000000003202', 'likely',
+          array['face_pattern_similar']::private.identity_assistance_reason_code[]
+        from writer_context
+        returning 1
+      ), gate as materialized (
+        select pg_catalog.pg_advisory_lock(20260831, 42) from inserted
+      ), completed as (
+        update private.identity_assistance_jobs
+           set status = 'succeeded', lease_id = null, lease_expires_at = null,
+               model_version = 'model.v1',
+               callback_contract_version = 'identify-callback.v1',
+               new_cat_recommended = false, completed_at = pg_catalog.now()
+         where id = '00000000-0000-4000-8000-000000003302'
+           and exists (select 1 from gate)
+        returning 1
+      )
+      select pg_catalog.count(*)::bigint from completed
+      $candidate$
+    );
+
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    loop
+      exit when exists (
+        select 1 from pg_catalog.pg_stat_activity
+         where application_name = 'identity_candidate_delete'
+           and wait_event_type = 'Lock'
+      );
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'candidate_delete_gate_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+
+    perform extensions.dblink_send_query(
+      'identity_animal_delete',
+      $animal$
+      with removed as (
+        delete from public.animals
+         where id = '00000000-0000-4000-8000-000000003202'
+        returning 1
+      )
+      select pg_catalog.count(*)::bigint from removed
+      $animal$
+    );
+
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    loop
+      exit when extensions.dblink_is_busy('identity_animal_delete') = 0
+        or exists (
+          select 1 from pg_catalog.pg_stat_activity
+           where application_name = 'identity_animal_delete'
+             and wait_event_type = 'Lock'
+        );
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'animal_delete_race_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+
+    perform pg_catalog.pg_advisory_unlock(20260831, 42);
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    while extensions.dblink_is_busy('identity_candidate_delete') = 1
+       or extensions.dblink_is_busy('identity_animal_delete') = 1 loop
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'animal_delete_completion_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+
+    perform * from extensions.dblink_get_result('identity_candidate_delete')
+      as candidate_result(completed bigint);
+    perform * from extensions.dblink_get_result('identity_animal_delete', false)
+      as animal_result(removed bigint);
+    perform extensions.dblink_disconnect('identity_candidate_delete');
+    perform extensions.dblink_disconnect('identity_animal_delete');
+  end
+  $main$;
+  $orchestrator$,
+  'candidate completion and animal delete execute in two real serialized sessions'
+);
+select ok(
+  not exists (
+    select 1 from public.animals
+     where id = '00000000-0000-4000-8000-000000003202'
+  ),
+  'concurrent candidate completion does not block the animal delete'
+);
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_candidates
+    where animal_id = '00000000-0000-4000-8000-000000003202'),
+  0::bigint,
+  'candidate completion racing a delete leaves no deleted-animal candidate'
+);
+
+select lives_ok(
+  $orchestrator$
+  do $main$
+  begin
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
+      do $cleanup$
+      begin
+        perform pg_catalog.set_config('session_replication_role', 'replica', true);
+        delete from private.identity_assistance_candidates
+         where job_id in (
+           '00000000-0000-4000-8000-000000003301',
+           '00000000-0000-4000-8000-000000003302'
+         );
+        delete from private.identity_assistance_jobs
+         where id in (
+           '00000000-0000-4000-8000-000000003301',
+           '00000000-0000-4000-8000-000000003302'
+         );
+        delete from private.media_upload_jobs
+         where id in (
+           '00000000-0000-4000-8000-000000003151',
+           '00000000-0000-4000-8000-000000003152'
+         );
+        delete from public.media_assets
+         where id in (
+           '00000000-0000-4000-8000-000000003101',
+           '00000000-0000-4000-8000-000000003102'
+         );
+        delete from public.animals
+         where id in (
+           '00000000-0000-4000-8000-000000003201',
+           '00000000-0000-4000-8000-000000003202'
+         );
+        delete from public.sightings
+         where id in (
+           '00000000-0000-4000-8000-000000003001',
+           '00000000-0000-4000-8000-000000003002'
+         );
+        delete from public.user_profiles
+         where id = '00000000-0000-4000-8000-000000003000';
+      end
+      $cleanup$;
+      $remote$
+    );
+    perform extensions.dblink_disconnect('identity_guard_setup');
+  end
+  $main$;
+  $orchestrator$,
+  'two-session race fixtures are removed after assertions'
 );
 
 select * from finish();
