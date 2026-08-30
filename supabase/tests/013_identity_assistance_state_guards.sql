@@ -1006,6 +1006,7 @@ select lives_ok(
   do $main$
   declare
     diagnostic_constraint text;
+    diagnostic_message text;
   begin
     perform extensions.dblink_connect(
       'identity_guard_setup',
@@ -1103,9 +1104,21 @@ select lives_ok(
     );
   exception
     when others then
-      get stacked diagnostics diagnostic_constraint = constraint_name;
-      raise exception 'identity_guard_setup_failed_%_%', sqlstate,
-        coalesce(diagnostic_constraint, 'no_constraint');
+      get stacked diagnostics
+        diagnostic_constraint = constraint_name,
+        diagnostic_message = message_text;
+      diagnostic_message := pg_catalog.regexp_replace(
+        diagnostic_message,
+        '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}',
+        'id',
+        'g'
+      );
+      diagnostic_message := pg_catalog.regexp_replace(
+        diagnostic_message, '[^A-Za-z0-9 _.()=-]', '_', 'g'
+      );
+      raise exception 'identity_guard_setup_failed_%_%_%', sqlstate,
+        coalesce(diagnostic_constraint, 'no_constraint'),
+        pg_catalog.left(diagnostic_message, 100);
   end
   $main$;
   $orchestrator$,
