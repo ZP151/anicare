@@ -1004,6 +1004,8 @@ select is(
 select lives_ok(
   $orchestrator$
   do $main$
+  declare
+    diagnostic_constraint text;
   begin
     perform extensions.dblink_connect(
       'identity_guard_setup',
@@ -1103,6 +1105,11 @@ select lives_ok(
       $setup$;
       $remote$
     );
+  exception
+    when others then
+      get stacked diagnostics diagnostic_constraint = constraint_name;
+      raise exception 'identity_guard_setup_failed_%_%', sqlstate,
+        coalesce(diagnostic_constraint, 'no_constraint');
   end
   $main$;
   $orchestrator$,
