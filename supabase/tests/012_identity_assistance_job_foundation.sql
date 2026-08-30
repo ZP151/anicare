@@ -1,5 +1,5 @@
 begin;
-select plan(177);
+select plan(186);
 
 select has_type('private', 'identity_assistance_job_status', 'identity-assistance job status enum exists');
 select has_type('private', 'identity_assistance_confidence_band', 'identity-assistance confidence enum exists');
@@ -108,7 +108,14 @@ insert into public.sightings (
   ('00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1811'),
   ('00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1812'),
   ('00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1813'),
-  ('00000000-0000-4000-8000-000000001814', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1814');
+  ('00000000-0000-4000-8000-000000001814', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1814'),
+  ('00000000-0000-4000-8000-000000001815', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1815'),
+  ('00000000-0000-4000-8000-000000001816', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1816'),
+  ('00000000-0000-4000-8000-000000001817', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1817'),
+  ('00000000-0000-4000-8000-000000001818', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1818'),
+  ('00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1819'),
+  ('00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1820'),
+  ('00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1821');
 
 insert into public.animals (id, primary_alias, profile_created_by, visibility) values
   ('00000000-0000-4000-8000-000000001820', 'Candidate One', '00000000-0000-4000-8000-000000001800', 'limited'),
@@ -120,6 +127,18 @@ values (
   '00000000-0000-4000-8000-000000001830', '00000000-0000-4000-8000-000000001812',
   '00000000-0000-4000-8000-000000001800', 'new_animal', 'tentative', '[]'::jsonb
 );
+
+insert into public.identity_proposals (id, sighting_id, proposer_id, source, status, reasons)
+values
+  ('00000000-0000-4000-8000-000000001831', '00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001800', 'new_animal', 'tentative', '[]'::jsonb),
+  ('00000000-0000-4000-8000-000000001832', '00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001800', 'new_animal', 'tentative', '[]'::jsonb),
+  ('00000000-0000-4000-8000-000000001833', '00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001800', 'new_animal', 'tentative', '[]'::jsonb);
+
+insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
+values
+  ('00000000-0000-4000-8000-000000001870', '00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('7', 64)),
+  ('00000000-0000-4000-8000-000000001871', '00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('8', 64)),
+  ('00000000-0000-4000-8000-000000001872', '00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('9', 64));
 
 select lives_ok(
   $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
@@ -228,6 +247,71 @@ select throws_ok(
     values ('00000000-0000-4000-8000-000000001851', '00000000-0000-4000-8000-000000001811',
       '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('d', 64), now())$$,
   '23514', null, 'requested jobs cannot carry completion fields'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, requester_id, status, notice_version, input_sha256,
+      model_version, callback_contract_version, new_cat_recommended, completed_at,
+      result_invalidated_at
+    ) values (
+      '00000000-0000-4000-8000-000000001856', '00000000-0000-4000-8000-000000001815',
+      '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('d', 64),
+      'model.v1', null, true, now(), now()
+    )$$,
+  '23514', null, 'succeeded jobs require the identify callback version'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256, withdrawn_at)
+    values ('00000000-0000-4000-8000-000000001857', '00000000-0000-4000-8000-000000001816',
+      '00000000-0000-4000-8000-000000001800', 'notice.v1', null, now())$$,
+  '23514', null, 'requested jobs with cleanup markers still require an input hash'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, requester_id, status, notice_version, input_sha256,
+      attempt_count, lease_id, lease_expires_at, processing_at, result_invalidated_at
+    ) values (
+      '00000000-0000-4000-8000-000000001858', '00000000-0000-4000-8000-000000001817',
+      '00000000-0000-4000-8000-000000001800', 'processing', 'notice.v1', null,
+      1, '00000000-0000-4000-8000-000000001899', now() + interval '1 minute', now(), now()
+    )$$,
+  '23514', null, 'processing jobs with cleanup markers still require an input hash'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, requester_id, status, notice_version, input_sha256,
+      model_version, callback_contract_version, new_cat_recommended, completed_at,
+      result_invalidated_at
+    ) values (
+      '00000000-0000-4000-8000-000000001859', '00000000-0000-4000-8000-000000001818',
+      '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('e', 64),
+      '', 'identify-callback.v1', true, now(), now()
+    )$$,
+  '23514', null, 'succeeded jobs reject empty model versions'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, requester_id, status, notice_version, input_sha256,
+      model_version, callback_contract_version, new_cat_recommended, completed_at,
+      result_invalidated_at
+    ) values (
+      '00000000-0000-4000-8000-000000001862', '00000000-0000-4000-8000-000000001818',
+      '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('e', 64),
+      'model /path', 'identify-callback.v1', true, now(), now()
+    )$$,
+  '23514', null, 'succeeded jobs reject whitespace and path-like model versions'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, requester_id, status, notice_version, input_sha256,
+      model_version, callback_contract_version, new_cat_recommended, completed_at,
+      result_invalidated_at
+    ) values (
+      '00000000-0000-4000-8000-000000001863', '00000000-0000-4000-8000-000000001818',
+      '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', repeat('e', 64),
+      repeat('m', 65), 'identify-callback.v1', true, now(), now()
+    )$$,
+  '23514', null, 'succeeded jobs bound model versions to 64 characters'
 );
 
 select lives_ok(
@@ -394,6 +478,42 @@ select is(
   0::bigint,
   'evidence has no locator, hash, score, vector, location, or arbitrary payload column'
 );
+select throws_ok(
+  $$insert into private.identity_proposal_evidence (
+      proposal_id, job_id, recipe_version, crop_contract_version,
+      embedding_contract_version, identify_contract_version, model_version,
+      callback_contract_version, selected_at
+    ) values (
+      '00000000-0000-4000-8000-000000001831', '00000000-0000-4000-8000-000000001870',
+      'jpeg-srgb-2048-q88.v1', 'crop.v1', 'embedding.v1', 'identify.v1', '',
+      'identify-callback.v1', now()
+    )$$,
+  '23514', null, 'evidence rejects empty model versions'
+);
+select throws_ok(
+  $$insert into private.identity_proposal_evidence (
+      proposal_id, job_id, recipe_version, crop_contract_version,
+      embedding_contract_version, identify_contract_version, model_version,
+      callback_contract_version, selected_at
+    ) values (
+      '00000000-0000-4000-8000-000000001832', '00000000-0000-4000-8000-000000001871',
+      'jpeg-srgb-2048-q88.v1', 'crop.v1', 'embedding.v1', 'identify.v1', 'model /path',
+      'identify-callback.v1', now()
+    )$$,
+  '23514', null, 'evidence rejects whitespace and path-like model versions'
+);
+select throws_ok(
+  $$insert into private.identity_proposal_evidence (
+      proposal_id, job_id, recipe_version, crop_contract_version,
+      embedding_contract_version, identify_contract_version, model_version,
+      callback_contract_version, selected_at
+    ) values (
+      '00000000-0000-4000-8000-000000001833', '00000000-0000-4000-8000-000000001872',
+      'jpeg-srgb-2048-q88.v1', 'crop.v1', 'embedding.v1', 'identify.v1', repeat('m', 65),
+      'identify-callback.v1', now()
+    )$$,
+  '23514', null, 'evidence bounds model versions to 64 characters'
+);
 
 delete from private.identity_proposal_evidence where proposal_id = '00000000-0000-4000-8000-000000001830';
 delete from private.identity_assistance_status_reads where actor_id = '00000000-0000-4000-8000-000000001800';
@@ -401,10 +521,10 @@ delete from private.identity_assistance_events where request_id = '00000000-0000
 delete from private.identity_assistance_service_requests where request_id between '00000000-0000-4000-8000-000000001873' and '00000000-0000-4000-8000-000000001875';
 delete from private.identity_assistance_requests where actor_id = '00000000-0000-4000-8000-000000001800';
 delete from private.identity_assistance_candidates where job_id in ('00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001842');
-delete from private.identity_assistance_jobs where id in ('00000000-0000-4000-8000-000000001840', '00000000-0000-4000-8000-000000001842', '00000000-0000-4000-8000-000000001853', '00000000-0000-4000-8000-000000001854', '00000000-0000-4000-8000-000000001855', '00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001861');
-delete from public.identity_proposals where id = '00000000-0000-4000-8000-000000001830';
+delete from private.identity_assistance_jobs where id in ('00000000-0000-4000-8000-000000001840', '00000000-0000-4000-8000-000000001842', '00000000-0000-4000-8000-000000001853', '00000000-0000-4000-8000-000000001854', '00000000-0000-4000-8000-000000001855', '00000000-0000-4000-8000-000000001856', '00000000-0000-4000-8000-000000001857', '00000000-0000-4000-8000-000000001858', '00000000-0000-4000-8000-000000001859', '00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001861', '00000000-0000-4000-8000-000000001862', '00000000-0000-4000-8000-000000001863', '00000000-0000-4000-8000-000000001870', '00000000-0000-4000-8000-000000001871', '00000000-0000-4000-8000-000000001872');
+delete from public.identity_proposals where id in ('00000000-0000-4000-8000-000000001830', '00000000-0000-4000-8000-000000001831', '00000000-0000-4000-8000-000000001832', '00000000-0000-4000-8000-000000001833');
 delete from public.animals where id in ('00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001822');
-delete from public.sightings where id in ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001814');
+delete from public.sightings where id in ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001814', '00000000-0000-4000-8000-000000001815', '00000000-0000-4000-8000-000000001816', '00000000-0000-4000-8000-000000001817', '00000000-0000-4000-8000-000000001818', '00000000-0000-4000-8000-000000001819', '00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001821');
 set local session_replication_role = replica;
 delete from public.user_profiles where id = '00000000-0000-4000-8000-000000001800';
 set local session_replication_role = origin;
