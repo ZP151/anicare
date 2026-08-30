@@ -1190,6 +1190,14 @@ select lives_ok(
       'identity_animal_hide',
       local_connection || ' application_name=identity_animal_hide'
     );
+    perform extensions.dblink_exec(
+      'identity_candidate_hide',
+      'set statement_timeout = ''12s'''
+    );
+    perform extensions.dblink_exec(
+      'identity_animal_hide',
+      'set statement_timeout = ''12s'''
+    );
     perform extensions.dblink_send_query(
       'identity_candidate_hide',
       $candidate$
@@ -1330,6 +1338,14 @@ select lives_ok(
     perform extensions.dblink_connect(
       'identity_animal_delete',
       local_connection || ' application_name=identity_animal_delete'
+    );
+    perform extensions.dblink_exec(
+      'identity_candidate_delete',
+      'set statement_timeout = ''12s'''
+    );
+    perform extensions.dblink_exec(
+      'identity_animal_delete',
+      'set statement_timeout = ''12s'''
     );
     perform extensions.dblink_send_query(
       'identity_candidate_delete',
