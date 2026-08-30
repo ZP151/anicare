@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 import { AnchoredCatSheet } from './AnchoredCatSheet';
 
@@ -52,7 +52,23 @@ describe('AnchoredCatSheet', () => {
     expect(view.getAllByText('Preview data')).toHaveLength(1);
     expect(view.getByText('Mochi · 麻糬')).toBeTruthy();
     expect(view.getByRole('button', { name: 'View Mochi' })).toBeTruthy();
-    expect(view.getByText('Report sighting').props.numberOfLines).toBe(1);
+
+    const reportSighting = view.getByRole('button', { name: 'Report a sighting of Mochi' });
+    const reportSightingStyle = StyleSheet.flatten(reportSighting.props.style);
+    expect(reportSightingStyle.minHeight).toBe(42);
+    expect(reportSightingStyle.height).toBeUndefined();
+    expect(view.getByText('Report sighting').props.numberOfLines).toBeUndefined();
+
+    const platformContracts = [
+      { platform: 'ios', hitSlop: 1, effectiveHeight: 44 },
+      { platform: 'android', hitSlop: 3, effectiveHeight: 48 },
+    ] as const;
+    for (const contract of platformContracts) {
+      expect(42 + contract.hitSlop * 2).toBe(contract.effectiveHeight);
+    }
+    expect(reportSighting.props.hitSlop).toBe(
+      platformContracts.find(({ platform }) => platform === Platform.OS)?.hitSlop ?? 1,
+    );
 
     await view.unmount();
   });

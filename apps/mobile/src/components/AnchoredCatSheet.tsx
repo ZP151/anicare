@@ -74,7 +74,7 @@ export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: 
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
           >
             <MaterialCommunityIcons color={colors.actionSecondary} name="camera-outline" size={20} />
-            <Text numberOfLines={1} style={styles.secondaryButtonText}>Report sighting</Text>
+            <Text style={styles.secondaryButtonText}>Report sighting</Text>
             <MaterialCommunityIcons color={colors.actionSecondary} name="chevron-right" size={25} />
           </Pressable>
         </View>
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: { color: colors.surface, fontSize: 17, lineHeight: 21, fontWeight: '800' },
   secondaryButton: {
-    height: 42,
+    minHeight: 42,
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 0.75,
