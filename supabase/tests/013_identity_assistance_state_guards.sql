@@ -1007,19 +1007,31 @@ select lives_ok(
   declare
     diagnostic_constraint text;
     diagnostic_message text;
+    setup_step text := 'connect';
   begin
     perform extensions.dblink_connect(
       'identity_guard_setup',
       'dbname=' || pg_catalog.current_database()
         || ' application_name=identity_guard_setup'
     );
+    setup_step := 'replication_role';
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      'set session_replication_role = replica'
+    );
+    setup_step := 'profile';
     perform extensions.dblink_exec(
       'identity_guard_setup',
       $remote$
-        set session_replication_role = replica;
         insert into public.user_profiles (id, public_name, adult_confirmed_at)
         values ('00000000-0000-4000-8000-000000003000',
           'Identity Guard Race Owner', pg_catalog.now());
+      $remote$
+    );
+    setup_step := 'sightings';
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         insert into public.sightings (
           id, reporter_id, occurred_at, public_cell_id, time_bucket, risk,
           visibility, client_dedupe_key
@@ -1032,6 +1044,12 @@ select lives_ok(
             '00000000-0000-4000-8000-000000003000', pg_catalog.now(),
             '8928308280fffff', 'morning', 'normal', 'limited',
             'identity-guard-race-delete');
+      $remote$
+    );
+    setup_step := 'media_assets';
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         insert into public.media_assets (
           id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
           redaction_confirmed_at, training_eligible, client_media_id,
@@ -1054,6 +1072,12 @@ select lives_ok(
             'jpeg-srgb-2048-q88.v1',
             '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
             'quarantined', pg_catalog.now());
+      $remote$
+    );
+    setup_step := 'upload_jobs';
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         insert into private.media_upload_jobs (
           id, uploader_id, sighting_id, media_id, sha256, byte_length, width,
           height, recipe_version, detector_versions, confirmed_at_local,
@@ -1078,12 +1102,24 @@ select lives_ok(
             'finalized', pg_catalog.now(), pg_catalog.now() + interval '10 minutes',
             pg_catalog.now() + interval '2 hours', 'infinity'::timestamptz,
             pg_catalog.now(), '00000000-0000-4000-8000-000000003102');
+      $remote$
+    );
+    setup_step := 'animals';
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         insert into public.animals (id, primary_alias, profile_created_by, visibility)
         values
           ('00000000-0000-4000-8000-000000003201', 'Race Hide Candidate',
             '00000000-0000-4000-8000-000000003000', 'limited'),
           ('00000000-0000-4000-8000-000000003202', 'Race Delete Candidate',
             '00000000-0000-4000-8000-000000003000', 'limited');
+      $remote$
+    );
+    setup_step := 'identity_jobs';
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         insert into private.identity_assistance_jobs (
           id, sighting_id, media_asset_id, requester_id, status, notice_version,
           input_sha256, attempt_count, lease_id, lease_expires_at, processing_at
@@ -1116,7 +1152,7 @@ select lives_ok(
       diagnostic_message := pg_catalog.regexp_replace(
         diagnostic_message, '[^A-Za-z0-9 _.()=-]', '_', 'g'
       );
-      raise exception 'identity_guard_setup_failed_%_%_%', sqlstate,
+      raise exception 'identity_guard_setup_failed_%_%_%_%', setup_step, sqlstate,
         coalesce(diagnostic_constraint, 'no_constraint'),
         pg_catalog.left(diagnostic_message, 100);
   end
@@ -1406,38 +1442,71 @@ select lives_ok(
   begin
     perform extensions.dblink_exec(
       'identity_guard_setup',
+      'set session_replication_role = replica'
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
       $remote$
-        set session_replication_role = replica;
         delete from private.identity_assistance_candidates
          where job_id in (
            '00000000-0000-4000-8000-000000003301',
            '00000000-0000-4000-8000-000000003302'
          );
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         delete from private.identity_assistance_jobs
          where id in (
            '00000000-0000-4000-8000-000000003301',
            '00000000-0000-4000-8000-000000003302'
          );
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         delete from private.media_upload_jobs
          where id in (
            '00000000-0000-4000-8000-000000003151',
            '00000000-0000-4000-8000-000000003152'
          );
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         delete from public.media_assets
          where id in (
            '00000000-0000-4000-8000-000000003101',
            '00000000-0000-4000-8000-000000003102'
          );
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         delete from public.animals
          where id in (
            '00000000-0000-4000-8000-000000003201',
            '00000000-0000-4000-8000-000000003202'
          );
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         delete from public.sightings
          where id in (
            '00000000-0000-4000-8000-000000003001',
            '00000000-0000-4000-8000-000000003002'
          );
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'identity_guard_setup',
+      $remote$
         delete from public.user_profiles
          where id = '00000000-0000-4000-8000-000000003000';
       $remote$
