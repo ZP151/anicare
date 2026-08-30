@@ -8,7 +8,7 @@ select has_type('private', 'identity_assistance_failure_code', 'identity-assista
 select has_type('private', 'identity_assistance_event_type', 'identity-assistance event enum exists');
 
 select is(
-  (select array_agg(enumlabel order by enumsortorder)
+  (select array_agg(enumlabel::text order by enumsortorder)
      from pg_enum join pg_type on pg_type.oid = pg_enum.enumtypid
      join pg_namespace on pg_namespace.oid = pg_type.typnamespace
     where nspname = 'private' and typname = 'identity_assistance_job_status'),
@@ -16,7 +16,7 @@ select is(
   'job-status enum is exactly allow-listed'
 );
 select is(
-  (select array_agg(enumlabel order by enumsortorder)
+  (select array_agg(enumlabel::text order by enumsortorder)
      from pg_enum join pg_type on pg_type.oid = pg_enum.enumtypid
      join pg_namespace on pg_namespace.oid = pg_type.typnamespace
     where nspname = 'private' and typname = 'identity_assistance_confidence_band'),
@@ -24,7 +24,7 @@ select is(
   'confidence enum is exactly allow-listed'
 );
 select is(
-  (select array_agg(enumlabel order by enumsortorder)
+  (select array_agg(enumlabel::text order by enumsortorder)
      from pg_enum join pg_type on pg_type.oid = pg_enum.enumtypid
      join pg_namespace on pg_namespace.oid = pg_type.typnamespace
     where nspname = 'private' and typname = 'identity_assistance_reason_code'),
@@ -32,7 +32,7 @@ select is(
   'reason-code enum is exactly allow-listed'
 );
 select is(
-  (select array_agg(enumlabel order by enumsortorder)
+  (select array_agg(enumlabel::text order by enumsortorder)
      from pg_enum join pg_type on pg_type.oid = pg_enum.enumtypid
      join pg_namespace on pg_namespace.oid = pg_type.typnamespace
     where nspname = 'private' and typname = 'identity_assistance_failure_code'),
@@ -40,7 +40,7 @@ select is(
   'failure-code enum is exactly allow-listed'
 );
 select is(
-  (select array_agg(enumlabel order by enumsortorder)
+  (select array_agg(enumlabel::text order by enumsortorder)
      from pg_enum join pg_type on pg_type.oid = pg_enum.enumtypid
      join pg_namespace on pg_namespace.oid = pg_type.typnamespace
     where nspname = 'private' and typname = 'identity_assistance_event_type'),
