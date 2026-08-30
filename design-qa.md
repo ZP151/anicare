@@ -47,4 +47,9 @@ The browser viewport was set to 390×844 and captured directly after the Expo We
 
 The confirmation pass raised the Impeccable hero score from 68.9% to 72.31%, clearing the numeric 72% bar. The hero phase nevertheless remains open because the gate also treats the deliberately omitted real-looking west/east/edge atlas labels as required semantic regions and still reports lesser control drift. The gate was not forced. A future native-device capture with configured Google Maps should be reviewed separately; it must not reintroduce exact location cues merely to satisfy a visual comparator.
 
+Release-risk tracker:
+
+- Atlas west/east/edge semantic regions — owner: product safety; disposition: accepted visual deviation and prohibited implementation because reversible-looking location labels conflict with the public-map policy.
+- Remaining report-action and inactive-tab chrome drift — owner: mobile design; disposition: carry into the configured-native responsive polish pass, with no functional or privacy release blocker in the current closed pilot.
+
 final result: blocked

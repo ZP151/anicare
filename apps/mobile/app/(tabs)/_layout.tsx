@@ -31,10 +31,10 @@ export default function TabLayout() {
           options={{
             title: tab.label,
             tabBarAccessibilityLabel: tab.accessibilityLabel,
-            tabBarIcon: ({ color, size }) => (
+            tabBarIcon: ({ color, focused, size }) => (
               <MaterialCommunityIcons
                 color={color}
-                name={getTabIconName(tab.route)}
+                name={getTabIconName(tab.route, focused)}
                 size={Math.max(size, tabVisualContract.iconSize)}
               />
             ),
