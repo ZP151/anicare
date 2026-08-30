@@ -1322,6 +1322,7 @@ select lives_ok(
   $orchestrator$
   do $main$
   declare
+    diagnostic_message text;
     wait_deadline timestamptz;
     local_connection text :=
       'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
@@ -1392,6 +1393,28 @@ select lives_ok(
          where application_name = 'identity_candidate_delete'
            and wait_event_type = 'Lock'
       );
+      if extensions.dblink_is_busy('identity_candidate_delete') = 0 then
+        perform * from extensions.dblink_get_result(
+          'identity_candidate_delete', false
+        ) as candidate_result(completed bigint);
+        diagnostic_message := extensions.dblink_error_message(
+          'identity_candidate_delete'
+        );
+        perform extensions.dblink_disconnect('identity_candidate_delete');
+        perform extensions.dblink_disconnect('identity_animal_delete');
+        perform pg_catalog.pg_advisory_unlock(20260831, 42);
+        diagnostic_message := pg_catalog.regexp_replace(
+          diagnostic_message,
+          '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}',
+          'id',
+          'g'
+        );
+        diagnostic_message := pg_catalog.regexp_replace(
+          diagnostic_message, '[^A-Za-z0-9 _.()=-]', '_', 'g'
+        );
+        raise exception 'candidate_delete_early_%',
+          pg_catalog.left(diagnostic_message, 120);
+      end if;
       if pg_catalog.clock_timestamp() >= wait_deadline then
         raise exception 'candidate_delete_gate_timeout';
       end if;
