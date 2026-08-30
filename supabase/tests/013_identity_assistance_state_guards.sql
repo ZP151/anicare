@@ -609,7 +609,7 @@ select throws_ok(
 );
 select lives_ok(
   $$update private.identity_assistance_jobs
-       set selected_at = '2026-08-31 00:01:00+00'
+       set selected_at = requested_at + interval '1 minute'
      where id = '00000000-0000-4000-8000-000000001824'$$,
   'selection time may be recorded once'
 );
@@ -631,7 +631,7 @@ select throws_ok(
   do $body$
   begin
     update private.identity_assistance_jobs
-       set selected_at = '2026-08-31 00:02:00+00'
+       set selected_at = selected_at + interval '1 second'
      where id = '00000000-0000-4000-8000-000000001824';
     raise exception 'selection_time_was_rewritten' using errcode = 'P0001';
   end
@@ -642,7 +642,7 @@ select throws_ok(
 );
 select lives_ok(
   $$update private.identity_assistance_jobs
-       set withdrawn_at = '2026-08-31 00:03:00+00'
+       set withdrawn_at = requested_at + interval '3 minutes'
      where id = '00000000-0000-4000-8000-000000001824'$$,
   'withdrawal time may be recorded once'
 );
@@ -664,7 +664,7 @@ select throws_ok(
   do $body$
   begin
     update private.identity_assistance_jobs
-       set withdrawn_at = '2026-08-31 00:04:00+00'
+       set withdrawn_at = withdrawn_at + interval '1 second'
      where id = '00000000-0000-4000-8000-000000001824';
     raise exception 'withdrawal_time_was_rewritten' using errcode = 'P0001';
   end
@@ -675,7 +675,7 @@ select throws_ok(
 );
 select lives_ok(
   $$update private.identity_assistance_jobs
-       set result_invalidated_at = '2026-08-31 00:05:00+00'
+       set result_invalidated_at = requested_at + interval '5 minutes'
      where id = '00000000-0000-4000-8000-000000001824'$$,
   'result invalidation time may be recorded once'
 );
@@ -697,7 +697,7 @@ select throws_ok(
   do $body$
   begin
     update private.identity_assistance_jobs
-       set result_invalidated_at = '2026-08-31 00:06:00+00'
+       set result_invalidated_at = result_invalidated_at + interval '1 second'
      where id = '00000000-0000-4000-8000-000000001824';
     raise exception 'result_invalidation_time_was_rewritten' using errcode = 'P0001';
   end

@@ -152,7 +152,7 @@ git commit -m "feat(ai): guard identity job state"
 
 **Files:**
 
-- Create: `supabase/migrations/202608310003_identity_assistance_media_invalidation.sql`
+- Create: `supabase/migrations/202608310004_identity_assistance_media_invalidation.sql`
 - Create: `supabase/tests/014_identity_assistance_media_invalidation.sql`
 - Modify: `supabase/tests/002_media_upload_privacy.sql`
 
@@ -224,7 +224,7 @@ Expected: database tests and existing delete/cleanup Edge contracts pass.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add supabase/migrations/202608310003_identity_assistance_media_invalidation.sql `
+git add supabase/migrations/202608310004_identity_assistance_media_invalidation.sql `
   supabase/tests/014_identity_assistance_media_invalidation.sql `
   supabase/tests/002_media_upload_privacy.sql
 git commit -m "feat(ai): invalidate identity jobs on media deletion"
@@ -236,7 +236,7 @@ git commit -m "feat(ai): invalidate identity jobs on media deletion"
 
 **Files:**
 
-- Create: `supabase/migrations/202608310004_identity_assistance_erasure_locking.sql`
+- Create: `supabase/migrations/202608310005_identity_assistance_erasure_locking.sql`
 - Create: `supabase/tests/015_identity_assistance_erasure_locking.sql`
 - Modify: `supabase/tests/006_account_erasure_and_block_oracle.sql`
 - Modify: `supabase/tests/011_identity_review_control_plane.sql`
@@ -283,7 +283,7 @@ Expected: all account erasure, moderation, identity review, and new identity inv
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add supabase/migrations/202608310004_identity_assistance_erasure_locking.sql `
+git add supabase/migrations/202608310005_identity_assistance_erasure_locking.sql `
   supabase/tests/015_identity_assistance_erasure_locking.sql `
   supabase/tests/006_account_erasure_and_block_oracle.sql `
   supabase/tests/011_identity_review_control_plane.sql
@@ -296,7 +296,7 @@ git commit -m "fix(ai): serialize identity erasure and review"
 
 **Files:**
 
-- Create: `supabase/migrations/202608310005_identity_assistance_service_lifecycle.sql`
+- Create: `supabase/migrations/202608310006_identity_assistance_service_lifecycle.sql`
 - Create: `supabase/tests/016_identity_assistance_service_lifecycle.sql`
 
 **Interfaces:**
@@ -366,7 +366,7 @@ Run `supabase test db` and `supabase db lint --level warning`. Mentally mutate l
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add supabase/migrations/202608310005_identity_assistance_service_lifecycle.sql `
+git add supabase/migrations/202608310006_identity_assistance_service_lifecycle.sql `
   supabase/tests/016_identity_assistance_service_lifecycle.sql
 git commit -m "feat(ai): add identity job leasing"
 ```
@@ -377,7 +377,7 @@ git commit -m "feat(ai): add identity job leasing"
 
 **Files:**
 
-- Create: `supabase/migrations/202608310006_identity_assistance_service_completion.sql`
+- Create: `supabase/migrations/202608310007_identity_assistance_service_completion.sql`
 - Create: `supabase/tests/017_identity_assistance_service_completion.sql`
 
 **Interfaces:**
@@ -387,7 +387,7 @@ git commit -m "feat(ai): add identity job leasing"
 
 - [ ] **Step 1: Write failing completion tests**
 
-Cover zero/one/three candidates, contiguous array-derived ranks, unique active animals, exact bands/reasons, strict object keys, model version regex, exact callback version, exact replay, conflicting request reuse, expired/stale lease, hash/recipe/media tombstone changes, duplicate successful completion, archived candidate, and completion-vs-deletion source revalidation.
+Cover zero/one/three candidates, contiguous array-derived ranks, unique active animals, exact bands/reasons, strict object keys, model version regex, exact callback version, exact replay, conflicting request reuse, expired/stale lease, hash/recipe/media tombstone changes, duplicate successful completion, and archived candidates. Add real completion-vs-animal-hide and completion-vs-animal-delete interleavings that prove candidate animals are locked before the identity job, availability is revalidated under those locks, no animal→job/job→animal deadlock occurs, the animal mutation is not blocked permanently, and no unavailable-animal candidate survives.
 
 Use literal callback JSON such as:
 
@@ -424,7 +424,7 @@ public.service_complete_identity_assistance_job(
 )
 ```
 
-Check prior service idempotency before active lease state. For new requests, discover linkage without locks, then lock sighting → upload job → media asset → identity job and revalidate all relationships and `clock_timestamp()` after locks. Set scoped writer contexts, insert candidates with ranks from `WITH ORDINALITY`, move the job to `succeeded`, clear lease fields, set seven-day expiry plus fixed completion provenance, append one completed event, and record the service request in one transaction.
+Check prior service idempotency before active lease state. For new requests, discover only the source linkage without row locks, then lock sighting → upload job → media asset. After the media asset is locked, parse and resolve the distinct candidate animal IDs, lock every `public.animals` row `FOR SHARE` in UUID order, and revalidate that all requested animals still exist and remain visible/unarchived. Only then lock the identity job, and revalidate the canonical media relationships, current lease/attempt, and `clock_timestamp()` after all locks. Set scoped writer contexts, insert candidates with ranks from `WITH ORDINALITY`, move the already-last-locked job to `succeeded`, clear lease fields, set seven-day expiry plus fixed completion provenance, append one completed event, and record the service request in one transaction. No completion path may acquire a candidate animal after acquiring the identity-job row.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -440,7 +440,7 @@ Expected: all database contracts pass with no sensitive field in the completion 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add supabase/migrations/202608310006_identity_assistance_service_completion.sql `
+git add supabase/migrations/202608310007_identity_assistance_service_completion.sql `
   supabase/tests/017_identity_assistance_service_completion.sql
 git commit -m "feat(ai): persist bounded identity results"
 ```
@@ -451,7 +451,7 @@ git commit -m "feat(ai): persist bounded identity results"
 
 **Files:**
 
-- Create: `supabase/migrations/202608310007_revoke_legacy_ai_proposal_bridge.sql`
+- Create: `supabase/migrations/202608310008_revoke_legacy_ai_proposal_bridge.sql`
 - Create: `supabase/tests/018_revoke_legacy_ai_proposal_bridge.sql`
 - Modify: `supabase/tests/011_identity_review_control_plane.sql`
 - Modify: `docs/iteration-plan.md`
@@ -510,7 +510,7 @@ Expected: database migrations/pgTAP/lint, all repository tests, type checks, bui
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add supabase/migrations/202608310007_revoke_legacy_ai_proposal_bridge.sql `
+git add supabase/migrations/202608310008_revoke_legacy_ai_proposal_bridge.sql `
   supabase/tests/018_revoke_legacy_ai_proposal_bridge.sql `
   supabase/tests/011_identity_review_control_plane.sql `
   docs/iteration-plan.md docs/ai-contracts.md
