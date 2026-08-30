@@ -3,9 +3,11 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { PublicAreaSummary } from '../maps/public-map-policy';
 import { colors, radii } from '../design/theme';
+import { getCommunityMapCopy, type Locale } from '../i18n/catalog';
 
 type CoarseAreaDetailSheetProps = Readonly<{
   area: PublicAreaSummary;
+  locale: Locale;
   onViewCat: (animalId: string) => void;
   onReportFromArea: () => void;
 }>;
@@ -14,13 +16,15 @@ export function getAreaActionMinHeight(platform: string): number {
   return platform === 'android' ? 48 : 44;
 }
 
-export function CoarseAreaDetailSheet({ area, onReportFromArea, onViewCat }: CoarseAreaDetailSheetProps) {
+export function CoarseAreaDetailSheet({ area, locale, onReportFromArea, onViewCat }: CoarseAreaDetailSheetProps) {
+  const copy = getCommunityMapCopy(locale);
   const visibleCats = area.cats.slice(0, 3);
-  const catsCopy = `${area.catCount} ${area.catCount === 1 ? 'cat' : 'cats'} visible`;
-  const confirmedCopy = `${area.confirmedCount} ${area.confirmedCount === 1 ? 'community confirmed' : 'community confirmed'}`;
+  const catsCopy = copy.visibleCatsLabel(area.catCount);
+  const confirmedCopy = copy.confirmedCatsLabel(area.confirmedCount);
+  const reportLabel = copy.reportFromAreaLabel(area.label);
 
   return (
-    <View accessibilityLabel={`Area detail: ${area.label}`} style={styles.sheet}>
+    <View accessibilityLabel={copy.areaDetailLabel(area.label)} style={styles.sheet}>
       <View style={styles.handle} />
       <View style={styles.header}>
         <View style={styles.titleBlock}>
@@ -30,7 +34,7 @@ export function CoarseAreaDetailSheet({ area, onReportFromArea, onViewCat }: Coa
         <MaterialCommunityIcons color={colors.community} name="map-marker-radius-outline" size={26} />
       </View>
 
-      <View accessibilityLabel={`${catsCopy}; ${confirmedCopy}`} style={styles.aggregateRow}>
+      <View accessibilityLabel={copy.aggregateAccessibilityLabel(area.catCount, area.confirmedCount)} style={styles.aggregateRow}>
         <View style={styles.aggregateItem}>
           <MaterialCommunityIcons color={colors.actionPrimary} name="cat" size={20} />
           <Text style={styles.aggregateText}>{catsCopy}</Text>
@@ -47,14 +51,15 @@ export function CoarseAreaDetailSheet({ area, onReportFromArea, onViewCat }: Coa
             <View style={styles.catIdentity}>
               <Text numberOfLines={1} style={styles.alias}>{cat.alias}</Text>
               <Text numberOfLines={1} style={styles.catMeta}>{cat.verificationLabel}</Text>
+              <Text numberOfLines={1} style={styles.catTime}>{cat.timeLabel}</Text>
             </View>
             <Pressable
-              accessibilityLabel={`View ${cat.alias}`}
+              accessibilityLabel={copy.viewCatLabel(cat.alias)}
               accessibilityRole="button"
               onPress={() => onViewCat(cat.animalId)}
               style={({ pressed }) => [styles.viewButton, pressed && styles.pressed]}
             >
-              <Text style={styles.viewButtonText}>View</Text>
+              <Text style={styles.viewButtonText}>{copy.viewAction}</Text>
               <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
             </Pressable>
           </View>
@@ -63,26 +68,26 @@ export function CoarseAreaDetailSheet({ area, onReportFromArea, onViewCat }: Coa
 
       <View style={styles.actions}>
         <Pressable
-          accessibilityLabel={`Report from ${area.label}`}
+          accessibilityLabel={reportLabel}
           accessibilityRole="button"
           onPress={() => onReportFromArea()}
           style={({ pressed }) => [styles.reportButton, pressed && styles.pressed]}
         >
           <MaterialCommunityIcons color={colors.actionSecondary} name="camera-outline" size={20} />
-          <Text style={styles.reportButtonText}>Report from {area.label}</Text>
+          <Text style={styles.reportButtonText}>{reportLabel}</Text>
         </Pressable>
         <View style={styles.followRow}>
           <Pressable
-            accessibilityLabel="Follow area"
+            accessibilityLabel={copy.followAction}
             accessibilityRole="button"
             accessibilityState={{ disabled: true }}
             disabled
             style={styles.followButton}
           >
             <MaterialCommunityIcons color={colors.muted} name="bell-outline" size={20} />
-            <Text style={styles.followButtonText}>Follow area</Text>
+            <Text style={styles.followButtonText}>{copy.followAction}</Text>
           </Pressable>
-          <Text style={styles.followReason}>Sign in and hosted follow support are required.</Text>
+          <Text style={styles.followReason}>{copy.followDisabledReason}</Text>
         </View>
       </View>
     </View>
@@ -113,6 +118,7 @@ const styles = StyleSheet.create({
   catIdentity: { flex: 1, minWidth: 0 },
   alias: { color: colors.ink, fontSize: 16, lineHeight: 20, fontWeight: '700' },
   catMeta: { marginTop: 2, color: colors.muted, fontSize: 12, lineHeight: 16 },
+  catTime: { marginTop: 1, color: colors.muted, fontSize: 11, lineHeight: 15 },
   viewButton: { minHeight: getAreaActionMinHeight(Platform.OS), minWidth: 74, paddingHorizontal: 10, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, backgroundColor: colors.leafSoft },
   viewButtonText: { color: colors.actionPrimary, fontSize: 14, lineHeight: 18, fontWeight: '800' },
   actions: { marginTop: 14, gap: 10 },

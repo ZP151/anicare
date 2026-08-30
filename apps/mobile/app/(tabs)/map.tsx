@@ -1,14 +1,15 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { listPublicSightings, type NarrowRpcClient, type PublicSighting } from '../../src/api/feed';
+import { listPublicSightings, type NarrowRpcClient } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
 import { CoarseAreaDetailSheet } from '../../src/components/CoarseAreaDetailSheet';
 import { colors, radii } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
+import { getCommunityMapCopy } from '../../src/i18n/catalog';
 import { NearbyMap } from '../../src/maps/NearbyMap';
 import {
   buildPublicAreaSummaries,
@@ -25,11 +26,14 @@ function getActionMinHeight(): number {
 }
 
 export default function MapScreen() {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const router = useRouter();
   const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
+  const mapCopy = getCommunityMapCopy(locale);
   const [status, setStatus] = useState<FeedStatus>(client ? 'loading' : 'demo');
-  const [sightings, setSightings] = useState<readonly PublicSighting[]>([]);
+  const [areas, setAreas] = useState<readonly PublicAreaSummary[]>(() => (
+    client ? [] : createDemoPublicAreaSummaries(locale)
+  ));
   const [layer, setLayer] = useState<JourneyLayer>('map');
   const [mapResetKey, setMapResetKey] = useState(0);
   const [selectedArea, setSelectedArea] = useState<PublicAreaSummary | null>(null);
@@ -37,29 +41,28 @@ export default function MapScreen() {
   useEffect(() => {
     if (!client) {
       setStatus('demo');
-      setSightings([]);
+      setAreas(createDemoPublicAreaSummaries(locale));
+      setSelectedArea(null);
       return;
     }
     let active = true;
     setStatus('loading');
+    setAreas([]);
+    setSelectedArea(null);
     void listPublicSightings({ limit: 20 }, client)
       .then((page) => {
         if (!active) return;
-        setSightings(page.items);
+        setAreas(buildPublicAreaSummaries(page.items, locale));
         setStatus('live');
       })
       .catch(() => {
         if (!active) return;
-        setSightings([]);
+        setAreas([]);
         setStatus('unavailable');
       });
     return () => { active = false; };
-  }, [client]);
+  }, [client, locale]);
 
-  const areas = useMemo(
-    () => (status === 'demo' ? createDemoPublicAreaSummaries() : buildPublicAreaSummaries(sightings)),
-    [sightings, status],
-  );
   const statusCopy = getStatusCopy(status, areas.length, t);
 
   function showAreaList() {
@@ -101,7 +104,9 @@ export default function MapScreen() {
         {layer === 'map' ? (
           <View style={styles.mapStage}>
             <NearbyMap key={mapResetKey} />
-            {statusCopy ? <StatusBadge text={statusCopy} unavailable={status === 'unavailable'} /> : null}
+            {statusCopy ? (
+              <StatusBadge announce={status !== 'demo'} text={statusCopy} unavailable={status === 'unavailable'} />
+            ) : null}
             <View style={styles.mapActions}>
               <ActionButton icon="refresh" label={t('map.resetBroadView')} onPress={resetBroadMapView} />
               <ActionButton icon="format-list-bulleted" label={t('map.showAreaList')} onPress={showAreaList} />
@@ -109,7 +114,9 @@ export default function MapScreen() {
           </View>
         ) : (
           <View style={styles.listStage}>
-            {statusCopy ? <StatusBadge text={statusCopy} unavailable={status === 'unavailable'} /> : null}
+            {statusCopy ? (
+              <StatusBadge announce={status !== 'demo'} text={statusCopy} unavailable={status === 'unavailable'} />
+            ) : null}
             <View style={styles.listHeader}>
               <Text style={styles.listTitle}>{t('map.delayedActivity')}</Text>
               <ActionButton icon="map-outline" label={t('map.showMap')} onPress={showMap} compact />
@@ -117,7 +124,7 @@ export default function MapScreen() {
             {areas.map((area) => (
               <Pressable
                 key={area.areaKey}
-                accessibilityLabel={formatAreaLabel(t('map.openArea'), area.label)}
+                accessibilityLabel={mapCopy.openAreaLabel(area.label)}
                 accessibilityRole="button"
                 onPress={() => openArea(area)}
                 style={({ pressed }) => [styles.areaRow, pressed && styles.pressed]}
@@ -141,6 +148,7 @@ export default function MapScreen() {
         {selectedArea ? (
           <CoarseAreaDetailSheet
             area={selectedArea}
+            locale={locale}
             onReportFromArea={() => router.push({ pathname: '/report', params: { source: 'community-map' } } as never)}
             onViewCat={(animalId) => router.push(`/cat/${animalId}` as never)}
           />
@@ -159,10 +167,6 @@ function getStatusCopy(
   if (status === 'loading') return t('map.loadingStatus');
   if (status === 'unavailable') return t('map.unavailableStatus');
   return areaCount === 0 ? t('map.emptyStatus') : null;
-}
-
-function formatAreaLabel(template: string, areaLabel: string): string {
-  return template.replace('{{area}}', areaLabel);
 }
 
 function SegmentButton({ active, label, onPress }: Readonly<{ active: boolean; label: string; onPress: () => void }>) {
@@ -210,9 +214,12 @@ function ActionButton({
   );
 }
 
-function StatusBadge({ text, unavailable }: Readonly<{ text: string; unavailable?: boolean }>) {
+function StatusBadge({ announce, text, unavailable }: Readonly<{ announce: boolean; text: string; unavailable?: boolean }>) {
   return (
-    <View style={[styles.statusBadge, unavailable && styles.statusBadgeUnavailable]}>
+    <View
+      accessibilityLiveRegion={announce ? 'polite' : undefined}
+      style={[styles.statusBadge, unavailable && styles.statusBadgeUnavailable]}
+    >
       <Text style={[styles.statusText, unavailable && styles.statusTextUnavailable]}>{text}</Text>
     </View>
   );

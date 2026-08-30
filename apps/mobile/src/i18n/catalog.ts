@@ -1,3 +1,5 @@
+import type { PublicSighting } from '../api/feed';
+
 export type Locale = 'en' | 'zh-CN';
 
 export type MessageKey =
@@ -20,7 +22,9 @@ export type MessageKey =
   | 'map.loadingStatus'
   | 'map.emptyStatus'
   | 'map.unavailableStatus'
-  | 'map.openArea'
+  | 'map.detail.viewAction'
+  | 'map.detail.followAction'
+  | 'map.detail.followDisabledReason'
   | 'report.title'
   | 'report.subtitle'
   | 'report.action'
@@ -51,7 +55,9 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.loadingStatus': 'Loading delayed community activity…',
     'map.emptyStatus': 'No delayed community activity yet',
     'map.unavailableStatus': 'Community feed unavailable · map remains privacy-safe',
-    'map.openArea': 'Open {{area}}',
+    'map.detail.viewAction': 'View',
+    'map.detail.followAction': 'Follow area',
+    'map.detail.followDisabledReason': 'Sign-in and hosted area-follow support are required.',
     'report.title': 'Report a sighting',
     'report.subtitle': 'Add a photo and traits. AI will suggest candidates, never decide.',
     'report.action': 'Start a report',
@@ -81,7 +87,9 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.loadingStatus': '正在加载延迟显示的社区活动…',
     'map.emptyStatus': '暂时没有延迟显示的社区活动',
     'map.unavailableStatus': '社区动态暂不可用 · 地图仍保持隐私安全',
-    'map.openArea': '打开{{area}}',
+    'map.detail.viewAction': '查看',
+    'map.detail.followAction': '关注区域',
+    'map.detail.followDisabledReason': '需要登录；区域关注服务上线后才能使用此功能。',
     'report.title': '报告目击',
     'report.subtitle': '添加照片和特征；AI 只推荐候选，不替你做决定。',
     'report.action': '开始报告',
@@ -95,6 +103,105 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
 
 export function translate(locale: Locale, key: MessageKey): string {
   return messages[locale][key];
+}
+
+type Verification = PublicSighting['verification'];
+type TimeBucket = PublicSighting['timeBucket'];
+
+export type CommunityMapCopy = Readonly<{
+  viewAction: string;
+  followAction: string;
+  followDisabledReason: string;
+  areaLabel: (ordinal: number) => string;
+  activityLabel: (catCount: number, timeBucket: TimeBucket) => string;
+  verificationLabel: (verification: Verification) => string;
+  timeLabel: (timeBucket: TimeBucket) => string;
+  openAreaLabel: (areaLabel: string) => string;
+  areaDetailLabel: (areaLabel: string) => string;
+  visibleCatsLabel: (catCount: number) => string;
+  confirmedCatsLabel: (confirmedCount: number) => string;
+  aggregateAccessibilityLabel: (catCount: number, confirmedCount: number) => string;
+  viewCatLabel: (alias: string) => string;
+  reportFromAreaLabel: (areaLabel: string) => string;
+}>;
+
+export function getCommunityMapCopy(locale: Locale): CommunityMapCopy {
+  if (locale === 'zh-CN') {
+    return {
+      viewAction: translate(locale, 'map.detail.viewAction'),
+      followAction: translate(locale, 'map.detail.followAction'),
+      followDisabledReason: translate(locale, 'map.detail.followDisabledReason'),
+      areaLabel: (ordinal) => `社区区域${ordinal}`,
+      activityLabel: (catCount, timeBucket) => {
+        if (timeBucket === 'today') return `最近延迟时段内有 ${catCount} 只猫活动`;
+        if (timeBucket === 'this_week') return `延迟周时段内有 ${catCount} 只猫活动`;
+        return `较早的延迟时段内有 ${catCount} 只猫活动`;
+      },
+      verificationLabel: (verification) => {
+        const labels: Record<Verification, string> = {
+          reported: '已报告 · 等待社区审核',
+          community_confirmed: '社区已确认',
+          partner_confirmed: '合作伙伴已确认',
+          disputed: '公开信息有争议',
+          superseded: '公开身份信息已更新',
+        };
+        return labels[verification];
+      },
+      timeLabel: (timeBucket) => {
+        if (timeBucket === 'today') return '最近延迟时段内有目击记录';
+        if (timeBucket === 'this_week') return '延迟周时段内有目击记录';
+        return '较早的延迟时段内有目击记录';
+      },
+      openAreaLabel: (areaLabel) => `打开${areaLabel}`,
+      areaDetailLabel: (areaLabel) => `区域详情：${areaLabel}`,
+      visibleCatsLabel: (catCount) => `可查看 ${catCount} 只猫`,
+      confirmedCatsLabel: (confirmedCount) => `其中 ${confirmedCount} 只已获社区确认`,
+      aggregateAccessibilityLabel: (catCount, confirmedCount) => (
+        `可查看 ${catCount} 只猫；其中 ${confirmedCount} 只已获社区确认`
+      ),
+      viewCatLabel: (alias) => `查看 ${alias}`,
+      reportFromAreaLabel: (areaLabel) => `从${areaLabel}提交报告`,
+    };
+  }
+
+  return {
+    viewAction: translate(locale, 'map.detail.viewAction'),
+    followAction: translate(locale, 'map.detail.followAction'),
+    followDisabledReason: translate(locale, 'map.detail.followDisabledReason'),
+    areaLabel: (ordinal) => `Community area ${ordinal}`,
+    activityLabel: (catCount, timeBucket) => {
+      const catNoun = catCount === 1 ? 'cat' : 'cats';
+      if (timeBucket === 'today') return `${catCount} ${catNoun} active in the latest delayed window`;
+      if (timeBucket === 'this_week') return `${catCount} ${catNoun} active in the delayed weekly window`;
+      return `${catCount} ${catNoun} active in an earlier delayed window`;
+    },
+    verificationLabel: (verification) => {
+      const labels: Record<Verification, string> = {
+        reported: 'Reported · awaiting community review',
+        community_confirmed: 'Community confirmed',
+        partner_confirmed: 'Partner confirmed',
+        disputed: 'Public information disputed',
+        superseded: 'Public identity updated',
+      };
+      return labels[verification];
+    },
+    timeLabel: (timeBucket) => {
+      if (timeBucket === 'today') return 'Seen in the latest delayed window';
+      if (timeBucket === 'this_week') return 'Seen in the delayed weekly window';
+      return 'Seen in an earlier delayed window';
+    },
+    openAreaLabel: (areaLabel) => `Open ${areaLabel}`,
+    areaDetailLabel: (areaLabel) => `Area detail: ${areaLabel}`,
+    visibleCatsLabel: (catCount) => `${catCount} ${catCount === 1 ? 'cat' : 'cats'} visible`,
+    confirmedCatsLabel: (confirmedCount) => (
+      `${confirmedCount} community-confirmed ${confirmedCount === 1 ? 'cat' : 'cats'}`
+    ),
+    aggregateAccessibilityLabel: (catCount, confirmedCount) => (
+      `${catCount} ${catCount === 1 ? 'cat' : 'cats'} visible; ${confirmedCount} community-confirmed ${confirmedCount === 1 ? 'cat' : 'cats'}`
+    ),
+    viewCatLabel: (alias) => `View ${alias}`,
+    reportFromAreaLabel: (areaLabel) => `Report from ${areaLabel}`,
+  };
 }
 
 export type TabRoute = 'index' | 'map' | 'report' | 'following' | 'profile';

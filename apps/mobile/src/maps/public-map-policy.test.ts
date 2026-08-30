@@ -197,7 +197,7 @@ describe('privacy-safe Google Maps presentation', () => {
       {
         areaKey: 'public-area-2',
         label: 'Community area 2',
-        activityLabel: '1 cat active in the earlier delayed window',
+        activityLabel: '1 cat active in an earlier delayed window',
         catCount: 1,
         confirmedCount: 1,
         cats: [
@@ -213,5 +213,36 @@ describe('privacy-safe Google Maps presentation', () => {
     expect(demo.every((area) => area.cats.every((cat) => cat.animalId.startsWith('demo-')))).toBe(true);
     expect(demo.every((area) => area.cats.every((cat) => cat.alias.startsWith('Demo Meow')))).toBe(true);
     expect(JSON.stringify(demo)).not.toMatch(/[0-9a-f]{10,20}/i);
+  });
+
+  it('projects complete Simplified Chinese area, activity, verification, and time labels', () => {
+    const result = buildPublicAreaSummaries([
+      {
+        ...safeRow,
+        primaryAlias: 'Pepper',
+        verification: 'reported',
+        timeBucket: 'today',
+      },
+    ], 'zh-CN');
+
+    expect(result).toEqual([
+      {
+        areaKey: 'public-area-1',
+        label: '社区区域1',
+        activityLabel: '最近延迟时段内有 1 只猫活动',
+        catCount: 1,
+        confirmedCount: 0,
+        cats: [{
+          alias: 'Pepper',
+          verificationLabel: '已报告 · 等待社区审核',
+          timeLabel: '最近延迟时段内有目击记录',
+          animalId: safeRow.animalId,
+        }],
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(safeRow.publicCellId);
+    expect(JSON.stringify(result)).not.toContain(safeRow.sightingId);
+    expect(JSON.stringify(result)).not.toContain(safeRow.coverMediaId);
+    expect(JSON.stringify(result)).not.toContain(safeRow.cursor);
   });
 });

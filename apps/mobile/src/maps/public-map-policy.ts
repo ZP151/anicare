@@ -1,4 +1,5 @@
 import type { PublicSighting } from '../api/feed';
+import { getCommunityMapCopy, type Locale } from '../i18n/catalog';
 
 export const PUBLIC_MAP_REGION = Object.freeze({
   latitude: 1.3521,
@@ -27,20 +28,6 @@ export const PUBLIC_GOOGLE_MAP_STYLE = Object.freeze([
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#B8D8D0' }] },
 ] as const);
 
-const verificationLabels: Record<PublicSighting['verification'], string> = {
-  reported: 'Reported · awaiting community review',
-  community_confirmed: 'Community confirmed',
-  partner_confirmed: 'Partner confirmed',
-  disputed: 'Public information disputed',
-  superseded: 'Public identity updated',
-};
-
-const timeLabels: Record<PublicSighting['timeBucket'], string> = {
-  today: 'Seen in the latest delayed window',
-  this_week: 'Seen in the delayed weekly window',
-  earlier: 'Seen in an earlier delayed window',
-};
-
 const verificationPriority: Readonly<Record<PublicSighting['verification'], number>> = {
   partner_confirmed: 4,
   community_confirmed: 3,
@@ -53,12 +40,6 @@ const timePriority: Readonly<Record<PublicSighting['timeBucket'], number>> = {
   today: 3,
   this_week: 2,
   earlier: 1,
-};
-
-const delayedWindowCopy: Readonly<Record<PublicSighting['timeBucket'], string>> = {
-  today: 'latest delayed window',
-  this_week: 'delayed weekly window',
-  earlier: 'earlier delayed window',
 };
 
 export type PublicMapPresentation = Readonly<{
@@ -77,28 +58,31 @@ export type PublicAreaSummary = Readonly<{
   cats: readonly PublicMapPresentation[];
 }>;
 
-export function toPublicMapPresentation(sighting: PublicSighting): PublicMapPresentation {
-  const verificationLabel = verificationLabels[sighting.verification];
-  const timeLabel = timeLabels[sighting.timeBucket];
-  if (!verificationLabel || !timeLabel) throw new Error('invalid_public_map_presentation');
+export function toPublicMapPresentation(sighting: PublicSighting, locale: Locale = 'en'): PublicMapPresentation {
+  const copy = getCommunityMapCopy(locale);
+  const verificationLabel = copy.verificationLabel(sighting.verification);
+  const validTimeBucket = sighting.timeBucket === 'today'
+    || sighting.timeBucket === 'this_week'
+    || sighting.timeBucket === 'earlier';
+  if (!verificationLabel || !validTimeBucket) throw new Error('invalid_public_map_presentation');
 
   return {
     alias: sighting.primaryAlias,
     verificationLabel,
-    timeLabel,
+    timeLabel: copy.timeLabel(sighting.timeBucket),
     animalId: sighting.animalId,
   };
-}
-
-function resolveActivityLabel(catCount: number, bucket: PublicSighting['timeBucket']): string {
-  return `${catCount} ${catCount === 1 ? 'cat' : 'cats'} active in the ${delayedWindowCopy[bucket]}`;
 }
 
 function isConfirmed(verdict: PublicSighting['verification']): boolean {
   return verdict === 'community_confirmed' || verdict === 'partner_confirmed';
 }
 
-export function buildPublicAreaSummaries(sightings: readonly PublicSighting[]): readonly PublicAreaSummary[] {
+export function buildPublicAreaSummaries(
+  sightings: readonly PublicSighting[],
+  locale: Locale = 'en',
+): readonly PublicAreaSummary[] {
+  const copy = getCommunityMapCopy(locale);
   const groupedByCell = new Map<string, PublicSighting[]>();
 
   for (const sighting of sightings) {
@@ -126,7 +110,7 @@ export function buildPublicAreaSummaries(sightings: readonly PublicSighting[]): 
         if (verificationDelta !== 0) return verificationDelta;
         return timePriority[right.timeBucket] - timePriority[left.timeBucket];
       })
-      .map(toPublicMapPresentation);
+      .map((sighting) => toPublicMapPresentation(sighting, locale));
 
     const strongestBucket: PublicSighting['timeBucket'] = group.some((sighting) => sighting.timeBucket === 'today')
       ? 'today'
@@ -136,8 +120,8 @@ export function buildPublicAreaSummaries(sightings: readonly PublicSighting[]): 
 
     summaries.push({
       areaKey: `public-area-${areaOrdinal}`,
-      label: `Community area ${areaOrdinal}`,
-      activityLabel: resolveActivityLabel(uniqueByAnimal.length, strongestBucket),
+      label: copy.areaLabel(areaOrdinal),
+      activityLabel: copy.activityLabel(uniqueByAnimal.length, strongestBucket),
       catCount: uniqueByAnimal.length,
       confirmedCount: uniqueByAnimal.reduce((count, sighting) => (isConfirmed(sighting.verification) ? count + 1 : count), 0),
       cats,
@@ -148,7 +132,7 @@ export function buildPublicAreaSummaries(sightings: readonly PublicSighting[]): 
   return summaries;
 }
 
-export function createDemoPublicAreaSummaries(): readonly PublicAreaSummary[] {
+export function createDemoPublicAreaSummaries(locale: Locale = 'en'): readonly PublicAreaSummary[] {
   return buildPublicAreaSummaries([
     {
       sightingId: '00000000-0000-4000-8000-000000000201',
@@ -180,5 +164,5 @@ export function createDemoPublicAreaSummaries(): readonly PublicAreaSummary[] {
       coverMediaId: null,
       cursor: '00000000-0000-4000-8000-000000000206',
     },
-  ]);
+  ], locale);
 }

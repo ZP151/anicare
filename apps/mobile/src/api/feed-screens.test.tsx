@@ -7,6 +7,38 @@ const mockPush = jest.fn();
 const mockNearbyMapMount = jest.fn();
 const mockRequestForegroundPermissionsAsync = jest.fn();
 const mockGetCurrentPositionAsync = jest.fn();
+const mockLocale = { value: 'en' as 'en' | 'zh-CN' };
+const mockReactStateValues: unknown[] = [];
+
+jest.mock('react', () => {
+  const actual = jest.requireActual<typeof import('react')>('react');
+  return {
+    ...actual,
+    useState: (initialState: unknown) => {
+      const trackedInitialState = typeof initialState === 'function'
+        ? () => {
+          const value = (initialState as () => unknown)();
+          mockReactStateValues.push(value);
+          return value;
+        }
+        : initialState;
+      if (typeof initialState !== 'function') mockReactStateValues.push(initialState);
+      const [value, setValue] = actual.useState(trackedInitialState);
+      return [value, (nextValue: unknown) => {
+        if (typeof nextValue === 'function') {
+          setValue((previousValue: unknown) => {
+            const resolvedValue = (nextValue as (previousValue: unknown) => unknown)(previousValue);
+            mockReactStateValues.push(resolvedValue);
+            return resolvedValue;
+          });
+          return;
+        }
+        mockReactStateValues.push(nextValue);
+        setValue(nextValue);
+      }];
+    },
+  };
+});
 
 jest.mock('./supabase', () => ({ getSupabaseClient: () => mockGetSupabaseClient() }));
 jest.mock('./feed', () => ({
@@ -32,30 +64,13 @@ jest.mock('../maps/NearbyMap', () => {
   };
 });
 jest.mock('../i18n/LocaleContext', () => ({
-  useLocale: () => ({
-    locale: 'en',
-    t: (key: string) => ({
-      'common.beta': 'Closed beta',
-      'nearby.title': 'Cats nearby',
-      'nearby.subtitle': 'Identity-backed sightings from your community.',
-      'nearby.privacyNote': 'Public locations are blurred and shown after a safety delay.',
-      'map.title': 'Community map',
-      'map.mapTab': 'Map',
-      'map.listTab': 'List',
-      'map.delayedActivity': 'Delayed community activity',
-      'map.legend': 'Coarse areas only · no exact pins or routes',
-      'map.showAreaList': 'Show area list',
-      'map.showMap': 'Show map',
-      'map.resetBroadView': 'Reset broad map view',
-      'map.chooseAreaManually': 'Choose area manually',
-      'map.manualAreaExplanation': 'Exact pins and routes are unavailable by design.',
-      'map.demoStatus': 'Demo map · live feed unavailable',
-      'map.loadingStatus': 'Loading delayed community activity…',
-      'map.emptyStatus': 'No delayed community activity yet',
-      'map.unavailableStatus': 'Community feed unavailable · map remains privacy-safe',
-      'map.openArea': 'Open {{area}}',
-    })[key] ?? key,
-  }),
+  useLocale: () => {
+    const { translate } = jest.requireActual('../i18n/catalog') as typeof import('../i18n/catalog');
+    return {
+      locale: mockLocale.value,
+      t: (key: import('../i18n/catalog').MessageKey) => translate(mockLocale.value, key),
+    };
+  },
 }));
 jest.mock('../components/ScreenScaffold', () => {
   const React = require('react');
@@ -91,6 +106,8 @@ describe('fail-closed feed screens', () => {
     mockNearbyMapMount.mockReset();
     mockRequestForegroundPermissionsAsync.mockReset();
     mockGetCurrentPositionAsync.mockReset();
+    mockLocale.value = 'en';
+    mockReactStateValues.length = 0;
   });
 
   it('keeps the privacy-safe map available in demo mode without exposing H3-like values', async () => {
@@ -110,10 +127,16 @@ describe('fail-closed feed screens', () => {
 
     const map = await render(<MapScreen />);
     expect(await map.findByText('Demo map · live feed unavailable')).toBeTruthy();
+    expect(map.getByText('Demo map · live feed unavailable').parent?.props.accessibilityLiveRegion).toBeUndefined();
     expect(map.queryAllByText('Demo map · live feed unavailable')).toHaveLength(1);
     expect(map.getByText('Privacy-safe map')).toBeTruthy();
     expect(map.queryByText(/8928308280[a-z0-9]+/i)).toBeNull();
     expect(mockListPublicSightings).not.toHaveBeenCalled();
+    const demoState = mockReactStateValues.map((value) => {
+      try { return JSON.stringify(value); } catch { return '[unserializable]'; }
+    }).join('|');
+    expect(demoState).toContain('Community area 1');
+    expect(demoState).not.toContain('demo-cell-1');
     await map.unmount();
   });
 
@@ -136,9 +159,11 @@ describe('fail-closed feed screens', () => {
 
     const map = await render(<MapScreen />);
     expect(map.getByText('Loading delayed community activity…')).toBeTruthy();
+    expect(map.getByText('Loading delayed community activity…').parent?.props.accessibilityLiveRegion).toBe('polite');
     expect(map.getByText('Privacy-safe map')).toBeTruthy();
     resolveFeed({ items: [], nextCursor: null });
     await waitFor(() => expect(map.getByText('No delayed community activity yet')).toBeTruthy());
+    expect(map.getByText('No delayed community activity yet').parent?.props.accessibilityLiveRegion).toBe('polite');
     expect(map.getByText('Privacy-safe map')).toBeTruthy();
     await map.unmount();
 
@@ -155,8 +180,40 @@ describe('fail-closed feed screens', () => {
     mockListPublicSightings.mockRejectedValueOnce(new Error('offline'));
     const unavailableMap = await render(<MapScreen />);
     await waitFor(() => expect(unavailableMap.getByText('Community feed unavailable · map remains privacy-safe')).toBeTruthy());
+    expect(unavailableMap.getByText('Community feed unavailable · map remains privacy-safe').parent?.props.accessibilityLiveRegion).toBe('polite');
     expect(unavailableMap.getByText('Privacy-safe map')).toBeTruthy();
     await unavailableMap.unmount();
+  });
+
+  it('projects feed and demo area summaries before any value reaches React state', async () => {
+    const client = { rpc: jest.fn() };
+    const sensitivePage: PublicSightingPage = {
+      items: [{
+        ...livePage.items[0],
+        sightingId: 'sensitive-sighting-id',
+        publicCellId: '8928308280abcde',
+        coverMediaId: 'sensitive-cover-media-id',
+        cursor: 'sensitive-row-cursor',
+      }],
+      nextCursor: 'sensitive-page-cursor',
+    };
+    mockGetSupabaseClient.mockReturnValue(client);
+    mockListPublicSightings.mockResolvedValueOnce(sensitivePage);
+
+    const map = await render(<MapScreen />);
+    await fireEvent.press(map.getByRole('button', { name: 'Show area list' }));
+    await waitFor(() => expect(map.getByRole('button', { name: 'Open Community area 1' })).toBeTruthy());
+
+    const storedState = mockReactStateValues.map((value) => {
+      try { return JSON.stringify(value); } catch { return '[unserializable]'; }
+    }).join('|');
+    expect(storedState).not.toMatch(/publicCellId|sightingId|coverMediaId|cursor|nextCursor/);
+    expect(storedState).not.toContain('8928308280abcde');
+    expect(storedState).not.toContain('sensitive-sighting-id');
+    expect(storedState).not.toContain('sensitive-cover-media-id');
+    expect(storedState).not.toContain('sensitive-row-cursor');
+    expect(storedState).not.toContain('sensitive-page-cursor');
+    await map.unmount();
   });
 
   it('supports the safe map and list journey without passing a cell or area key to routes', async () => {
@@ -188,6 +245,43 @@ describe('fail-closed feed screens', () => {
     expect(mockPush).toHaveBeenNthCalledWith(2, { pathname: '/report', params: { source: 'community-map' } });
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('demo-cell-1');
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('public-area-1');
+    await map.unmount();
+  });
+
+  it('renders the complete Simplified Chinese map, list, and area-detail journey', async () => {
+    const client = { rpc: jest.fn() };
+    mockLocale.value = 'zh-CN';
+    mockGetSupabaseClient.mockReturnValue(client);
+    mockListPublicSightings.mockResolvedValueOnce(livePage);
+
+    const map = await render(<MapScreen />);
+    expect(map.getByText('社区地图')).toBeTruthy();
+    expect(map.getByText('延迟显示的社区活动')).toBeTruthy();
+    expect(map.getByText('仅显示粗略区域 · 不显示精确位置或路线')).toBeTruthy();
+    expect(map.getByText('为保护社区猫，地图不提供精确位置或路线。')).toBeTruthy();
+
+    await fireEvent.press(map.getByRole('button', { name: '显示区域列表' }));
+    await waitFor(() => expect(map.getByRole('button', { name: '打开社区区域1' })).toBeTruthy());
+    expect(map.getAllByText('最近延迟时段内有 1 只猫活动').length).toBeGreaterThanOrEqual(1);
+    await fireEvent.press(map.getByRole('button', { name: '打开社区区域1' }));
+
+    expect(map.getByLabelText('区域详情：社区区域1')).toBeTruthy();
+    expect(map.getByText('可查看 1 只猫')).toBeTruthy();
+    expect(map.getByText('其中 0 只已获社区确认')).toBeTruthy();
+    expect(map.getByText('已报告 · 等待社区审核')).toBeTruthy();
+    expect(map.getByText('最近延迟时段内有目击记录')).toBeTruthy();
+    expect(map.getByRole('button', { name: '查看 Pepper' })).toBeTruthy();
+    expect(map.getByRole('button', { name: '从社区区域1提交报告' })).toBeTruthy();
+    expect(map.getByRole('button', { name: '关注区域' }).props.accessibilityState).toEqual({ disabled: true });
+    expect(map.getByText('需要登录；区域关注服务上线后才能使用此功能。')).toBeTruthy();
+
+    const rendered = JSON.stringify(map.toJSON());
+    expect(rendered).not.toMatch(
+      /Community map|Delayed community activity|Coarse areas only|Community area|cats? active|Reported ·|Seen in|cats? visible|community-confirmed|View Pepper|Report from|Follow area|Sign-in and hosted/i,
+    );
+    expect(rendered).not.toMatch(/publicCellId|sightingId|coverMediaId|cursor|nextCursor/);
+    expect(rendered).not.toContain(livePage.items[0].publicCellId);
+    expect(rendered).not.toContain(livePage.items[0].sightingId);
     await map.unmount();
   });
 });

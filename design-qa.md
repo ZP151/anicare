@@ -15,7 +15,7 @@ The browser viewport was set to 390×844 and captured directly after the Expo We
 
 - Replaced the production atlas decision with Google Maps Platform through `react-native-maps`; the generated atlas is an explicit web/unconfigured fallback.
 - Removed exact cat markers, user-location controls, routes, precise timestamps, public cell identifiers, real block numbers, and transit labels.
-- Preserved a broad Singapore camera, restricted zoom, Google attribution space, and a provider-unavailable state.
+- Preserved a broad Singapore camera, restricted zoom, and Google attribution space. Automated adapter tests cover the labelled atlas fallback when native readiness never arrives; real configured-provider and offline behavior remains a native-device verification gate.
 - Matched the approved first-viewport hierarchy: compact top bar, dominant map, privacy notice, 258-point anchored cat sheet, and five-destination tab bar.
 - Re-cropped the approved cat fixture for the measured 135×199 portrait slot.
 - Replaced text-symbol navigation with semantic MaterialCommunityIcons.
@@ -30,7 +30,7 @@ The browser viewport was set to 390×844 and captured directly after the Expo We
 
 - Real-looking block numbers, a bus-stop label, and route-like geographic labels are not reproduced because they conflict with the approved location-safety policy. The fallback uses non-reversible labels such as “Community green”.
 - Post-capture safety/completeness deviation: the visible `Privacy-safe atlas fallback` provider-state label was restored after the 0.7857 hero evidence. The Impeccable hero remains open and unforced.
-- “Google Maps unavailable” appears only when native Google Maps keys/provider are unavailable. It is absent from configured native production builds.
+- “Google Maps unavailable” appears on web, when native keys are absent, or when a configured native map misses the bounded readiness signal. Real device testing is still required to determine which offline/provider failures actually omit that signal.
 - “Preview data” is visible for the synthetic Mochi fixture so community-confirmation language cannot be mistaken for a live fact.
 - Live public portraits remain protected until a separately approved public-media policy exists.
 
@@ -59,12 +59,13 @@ final result: blocked
 
 ### Automated behavior evidence
 
-- `pnpm --filter @animalhelper/mobile test` passed: 47 suites / 542 tests.
+- `pnpm --filter @animalhelper/mobile test` passed: 47 suites / 553 tests after the final review fix wave.
 - `pnpm --filter @animalhelper/mobile typecheck` passed with no TypeScript errors.
 - `pnpm --filter @animalhelper/mobile build` passed and exported 15 web routes, including `/map` and `/(tabs)/map`.
 - `pnpm validate:pilot-policies` passed with `native_config_policy_ok` and `pilot_build_policy_ok`.
 - The required scan for `892830`, `publicCellId`, `showsUserLocation`, `showsMyLocationButton`, `Marker`, `Polyline`, and `Directions` returned no matches in `apps/mobile/app/(tabs)/map.tsx` or `apps/mobile/src/components/CoarseAreaDetailSheet.tsx`.
 - Focused automated coverage includes the native/web map adapters, public map policy, coarse-area detail sheet, report context, native configuration, and pilot-build policy.
+- The configured native adapter has automated coverage for an eight-second readiness timeout, both supported map readiness callbacks, readiness arriving before the timeout effect, and timer cleanup after load or unmount. These tests prove the adapter state machine only; they do not prove how a real configured Google provider behaves offline or during provider failure.
 
 ### Web fallback visual and interaction evidence
 
@@ -84,6 +85,7 @@ Interaction checks passed for Map/List switching, `Show area list`, `Show map`, 
 - This Windows host reported `ADB_NOT_FOUND` and `ANDROID_HOME_NOT_SET`; no Android emulator or connected Android device was available.
 - An iOS simulator is unavailable on this Windows host.
 - Configured native Google Maps rendering therefore remains an explicit release gate. A later iOS/Android simulator or device pass must verify the provider, adaptive platform chrome, dark appearance, text scaling, and native gestures without enabling user location, exact cat pins, routes, directions, or public source-cell rendering.
+- The same native-device pass must exercise real configured offline and provider-initialization failure. Automated timeout fallback exists, but no claim is made that a provider always omits readiness callbacks for every real failure mode.
 - Area follow remains contract-blocked and is not represented as a working capability.
 - The existing Nearby Impeccable hero gate remains open and unforced; this Map verification does not weaken its privacy-safe accepted deviations.
 
