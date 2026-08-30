@@ -95,7 +95,7 @@ set local session_replication_role = origin;
 insert into public.sightings (
   id, reporter_id, occurred_at, public_cell_id, time_bucket, risk, visibility, client_dedupe_key
 )
-select ('00000000-0000-4000-8000-' || lpad((1800 + fixture)::text, 12, '0'))::uuid,
+select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1800 + fixture)::text, 12, '0'))::uuid,
        '00000000-0000-4000-8000-000000001800', pg_catalog.now(),
        '8928308280fffff', 'morning', 'normal', 'limited',
        'identity-guard-' || fixture::text
@@ -106,11 +106,11 @@ insert into public.media_assets (
   redaction_confirmed_at, training_eligible, client_media_id, byte_length,
   width, height, recipe_version, detector_versions, status, reviewed_at
 )
-select ('00000000-0000-4000-8000-' || lpad((1900 + fixture)::text, 12, '0'))::uuid,
-       ('00000000-0000-4000-8000-' || lpad((1800 + fixture)::text, 12, '0'))::uuid,
+select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1900 + fixture)::text, 12, '0'))::uuid,
+       pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1800 + fixture)::text, 12, '0'))::uuid,
        '00000000-0000-4000-8000-000000001800',
        'media-staging',
-       'jobs/' || ('00000000-0000-4000-8000-' || lpad((1950 + fixture)::text, 12, '0')) || '.jpg',
+       'jobs/' || pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1950 + fixture)::text, 12, '0')) || '.jpg',
        repeat(substr('abcdef0123456789', (fixture % 16) + 1, 1), 64),
        pg_catalog.now(), false, 'guard-media-' || lpad(fixture::text, 2, '0'),
        4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
@@ -124,23 +124,23 @@ insert into private.media_upload_jobs (
   reserved_at, reservation_expires_at, upload_token_expires_at, next_cleanup_at,
   finalized_at, media_asset_id
 )
-select ('00000000-0000-4000-8000-' || lpad((1950 + fixture)::text, 12, '0'))::uuid,
+select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1950 + fixture)::text, 12, '0'))::uuid,
        '00000000-0000-4000-8000-000000001800',
-       ('00000000-0000-4000-8000-' || lpad((1800 + fixture)::text, 12, '0'))::uuid,
+       pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1800 + fixture)::text, 12, '0'))::uuid,
        'guard-media-' || lpad(fixture::text, 2, '0'),
        repeat(substr('abcdef0123456789', (fixture % 16) + 1, 1), 64),
        4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
        '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
        pg_catalog.now(),
-       'jobs/' || ('00000000-0000-4000-8000-' || lpad((1950 + fixture)::text, 12, '0')) || '.jpg',
+       'jobs/' || pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1950 + fixture)::text, 12, '0')) || '.jpg',
        'finalized', pg_catalog.now(), pg_catalog.now() + interval '10 minutes',
        pg_catalog.now() + interval '2 hours', 'infinity'::timestamptz,
        pg_catalog.now(),
-       ('00000000-0000-4000-8000-' || lpad((1900 + fixture)::text, 12, '0'))::uuid
+       pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1900 + fixture)::text, 12, '0'))::uuid
   from generate_series(1, 30) as fixtures(fixture);
 
 insert into public.animals (id, primary_alias, profile_created_by, visibility)
-select ('00000000-0000-4000-8000-' || lpad((1800 + fixture)::text, 12, '0'))::uuid,
+select pg_catalog.format('00000000-0000-4000-8000-%s', lpad((1800 + fixture)::text, 12, '0'))::uuid,
        'Guard Candidate ' || fixture::text,
        '00000000-0000-4000-8000-000000001800', 'limited'
   from generate_series(20, 40) as fixtures(fixture);
@@ -405,8 +405,7 @@ select throws_ok(
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001822', true);
 select throws_ok(
   $$update private.identity_assistance_jobs
-       set status = 'requested', failed_at = null, failure_code = null,
-           input_sha256 = repeat('2', 64)
+       set status = 'requested', failed_at = null, failure_code = null
      where id = '00000000-0000-4000-8000-000000001822'$$,
   '42501', 'identity_assistance_job_transition_forbidden',
   'terminal failed jobs cannot become requested again'
