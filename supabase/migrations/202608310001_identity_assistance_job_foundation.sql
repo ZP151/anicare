@@ -52,7 +52,7 @@ create table private.identity_assistance_jobs (
   created_at timestamptz not null default pg_catalog.now(),
   updated_at timestamptz not null default pg_catalog.now(),
   constraint identity_assistance_job_input_hash check (
-    (input_sha256 ~ '^[a-f0-9]{64}$')
+    (input_sha256 is not null and input_sha256 ~ '^[a-f0-9]{64}$')
     or (
       input_sha256 is null
       and (
@@ -129,7 +129,10 @@ create table private.identity_assistance_candidates (
   animal_id uuid not null references public.animals(id) on delete restrict,
   confidence_band private.identity_assistance_confidence_band not null,
   reason_codes private.identity_assistance_reason_code[] not null
-    check (cardinality(reason_codes) between 1 and 4),
+    check (
+      cardinality(reason_codes) between 1 and 4
+      and array_position(reason_codes, null) is null
+    ),
   created_at timestamptz not null default pg_catalog.now(),
   primary key (job_id, rank),
   unique (job_id, animal_id)
