@@ -10,6 +10,7 @@ alter table private.identity_assistance_jobs
       completed_at is not null
       and status in ('succeeded', 'cancelled', 'expired')
       and model_version is not null
+      and callback_contract_version is not null
       and callback_contract_version = 'identify-callback.v1'
       and new_cat_recommended is not null
     )
