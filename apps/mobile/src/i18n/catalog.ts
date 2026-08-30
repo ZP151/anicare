@@ -7,6 +7,20 @@ export type MessageKey =
   | 'nearby.privacyNote'
   | 'map.title'
   | 'map.subtitle'
+  | 'map.mapTab'
+  | 'map.listTab'
+  | 'map.delayedActivity'
+  | 'map.legend'
+  | 'map.showAreaList'
+  | 'map.showMap'
+  | 'map.resetBroadView'
+  | 'map.chooseAreaManually'
+  | 'map.manualAreaExplanation'
+  | 'map.demoStatus'
+  | 'map.loadingStatus'
+  | 'map.emptyStatus'
+  | 'map.unavailableStatus'
+  | 'map.openArea'
   | 'report.title'
   | 'report.subtitle'
   | 'report.action'
@@ -23,7 +37,21 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'nearby.subtitle': 'Identity-backed sightings from your community.',
     'nearby.privacyNote': 'Public locations are blurred and shown after a safety delay.',
     'map.title': 'Community map',
-    'map.subtitle': 'Pins represent approximate community cells, never exact locations.',
+    'map.subtitle': 'Delayed, coarse community activity.',
+    'map.mapTab': 'Map',
+    'map.listTab': 'List',
+    'map.delayedActivity': 'Delayed community activity',
+    'map.legend': 'Coarse areas only · no exact pins or routes',
+    'map.showAreaList': 'Show area list',
+    'map.showMap': 'Show map',
+    'map.resetBroadView': 'Reset broad map view',
+    'map.chooseAreaManually': 'Choose area manually',
+    'map.manualAreaExplanation': 'Exact pins and routes are unavailable by design.',
+    'map.demoStatus': 'Demo map · live feed unavailable',
+    'map.loadingStatus': 'Loading delayed community activity…',
+    'map.emptyStatus': 'No delayed community activity yet',
+    'map.unavailableStatus': 'Community feed unavailable · map remains privacy-safe',
+    'map.openArea': 'Open {{area}}',
     'report.title': 'Report a sighting',
     'report.subtitle': 'Add a photo and traits. AI will suggest candidates, never decide.',
     'report.action': 'Start a report',
@@ -39,7 +67,21 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'nearby.subtitle': '查看与稳定身份关联的社区目击记录。',
     'nearby.privacyNote': '公开位置已模糊处理，并延迟显示。',
     'map.title': '社区地图',
-    'map.subtitle': '地图仅显示约 300 米社区网格，不显示精确位置。',
+    'map.subtitle': '延迟显示的粗略社区活动。',
+    'map.mapTab': '地图',
+    'map.listTab': '列表',
+    'map.delayedActivity': '延迟显示的社区活动',
+    'map.legend': '仅显示粗略区域 · 不显示精确位置或路线',
+    'map.showAreaList': '显示区域列表',
+    'map.showMap': '显示地图',
+    'map.resetBroadView': '重置广域地图视图',
+    'map.chooseAreaManually': '手动选择区域',
+    'map.manualAreaExplanation': '为保护社区猫，地图不提供精确位置或路线。',
+    'map.demoStatus': '演示地图 · 实时动态暂不可用',
+    'map.loadingStatus': '正在加载延迟显示的社区活动…',
+    'map.emptyStatus': '暂时没有延迟显示的社区活动',
+    'map.unavailableStatus': '社区动态暂不可用 · 地图仍保持隐私安全',
+    'map.openArea': '打开{{area}}',
     'report.title': '报告目击',
     'report.subtitle': '添加照片和特征；AI 只推荐候选，不替你做决定。',
     'report.action': '开始报告',

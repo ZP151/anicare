@@ -1,8 +1,10 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import type { PublicSightingPage } from './feed';
 
 const mockGetSupabaseClient = jest.fn();
 const mockListPublicSightings = jest.fn();
 const mockPush = jest.fn();
+const mockNearbyMapMount = jest.fn();
 
 jest.mock('./supabase', () => ({ getSupabaseClient: () => mockGetSupabaseClient() }));
 jest.mock('./feed', () => ({
@@ -15,18 +17,37 @@ jest.mock('../maps/NearbyMap', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
   return {
-    NearbyMap: () => React.createElement(View, null, React.createElement(Text, null, 'Privacy-safe map')),
+    NearbyMap: () => {
+      React.useEffect(() => {
+        mockNearbyMapMount();
+      }, []);
+      return React.createElement(View, null, React.createElement(Text, null, 'Privacy-safe map'));
+    },
   };
 });
 jest.mock('../i18n/LocaleContext', () => ({
   useLocale: () => ({
+    locale: 'en',
     t: (key: string) => ({
       'common.beta': 'Closed beta',
       'nearby.title': 'Cats nearby',
       'nearby.subtitle': 'Identity-backed sightings from your community.',
       'nearby.privacyNote': 'Public locations are blurred and shown after a safety delay.',
       'map.title': 'Community map',
-      'map.subtitle': 'Pins represent approximate community cells, never exact locations.',
+      'map.mapTab': 'Map',
+      'map.listTab': 'List',
+      'map.delayedActivity': 'Delayed community activity',
+      'map.legend': 'Coarse areas only · no exact pins or routes',
+      'map.showAreaList': 'Show area list',
+      'map.showMap': 'Show map',
+      'map.resetBroadView': 'Reset broad map view',
+      'map.chooseAreaManually': 'Choose area manually',
+      'map.manualAreaExplanation': 'Exact pins and routes are unavailable by design.',
+      'map.demoStatus': 'Demo map · live feed unavailable',
+      'map.loadingStatus': 'Loading delayed community activity…',
+      'map.emptyStatus': 'No delayed community activity yet',
+      'map.unavailableStatus': 'Community feed unavailable · map remains privacy-safe',
+      'map.openArea': 'Open {{area}}',
     })[key] ?? key,
   }),
 }));
@@ -60,9 +81,11 @@ describe('fail-closed feed screens', () => {
   beforeEach(() => {
     mockGetSupabaseClient.mockReset();
     mockListPublicSightings.mockReset();
+    mockPush.mockReset();
+    mockNearbyMapMount.mockReset();
   });
 
-  it('labels synthetic content and keeps the two core journeys available without configuration', async () => {
+  it('keeps the privacy-safe map available in demo mode without exposing H3-like values', async () => {
     mockGetSupabaseClient.mockReturnValue(null);
 
     const nearby = await render(<NearbyScreen />);
@@ -79,15 +102,20 @@ describe('fail-closed feed screens', () => {
 
     const map = await render(<MapScreen />);
     expect(await map.findByText('Demo map · live feed unavailable')).toBeTruthy();
-    expect(map.queryAllByRole('button')).toHaveLength(0);
+    expect(map.queryAllByText('Demo map · live feed unavailable')).toHaveLength(1);
+    expect(map.getByText('Privacy-safe map')).toBeTruthy();
+    expect(map.queryByText(/8928308280[a-z0-9]+/i)).toBeNull();
     expect(mockListPublicSightings).not.toHaveBeenCalled();
     await map.unmount();
   });
 
-  it('renders configured data only through the narrow feed wrapper without precise markers', async () => {
+  it('keeps the privacy-safe map present through loading, empty, live, and unavailable feed states', async () => {
     const client = { rpc: jest.fn() };
     mockGetSupabaseClient.mockReturnValue(client);
-    mockListPublicSightings.mockResolvedValue(livePage);
+    let resolveFeed: (value: PublicSightingPage) => void = () => undefined;
+    mockListPublicSightings
+      .mockResolvedValueOnce(livePage)
+      .mockImplementationOnce(() => new Promise<PublicSightingPage>((resolve) => { resolveFeed = resolve; }));
 
     const nearby = await render(<NearbyScreen />);
     expect(mockListPublicSightings).toHaveBeenCalledWith({ limit: 20 }, client);
@@ -99,8 +127,53 @@ describe('fail-closed feed screens', () => {
     await nearby.unmount();
 
     const map = await render(<MapScreen />);
-    await waitFor(() => expect(map.getByText('Cell 8928308280fffff')).toBeTruthy());
-    expect(map.getByText('Coarse cells from live feed · no precise markers')).toBeTruthy();
+    expect(map.getByText('Loading delayed community activity…')).toBeTruthy();
+    expect(map.getByText('Privacy-safe map')).toBeTruthy();
+    resolveFeed({ items: [], nextCursor: null });
+    await waitFor(() => expect(map.getByText('No delayed community activity yet')).toBeTruthy());
+    expect(map.getByText('Privacy-safe map')).toBeTruthy();
+    await map.unmount();
+
+    mockListPublicSightings.mockResolvedValueOnce(livePage);
+    const liveMap = await render(<MapScreen />);
+    await waitFor(() => expect(liveMap.getByText('Privacy-safe map')).toBeTruthy());
+    expect(liveMap.queryByText(/8928308280fffff/)).toBeNull();
+    await liveMap.unmount();
+
+    mockListPublicSightings.mockRejectedValueOnce(new Error('offline'));
+    const unavailableMap = await render(<MapScreen />);
+    await waitFor(() => expect(unavailableMap.getByText('Community feed unavailable · map remains privacy-safe')).toBeTruthy());
+    expect(unavailableMap.getByText('Privacy-safe map')).toBeTruthy();
+    await unavailableMap.unmount();
+  });
+
+  it('supports the safe map and list journey without passing a cell or area key to routes', async () => {
+    mockGetSupabaseClient.mockReturnValue(null);
+
+    const map = await render(<MapScreen />);
+    expect(await map.findByText('Delayed community activity')).toBeTruthy();
+    expect(map.getByText('Coarse areas only · no exact pins or routes')).toBeTruthy();
+    expect(map.getByText('Exact pins and routes are unavailable by design.')).toBeTruthy();
+
+    await fireEvent.press(map.getByRole('button', { name: 'Reset broad map view' }));
+    await waitFor(() => expect(mockNearbyMapMount).toHaveBeenCalledTimes(2));
+    expect(map.getByText('Privacy-safe map')).toBeTruthy();
+
+    await fireEvent.press(map.getByRole('button', { name: 'Show area list' }));
+    expect(map.getByRole('button', { name: 'Show map' })).toBeTruthy();
+    expect(map.getByText('Community area 1')).toBeTruthy();
+    await fireEvent.press(map.getByRole('button', { name: 'Show map' }));
+    expect(map.getByText('Privacy-safe map')).toBeTruthy();
+
+    await fireEvent.press(map.getByRole('button', { name: 'Choose area manually' }));
+    await fireEvent.press(map.getByRole('button', { name: 'Open Community area 1' }));
+    expect(map.getByLabelText('Area detail: Community area 1')).toBeTruthy();
+    await fireEvent.press(map.getByRole('button', { name: 'View Demo Meow One' }));
+    await fireEvent.press(map.getByRole('button', { name: 'Report from Community area 1' }));
+    expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-community-cat-1');
+    expect(mockPush).toHaveBeenNthCalledWith(2, { pathname: '/report', params: { source: 'community-map' } });
+    expect(JSON.stringify(mockPush.mock.calls)).not.toContain('demo-cell-1');
+    expect(JSON.stringify(mockPush.mock.calls)).not.toContain('public-area-1');
     await map.unmount();
   });
 });

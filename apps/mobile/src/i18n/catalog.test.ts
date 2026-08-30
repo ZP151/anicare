@@ -26,4 +26,18 @@ describe('localization catalog', () => {
     ]);
     expect(translate('zh-CN', 'nearby.privacyNote')).toBe('公开位置已模糊处理，并延迟显示。');
   });
+
+  it('provides complete privacy-safe community map labels in English', () => {
+    expect(translate('en', 'map.delayedActivity')).toBe('Delayed community activity');
+    expect(translate('en', 'map.legend')).toBe('Coarse areas only · no exact pins or routes');
+    expect(translate('en', 'map.manualAreaExplanation')).toBe('Exact pins and routes are unavailable by design.');
+    expect(translate('en', 'map.resetBroadView')).toBe('Reset broad map view');
+  });
+
+  it('provides complete privacy-safe community map labels in Simplified Chinese', () => {
+    expect(translate('zh-CN', 'map.delayedActivity')).toBe('延迟显示的社区活动');
+    expect(translate('zh-CN', 'map.legend')).toBe('仅显示粗略区域 · 不显示精确位置或路线');
+    expect(translate('zh-CN', 'map.manualAreaExplanation')).toBe('为保护社区猫，地图不提供精确位置或路线。');
+    expect(translate('zh-CN', 'map.resetBroadView')).toBe('重置广域地图视图');
+  });
 });
