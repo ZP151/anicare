@@ -1,0 +1,6 @@
+Use case: stylized-concept
+Asset type: privacy-safe mobile neighbourhood atlas plate for a community-cat app
+Input image: the approved comp crop is the visual and compositional reference only.
+Primary request: recreate the same softly illustrated oblique neighbourhood atlas, with pale warm buildings, muted green communal open space, and sheltered teal linkways crossing the scene. Preserve the reference viewpoint, density, framing, gentle paper-like texture, low contrast and palette (#F1EBDD, #B8D8D0, #2E756C, #123B46). Fill the whole portrait frame edge to edge.
+Privacy transformation: make the geography entirely fictional and non-reversible. Do not reproduce any real Singapore estate, street, route, block number, bus stop, station, landmark, coordinate, navigation path, or exact geometry. Remove all labels, numbers, transport icons, and text; app-native semantic labels will be overlaid separately.
+Constraints: illustration only, no UI chrome, no banners, no cards, no buttons, no shadows from a device frame, no people, no cats, no watermark, no legible text. The bottom portion must continue the atlas art rather than become a blank band.

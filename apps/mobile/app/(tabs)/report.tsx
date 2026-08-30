@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
-import { router } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -24,9 +25,12 @@ import {
   reportSubmissionStatus,
   submitReportWithMedia,
 } from '../../src/report/report-submission';
+import { getReportContext } from '../../src/report/report-context';
 
 export default function ReportScreen() {
   const { t } = useLocale();
+  const { animalId } = useLocalSearchParams<{ animalId?: string | string[] }>();
+  const reportContext = getReportContext(animalId);
   const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [notes, setNotes] = useState('');
   const [risk, setRisk] = useState<SightingRisk>('normal');
@@ -130,8 +134,15 @@ export default function ReportScreen() {
 
   return (
     <ScreenScaffold title={t('report.title')} subtitle={t('report.subtitle')}>
+      {reportContext ? (
+        <View accessibilityLabel="Selected cat report context" style={styles.context}>
+          <MaterialCommunityIcons color={colors.community} name="link-variant" size={19} />
+          <Text style={styles.contextText}>{reportContext.label}</Text>
+        </View>
+      ) : null}
       <Pressable accessibilityRole="button" onPress={choosePhoto} style={styles.photo}>
-        <Text style={styles.photoCopy}>＋ Review a cat photo privately</Text>
+        <MaterialCommunityIcons color={colors.leaf} name="image-search-outline" size={30} />
+        <Text style={styles.photoCopy}>Review a cat photo privately</Text>
       </Pressable>
       <Text style={styles.warning}>Automatic people, licence-plate and cat detectors are unavailable. Add opaque masks manually before confirming.</Text>
       <TextInput
@@ -168,7 +179,9 @@ export default function ReportScreen() {
 }
 
 const styles = StyleSheet.create({
-  photo: { height: 230, borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leafSoft, overflow: 'hidden' },
+  context: { minHeight: 48, paddingHorizontal: 14, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: colors.aquaSoft },
+  contextText: { flex: 1, color: colors.aquaDeep, fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  photo: { height: 230, borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.leafSoft, overflow: 'hidden' },
   photoCopy: { color: colors.leaf, fontWeight: '700' },
   warning: { color: colors.amber, fontSize: 13, lineHeight: 19 },
   input: { minHeight: 120, padding: 16, textAlignVertical: 'top', borderRadius: radii.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, color: colors.ink },

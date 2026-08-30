@@ -13,6 +13,7 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="cat/[id]" />
         <Stack.Screen name="report/redaction-review" options={{ presentation: 'modal' }} />
       </Stack>
     </LocaleProvider>

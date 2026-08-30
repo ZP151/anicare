@@ -1,0 +1,6 @@
+Use case: stylized-concept
+Asset type: seamless surface texture tile for a native mobile app
+Input image: use only the warm off-white paper grain visible in the upper portion as the exact material reference; ignore the map fragment at the bottom.
+Primary request: create a uniform, very low-contrast, seamless warm ivory paper texture matching #F1EBDD / #EDEDE4, softly fibrous and tactile, with no directional lighting and no vignette.
+Composition: texture fills the entire frame edge to edge and must tile cleanly on all four edges.
+Constraints: no objects, no map, no lines, no illustration, no UI, no shadow, no gradient, no text, no watermark; keep contrast subtle enough for accessible dark text on top.

@@ -1,12 +1,23 @@
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockGetSupabaseClient = jest.fn();
 const mockListPublicSightings = jest.fn();
+const mockPush = jest.fn();
 
 jest.mock('./supabase', () => ({ getSupabaseClient: () => mockGetSupabaseClient() }));
 jest.mock('./feed', () => ({
   listPublicSightings: (...args: unknown[]) => mockListPublicSightings(...args),
 }));
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+jest.mock('../maps/NearbyMap', () => {
+  const React = require('react');
+  const { Text, View } = require('react-native');
+  return {
+    NearbyMap: () => React.createElement(View, null, React.createElement(Text, null, 'Privacy-safe map')),
+  };
+});
 jest.mock('../i18n/LocaleContext', () => ({
   useLocale: () => ({
     t: (key: string) => ({
@@ -51,12 +62,17 @@ describe('fail-closed feed screens', () => {
     mockListPublicSightings.mockReset();
   });
 
-  it('labels synthetic content as demo/unavailable and exposes no live mutation controls without configuration', async () => {
+  it('labels synthetic content and keeps the two core journeys available without configuration', async () => {
     mockGetSupabaseClient.mockReturnValue(null);
 
     const nearby = await render(<NearbyScreen />);
-    expect(await nearby.findByText('Demo mode · live feed unavailable')).toBeTruthy();
-    expect(nearby.queryAllByRole('button')).toHaveLength(0);
+    expect(await nearby.findByText('Preview data')).toBeTruthy();
+    await fireEvent.press(nearby.getByRole('button', { name: 'View Mochi' }));
+    await fireEvent.press(nearby.getByRole('button', { name: 'Report a sighting of Mochi' }));
+    expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-cat');
+    expect(mockPush).toHaveBeenNthCalledWith(2, { pathname: '/report', params: { animalId: 'demo-cat' } });
+    await fireEvent.press(nearby.getByRole('button', { name: 'How locations are protected' }));
+    expect(nearby.getByText('No user location is requested. Cat locations, routes and timestamps remain hidden.')).toBeTruthy();
     await nearby.unmount();
 
     const map = await render(<MapScreen />);
@@ -75,7 +91,9 @@ describe('fail-closed feed screens', () => {
     expect(mockListPublicSightings).toHaveBeenCalledWith({ limit: 20 }, client);
     await waitFor(() => expect(nearby.getByText('Pepper')).toBeTruthy());
     expect(nearby.queryByText(/Mochi/)).toBeNull();
-    expect(nearby.getByText('Approx. cell 8928308280fffff · today')).toBeTruthy();
+    expect(nearby.queryByText(/8928308280fffff/)).toBeNull();
+    expect(nearby.getByText('Reported · awaiting community review')).toBeTruthy();
+    expect(nearby.getByText('Seen in the latest delayed window')).toBeTruthy();
     await nearby.unmount();
 
     const map = await render(<MapScreen />);

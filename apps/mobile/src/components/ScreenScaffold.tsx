@@ -1,5 +1,6 @@
 import { PropsWithChildren, ReactNode } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '../design/theme';
 
@@ -45,4 +46,3 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 32, lineHeight: 38, fontWeight: '800' },
   subtitle: { color: colors.muted, fontSize: 16, lineHeight: 23 },
 });
-

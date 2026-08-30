@@ -1,18 +1,12 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { StyleSheet } from 'react-native';
 
 import { GlassSurface } from '../../src/design/GlassSurface';
 import { colors } from '../../src/design/theme';
 import { getTabDefinitions, TabRoute } from '../../src/i18n/catalog';
 import { useLocale } from '../../src/i18n/LocaleContext';
-
-const icons: Record<TabRoute, string> = {
-  index: '⌂',
-  map: '⌖',
-  report: '＋',
-  following: '♡',
-  profile: '●',
-};
+import { getTabIconName } from '../../src/navigation/tab-icons';
 
 export default function TabLayout() {
   const { locale } = useLocale();
@@ -24,6 +18,7 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.leaf,
         tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: styles.tabLabel,
         tabBarStyle: styles.tabBar,
         tabBarBackground: () => <GlassSurface style={StyleSheet.absoluteFill} />,
       }}
@@ -35,7 +30,9 @@ export default function TabLayout() {
           options={{
             title: tab.label,
             tabBarAccessibilityLabel: tab.accessibilityLabel,
-            tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons[tab.route]}</Text>,
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons color={color} name={getTabIconName(tab.route)} size={Math.max(size, 25)} />
+            ),
           }}
         />
       ))}
@@ -53,6 +50,5 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
-  icon: { fontSize: 21, fontWeight: '700' },
+  tabLabel: { fontSize: 11, lineHeight: 14, fontWeight: '600' },
 });
-
