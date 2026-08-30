@@ -1009,7 +1009,7 @@ select lives_ok(
     diagnostic_message text;
     setup_step text := 'connect';
   begin
-    perform extensions.dblink_connect(
+    perform extensions.dblink_connect_u(
       'identity_guard_setup',
       'dbname=' || pg_catalog.current_database()
         || ' application_name=identity_guard_setup'
@@ -1168,12 +1168,12 @@ select lives_ok(
     wait_deadline timestamptz;
   begin
     perform pg_catalog.pg_advisory_lock(20260831, 41);
-    perform extensions.dblink_connect(
+    perform extensions.dblink_connect_u(
       'identity_candidate_hide',
       'dbname=' || pg_catalog.current_database()
         || ' application_name=identity_candidate_hide'
     );
-    perform extensions.dblink_connect(
+    perform extensions.dblink_connect_u(
       'identity_animal_hide',
       'dbname=' || pg_catalog.current_database()
         || ' application_name=identity_animal_hide'
@@ -1305,12 +1305,12 @@ select lives_ok(
     wait_deadline timestamptz;
   begin
     perform pg_catalog.pg_advisory_lock(20260831, 42);
-    perform extensions.dblink_connect(
+    perform extensions.dblink_connect_u(
       'identity_candidate_delete',
       'dbname=' || pg_catalog.current_database()
         || ' application_name=identity_candidate_delete'
     );
-    perform extensions.dblink_connect(
+    perform extensions.dblink_connect_u(
       'identity_animal_delete',
       'dbname=' || pg_catalog.current_database()
         || ' application_name=identity_animal_delete'
