@@ -1009,13 +1009,15 @@ select lives_ok(
     diagnostic_message text;
     setup_step text := 'connect';
     local_connection text :=
-      'host=127.0.0.1 port=' || pg_catalog.current_setting('port')
+      'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
+      || ' port=' || pg_catalog.current_setting('port')
       || ' dbname=' || pg_catalog.current_database()
       || ' user=' || session_user
       || ' password=' || session_user;
   begin
     -- The Supabase CLI local stack uses its fixed test-only postgres credential.
-    -- Force TCP so dblink authenticates with it instead of the peer path.
+    -- Use the container address so pg_hba selects password auth rather than
+    -- loopback trust; dblink then accepts the independent local session.
     perform extensions.dblink_connect(
       'identity_guard_setup',
       local_connection || ' application_name=identity_guard_setup'
@@ -1173,7 +1175,8 @@ select lives_ok(
   declare
     wait_deadline timestamptz;
     local_connection text :=
-      'host=127.0.0.1 port=' || pg_catalog.current_setting('port')
+      'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
+      || ' port=' || pg_catalog.current_setting('port')
       || ' dbname=' || pg_catalog.current_database()
       || ' user=' || session_user
       || ' password=' || session_user;
@@ -1313,7 +1316,8 @@ select lives_ok(
   declare
     wait_deadline timestamptz;
     local_connection text :=
-      'host=127.0.0.1 port=' || pg_catalog.current_setting('port')
+      'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
+      || ' port=' || pg_catalog.current_setting('port')
       || ' dbname=' || pg_catalog.current_database()
       || ' user=' || session_user
       || ' password=' || session_user;
