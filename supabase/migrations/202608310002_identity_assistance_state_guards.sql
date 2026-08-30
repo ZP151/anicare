@@ -300,11 +300,11 @@ begin
              when status in (
                'requested'::private.identity_assistance_job_status,
                'processing'::private.identity_assistance_job_status
-             ) then pg_catalog.coalesce(cancelled_at, invalidated_at)
+             ) then coalesce(cancelled_at, invalidated_at)
              else cancelled_at
            end,
-           withdrawn_at = pg_catalog.coalesce(withdrawn_at, invalidated_at),
-           result_invalidated_at = pg_catalog.coalesce(result_invalidated_at, invalidated_at),
+           withdrawn_at = coalesce(withdrawn_at, invalidated_at),
+           result_invalidated_at = coalesce(result_invalidated_at, invalidated_at),
            updated_at = invalidated_at
      where id = affected_job.id;
 
@@ -318,11 +318,11 @@ begin
 
   perform pg_catalog.set_config(
     'private.identity_assistance_candidate_writer',
-    pg_catalog.coalesce(prior_candidate_writer, ''), true
+    coalesce(prior_candidate_writer, ''), true
   );
   perform pg_catalog.set_config(
     'private.identity_assistance_job_writer',
-    pg_catalog.coalesce(prior_job_writer, ''), true
+    coalesce(prior_job_writer, ''), true
   );
 
   if tg_op = 'DELETE' then

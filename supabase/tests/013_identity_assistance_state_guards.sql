@@ -574,7 +574,8 @@ select lives_ok(
   'a second service request owns its own replay rows'
 );
 select lives_ok(
-  $$do $test$
+  $sql$
+  do $body$
     begin
       delete from private.identity_assistance_service_requests
        where request_id = '00000000-0000-4000-8000-000000001841';
@@ -585,7 +586,8 @@ select lives_ok(
         raise exception 'claim replay rows remain';
       end if;
     end
-  $test$$$,
+  $body$;
+  $sql$,
   'deleting a service request cascades its claim replay rows'
 );
 

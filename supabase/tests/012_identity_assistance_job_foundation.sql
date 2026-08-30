@@ -301,6 +301,7 @@ select throws_ok(
       '00000000-0000-4000-8000-000000001800', 'notice.v1', null, now())$$,
   '23514', null, 'requested jobs with cleanup markers still require an input hash'
 );
+set local session_replication_role = replica;
 select throws_ok(
   $$insert into private.identity_assistance_jobs (
       id, sighting_id, requester_id, status, notice_version, input_sha256,
@@ -312,6 +313,7 @@ select throws_ok(
     )$$,
   '23514', null, 'processing jobs with cleanup markers still require an input hash'
 );
+set local session_replication_role = origin;
 select throws_ok(
   $$insert into private.identity_assistance_jobs (
       id, sighting_id, requester_id, status, notice_version, input_sha256,
