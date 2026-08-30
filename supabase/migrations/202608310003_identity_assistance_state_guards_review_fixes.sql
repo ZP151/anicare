@@ -140,16 +140,6 @@ begin
         using errcode = '42501';
     end if;
 
-    if old.completed_at is null
-       and new.completed_at is not null
-       and not (
-         old.status = 'processing'::private.identity_assistance_job_status
-         and new.status = 'succeeded'::private.identity_assistance_job_status
-       ) then
-      raise exception 'identity_assistance_job_completion_immutable'
-        using errcode = '42501';
-    end if;
-
     if pg_catalog.current_setting('private.identity_assistance_job_writer', true)
         is distinct from old.id::text then
       raise exception 'identity_assistance_job_write_forbidden'
@@ -196,6 +186,16 @@ begin
          )
        ) then
       raise exception 'identity_assistance_job_transition_forbidden'
+        using errcode = '42501';
+    end if;
+
+    if old.completed_at is null
+       and new.completed_at is not null
+       and not (
+         old.status = 'processing'::private.identity_assistance_job_status
+         and new.status = 'succeeded'::private.identity_assistance_job_status
+       ) then
+      raise exception 'identity_assistance_job_completion_immutable'
         using errcode = '42501';
     end if;
   end if;
