@@ -71,7 +71,7 @@ final result: blocked
 The Expo Web preview ran at `http://localhost:8087/map` with a 390×844 phone viewport. This is evidence for layout, fallback state, and interactions only; it does not prove a configured native Google Maps provider.
 
 - Map fallback: `apps/mobile/.impeccable/review/community-map-web-map-390x844.png`.
-- Coarse-area list: `apps/mobile/.impeccable/review/community-map-web-list-390x844.png`.
+- Stable coarse-area list (fresh Fix round 1 recapture with `Community map` title and complete five-tab navigation visible): `apps/mobile/.impeccable/review/community-map-web-list-390x844.png`.
 - Open area detail: `apps/mobile/.impeccable/review/community-map-web-area-detail-390x844.png`.
 - Scrolled detail actions and contract-blocked follow state: `apps/mobile/.impeccable/review/community-map-web-area-detail-actions-390x844.png`.
 
