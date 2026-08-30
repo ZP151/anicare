@@ -25,8 +25,9 @@ builds, and run the remaining non-media runtime/two-session database checks.
 - Automatic person, licence-plate and cat detection are explicitly unavailable;
   native-device execution has not been completed.
 - Backend private Supabase staging/quarantine, cleanup contracts, strict JPEG
-  validation, authenticated artifact reader and native
-  reserve-to-signed-upload-to-finalize wiring are implemented. A `quarantined`
+  validation and native reserve-to-signed-upload-to-finalize artifact transport
+  are implemented; an authenticated reviewer artifact reader is not yet
+  implemented. A `quarantined`
   result remains private and public promotion is disabled. Gate 2A media
   local-stack runtime evidence is recorded on
   [run 33208195906](https://github.com/ZP151/anicare/actions/runs/33208195906) with both
@@ -50,8 +51,8 @@ builds, and run the remaining non-media runtime/two-session database checks.
   trusted server residual validation exists; manual quarantine is not public
   publication.
 
-Exit gate: repeat the authenticated artifact reader and
-reserve-to-signed-upload-to-finalize flow on hosted Supabase and supported
+Exit gate: implement and repeat an authenticated reviewer artifact reader and
+the reserve-to-signed-upload-to-finalize flow on hosted Supabase and supported
 native devices, including true post-token-expiry cleanup/replay; then complete
 adversarial redaction, residual-detector/public-promotion, public-projection and
 the non-media two-session concurrency checks. Do not label the branch
@@ -196,7 +197,7 @@ have real content hierarchy and purposeful actions; no main page is an isolated
 demo shell; liquid glass has accessible fallbacks; and screen-by-screen
 Impeccable, animation, accessibility and visual-regression reviews are recorded.
 
-## Sprint 4–5 — AI identity alpha contracts (implemented skeleton)
+## Sprint 4–5 — AI identity alpha contracts (dormant schema foundation)
 
 - Strict crop, embedding, callback and public-result contracts, synthetic
   evaluation fixtures and a fail-closed internal identify route are implemented.
@@ -204,6 +205,11 @@ Impeccable, animation, accessibility and visual-regression reviews are recorded.
   proposals from service-only AI provenance, denies direct authenticated
   mutations, enforces independent reviewer recusal, records idempotent
   append-only decisions and atomically links a sighting only after confirmation.
+- The dormant private identity-assistance job, candidate, bounded-ledger,
+  event/access-aggregation and proposal-evidence schema foundation exists with
+  no direct table access. Contributor request/status/cancel/select RPCs,
+  broker claim/complete/fail/cleanup RPCs, lease-bound media fetch,
+  erasure/concurrency integration and the callback adapter remain open.
 - No model weights, labelled dataset, ANN, queue, real callback, automatic
   detection or production identity/accuracy result exists. AI cannot confirm an
   animal identity.
