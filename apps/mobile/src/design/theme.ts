@@ -10,8 +10,10 @@ export const colors = {
   danger: '#9E3D38',
   mineral: '#123B46',
   community: '#2E756C',
+  actionPrimary: '#1A5A58',
   paper: '#F1EBDD',
   vermilion: '#D55B3E',
+  actionSecondary: '#E24F11',
   aquaSoft: '#DCEBE6',
   aquaDeep: '#386C68',
 } as const;

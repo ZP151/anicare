@@ -6,7 +6,7 @@ import type { TabRoute } from '../i18n/catalog';
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const tabIcons: Record<TabRoute, IconName> = {
-  index: 'map-marker-radius-outline',
+  index: 'map-marker',
   map: 'map-outline',
   report: 'plus-circle-outline',
   following: 'heart-outline',

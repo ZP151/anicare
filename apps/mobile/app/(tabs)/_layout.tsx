@@ -7,6 +7,7 @@ import { colors } from '../../src/design/theme';
 import { getTabDefinitions, TabRoute } from '../../src/i18n/catalog';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { getTabIconName } from '../../src/navigation/tab-icons';
+import { tabVisualContract } from '../../src/navigation/tab-style';
 
 export default function TabLayout() {
   const { locale } = useLocale();
@@ -31,7 +32,11 @@ export default function TabLayout() {
             title: tab.label,
             tabBarAccessibilityLabel: tab.accessibilityLabel,
             tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons color={color} name={getTabIconName(tab.route)} size={Math.max(size, 25)} />
+              <MaterialCommunityIcons
+                color={color}
+                name={getTabIconName(tab.route)}
+                size={Math.max(size, tabVisualContract.iconSize)}
+              />
             ),
           }}
         />
@@ -46,9 +51,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     elevation: 0,
     backgroundColor: 'transparent',
-    height: 78,
-    paddingTop: 8,
-    paddingBottom: 12,
+    height: tabVisualContract.barHeight,
+    paddingTop: tabVisualContract.topPadding,
+    paddingBottom: tabVisualContract.bottomPadding,
   },
-  tabLabel: { fontSize: 11, lineHeight: 14, fontWeight: '600' },
+  tabLabel: {
+    fontSize: tabVisualContract.labelFontSize,
+    lineHeight: tabVisualContract.labelLineHeight,
+    fontWeight: '600',
+  },
 });

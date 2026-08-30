@@ -11,11 +11,13 @@ import { GlassSurface } from '../../src/design/GlassSurface';
 import { colors, radii } from '../../src/design/theme';
 import { NearbyMap } from '../../src/maps/NearbyMap';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
+import { tabVisualContract } from '../../src/navigation/tab-style';
 
 type FeedStatus = 'demo' | 'loading' | 'live' | 'unavailable';
 
 const previewCat: SelectedCatSummary = {
   animalId: 'demo-cat',
+  displayAlias: 'Mochi · 麻糬',
   primaryAlias: 'Mochi',
   verificationLabel: 'Community confirmed',
   timeLabel: 'Seen this afternoon',
@@ -138,7 +140,7 @@ function StatusBadge({ danger = false, text }: Readonly<{ danger?: boolean; text
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, paddingBottom: 78, backgroundColor: colors.paper },
+  screen: { flex: 1, paddingBottom: tabVisualContract.barHeight, backgroundColor: colors.paper },
   paperGround: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', opacity: 0.22 },
   mapStage: { flex: 1, minHeight: 330, overflow: 'hidden', backgroundColor: colors.paper },
   topBar: {

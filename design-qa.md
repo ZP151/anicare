@@ -9,7 +9,7 @@
 - Focused bottom-navigation evidence: `apps/mobile/.impeccable/review/tab-bar.png`.
 - Impeccable diff: `apps/mobile/.impeccable/review/diff/hero/side-by-side.png`.
 
-The browser viewport was set to 390×844. The in-app browser returns a 390×780 primary capture and a separately composited 64-pixel fixed-navigation strip; both regions were captured from the same state and joined without altering UI pixels. The joined capture was then scaled only for the 853×1844 gate input.
+The browser viewport was set to 390×844 and captured directly after the Expo Web preview reached its stable fixture state. The capture was then scaled only for the 853×1844 gate input.
 
 ## Implemented fixes
 
@@ -22,6 +22,9 @@ The browser viewport was set to 390×844. The in-app browser returns a 390×780 
 - Added a functional inline privacy explanation, cat detail route, report-context route, and all five tab destinations.
 - Replaced the report photo text symbol with a semantic icon.
 - Removed React Native Web shadow and pointer-event deprecation warnings introduced by the new screen.
+- Restored the approved bilingual fixture name while keeping route and accessible action names stable.
+- Rebuilt the cat-status spacing and both 44-point actions from measured comp slots so their full chrome lands inside the expected regions.
+- Enlarged and rebalanced the five-destination navigation while preserving semantic icons and platform tab behavior.
 
 ## Intentional source deviations
 
@@ -38,10 +41,10 @@ The browser viewport was set to 390×844. The in-app browser returns a 390×780 
 - Nearby, Map, Report, Following, and Profile tabs all navigate to their real destinations.
 - Core buttons expose accessible names and at least 44-point targets.
 - Browser console confirmation pass: zero errors and zero warnings.
-- Automated verification: 45 suites / 531 tests passed; TypeScript, Expo web export, native config policy, and pilot build policy passed.
+- Automated verification: 46 suites / 532 tests passed; TypeScript, Expo web export, native config policy, and pilot build policy passed.
 
 ## Remaining visual gate
 
-Impeccable hero score is 68.9%; the required threshold is 72%. The gate remains open and was not forced. Its largest remaining penalties are the intentionally removed reversible atlas labels plus automated region-reading drift around status text, buttons, and the fixed tab bar. A future native-device capture with configured Google Maps should be reviewed separately; it must not reintroduce exact location cues merely to raise the comp score.
+The confirmation pass raised the Impeccable hero score from 68.9% to 72.31%, clearing the numeric 72% bar. The hero phase nevertheless remains open because the gate also treats the deliberately omitted real-looking west/east/edge atlas labels as required semantic regions and still reports lesser control drift. The gate was not forced. A future native-device capture with configured Google Maps should be reviewed separately; it must not reintroduce exact location cues merely to satisfy a visual comparator.
 
 final result: blocked

@@ -3,7 +3,7 @@ import type { TabRoute } from '../i18n/catalog';
 
 describe('tab iconography', () => {
   it('uses semantic MaterialCommunityIcons for every destination', () => {
-    expect(getTabIconName('index')).toBe('map-marker-radius-outline');
+    expect(getTabIconName('index')).toBe('map-marker');
     expect(getTabIconName('map')).toBe('map-outline');
     expect(getTabIconName('report')).toBe('plus-circle-outline');
     expect(getTabIconName('following')).toBe('heart-outline');

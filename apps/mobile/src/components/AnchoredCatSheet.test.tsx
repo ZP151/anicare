@@ -37,6 +37,7 @@ describe('AnchoredCatSheet', () => {
       <AnchoredCatSheet
         cat={{
           animalId: 'demo-cat',
+          displayAlias: 'Mochi · 麻糬',
           primaryAlias: 'Mochi',
           verificationLabel: 'Community confirmed',
           timeLabel: 'Seen this afternoon',
@@ -48,6 +49,10 @@ describe('AnchoredCatSheet', () => {
     );
 
     expect(view.getAllByText('Preview data')).toHaveLength(1);
+    expect(view.getByText('Mochi · 麻糬')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'View Mochi' })).toBeTruthy();
+    expect(view.getByText('Report sighting').props.numberOfLines).toBe(1);
+
     await view.unmount();
   });
 });
