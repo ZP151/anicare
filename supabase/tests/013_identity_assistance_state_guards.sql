@@ -1213,7 +1213,7 @@ select lives_ok(
       perform pg_catalog.pg_sleep(0.01);
     end loop;
 
-    perform * from extensions.dblink_get_result('identity_candidate_hide')
+    perform * from extensions.dblink_get_result('identity_candidate_hide', false)
       as candidate_result(completed bigint);
     perform * from extensions.dblink_get_result('identity_animal_hide')
       as animal_result(changed bigint);
@@ -1235,6 +1235,15 @@ select is(
     where animal_id = '00000000-0000-4000-8000-000000003201'),
   0::bigint,
   'candidate completion racing a hide leaves no hidden-animal candidate'
+);
+select ok(
+  (select status = 'succeeded'
+      and completed_at is not null
+      and withdrawn_at is not null
+      and result_invalidated_at is not null
+     from private.identity_assistance_jobs
+    where id = '00000000-0000-4000-8000-000000003301'),
+  'the hide race completes then invalidates the same result transaction'
 );
 
 select lives_ok(
@@ -1341,7 +1350,7 @@ select lives_ok(
       perform pg_catalog.pg_sleep(0.01);
     end loop;
 
-    perform * from extensions.dblink_get_result('identity_candidate_delete')
+    perform * from extensions.dblink_get_result('identity_candidate_delete', false)
       as candidate_result(completed bigint);
     perform * from extensions.dblink_get_result('identity_animal_delete', false)
       as animal_result(removed bigint);
@@ -1364,6 +1373,15 @@ select is(
     where animal_id = '00000000-0000-4000-8000-000000003202'),
   0::bigint,
   'candidate completion racing a delete leaves no deleted-animal candidate'
+);
+select ok(
+  (select status = 'succeeded'
+      and completed_at is not null
+      and withdrawn_at is not null
+      and result_invalidated_at is not null
+     from private.identity_assistance_jobs
+    where id = '00000000-0000-4000-8000-000000003302'),
+  'the delete race completes then invalidates the same result transaction'
 );
 
 select lives_ok(
