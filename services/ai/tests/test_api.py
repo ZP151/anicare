@@ -5,7 +5,12 @@ import unittest
 from typing import ClassVar
 from unittest.mock import patch
 
-from animalhelper_ai.api import INTERNAL_TOKEN_ENV, INTERNAL_TOKEN_HEADER, app
+from animalhelper_ai.api import (
+    IDENTITY_ASSISTANCE_ENABLED_ENV,
+    INTERNAL_TOKEN_ENV,
+    INTERNAL_TOKEN_HEADER,
+    app,
+)
 
 
 def invoke_http(
@@ -47,9 +52,25 @@ class ApiAuthTests(unittest.TestCase):
     payload: ClassVar[dict[str, object]] = {"jobId": "job-1", "candidates": []}
     token: ClassVar[str] = "t" * 32
 
+    def test_identity_assistance_flag_is_required_before_body_parsing(self) -> None:
+        disabled_values: tuple[str | None, ...] = (None, "", "false", "TRUE", "1", " true ")
+        for configured in disabled_values:
+            with self.subTest(configured=configured):
+                environment = {INTERNAL_TOKEN_ENV: self.token}
+                if configured is not None:
+                    environment[IDENTITY_ASSISTANCE_ENABLED_ENV] = configured
+                with patch.dict(os.environ, environment, clear=True):
+                    status, body = invoke_http(
+                        "/v1/identify", {INTERNAL_TOKEN_HEADER: self.token}, b"{malformed"
+                    )
+                self.assertEqual(status, 503)
+                self.assertNotIn(self.token, body)
+
     def test_missing_or_weak_server_configuration_fails_closed(self) -> None:
         for configured in (None, "short"):
-            with self.subTest(configured=configured), patch.dict(os.environ, {}, clear=True):
+            with self.subTest(configured=configured), patch.dict(
+                os.environ, {IDENTITY_ASSISTANCE_ENABLED_ENV: "true"}, clear=True
+            ):
                 if configured is not None:
                     os.environ[INTERNAL_TOKEN_ENV] = configured
                 status, body = invoke_http("/v1/identify", {}, b"{malformed")
@@ -57,7 +78,11 @@ class ApiAuthTests(unittest.TestCase):
                 self.assertNotIn("short", body)
 
     def test_missing_or_wrong_caller_token_is_unauthorized(self) -> None:
-        with patch.dict(os.environ, {INTERNAL_TOKEN_ENV: self.token}, clear=True):
+        with patch.dict(
+            os.environ,
+            {IDENTITY_ASSISTANCE_ENABLED_ENV: "true", INTERNAL_TOKEN_ENV: self.token},
+            clear=True,
+        ):
             for headers in ({}, {INTERNAL_TOKEN_HEADER: "w" * 32}):
                 with self.subTest(headers=headers):
                     status, body = invoke_http("/v1/identify", headers, b"{malformed")
@@ -65,7 +90,11 @@ class ApiAuthTests(unittest.TestCase):
                     self.assertNotIn(self.token, body)
 
     def test_correct_internal_token_allows_strict_typed_request_without_leaking_token(self) -> None:
-        with patch.dict(os.environ, {INTERNAL_TOKEN_ENV: self.token}, clear=True):
+        with patch.dict(
+            os.environ,
+            {IDENTITY_ASSISTANCE_ENABLED_ENV: "true", INTERNAL_TOKEN_ENV: self.token},
+            clear=True,
+        ):
             status, body = invoke_identify(self.payload, {INTERNAL_TOKEN_HEADER: self.token})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["contractVersion"], "identify.v1")
@@ -73,7 +102,11 @@ class ApiAuthTests(unittest.TestCase):
         self.assertNotIn("internalScore", body)
 
     def test_correct_token_does_not_bypass_strict_request_schema(self) -> None:
-        with patch.dict(os.environ, {INTERNAL_TOKEN_ENV: self.token}, clear=True):
+        with patch.dict(
+            os.environ,
+            {IDENTITY_ASSISTANCE_ENABLED_ENV: "true", INTERNAL_TOKEN_ENV: self.token},
+            clear=True,
+        ):
             status, body = invoke_identify(
                 {**self.payload, "imagePath": "secret"},
                 {INTERNAL_TOKEN_HEADER: self.token},
@@ -82,7 +115,11 @@ class ApiAuthTests(unittest.TestCase):
         self.assertNotIn(self.token, body)
 
     def test_correct_token_reaches_schema_validation_for_malformed_body(self) -> None:
-        with patch.dict(os.environ, {INTERNAL_TOKEN_ENV: self.token}, clear=True):
+        with patch.dict(
+            os.environ,
+            {IDENTITY_ASSISTANCE_ENABLED_ENV: "true", INTERNAL_TOKEN_ENV: self.token},
+            clear=True,
+        ):
             status, body = invoke_http("/v1/identify", {INTERNAL_TOKEN_HEADER: self.token}, b"{malformed")
         self.assertEqual(status, 422)
         self.assertNotIn(self.token, body)

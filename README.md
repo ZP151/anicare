@@ -28,9 +28,13 @@ names remain compatible technical identifiers.
   contract. Their non-media database runtime verification and two-session
   concurrency remain required gates.
 - Versioned, model-free AI contracts for crops, embeddings, callbacks and public
-  results, plus synthetic evaluation fixtures. The internal identify route
-  fails closed behind an ASGI token boundary. There are no model weights,
-  labelled dataset, ANN, queue, real callback, or production accuracy claim.
+  results, plus synthetic evaluation fixtures. The internal identify route is
+  disabled by default and requires both the exact non-secret
+  `WHISKER_AI_IDENTITY_ASSISTANCE_ENABLED=true` flag and the secret
+  `WHISKER_INTERNAL_AI_TOKEN` at its ASGI boundary. Enabling this compatibility
+  route activates only the synthetic/model-free contract, not live cat-face
+  inference. There are no model weights, labelled dataset, ANN, queue, real
+  callback, or production accuracy claim.
 
 The UI contains synthetic placeholder content only. It is not connected to
 production data and must not be used to record real locations. This repository

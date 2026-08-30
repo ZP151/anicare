@@ -10,9 +10,20 @@ from .contracts import IdentifyRequest
 from .handler import handle_identify
 
 app = FastAPI(title="WhiskerCommons AI", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
+IDENTITY_ASSISTANCE_ENABLED_ENV = "WHISKER_AI_IDENTITY_ASSISTANCE_ENABLED"
 INTERNAL_TOKEN_ENV = "WHISKER_INTERNAL_AI_TOKEN"
 INTERNAL_TOKEN_HEADER = "X-Whisker-Internal-Token"
 MIN_INTERNAL_TOKEN_LENGTH = 32
+
+
+def require_identity_assistance_enabled(configured_value: str | None = None) -> None:
+    enabled = (
+        os.environ.get(IDENTITY_ASSISTANCE_ENABLED_ENV)
+        if configured_value is None
+        else configured_value
+    )
+    if enabled != "true":
+        raise HTTPException(status_code=503, detail="AI service unavailable")
 
 
 def require_internal_token(caller_token: str | None, configured_token: str | None = None) -> None:
@@ -36,6 +47,7 @@ async def authenticate_private_identify(
     """Authenticate before FastAPI reads or validates the private request body."""
     if request.method == "POST" and request.url.path == "/v1/identify":
         try:
+            require_identity_assistance_enabled()
             require_internal_token(request.headers.get(INTERNAL_TOKEN_HEADER))
         except HTTPException as error:
             return JSONResponse(status_code=error.status_code, content={"detail": error.detail})
