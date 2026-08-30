@@ -1008,11 +1008,17 @@ select lives_ok(
     diagnostic_constraint text;
     diagnostic_message text;
     setup_step text := 'connect';
+    local_connection text :=
+      'host=127.0.0.1 port=' || pg_catalog.current_setting('port')
+      || ' dbname=' || pg_catalog.current_database()
+      || ' user=' || session_user
+      || ' password=' || session_user;
   begin
-    perform extensions.dblink_connect_u(
+    -- The Supabase CLI local stack uses its fixed test-only postgres credential.
+    -- Force TCP so dblink authenticates with it instead of the peer path.
+    perform extensions.dblink_connect(
       'identity_guard_setup',
-      'dbname=' || pg_catalog.current_database()
-        || ' application_name=identity_guard_setup'
+      local_connection || ' application_name=identity_guard_setup'
     );
     setup_step := 'replication_role';
     perform extensions.dblink_exec(
@@ -1166,17 +1172,20 @@ select lives_ok(
   do $main$
   declare
     wait_deadline timestamptz;
+    local_connection text :=
+      'host=127.0.0.1 port=' || pg_catalog.current_setting('port')
+      || ' dbname=' || pg_catalog.current_database()
+      || ' user=' || session_user
+      || ' password=' || session_user;
   begin
     perform pg_catalog.pg_advisory_lock(20260831, 41);
-    perform extensions.dblink_connect_u(
+    perform extensions.dblink_connect(
       'identity_candidate_hide',
-      'dbname=' || pg_catalog.current_database()
-        || ' application_name=identity_candidate_hide'
+      local_connection || ' application_name=identity_candidate_hide'
     );
-    perform extensions.dblink_connect_u(
+    perform extensions.dblink_connect(
       'identity_animal_hide',
-      'dbname=' || pg_catalog.current_database()
-        || ' application_name=identity_animal_hide'
+      local_connection || ' application_name=identity_animal_hide'
     );
     perform extensions.dblink_send_query(
       'identity_candidate_hide',
@@ -1303,17 +1312,20 @@ select lives_ok(
   do $main$
   declare
     wait_deadline timestamptz;
+    local_connection text :=
+      'host=127.0.0.1 port=' || pg_catalog.current_setting('port')
+      || ' dbname=' || pg_catalog.current_database()
+      || ' user=' || session_user
+      || ' password=' || session_user;
   begin
     perform pg_catalog.pg_advisory_lock(20260831, 42);
-    perform extensions.dblink_connect_u(
+    perform extensions.dblink_connect(
       'identity_candidate_delete',
-      'dbname=' || pg_catalog.current_database()
-        || ' application_name=identity_candidate_delete'
+      local_connection || ' application_name=identity_candidate_delete'
     );
-    perform extensions.dblink_connect_u(
+    perform extensions.dblink_connect(
       'identity_animal_delete',
-      'dbname=' || pg_catalog.current_database()
-        || ' application_name=identity_animal_delete'
+      local_connection || ' application_name=identity_animal_delete'
     );
     perform extensions.dblink_send_query(
       'identity_candidate_delete',
