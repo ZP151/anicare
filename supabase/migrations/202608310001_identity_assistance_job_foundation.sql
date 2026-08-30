@@ -57,8 +57,10 @@ create table private.identity_assistance_jobs (
       input_sha256 is null
       and (
         status in ('failed', 'cancelled', 'expired')
-        or withdrawn_at is not null
-        or result_invalidated_at is not null
+        or (
+          status = 'succeeded'
+          and (withdrawn_at is not null or result_invalidated_at is not null)
+        )
       )
     )
   ),
@@ -69,6 +71,7 @@ create table private.identity_assistance_jobs (
     (
       status = 'succeeded'
       and model_version is not null
+      and callback_contract_version is not null
       and callback_contract_version = 'identify-callback.v1'
       and new_cat_recommended is not null
     )
@@ -78,6 +81,10 @@ create table private.identity_assistance_jobs (
       and callback_contract_version is null
       and new_cat_recommended is null
     )
+  ),
+  constraint identity_assistance_job_model_version check (
+    model_version is null
+    or model_version ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
   ),
   constraint identity_assistance_job_state check (
     (status = 'requested'
@@ -190,7 +197,7 @@ create table private.identity_proposal_evidence (
   crop_contract_version text not null check (crop_contract_version = 'crop.v1'),
   embedding_contract_version text not null check (embedding_contract_version = 'embedding.v1'),
   identify_contract_version text not null check (identify_contract_version = 'identify.v1'),
-  model_version text not null check (char_length(model_version) >= 1),
+  model_version text not null check (model_version ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'),
   callback_contract_version text not null check (callback_contract_version = 'identify-callback.v1'),
   selector_id uuid references public.user_profiles(id) on delete set null,
   selected_at timestamptz not null
