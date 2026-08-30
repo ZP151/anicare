@@ -1,5 +1,5 @@
 begin;
-select plan(172);
+select plan(177);
 
 select has_type('private', 'identity_assistance_job_status', 'identity-assistance job status enum exists');
 select has_type('private', 'identity_assistance_confidence_band', 'identity-assistance confidence enum exists');
@@ -106,7 +106,9 @@ insert into public.sightings (
 ) values
   ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1810'),
   ('00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1811'),
-  ('00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1812');
+  ('00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1812'),
+  ('00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1813'),
+  ('00000000-0000-4000-8000-000000001814', '00000000-0000-4000-8000-000000001800', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-job-1814');
 
 insert into public.animals (id, primary_alias, profile_created_by, visibility) values
   ('00000000-0000-4000-8000-000000001820', 'Candidate One', '00000000-0000-4000-8000-000000001800', 'limited'),
@@ -124,6 +126,30 @@ select lives_ok(
     values ('00000000-0000-4000-8000-000000001840', '00000000-0000-4000-8000-000000001810',
       '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('a', 64))$$,
   'a hand-written requested job is valid'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
+    values ('00000000-0000-4000-8000-000000001853', '00000000-0000-4000-8000-000000001813',
+      '00000000-0000-4000-8000-000000001800', 'notice.v1', null)$$,
+  '23514', null, 'requested jobs require an input hash'
+);
+select lives_ok(
+  $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, status, notice_version, input_sha256, failed_at, failure_code)
+    values ('00000000-0000-4000-8000-000000001854', '00000000-0000-4000-8000-000000001811',
+      '00000000-0000-4000-8000-000000001800', 'failed', 'notice.v1', null, now(), 'source_invalidated')$$,
+  'terminal cleanup can clear an input hash'
+);
+select lives_ok(
+  $$insert into private.identity_assistance_jobs (
+      id, sighting_id, requester_id, status, notice_version, input_sha256,
+      model_version, callback_contract_version, new_cat_recommended, completed_at,
+      result_invalidated_at
+    ) values (
+      '00000000-0000-4000-8000-000000001855', '00000000-0000-4000-8000-000000001812',
+      '00000000-0000-4000-8000-000000001800', 'succeeded', 'notice.v1', null,
+      'model.v1', 'identify-callback.v1', true, now(), now()
+    )$$,
+  'invalidation cleanup can clear an input hash'
 );
 select throws_ok(
   $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
@@ -219,6 +245,17 @@ select throws_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
     values ('00000000-0000-4000-8000-000000001860', 4, '00000000-0000-4000-8000-000000001820', 'likely', array['face_pattern_similar']::private.identity_assistance_reason_code[])$$,
   '23514', null, 'candidate rank four is rejected'
+);
+select lives_ok(
+  $$insert into private.identity_assistance_jobs (id, sighting_id, requester_id, notice_version, input_sha256)
+    values ('00000000-0000-4000-8000-000000001861', '00000000-0000-4000-8000-000000001814',
+      '00000000-0000-4000-8000-000000001800', 'notice.v1', repeat('f', 64))$$,
+  'null-reason candidate fixture job is valid'
+);
+select throws_ok(
+  $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
+    values ('00000000-0000-4000-8000-000000001861', 1, '00000000-0000-4000-8000-000000001820', 'likely', array[null]::private.identity_assistance_reason_code[])$$,
+  '23514', null, 'candidate reason arrays reject null elements'
 );
 select lives_ok(
   $$insert into private.identity_assistance_candidates (job_id, rank, animal_id, confidence_band, reason_codes)
@@ -364,10 +401,10 @@ delete from private.identity_assistance_events where request_id = '00000000-0000
 delete from private.identity_assistance_service_requests where request_id between '00000000-0000-4000-8000-000000001873' and '00000000-0000-4000-8000-000000001875';
 delete from private.identity_assistance_requests where actor_id = '00000000-0000-4000-8000-000000001800';
 delete from private.identity_assistance_candidates where job_id in ('00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001842');
-delete from private.identity_assistance_jobs where id in ('00000000-0000-4000-8000-000000001840', '00000000-0000-4000-8000-000000001842', '00000000-0000-4000-8000-000000001860');
+delete from private.identity_assistance_jobs where id in ('00000000-0000-4000-8000-000000001840', '00000000-0000-4000-8000-000000001842', '00000000-0000-4000-8000-000000001853', '00000000-0000-4000-8000-000000001854', '00000000-0000-4000-8000-000000001855', '00000000-0000-4000-8000-000000001860', '00000000-0000-4000-8000-000000001861');
 delete from public.identity_proposals where id = '00000000-0000-4000-8000-000000001830';
 delete from public.animals where id in ('00000000-0000-4000-8000-000000001820', '00000000-0000-4000-8000-000000001821', '00000000-0000-4000-8000-000000001822');
-delete from public.sightings where id in ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001812');
+delete from public.sightings where id in ('00000000-0000-4000-8000-000000001810', '00000000-0000-4000-8000-000000001811', '00000000-0000-4000-8000-000000001812', '00000000-0000-4000-8000-000000001813', '00000000-0000-4000-8000-000000001814');
 set local session_replication_role = replica;
 delete from public.user_profiles where id = '00000000-0000-4000-8000-000000001800';
 set local session_replication_role = origin;
