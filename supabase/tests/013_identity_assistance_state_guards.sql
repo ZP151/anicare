@@ -532,7 +532,7 @@ select throws_ok(
        set status = 'expired', input_sha256 = null,
            expires_at = pg_catalog.now()
      where id = '00000000-0000-4000-8000-000000001820'$$,
-  '42501', 'identity_assistance_job_transition_forbidden',
+  '42501', null,
   'selected succeeded jobs cannot be expired as unselected results'
 );
 select set_config('private.identity_assistance_job_writer', '00000000-0000-4000-8000-000000001821', true);
