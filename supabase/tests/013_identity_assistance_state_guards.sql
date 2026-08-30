@@ -1173,6 +1173,8 @@ select lives_ok(
   $orchestrator$
   do $main$
   declare
+    animal_pid integer;
+    candidate_pid integer;
     wait_deadline timestamptz;
     local_connection text :=
       'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
@@ -1198,6 +1200,16 @@ select lives_ok(
       'identity_animal_hide',
       'set statement_timeout = ''12s'''
     );
+    select remote_pid into candidate_pid
+      from extensions.dblink(
+        'identity_candidate_hide',
+        'select pg_catalog.pg_backend_pid()'
+      ) as remote_backend(remote_pid integer);
+    select remote_pid into animal_pid
+      from extensions.dblink(
+        'identity_animal_hide',
+        'select pg_catalog.pg_backend_pid()'
+      ) as remote_backend(remote_pid integer);
     perform extensions.dblink_send_query(
       'identity_candidate_hide',
       $candidate$
@@ -1239,9 +1251,10 @@ select lives_ok(
     wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
     loop
       exit when exists (
-        select 1 from pg_catalog.pg_stat_activity
-         where application_name = 'identity_candidate_hide'
-           and wait_event_type = 'Lock'
+        select 1 from pg_catalog.pg_locks
+         where pid = candidate_pid
+           and locktype = 'advisory'
+           and not granted
       );
       if pg_catalog.clock_timestamp() >= wait_deadline then
         raise exception 'candidate_hide_gate_timeout';
@@ -1265,9 +1278,9 @@ select lives_ok(
     loop
       exit when extensions.dblink_is_busy('identity_animal_hide') = 0
         or exists (
-          select 1 from pg_catalog.pg_stat_activity
-           where application_name = 'identity_animal_hide'
-             and wait_event_type = 'Lock'
+          select 1 from pg_catalog.pg_locks
+           where pid = animal_pid
+             and not granted
         );
       if pg_catalog.clock_timestamp() >= wait_deadline then
         raise exception 'animal_hide_race_timeout';
@@ -1322,6 +1335,8 @@ select lives_ok(
   $orchestrator$
   do $main$
   declare
+    animal_pid integer;
+    candidate_pid integer;
     diagnostic_message text;
     wait_deadline timestamptz;
     local_connection text :=
@@ -1348,6 +1363,16 @@ select lives_ok(
       'identity_animal_delete',
       'set statement_timeout = ''12s'''
     );
+    select remote_pid into candidate_pid
+      from extensions.dblink(
+        'identity_candidate_delete',
+        'select pg_catalog.pg_backend_pid()'
+      ) as remote_backend(remote_pid integer);
+    select remote_pid into animal_pid
+      from extensions.dblink(
+        'identity_animal_delete',
+        'select pg_catalog.pg_backend_pid()'
+      ) as remote_backend(remote_pid integer);
     perform extensions.dblink_send_query(
       'identity_candidate_delete',
       $candidate$
@@ -1389,9 +1414,10 @@ select lives_ok(
     wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
     loop
       exit when exists (
-        select 1 from pg_catalog.pg_stat_activity
-         where application_name = 'identity_candidate_delete'
-           and wait_event_type = 'Lock'
+        select 1 from pg_catalog.pg_locks
+         where pid = candidate_pid
+           and locktype = 'advisory'
+           and not granted
       );
       if extensions.dblink_is_busy('identity_candidate_delete') = 0 then
         perform * from extensions.dblink_get_result(
@@ -1437,9 +1463,9 @@ select lives_ok(
     loop
       exit when extensions.dblink_is_busy('identity_animal_delete') = 0
         or exists (
-          select 1 from pg_catalog.pg_stat_activity
-           where application_name = 'identity_animal_delete'
-             and wait_event_type = 'Lock'
+          select 1 from pg_catalog.pg_locks
+           where pid = animal_pid
+             and not granted
         );
       if pg_catalog.clock_timestamp() >= wait_deadline then
         raise exception 'animal_delete_race_timeout';
