@@ -67,6 +67,8 @@ describe('fail-closed feed screens', () => {
 
     const nearby = await render(<NearbyScreen />);
     expect(await nearby.findByText('Preview data')).toBeTruthy();
+    expect(nearby.getByText('Coarse neighbourhood view.')).toBeTruthy();
+    expect(nearby.getByText('Exact locations are protected.')).toBeTruthy();
     await fireEvent.press(nearby.getByRole('button', { name: 'View Mochi' }));
     await fireEvent.press(nearby.getByRole('button', { name: 'Report a sighting of Mochi' }));
     expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-cat');

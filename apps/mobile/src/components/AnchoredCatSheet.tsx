@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
 
@@ -17,6 +17,9 @@ type AnchoredCatSheetProps = Readonly<{
   onViewCat: () => void;
   onReportSighting: () => void;
 }>;
+
+const primaryHitSlop = Platform.OS === 'android' ? 2 : 0;
+const secondaryHitSlop = Platform.OS === 'android' ? 3 : 1;
 
 export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: AnchoredCatSheetProps) {
   return (
@@ -56,6 +59,7 @@ export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: 
           <Pressable
             accessibilityLabel={`View ${cat.primaryAlias}`}
             accessibilityRole="button"
+            hitSlop={primaryHitSlop}
             onPress={onViewCat}
             style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
           >
@@ -65,12 +69,13 @@ export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: 
           <Pressable
             accessibilityLabel={`Report a sighting of ${cat.primaryAlias}`}
             accessibilityRole="button"
+            hitSlop={secondaryHitSlop}
             onPress={onReportSighting}
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
           >
             <MaterialCommunityIcons color={colors.actionSecondary} name="camera-outline" size={20} />
             <Text numberOfLines={1} style={styles.secondaryButtonText}>Report sighting</Text>
-            <MaterialCommunityIcons color={colors.actionSecondary} name="chevron-right" size={22} />
+            <MaterialCommunityIcons color={colors.actionSecondary} name="chevron-right" size={25} />
           </Pressable>
         </View>
       </View>
@@ -83,7 +88,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     minHeight: 258,
     paddingTop: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: 23,
     paddingBottom: 14,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -99,7 +104,7 @@ const styles = StyleSheet.create({
   portraitPlaceholderText: { color: colors.aquaDeep, textAlign: 'center', fontSize: 12, fontWeight: '700' },
   summary: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  name: { flex: 1, color: colors.mineral, fontSize: 25, lineHeight: 30, fontWeight: '800' },
+  name: { flex: 1, color: colors.mineral, fontSize: 24, lineHeight: 29, fontWeight: '700', letterSpacing: -0.4 },
   fixtureLabel: { position: 'absolute', top: 12, right: 20, color: colors.muted, fontSize: 9, lineHeight: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   confirmationRow: { marginBottom: 8 },
@@ -110,7 +115,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     marginBottom: 13,
     paddingHorizontal: 16,
-    borderRadius: radii.medium,
+    borderRadius: radii.small,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -118,16 +123,17 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: { color: colors.surface, fontSize: 17, lineHeight: 21, fontWeight: '800' },
   secondaryButton: {
-    minHeight: 44,
+    height: 42,
     paddingHorizontal: 12,
-    borderRadius: radii.medium,
-    borderWidth: 1.5,
-    borderColor: colors.actionSecondary,
+    borderRadius: 16,
+    borderWidth: 0.75,
+    borderColor: 'rgba(226,79,17,0.72)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 4,
+    backgroundColor: 'rgba(241,235,221,0.2)',
   },
-  secondaryButtonText: { flex: 1, color: colors.actionSecondary, fontSize: 14, lineHeight: 18, fontWeight: '800' },
-  pressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
+  secondaryButtonText: { flex: 1, color: colors.actionSecondary, fontSize: 14, lineHeight: 18, fontWeight: '500' },
+  pressed: { opacity: 0.82 },
 });

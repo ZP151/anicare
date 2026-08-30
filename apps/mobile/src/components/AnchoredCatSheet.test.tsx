@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { AnchoredCatSheet } from './AnchoredCatSheet';
 
@@ -52,6 +53,30 @@ describe('AnchoredCatSheet', () => {
     expect(view.getByText('Mochi · 麻糬')).toBeTruthy();
     expect(view.getByRole('button', { name: 'View Mochi' })).toBeTruthy();
     expect(view.getByText('Report sighting').props.numberOfLines).toBe(1);
+
+    await view.unmount();
+  });
+
+  it('uses opacity-only press feedback for frequent sheet actions', async () => {
+    const view = await render(
+      <AnchoredCatSheet
+        cat={{
+          animalId: 'demo-cat',
+          primaryAlias: 'Mochi',
+          verificationLabel: 'Community confirmed',
+          timeLabel: 'Seen this afternoon',
+        }}
+        fixture={false}
+        onReportSighting={jest.fn()}
+        onViewCat={jest.fn()}
+      />,
+    );
+
+    const viewCat = view.getByRole('button', { name: 'View Mochi' });
+    await fireEvent(viewCat, 'responderGrant', { nativeEvent: {}, persist: jest.fn() });
+    const pressedStyle = StyleSheet.flatten(viewCat.props.style);
+    expect(pressedStyle.opacity).toBeLessThan(1);
+    expect(pressedStyle.transform).toBeUndefined();
 
     await view.unmount();
   });

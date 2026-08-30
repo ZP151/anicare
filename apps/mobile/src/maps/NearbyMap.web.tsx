@@ -1,12 +1,12 @@
-import { ImageBackground, StyleSheet, Text, View } from 'react-native';
+import { ImageBackground, Platform, StyleSheet, Text } from 'react-native';
 
-import { colors, radii } from '../design/theme';
+import { colors } from '../design/theme';
 import type { NearbyMapProps } from './NearbyMap.types';
 
 export function NearbyMap(_props: NearbyMapProps) {
   return (
     <ImageBackground
-      accessibilityLabel="Privacy-safe neighbourhood atlas"
+      accessibilityLabel="Privacy-safe neighbourhood atlas. Google Maps unavailable; showing privacy-safe atlas fallback."
       imageStyle={styles.image}
       resizeMode="contain"
       source={require('../../assets/plates/coarse-atlas.png')}
@@ -17,10 +17,6 @@ export function NearbyMap(_props: NearbyMapProps) {
       <Text style={[styles.atlasLabel, styles.eastLabel]}>East court</Text>
       <Text style={[styles.atlasLabel, styles.greenLabel]}>Community green</Text>
       <Text style={[styles.atlasLabel, styles.edgeLabel]}>Public edge</Text>
-      <View style={styles.fallbackBadge}>
-        <Text style={styles.fallbackTitle}>Google Maps unavailable</Text>
-        <Text style={styles.fallbackCopy}>Privacy-safe atlas fallback</Text>
-      </View>
     </ImageBackground>
   );
 }
@@ -30,27 +26,28 @@ const styles = StyleSheet.create({
   image: { opacity: 0.78 },
   atlasLabel: {
     position: 'absolute',
-    color: '#465451',
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '700',
+    color: '#555858',
+    fontSize: Platform.select({ ios: 11, android: 12, default: 10 }),
+    lineHeight: Platform.select({ ios: 14, android: 15, default: 13 }),
+    fontWeight: '500',
   },
-  northLabel: { left: '48%', top: '28%' },
-  westLabel: { left: '10%', top: '54%' },
-  eastLabel: { left: '70%', top: '49%' },
-  greenLabel: { left: '36%', top: '58%' },
-  edgeLabel: { left: '7%', top: '75%' },
-  fallbackBadge: {
-    position: 'absolute',
-    right: 18,
-    top: 86,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radii.small,
-    backgroundColor: 'rgba(241,235,221,0.94)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.mineral,
+  northLabel: { left: '48%', top: '24.1%' },
+  westLabel: { left: '10%', top: '56.1%' },
+  eastLabel: { left: '70%', top: '51.2%' },
+  greenLabel: {
+    left: '36%',
+    top: '60%',
+    width: 75,
+    color: '#56724D',
+    fontSize: Platform.select({ ios: 11, android: 12, default: 9 }),
+    lineHeight: Platform.select({ ios: 14, android: 15, default: 12 }),
+    textAlign: 'center',
   },
-  fallbackTitle: { color: colors.mineral, fontSize: 12, fontWeight: '800' },
-  fallbackCopy: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  edgeLabel: {
+    left: '7%',
+    top: '75.9%',
+    color: colors.aquaDeep,
+    fontSize: Platform.select({ ios: 11, android: 12, default: 10 }),
+    lineHeight: Platform.select({ ios: 14, android: 15, default: 13 }),
+  },
 });

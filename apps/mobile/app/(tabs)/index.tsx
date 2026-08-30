@@ -80,7 +80,9 @@ export default function NearbyScreen() {
         style={styles.paperGround}
       />
       <View style={styles.mapStage}>
-        <NearbyMap />
+        <View style={styles.atlasFrame}>
+          <NearbyMap />
+        </View>
 
         <View style={styles.topBar}>
           <Text style={styles.title}>Nearby</Text>
@@ -92,18 +94,20 @@ export default function NearbyScreen() {
             onPress={() => setPrivacyExpanded((expanded) => !expanded)}
             style={({ pressed }) => [styles.privacyButton, pressed && styles.pressed]}
           >
-            <MaterialCommunityIcons color={colors.mineral} name="shield-lock-outline" size={22} />
+            <View style={styles.privacyButtonVisual}>
+              <MaterialCommunityIcons color={colors.mineral} name="shield-check-outline" size={19} />
+            </View>
           </Pressable>
         </View>
 
         <GlassSurface style={styles.privacyNotice}>
-          <MaterialCommunityIcons color={colors.aquaDeep} name="map-marker-radius-outline" size={21} />
+          <MaterialCommunityIcons color={colors.aquaDeep} name="shield-outline" size={19} />
           <View style={styles.noticeCopy}>
-            <Text style={styles.noticeTitle}>Coarse neighbourhood view</Text>
+            <Text style={styles.noticeTitle}>Coarse neighbourhood view.</Text>
             <Text style={styles.noticeText}>
               {privacyExpanded
                 ? 'No user location is requested. Cat locations, routes and timestamps remain hidden.'
-                : 'Exact locations, routes and times are protected.'}
+                : 'Exact locations are protected.'}
             </Text>
           </View>
         </GlassSurface>
@@ -143,28 +147,36 @@ const styles = StyleSheet.create({
   screen: { flex: 1, paddingBottom: tabVisualContract.barHeight, backgroundColor: colors.paper },
   paperGround: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', opacity: 0.22 },
   mapStage: { flex: 1, minHeight: 330, overflow: 'hidden', backgroundColor: colors.paper },
+  atlasFrame: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
   topBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     height: 68,
-    paddingHorizontal: 20,
+    paddingLeft: 22,
+    paddingRight: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(241,235,221,0.9)',
+    backgroundColor: 'rgba(250,248,242,0.92)',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(18,59,70,0.16)',
     pointerEvents: 'box-none',
   },
-  title: { color: colors.mineral, fontSize: 20, lineHeight: 25, fontWeight: '800', letterSpacing: -0.3 },
+  title: { color: colors.actionPrimary, fontSize: 18, lineHeight: 22, fontWeight: '700', letterSpacing: -0.3 },
   privacyButton: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+  },
+  privacyButtonVisual: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(18,59,70,0.32)',
     backgroundColor: 'rgba(255,255,255,0.62)',
@@ -180,15 +192,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.medium,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(56,108,104,0.25)',
     backgroundColor: 'rgba(220,235,230,0.9)',
   },
   noticeCopy: { flex: 1 },
-  noticeTitle: { color: colors.mineral, fontSize: 13, fontWeight: '800' },
-  noticeText: { color: colors.mineral, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  noticeTitle: { color: colors.actionPrimary, fontSize: 13, fontWeight: '700' },
+  noticeText: { color: colors.mineral, fontSize: 13, lineHeight: 18, marginTop: 1 },
   statusBadge: {
     position: 'absolute',
     top: 82,

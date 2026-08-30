@@ -35,7 +35,9 @@ describe('NearbyMap native privacy contract', () => {
 
   it('fails closed to the safe atlas when native keys are absent', async () => {
     const view = await render(<NearbyMap googleMapsConfigured={false} />);
-    expect(view.getByText('Google Maps unavailable')).toBeTruthy();
+    expect(view.getByLabelText(
+      'Privacy-safe neighbourhood atlas. Google Maps unavailable; showing privacy-safe atlas fallback.',
+    )).toBeTruthy();
     expect(mockMapProps).not.toHaveBeenCalled();
     await view.unmount();
   });
