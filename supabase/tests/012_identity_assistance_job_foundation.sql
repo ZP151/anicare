@@ -70,7 +70,7 @@ select ok(
 from roles cross join tables cross join privileges;
 
 select is(
-  (select array_agg(attname order by attnum)
+  (select array_agg(attname::text order by attnum)
      from pg_attribute
     where attrelid = 'private.identity_assistance_jobs'::regclass
       and attnum > 0 and not attisdropped),
