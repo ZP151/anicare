@@ -85,4 +85,3 @@ Review the full Task 1 diff against the spec and verify:
 - test output is clean and no unrelated files changed.
 
 Any Critical or Important finding must be fixed and re-reviewed before synchronization.
-

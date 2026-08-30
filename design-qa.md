@@ -29,6 +29,7 @@ The browser viewport was set to 390×844 and captured directly after the Expo We
 ## Intentional source deviations
 
 - Real-looking block numbers, a bus-stop label, and route-like geographic labels are not reproduced because they conflict with the approved location-safety policy. The fallback uses non-reversible labels such as “Community green”.
+- Post-capture safety/completeness deviation: the visible `Privacy-safe atlas fallback` provider-state label was restored after the 0.7857 hero evidence. The Impeccable hero remains open and unforced.
 - “Google Maps unavailable” appears only when native Google Maps keys/provider are unavailable. It is absent from configured native production builds.
 - “Preview data” is visible for the synthetic Mochi fixture so community-confirmation language cannot be mistaken for a live fact.
 - Live public portraits remain protected until a separately approved public-media policy exists.

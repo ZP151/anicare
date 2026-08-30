@@ -1,7 +1,7 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import { Platform, StyleSheet } from 'react-native';
 
-import { AnchoredCatSheet } from './AnchoredCatSheet';
+import { AnchoredCatSheet, getActionMinHeight } from './AnchoredCatSheet';
 
 describe('AnchoredCatSheet', () => {
   it('renders a safe public summary and exposes both primary journeys', async () => {
@@ -55,20 +55,17 @@ describe('AnchoredCatSheet', () => {
 
     const reportSighting = view.getByRole('button', { name: 'Report a sighting of Mochi' });
     const reportSightingStyle = StyleSheet.flatten(reportSighting.props.style);
-    expect(reportSightingStyle.minHeight).toBe(42);
+    const viewCat = view.getByRole('button', { name: 'View Mochi' });
+    const viewCatStyle = StyleSheet.flatten(viewCat.props.style);
+    expect(getActionMinHeight('android')).toBe(48);
+    expect(getActionMinHeight('ios')).toBe(44);
+    expect(getActionMinHeight('web')).toBe(44);
+    expect(reportSightingStyle.minHeight).toBe(getActionMinHeight(Platform.OS));
+    expect(viewCatStyle.minHeight).toBe(getActionMinHeight(Platform.OS));
     expect(reportSightingStyle.height).toBeUndefined();
     expect(view.getByText('Report sighting').props.numberOfLines).toBeUndefined();
-
-    const platformContracts = [
-      { platform: 'ios', hitSlop: 1, effectiveHeight: 44 },
-      { platform: 'android', hitSlop: 3, effectiveHeight: 48 },
-    ] as const;
-    for (const contract of platformContracts) {
-      expect(42 + contract.hitSlop * 2).toBe(contract.effectiveHeight);
-    }
-    expect(reportSighting.props.hitSlop).toBe(
-      platformContracts.find(({ platform }) => platform === Platform.OS)?.hitSlop ?? 1,
-    );
+    expect(reportSighting.props.hitSlop).toBeUndefined();
+    expect(viewCat.props.hitSlop).toBeUndefined();
 
     await view.unmount();
   });

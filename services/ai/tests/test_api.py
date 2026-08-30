@@ -66,6 +66,17 @@ class ApiAuthTests(unittest.TestCase):
                 self.assertEqual(status, 503)
                 self.assertNotIn(self.token, body)
 
+    def test_disabled_identity_assistance_masks_missing_or_wrong_tokens_before_body_parsing(self) -> None:
+        for headers in ({}, {INTERNAL_TOKEN_HEADER: "w" * 32}):
+            with self.subTest(headers=headers), patch.dict(
+                os.environ,
+                {IDENTITY_ASSISTANCE_ENABLED_ENV: "false", INTERNAL_TOKEN_ENV: self.token},
+                clear=True,
+            ):
+                status, body = invoke_http("/v1/identify", headers, b"{malformed")
+            self.assertEqual(status, 503)
+            self.assertNotIn(self.token, body)
+
     def test_missing_or_weak_server_configuration_fails_closed(self) -> None:
         for configured in (None, "short"):
             with self.subTest(configured=configured), patch.dict(

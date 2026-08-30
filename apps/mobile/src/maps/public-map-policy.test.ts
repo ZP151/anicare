@@ -5,6 +5,7 @@ import {
   createDemoPublicAreaSummaries,
   toPublicMapPresentation,
 } from './public-map-policy';
+import type { PublicSighting } from '../api/feed';
 
 const safeRow = {
   sightingId: '00000000-0000-4000-8000-000000000101',
@@ -51,7 +52,7 @@ describe('privacy-safe Google Maps presentation', () => {
   });
 
   it('builds coarse-area summaries for privacy-safe map presentation', () => {
-    const result = buildPublicAreaSummaries([
+    const sightings: PublicSighting[] = [
       {
         ...safeRow,
         sightingId: '00000000-0000-4000-8000-000000000111',
@@ -88,7 +89,10 @@ describe('privacy-safe Google Maps presentation', () => {
         publicCellId: '8928308280ffffe',
         timeBucket: 'this_week',
       },
-    ]);
+    ];
+    const sourceOrder = sightings.map((sighting) => sighting.sightingId);
+
+    const result = buildPublicAreaSummaries(sightings);
 
     expect(result).toEqual([
       {
@@ -139,6 +143,25 @@ describe('privacy-safe Google Maps presentation', () => {
     expect(serialized).not.toContain('00000000-0000-4000-8000-000000000116');
     expect(serialized).not.toContain('00000000-0000-4000-8000-000000000113');
     expect(serialized).not.toContain('00000000-0000-4000-8000-000000000999');
+    expect(sightings.map((sighting) => sighting.sightingId)).toEqual(sourceOrder);
+  });
+
+  it('sorts privacy-safe summaries without Hermes change-array-copy support', () => {
+    const sightings = [
+      { ...safeRow, sightingId: '00000000-0000-4000-8000-000000000121', animalId: 'animal-a', verification: 'reported' as const },
+      { ...safeRow, sightingId: '00000000-0000-4000-8000-000000000122', animalId: 'animal-b', verification: 'partner_confirmed' as const },
+    ];
+    const sourceOrder = sightings.map((sighting) => sighting.sightingId);
+    const toSorted = Array.prototype.toSorted;
+
+    Object.defineProperty(Array.prototype, 'toSorted', { configurable: true, value: undefined });
+    try {
+      expect(buildPublicAreaSummaries(sightings)[0].cats.map((cat) => cat.animalId)).toEqual(['animal-b', 'animal-a']);
+    } finally {
+      Object.defineProperty(Array.prototype, 'toSorted', { configurable: true, value: toSorted });
+    }
+
+    expect(sightings.map((sighting) => sighting.sightingId)).toEqual(sourceOrder);
   });
 
   it('builds no summaries from no rows', () => {

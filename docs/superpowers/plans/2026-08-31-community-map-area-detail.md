@@ -206,4 +206,3 @@ Commit:
 **Step 4 — independent final review**
 
 Review the entire plan diff for spec compliance, privacy leakage, accessibility semantics, functional controls, and test quality. Any Critical or Important finding must be fixed and re-reviewed before synchronization.
-

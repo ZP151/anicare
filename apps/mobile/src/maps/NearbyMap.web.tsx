@@ -17,6 +17,7 @@ export function NearbyMap(_props: NearbyMapProps) {
       <Text style={[styles.atlasLabel, styles.eastLabel]}>East court</Text>
       <Text style={[styles.atlasLabel, styles.greenLabel]}>Community green</Text>
       <Text style={[styles.atlasLabel, styles.edgeLabel]}>Public edge</Text>
+      <Text style={styles.fallbackLabel}>Privacy-safe atlas fallback</Text>
     </ImageBackground>
   );
 }
@@ -49,5 +50,18 @@ const styles = StyleSheet.create({
     color: colors.aquaDeep,
     fontSize: Platform.select({ ios: 11, android: 12, default: 10 }),
     lineHeight: Platform.select({ ios: 14, android: 15, default: 13 }),
+  },
+  fallbackLabel: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    color: colors.mineral,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
   },
 });

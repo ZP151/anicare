@@ -120,8 +120,8 @@ export function buildPublicAreaSummaries(sightings: readonly PublicSighting[]): 
     }
     const uniqueByAnimal = [...dedupedByAnimal.values()];
 
-    const cats = uniqueByAnimal
-      .toSorted((left, right) => {
+    const cats = [...uniqueByAnimal]
+      .sort((left, right) => {
         const verificationDelta = verificationPriority[right.verification] - verificationPriority[left.verification];
         if (verificationDelta !== 0) return verificationDelta;
         return timePriority[right.timeBucket] - timePriority[left.timeBucket];

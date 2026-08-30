@@ -18,8 +18,9 @@ type AnchoredCatSheetProps = Readonly<{
   onReportSighting: () => void;
 }>;
 
-const primaryHitSlop = Platform.OS === 'android' ? 2 : 0;
-const secondaryHitSlop = Platform.OS === 'android' ? 3 : 1;
+export function getActionMinHeight(platform: string): number {
+  return platform === 'android' ? 48 : 44;
+}
 
 export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: AnchoredCatSheetProps) {
   return (
@@ -59,7 +60,6 @@ export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: 
           <Pressable
             accessibilityLabel={`View ${cat.primaryAlias}`}
             accessibilityRole="button"
-            hitSlop={primaryHitSlop}
             onPress={onViewCat}
             style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
           >
@@ -69,7 +69,6 @@ export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: 
           <Pressable
             accessibilityLabel={`Report a sighting of ${cat.primaryAlias}`}
             accessibilityRole="button"
-            hitSlop={secondaryHitSlop}
             onPress={onReportSighting}
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
           >
@@ -112,7 +111,7 @@ const styles = StyleSheet.create({
   verification: { flex: 1, color: colors.actionPrimary, fontSize: 14, lineHeight: 19, fontWeight: '700' },
   time: { flex: 1, color: colors.mineral, fontSize: 14, lineHeight: 18 },
   primaryButton: {
-    minHeight: 44,
+    minHeight: getActionMinHeight(Platform.OS),
     marginBottom: 13,
     paddingHorizontal: 16,
     borderRadius: radii.small,
@@ -123,7 +122,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: { color: colors.surface, fontSize: 17, lineHeight: 21, fontWeight: '800' },
   secondaryButton: {
-    minHeight: 42,
+    minHeight: getActionMinHeight(Platform.OS),
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 0.75,
