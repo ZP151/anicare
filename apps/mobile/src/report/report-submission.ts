@@ -1,15 +1,20 @@
-import type { SightingRecoveryOutcome, SightingRisk, SightingSubmissionResponse } from '../api/sightings';
+import type {
+  SightingLocationInput,
+  SightingRecoveryOutcome,
+  SightingRisk,
+  SightingSubmissionResponse,
+} from '../api/sightings';
 import type { StoredDraft } from '../offline/draft-policy';
 import type { UploadJobState } from '../offline/upload-job';
 
-export type ReportCoordinates = Readonly<{ latitude: number; longitude: number }>;
 export type MediaSubmissionState = UploadJobState | 'not_ready' | 'unavailable' | 'stale';
 
 export type SubmitReportWithMediaInput = Readonly<{
   draftId: string;
   notes: string;
   risk: SightingRisk;
-  coordinates: ReportCoordinates | null;
+  traits: Readonly<Record<string, unknown>>;
+  location: SightingLocationInput | null;
   occurredAt: Date;
 }>;
 
@@ -17,6 +22,17 @@ export type ReportSubmissionOutcome = Readonly<{
   sightingId: string | null;
   visibility: SightingSubmissionResponse['visibility'] | null;
   state: 'submitted_text_only' | 'recovery_miss' | MediaSubmissionState;
+  receipt: Readonly<{
+    sightingId: string;
+    visibility: SightingSubmissionResponse['visibility'] | null;
+    mediaState: Exclude<ReportSubmissionOutcome['state'], 'recovery_miss'>;
+  }> | null;
+}>;
+
+export type ReportSubmissionProgress = Readonly<{
+  sightingId: string | null;
+  visibility: SightingSubmissionResponse['visibility'] | null;
+  state: ReportSubmissionOutcome['state'];
 }>;
 
 export type ReportSubmissionDependencies = Readonly<{
@@ -24,10 +40,10 @@ export type ReportSubmissionDependencies = Readonly<{
   getDraft(id: string): Promise<StoredDraft | null>;
   recoverSighting(draftId: string): Promise<SightingRecoveryOutcome>;
   createSighting(input: Readonly<{
-    latitude: number;
-    longitude: number;
+    location: SightingLocationInput;
     occurredAt: Date;
     risk: SightingRisk;
+    traits: Readonly<Record<string, unknown>>;
     notes: string | null;
     clientDedupeKey: string;
   }>): Promise<SightingSubmissionResponse>;
@@ -39,7 +55,7 @@ export type ReportSubmissionDependencies = Readonly<{
 
 export function nextReportDraftIdAfterSubmission(
   currentDraftId: string,
-  result: ReportSubmissionOutcome,
+  result: ReportSubmissionProgress,
   nextDraftId: string,
 ): string {
   return result.state === 'submitted_text_only' || result.state === 'quarantined'
@@ -49,7 +65,7 @@ export function nextReportDraftIdAfterSubmission(
 
 export function nextReportFormAfterSubmission(
   currentDraftId: string,
-  result: ReportSubmissionOutcome,
+  result: ReportSubmissionProgress,
   nextDraftId: string,
 ): Readonly<{ draftId: string; resetForm: boolean; keepConfirmation: boolean }> {
   const resetForm = nextReportDraftIdAfterSubmission(currentDraftId, result, nextDraftId) !== currentDraftId;
@@ -81,6 +97,22 @@ type ResolvedSighting = Readonly<{
   visibility: SightingSubmissionResponse['visibility'] | null;
 }>;
 
+function outcome(
+  sighting: ResolvedSighting,
+  state: Exclude<ReportSubmissionOutcome['state'], 'recovery_miss'>,
+): ReportSubmissionOutcome {
+  return {
+    sightingId: sighting.sightingId,
+    visibility: sighting.visibility,
+    state,
+    receipt: {
+      sightingId: sighting.sightingId,
+      visibility: sighting.visibility,
+      mediaState: state,
+    },
+  };
+}
+
 async function recoverOrCreateSighting(
   input: SubmitReportWithMediaInput,
   draft: StoredDraft,
@@ -94,12 +126,12 @@ async function recoverOrCreateSighting(
   if (!('kind' in recovered)) {
     return { sighting: { sightingId: recovered.sightingId, visibility: recovered.visibility }, recoveryMiss: false };
   }
-  if (!input.coordinates) return { sighting: null, recoveryMiss: true };
+  if (!input.location) return { sighting: null, recoveryMiss: true };
   const created = await dependencies.createSighting({
-    latitude: input.coordinates.latitude,
-    longitude: input.coordinates.longitude,
+    location: input.location,
     occurredAt: input.occurredAt,
     risk: input.risk,
+    traits: input.traits,
     notes: input.notes.trim() || null,
     clientDedupeKey: input.draftId,
   });
@@ -110,8 +142,8 @@ async function recoverOrCreateSighting(
 }
 
 /**
- * Coordinates remain in this invocation only. The durable draft first anchors
- * the dedupe key; a sighting ID is appended before Task 4 may claim media.
+ * A device-once location remains in this invocation only. The durable draft
+ * first anchors the dedupe key; a sighting ID is appended before media claims.
  */
 export async function submitReportWithMedia(
   input: SubmitReportWithMediaInput,
@@ -129,7 +161,7 @@ export async function submitReportWithMedia(
 
   const resolved = await recoverOrCreateSighting(input, draft, dependencies);
   if (resolved.recoveryMiss || !resolved.sighting) {
-    return { sightingId: null, visibility: null, state: 'recovery_miss' };
+    return { sightingId: null, visibility: null, state: 'recovery_miss', receipt: null };
   }
 
   if (!draft.sightingId && !await dependencies.attachSighting(input.draftId, resolved.sighting.sightingId, ownerSubject)) {
@@ -143,22 +175,14 @@ export async function submitReportWithMedia(
 
   if (!hasMediaBoundary(durable)) {
     await dependencies.deleteDraft(input.draftId);
-    return {
-      sightingId: resolved.sighting.sightingId,
-      visibility: resolved.sighting.visibility,
-      state: 'submitted_text_only',
-    };
+    return outcome(resolved.sighting, 'submitted_text_only');
   }
 
   const state = await dependencies.uploadMedia(input.draftId);
-  return {
-    sightingId: resolved.sighting.sightingId,
-    visibility: resolved.sighting.visibility,
-    state,
-  };
+  return outcome(resolved.sighting, state);
 }
 
-export function reportSubmissionStatus(result: ReportSubmissionOutcome): string {
+export function reportSubmissionStatus(result: ReportSubmissionProgress): string {
   switch (result.state) {
     case 'submitted_text_only':
       if (result.visibility === 'hidden') return 'Submitted for private safety review.';

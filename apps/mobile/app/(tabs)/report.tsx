@@ -87,7 +87,8 @@ export default function ReportScreen() {
         draftId,
         notes,
         risk,
-        coordinates,
+        traits: {},
+        location: coordinates ? { kind: 'device_once', ...coordinates } : null,
         occurredAt: new Date(),
       }, {
         saveDraft: saveOfflineDraft,
@@ -101,10 +102,10 @@ export default function ReportScreen() {
           insecureOrigins,
           accessToken: await withCurrentToken(),
           draft: {
-            location: { kind: 'device_once', latitude: draft.latitude, longitude: draft.longitude },
+            location: draft.location,
             occurredAt: draft.occurredAt,
             risk: draft.risk,
-            traits: {},
+            traits: draft.traits,
             notes: draft.notes,
             clientDedupeKey: draft.clientDedupeKey,
           },

@@ -7,6 +7,7 @@ import {
   reportSubmissionStatus,
   submitReportWithMedia,
   type ReportSubmissionDependencies,
+  type SubmitReportWithMediaInput,
 } from './report-submission';
 
 const receipt = {
@@ -25,6 +26,18 @@ const response = {
   visibleAt: null,
   requestId: '87654321-1234-1234-1234-123456789abc',
 };
+
+function submission(overrides: Partial<SubmitReportWithMediaInput> = {}): SubmitReportWithMediaInput {
+  return {
+    draftId: 'draft-12345678',
+    notes: 'tabby',
+    risk: 'normal',
+    traits: {},
+    location: null,
+    occurredAt: new Date('2026-08-27T00:00:00.000Z'),
+    ...overrides,
+  };
+}
 
 function mediaDraft(overrides: Record<string, unknown> = {}) {
   return {
@@ -108,10 +121,9 @@ describe('report submission lifecycle', () => {
           return { ...response, sightingId };
         }),
       });
-      const result = await submitReportWithMedia({
-        draftId, notes: 'tabby', risk: 'normal', coordinates: { latitude: 1.3, longitude: 103.8 },
-        occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-      }, run.dependencies);
+      const result = await submitReportWithMedia(submission({
+        draftId, location: { kind: 'device_once', latitude: 1.3, longitude: 103.8 },
+      }), run.dependencies);
       return { result, calls: run.calls };
     };
     const first = await submit('draft-12345678', sightingIds[0]!);
@@ -134,10 +146,9 @@ describe('report submission lifecycle', () => {
   it('does not claim a durable recovery path when the initial draft save fails', async () => {
     const run = harness({ saveDraft: jest.fn(async () => { throw new Error('database_locked'); }) });
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal',
-      coordinates: { latitude: 1.3, longitude: 103.8 }, occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).rejects.toBeInstanceOf(ReportDraftPersistenceError);
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'device_once', latitude: 1.3, longitude: 103.8 },
+    }), run.dependencies)).rejects.toBeInstanceOf(ReportDraftPersistenceError);
 
     expect(run.dependencies.recoverSighting).not.toHaveBeenCalled();
     expect(run.dependencies.createSighting).not.toHaveBeenCalled();
@@ -166,16 +177,13 @@ describe('report submission lifecycle', () => {
     jest.mocked(run.dependencies.createSighting)
       .mockRejectedValueOnce(new Error('response_lost'));
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal',
-      coordinates: { latitude: 1.3, longitude: 103.8 }, occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).rejects.toThrow('response_lost');
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'device_once', latitude: 1.3, longitude: 103.8 },
+    }), run.dependencies)).rejects.toThrow('response_lost');
 
     jest.mocked(run.dependencies.recoverSighting).mockResolvedValueOnce(response);
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal', coordinates: null,
-      occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).resolves.toMatchObject({ state: 'quarantined', sightingId: response.sightingId });
+    await expect(submitReportWithMedia(submission(), run.dependencies))
+      .resolves.toMatchObject({ state: 'quarantined', sightingId: response.sightingId });
 
     expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678');
     expect(run.dependencies.createSighting).toHaveBeenCalledTimes(1);
@@ -190,10 +198,8 @@ describe('report submission lifecycle', () => {
   it('uses an already durable sighting without retaining or requiring coordinates on retry', async () => {
     const run = harness({ current: mediaDraft({ sightingId: response.sightingId }) });
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal', coordinates: null,
-      occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).resolves.toMatchObject({ state: 'quarantined', sightingId: response.sightingId });
+    await expect(submitReportWithMedia(submission(), run.dependencies))
+      .resolves.toMatchObject({ state: 'quarantined', sightingId: response.sightingId });
 
     expect(run.dependencies.recoverSighting).not.toHaveBeenCalled();
     expect(run.dependencies.createSighting).not.toHaveBeenCalled();
@@ -203,19 +209,16 @@ describe('report submission lifecycle', () => {
   it('does not invent a visibility claim for an already attached sighting', async () => {
     const run = harness({ current: mediaDraft({ sightingId: response.sightingId }) });
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal', coordinates: null,
-      occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).resolves.toMatchObject({ sightingId: response.sightingId, visibility: null });
+    await expect(submitReportWithMedia(submission(), run.dependencies))
+      .resolves.toMatchObject({ sightingId: response.sightingId, visibility: null });
   });
 
   it('deletes a text-only draft only after a successful sighting submission', async () => {
     const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal',
-      coordinates: { latitude: 1.3, longitude: 103.8 }, occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).resolves.toMatchObject({ state: 'submitted_text_only', sightingId: response.sightingId });
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'device_once', latitude: 1.3, longitude: 103.8 },
+    }), run.dependencies)).resolves.toMatchObject({ state: 'submitted_text_only', sightingId: response.sightingId });
 
     expect(run.calls).toEqual([
       'save:tabby:normal',
@@ -225,16 +228,80 @@ describe('report submission lifecycle', () => {
   });
 
   it.each([
+    ['device-once', { kind: 'device_once' as const, latitude: 1.3521, longitude: 103.8198 }],
+    ['manual-area', { kind: 'manual_area' as const, publicCellId: '89652636d87ffff' }],
+  ])('passes the exact %s location union and bounded traits only to sighting creation', async (_mode, location) => {
+    const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
+
+    await expect(submitReportWithMedia(submission({
+      location,
+      traits: { coat: ['tabby'], markings: ['white-paws'], condition: 'appears_well' },
+    }), run.dependencies)).resolves.toMatchObject({ state: 'submitted_text_only' });
+
+    expect(run.dependencies.createSighting).toHaveBeenCalledWith({
+      location,
+      occurredAt: new Date('2026-08-27T00:00:00.000Z'),
+      risk: 'normal',
+      notes: 'tabby',
+      traits: { coat: ['tabby'], markings: ['white-paws'], condition: 'appears_well' },
+      clientDedupeKey: 'draft-12345678',
+    });
+    expect(run.dependencies.saveDraft).toHaveBeenCalledWith({ id: 'draft-12345678', notes: 'tabby', risk: 'normal' });
+  });
+
+  it('returns a recovery miss after recovery and never invents a location for creation', async () => {
+    const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
+
+    await expect(submitReportWithMedia(submission(), run.dependencies)).resolves.toEqual({
+      sightingId: null,
+      visibility: null,
+      state: 'recovery_miss',
+      receipt: null,
+    });
+
+    expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678');
+    expect(run.dependencies.createSighting).not.toHaveBeenCalled();
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
+  });
+
+  it('returns a receipt-capable result when committed text leaves media pending', async () => {
+    const run = harness({ uploadMedia: jest.fn(async () => 'upload_pending' as const) });
+
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
+    }), run.dependencies)).resolves.toEqual({
+      sightingId: response.sightingId,
+      visibility: 'hidden',
+      state: 'upload_pending',
+      receipt: {
+        sightingId: response.sightingId,
+        visibility: 'hidden',
+        mediaState: 'upload_pending',
+      },
+    });
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['authentication ownership', harness({ current: mediaDraft({ ownerSubject: 'different-owner-12345678' }) }), 'auth_ownership'],
+    ['sighting attachment', harness({ attachSighting: jest.fn(async () => false) }), 'sighting_attachment_conflict'],
+  ])('preserves local recovery state when %s rejects the submission', async (_name, run, error) => {
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'device_once', latitude: 1.3521, longitude: 103.8198 },
+    }), run.dependencies)).rejects.toThrow(error);
+
+    expect(run.current()).not.toBeNull();
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['waiting', mediaDraft({ uploadJob: { state: 'waiting', attempts: 1, nextAttemptAt: '2026-08-27T00:01:00.000Z', lastError: 'network', resumeState: 'uploading', attemptStartedAt: null } })],
     ['needs_user', mediaDraft({ uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
     ['needs_user', mediaDraft({ mediaFailure: 'local_media_corrupt', uploadJob: { state: 'needs_user', attempts: 0, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
   ] as const)('keeps %s media drafts durable instead of treating them as text-only', async (state, current) => {
     const run = harness({ current: { ...current, sightingId: response.sightingId }, uploadMedia: jest.fn(async () => state) });
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal', coordinates: null,
-      occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).resolves.toMatchObject({ state });
+    await expect(submitReportWithMedia(submission(), run.dependencies)).resolves.toMatchObject({ state });
 
     expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
     expect(run.current()).not.toBeNull();
@@ -243,10 +310,7 @@ describe('report submission lifecycle', () => {
   it('does not claim local or remote success from a reserve/PUT phase', async () => {
     const run = harness({ current: mediaDraft({ sightingId: response.sightingId }), uploadMedia: jest.fn(async () => 'finalizing') });
 
-    await expect(submitReportWithMedia({
-      draftId: 'draft-12345678', notes: 'tabby', risk: 'normal', coordinates: null,
-      occurredAt: new Date('2026-08-27T00:00:00.000Z'),
-    }, run.dependencies)).resolves.toMatchObject({ state: 'finalizing' });
+    await expect(submitReportWithMedia(submission(), run.dependencies)).resolves.toMatchObject({ state: 'finalizing' });
 
     expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
   });
