@@ -33,9 +33,18 @@ describe('parseMyReports', () => {
     ['an invalid report enum', [{ ...safeRow, reportState: 'limited' }]],
     ['an invalid media enum', [{ ...safeRow, mediaState: 'finalized' }]],
     ['an invalid identity enum', [{ ...safeRow, identityState: 'confirmed' }]],
-    ['a payload over 64 KiB', [{ ...safeRow, padding: 'x'.repeat(64 * 1024) }]],
   ])('rejects %s', (_name, value) => {
     expect(() => parseMyReports(value)).toThrow('invalid_my_reports_response');
+  });
+
+  it('rejects an exact-key payload whose JSON encoding exceeds 64 KiB', () => {
+    const row = { ...safeRow };
+    Object.defineProperty(row, 'toJSON', {
+      enumerable: false,
+      value: () => ({ ...safeRow, oversizedSerializedPayload: 'x'.repeat(64 * 1024) }),
+    });
+
+    expect(() => parseMyReports([row])).toThrow('invalid_my_reports_response');
   });
 });
 
