@@ -118,6 +118,13 @@ select ok(
 )
 from roles cross join tables cross join privileges;
 
+-- A tests-only database contains neither the helper nor the public RPC.  Keep
+-- its RED to the catalog assertions above; all fixture/state assertions below
+-- run only after migration 007 supplies the exact callable surface.
+select pg_catalog.to_regprocedure(
+  'public.service_complete_identity_assistance_job(uuid,uuid,integer,text,text,jsonb,boolean,uuid)'
+) is not null as task5_completion_surface \gset
+\if :task5_completion_surface
 -- Authentication occurs before scalar validation or table-dependent work.
 select pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok(
@@ -1184,5 +1191,6 @@ select ok(
 select pg_catalog.set_config('private.identity_assistance_job_writer', '', true);
 select pg_catalog.set_config('private.identity_assistance_candidate_writer', '', true);
 
+\endif
 select * from finish();
 rollback;
