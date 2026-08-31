@@ -279,16 +279,31 @@ begin
                when status in (
                  'requested'::private.identity_assistance_job_status,
                  'processing'::private.identity_assistance_job_status
+               ) or (
+                 status = 'succeeded'::private.identity_assistance_job_status
+                 and selected_at is null
+                 and withdrawn_at is null
+                 and result_invalidated_at is null
                ) then null else lease_id end,
              lease_expires_at = case
                when status in (
                  'requested'::private.identity_assistance_job_status,
                  'processing'::private.identity_assistance_job_status
+               ) or (
+                 status = 'succeeded'::private.identity_assistance_job_status
+                 and selected_at is null
+                 and withdrawn_at is null
+                 and result_invalidated_at is null
                ) then null else lease_expires_at end,
              processing_at = case
                when status in (
                  'requested'::private.identity_assistance_job_status,
                  'processing'::private.identity_assistance_job_status
+               ) or (
+                 status = 'succeeded'::private.identity_assistance_job_status
+                 and selected_at is null
+                 and withdrawn_at is null
+                 and result_invalidated_at is null
                ) then null else processing_at end,
              cancelled_at = case
                when status in (
@@ -658,10 +673,13 @@ begin
   if proposal_row.proposed_animal_id is not null then
     select animals.profile_created_by into animal_creator_id
       from public.animals as animals
-     where animals.id = proposal_row.proposed_animal_id
+    where animals.id = proposal_row.proposed_animal_id
        and animals.archived_at is null
        and animals.visibility <> 'hidden'::public.record_visibility;
     if not found then
+      if has_evidence then
+        raise exception 'identity_proposal_not_actionable' using errcode = 'P0001';
+      end if;
       raise exception 'identity_animal_not_available' using errcode = 'P0001';
     end if;
     if animal_creator_id is distinct from discovered_animal_creator_id then
