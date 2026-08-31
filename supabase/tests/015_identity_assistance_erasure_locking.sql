@@ -2,7 +2,7 @@ begin;
 create extension if not exists dblink with schema extensions;
 select no_plan();
 
-\echo 015_task3_stage_profiles.sql
+select diag('015_task3_stage_profiles.sql');
 
 set local session_replication_role = replica;
 insert into public.user_profiles (id, public_name, adult_confirmed_at)
@@ -52,7 +52,7 @@ select pg_catalog.format(
        'task3-identity-source-' || fixture::text
   from generate_series(1, 15) as fixtures(fixture);
 
-\echo 015_task3_stage_media_assets.sql
+select diag('015_task3_stage_media_assets.sql');
 insert into public.media_assets (
   id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
   redaction_confirmed_at, training_eligible, client_media_id, byte_length,
@@ -126,7 +126,7 @@ values
   ('00000000-0000-4000-8000-000000006505', 'Task 3 Media Candidate',
     '00000000-0000-4000-8000-000000006002', 'limited');
 
-\echo 015_task3_stage_jobs.sql
+select diag('015_task3_stage_jobs.sql');
 insert into private.identity_assistance_jobs (
   id, sighting_id, media_asset_id, requester_id, notice_version, input_sha256
 ) values (
@@ -216,7 +216,7 @@ begin
 end;
 $fixture$;
 
-\echo 015_task3_stage_proposals.sql
+select diag('015_task3_stage_proposals.sql');
 insert into public.identity_proposals (
   id, sighting_id, proposed_animal_id, proposer_id, source, status,
   model_version, confidence_band, reasons
@@ -334,7 +334,7 @@ select pg_catalog.format(
          )::uuid)
   from unnest(array[4, 5, 7, 10, 11, 12, 13, 14]) as fixtures(fixture);
 
-\echo 015_task3_stage_ledgers.sql
+select diag('015_task3_stage_ledgers.sql');
 insert into private.identity_assistance_requests (
   actor_id, request_id, payload_sha256, operation, job_id, proposal_id
 ) values (
@@ -422,7 +422,7 @@ select is(
   'selector recusal writes no audit row'
 );
 
-\echo 015_task3_stage_account_erasure.sql
+select diag('015_task3_stage_account_erasure.sql');
 select set_config('private.account_erasure_actor', 'task3-outer-scope', true);
 select set_config('private.identity_assistance_job_writer', 'task3-outer-job', true);
 select set_config('private.identity_assistance_candidate_writer', 'task3-outer-candidate', true);
@@ -664,7 +664,7 @@ select is(
   'account-invalidated review writes no decision'
 );
 
-\echo 015_task3_stage_candidate_invalidation.sql
+select diag('015_task3_stage_candidate_invalidation.sql');
 update public.animals
    set visibility = 'hidden'
  where id = '00000000-0000-4000-8000-000000006502';
@@ -792,7 +792,7 @@ select is(
   'media-invalidated review writes no review ledger or audit side effect'
 );
 
-\echo 015_task3_stage_manual_review.sql
+select diag('015_task3_stage_manual_review.sql');
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006006', true);
@@ -901,7 +901,7 @@ select ok(
   'exceptional account erasure rolls back the profile deletion'
 );
 
-\echo 015_task3_stage_race.sql
+select diag('015_task3_stage_race.sql');
 select lives_ok(
   $orchestrator$
   do $main$
