@@ -180,19 +180,41 @@ begin
      order by uploads.id
      limit 1;
 
-    if upload_job.media_asset_id is distinct from asset.id
-       or upload_job.sighting_id is distinct from asset.sighting_id
-       or upload_job.uploader_id is distinct from asset.uploader_id
-       or upload_job.object_path is distinct from asset.storage_path
-       or upload_job.media_id is distinct from asset.client_media_id
-       or upload_job.sha256 is distinct from asset.sha256
-       or upload_job.recipe_version is distinct from asset.recipe_version
-       or upload_job.byte_length is distinct from asset.byte_length
-       or upload_job.width is distinct from asset.width
-       or upload_job.height is distinct from asset.height
-       or upload_job.detector_versions is distinct from asset.detector_versions
-       or upload_job.finalized_at is null then
-      raise exception 'media_deletion_unavailable_upload_binding'
+    if upload_job.media_asset_id is distinct from asset.id then
+      raise exception 'media_deletion_unavailable_binding_asset'
+        using errcode = 'P0001';
+    elsif upload_job.sighting_id is distinct from asset.sighting_id then
+      raise exception 'media_deletion_unavailable_binding_sighting'
+        using errcode = 'P0001';
+    elsif upload_job.uploader_id is distinct from asset.uploader_id then
+      raise exception 'media_deletion_unavailable_binding_uploader'
+        using errcode = 'P0001';
+    elsif upload_job.object_path is distinct from asset.storage_path then
+      raise exception 'media_deletion_unavailable_binding_path'
+        using errcode = 'P0001';
+    elsif upload_job.media_id is distinct from asset.client_media_id then
+      raise exception 'media_deletion_unavailable_binding_media_id'
+        using errcode = 'P0001';
+    elsif upload_job.sha256 is distinct from asset.sha256 then
+      raise exception 'media_deletion_unavailable_binding_hash'
+        using errcode = 'P0001';
+    elsif upload_job.recipe_version is distinct from asset.recipe_version then
+      raise exception 'media_deletion_unavailable_binding_recipe'
+        using errcode = 'P0001';
+    elsif upload_job.byte_length is distinct from asset.byte_length then
+      raise exception 'media_deletion_unavailable_binding_bytes'
+        using errcode = 'P0001';
+    elsif upload_job.width is distinct from asset.width then
+      raise exception 'media_deletion_unavailable_binding_width'
+        using errcode = 'P0001';
+    elsif upload_job.height is distinct from asset.height then
+      raise exception 'media_deletion_unavailable_binding_height'
+        using errcode = 'P0001';
+    elsif upload_job.detector_versions is distinct from asset.detector_versions then
+      raise exception 'media_deletion_unavailable_binding_detectors'
+        using errcode = 'P0001';
+    elsif upload_job.finalized_at is null then
+      raise exception 'media_deletion_unavailable_binding_finalized_at'
         using errcode = 'P0001';
     end if;
   end if;
