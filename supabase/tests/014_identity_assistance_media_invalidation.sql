@@ -164,7 +164,10 @@ select pg_catalog.format(
          '00000000-0000-4000-8000-%s', lpad((4100 + fixture)::text, 12, '0')
        )::uuid,
        'task2-media-0' || fixture::text,
-       repeat(substr('abcdef01', fixture, 1), 64),
+       case
+         when fixture = 7 then repeat('1', 64)
+         else repeat(substr('abcdef01', fixture, 1), 64)
+       end,
        4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
        '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
        pg_catalog.now(),

@@ -168,8 +168,7 @@ begin
 
   if asset.storage_bucket = 'media-staging' then
     if linked_upload_count <> 1 or finalized_upload_count <> 1 then
-      raise exception 'media_deletion_unavailable_upload_count'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     end if;
 
     select uploads.*
@@ -181,41 +180,29 @@ begin
      limit 1;
 
     if upload_job.media_asset_id is distinct from asset.id then
-      raise exception 'media_deletion_unavailable_binding_asset'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.sighting_id is distinct from asset.sighting_id then
-      raise exception 'media_deletion_unavailable_binding_sighting'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.uploader_id is distinct from asset.uploader_id then
-      raise exception 'media_deletion_unavailable_binding_uploader'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.object_path is distinct from asset.storage_path then
-      raise exception 'media_deletion_unavailable_binding_path'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.media_id is distinct from asset.client_media_id then
-      raise exception 'media_deletion_unavailable_binding_media_id'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.sha256 is distinct from asset.sha256 then
-      raise exception 'media_deletion_unavailable_binding_hash'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.recipe_version is distinct from asset.recipe_version then
-      raise exception 'media_deletion_unavailable_binding_recipe'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.byte_length is distinct from asset.byte_length then
-      raise exception 'media_deletion_unavailable_binding_bytes'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.width is distinct from asset.width then
-      raise exception 'media_deletion_unavailable_binding_width'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.height is distinct from asset.height then
-      raise exception 'media_deletion_unavailable_binding_height'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.detector_versions is distinct from asset.detector_versions then
-      raise exception 'media_deletion_unavailable_binding_detectors'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     elsif upload_job.finalized_at is null then
-      raise exception 'media_deletion_unavailable_binding_finalized_at'
-        using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
     end if;
   end if;
 
@@ -239,8 +226,7 @@ begin
 
   if revalidated_job_ids is distinct from affected_job_ids
      or revalidated_proposal_ids is distinct from affected_proposal_ids then
-    raise exception 'media_deletion_unavailable_relationship_revalidation'
-      using errcode = 'P0001';
+    raise exception 'media_deletion_unavailable' using errcode = 'P0001';
   end if;
 
   -- Tentative AI-selected work is withdrawn, not rejected. Deleting the
@@ -376,11 +362,13 @@ begin
 
   update private.media_upload_jobs
      set status = 'deletion_pending'::private.media_upload_job_status,
-         next_cleanup_at = greatest(
-           invalidated_at,
-           coalesce(upload_token_expires_at, reservation_expires_at)
-             + interval '5 minutes'
-         ),
+         next_cleanup_at = case
+           when coalesce(upload_token_expires_at, reservation_expires_at)
+                  + interval '5 minutes' <= invalidated_at
+             then pg_catalog.now()
+           else coalesce(upload_token_expires_at, reservation_expires_at)
+                  + interval '5 minutes'
+         end,
          cleanup_claimed_at = null,
          cleanup_claim_id = null,
          updated_at = invalidated_at
