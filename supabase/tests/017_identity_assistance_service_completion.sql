@@ -825,126 +825,6 @@ select throws_ok(
   'pre-existing candidates prevent completion rather than leaking a uniqueness failure'
 );
 
--- Scoped guard contexts cannot be injected by a caller and must restore after
--- success as well as a later guarded-write failure.
-select pg_catalog.set_config(
-  'private.identity_assistance_job_writer', 'task5-outer-job-writer', true
-);
-select pg_catalog.set_config(
-  'private.identity_assistance_candidate_writer', 'task5-outer-candidate-writer', true
-);
-select lives_ok(
-  $$select public.service_complete_identity_assistance_job(
-      '00000000-0000-4000-8000-000000017305',
-      '00000000-0000-4000-8000-000000017605', 1,
-      'identify-callback.v1', 'model.guc.v1',
-      '[{"animalId":"00000000-0000-4000-8000-000000017502","confidenceBand":"possible","reasonCodes":["ear_shape_similar"]}]'::jsonb,
-      false, '00000000-0000-4000-8000-000000017746'
-    )$$,
-  'completion succeeds with caller-preseeded writer contexts'
-);
-select is(
-  pg_catalog.current_setting('private.identity_assistance_job_writer', true),
-  'task5-outer-job-writer',
-  'completion restores the caller job-writer context after success'
-);
-select is(
-  pg_catalog.current_setting('private.identity_assistance_candidate_writer', true),
-  'task5-outer-candidate-writer',
-  'completion restores the caller candidate-writer context after success'
-);
-create function pg_temp.task5_completion_fixture_failure()
-returns trigger
-language plpgsql
-set search_path = pg_catalog
-as $$
-begin
-  if new.id = '00000000-0000-4000-8000-000000017306'::uuid then
-    raise exception 'task5_completion_fixture_failure' using errcode = 'P0001';
-  end if;
-  return new;
-end;
-$$;
-create trigger task5_completion_fixture_failure
-before update on private.identity_assistance_jobs
-for each row execute function pg_temp.task5_completion_fixture_failure();
-select throws_ok(
-  $$select public.service_complete_identity_assistance_job(
-      '00000000-0000-4000-8000-000000017306',
-      '00000000-0000-4000-8000-000000017606', 1,
-      'identify-callback.v1', 'model.fail.v1',
-      '[{"animalId":"00000000-0000-4000-8000-000000017503","confidenceBand":"weak","reasonCodes":["image_quality_limited"]}]'::jsonb,
-      false, '00000000-0000-4000-8000-000000017747'
-    )$$,
-  'P0001', 'task5_completion_fixture_failure',
-  'a post-candidate guarded-write failure aborts the entire completion'
-);
-drop trigger task5_completion_fixture_failure on private.identity_assistance_jobs;
-select is(
-  pg_catalog.current_setting('private.identity_assistance_job_writer', true),
-  'task5-outer-job-writer',
-  'completion restores the caller job-writer context after an exception'
-);
-select is(
-  pg_catalog.current_setting('private.identity_assistance_candidate_writer', true),
-  'task5-outer-candidate-writer',
-  'completion restores the caller candidate-writer context after an exception'
-);
-select is(
-  (select pg_catalog.count(*) from private.identity_assistance_candidates as candidates
-    where candidates.job_id = '00000000-0000-4000-8000-000000017306'),
-  0::bigint,
-  'a failing completion leaves no partial candidate rows'
-);
-select is(
-  (select pg_catalog.count(*) from private.identity_assistance_service_requests as requests
-    where requests.request_id = '00000000-0000-4000-8000-000000017747'),
-  0::bigint,
-  'a failing completion rolls back its idempotency ledger row'
-);
-
--- When completion wins the per-animal serialization boundary, the later
--- governed mutation immediately invalidates/purges the just-written result.
-select lives_ok(
-  $$select public.service_complete_identity_assistance_job(
-      '00000000-0000-4000-8000-000000017314',
-      '00000000-0000-4000-8000-000000017614', 1,
-      'identify-callback.v1', 'model.hide.v1',
-      '[{"animalId":"00000000-0000-4000-8000-000000017502","confidenceBand":"possible","reasonCodes":["ear_shape_similar"]}]'::jsonb,
-      false, '00000000-0000-4000-8000-000000017750'
-    )$$,
-  'completion can commit before a later candidate hide mutation'
-);
-update public.animals
-   set visibility = 'hidden'::public.record_visibility
- where id = '00000000-0000-4000-8000-000000017502';
-select is(
-  (select pg_catalog.count(*) from private.identity_assistance_candidates as candidates
-    where candidates.job_id = '00000000-0000-4000-8000-000000017314'),
-  0::bigint,
-  'a later governed animal hide purges the completed candidate set'
-);
-select ok(
-  (select jobs.result_invalidated_at is not null
-     from private.identity_assistance_jobs as jobs
-    where jobs.id = '00000000-0000-4000-8000-000000017314'),
-  'a later governed animal hide invalidates the completed job'
-);
-delete from public.animals
- where id = '00000000-0000-4000-8000-000000017503';
-select is(
-  (select pg_catalog.count(*) from private.identity_assistance_candidates as candidates
-    where candidates.job_id = '00000000-0000-4000-8000-000000017303'),
-  0::bigint,
-  'a later governed animal deletion purges a multi-candidate completed result atomically'
-);
-select ok(
-  (select jobs.result_invalidated_at is not null
-     from private.identity_assistance_jobs as jobs
-    where jobs.id = '00000000-0000-4000-8000-000000017303'),
-  'a later governed animal deletion invalidates the completed multi-candidate job'
-);
-
 -- Two distinct completion request IDs race on one lease.  A lower-class media
 -- lock makes both competitors observable with pg_blocking_pids before either
 -- is released; no sleep-only timing decides the result.
@@ -1330,6 +1210,127 @@ select ok(
   coalesce((select results.state_valid from pg_temp.task5_completion_race_result as results), false),
   'two completion requests on one lease produce one immutable result and one bounded stale-lease loser'
 );
+
+-- Scoped guard contexts cannot be injected by a caller and must restore after
+-- success as well as a later guarded-write failure.
+select pg_catalog.set_config(
+  'private.identity_assistance_job_writer', 'task5-outer-job-writer', true
+);
+select pg_catalog.set_config(
+  'private.identity_assistance_candidate_writer', 'task5-outer-candidate-writer', true
+);
+select lives_ok(
+  $$select public.service_complete_identity_assistance_job(
+      '00000000-0000-4000-8000-000000017305',
+      '00000000-0000-4000-8000-000000017605', 1,
+      'identify-callback.v1', 'model.guc.v1',
+      '[{"animalId":"00000000-0000-4000-8000-000000017502","confidenceBand":"possible","reasonCodes":["ear_shape_similar"]}]'::jsonb,
+      false, '00000000-0000-4000-8000-000000017746'
+    )$$,
+  'completion succeeds with caller-preseeded writer contexts'
+);
+select is(
+  pg_catalog.current_setting('private.identity_assistance_job_writer', true),
+  'task5-outer-job-writer',
+  'completion restores the caller job-writer context after success'
+);
+select is(
+  pg_catalog.current_setting('private.identity_assistance_candidate_writer', true),
+  'task5-outer-candidate-writer',
+  'completion restores the caller candidate-writer context after success'
+);
+create function pg_temp.task5_completion_fixture_failure()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $$
+begin
+  if new.id = '00000000-0000-4000-8000-000000017306'::uuid then
+    raise exception 'task5_completion_fixture_failure' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger task5_completion_fixture_failure
+before update on private.identity_assistance_jobs
+for each row execute function pg_temp.task5_completion_fixture_failure();
+select throws_ok(
+  $$select public.service_complete_identity_assistance_job(
+      '00000000-0000-4000-8000-000000017306',
+      '00000000-0000-4000-8000-000000017606', 1,
+      'identify-callback.v1', 'model.fail.v1',
+      '[{"animalId":"00000000-0000-4000-8000-000000017503","confidenceBand":"weak","reasonCodes":["image_quality_limited"]}]'::jsonb,
+      false, '00000000-0000-4000-8000-000000017747'
+    )$$,
+  'P0001', 'task5_completion_fixture_failure',
+  'a post-candidate guarded-write failure aborts the entire completion'
+);
+drop trigger task5_completion_fixture_failure on private.identity_assistance_jobs;
+select is(
+  pg_catalog.current_setting('private.identity_assistance_job_writer', true),
+  'task5-outer-job-writer',
+  'completion restores the caller job-writer context after an exception'
+);
+select is(
+  pg_catalog.current_setting('private.identity_assistance_candidate_writer', true),
+  'task5-outer-candidate-writer',
+  'completion restores the caller candidate-writer context after an exception'
+);
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_candidates as candidates
+    where candidates.job_id = '00000000-0000-4000-8000-000000017306'),
+  0::bigint,
+  'a failing completion leaves no partial candidate rows'
+);
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_service_requests as requests
+    where requests.request_id = '00000000-0000-4000-8000-000000017747'),
+  0::bigint,
+  'a failing completion rolls back its idempotency ledger row'
+);
+
+-- When completion wins the per-animal serialization boundary, the later
+-- governed mutation immediately invalidates/purges the just-written result.
+select lives_ok(
+  $$select public.service_complete_identity_assistance_job(
+      '00000000-0000-4000-8000-000000017314',
+      '00000000-0000-4000-8000-000000017614', 1,
+      'identify-callback.v1', 'model.hide.v1',
+      '[{"animalId":"00000000-0000-4000-8000-000000017502","confidenceBand":"possible","reasonCodes":["ear_shape_similar"]}]'::jsonb,
+      false, '00000000-0000-4000-8000-000000017750'
+    )$$,
+  'completion can commit before a later candidate hide mutation'
+);
+update public.animals
+   set visibility = 'hidden'::public.record_visibility
+ where id = '00000000-0000-4000-8000-000000017502';
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_candidates as candidates
+    where candidates.job_id = '00000000-0000-4000-8000-000000017314'),
+  0::bigint,
+  'a later governed animal hide purges the completed candidate set'
+);
+select ok(
+  (select jobs.result_invalidated_at is not null
+     from private.identity_assistance_jobs as jobs
+    where jobs.id = '00000000-0000-4000-8000-000000017314'),
+  'a later governed animal hide invalidates the completed job'
+);
+delete from public.animals
+ where id = '00000000-0000-4000-8000-000000017503';
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_candidates as candidates
+    where candidates.job_id = '00000000-0000-4000-8000-000000017303'),
+  0::bigint,
+  'a later governed animal deletion purges a multi-candidate completed result atomically'
+);
+select ok(
+  (select jobs.result_invalidated_at is not null
+     from private.identity_assistance_jobs as jobs
+    where jobs.id = '00000000-0000-4000-8000-000000017303'),
+  'a later governed animal deletion invalidates the completed multi-candidate job'
+);
+
 select pg_catalog.set_config('private.identity_assistance_job_writer', '', true);
 select pg_catalog.set_config('private.identity_assistance_candidate_writer', '', true);
 
