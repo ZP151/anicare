@@ -113,6 +113,18 @@ function outcome(
   };
 }
 
+function persistedMediaRecoveryState(
+  draft: StoredDraft | null,
+  sighting: ResolvedSighting,
+  ownerSubject: string,
+): MediaSubmissionState {
+  if (!draft || draft.sightingId !== sighting.sightingId || draft.ownerSubject !== ownerSubject || !hasMediaBoundary(draft)) {
+    return 'unavailable';
+  }
+  if (draft.mediaFailure !== undefined || draft.uploadJob?.state === 'needs_user') return 'needs_user';
+  return draft.uploadJob?.state ?? 'unavailable';
+}
+
 async function recoverOrCreateSighting(
   input: SubmitReportWithMediaInput,
   draft: StoredDraft,
@@ -186,7 +198,14 @@ export async function submitReportWithMedia(
     const state = await dependencies.uploadMedia(input.draftId);
     return outcome(resolved.sighting, state);
   } catch {
-    return outcome(resolved.sighting, 'needs_user');
+    try {
+      return outcome(
+        resolved.sighting,
+        persistedMediaRecoveryState(await dependencies.getDraft(input.draftId), resolved.sighting, ownerSubject),
+      );
+    } catch {
+      return outcome(resolved.sighting, 'unavailable');
+    }
   }
 }
 

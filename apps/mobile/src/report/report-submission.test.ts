@@ -250,12 +250,33 @@ describe('report submission lifecycle', () => {
     expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
   });
 
-  it('keeps a bound media draft and returns its committed receipt when upload rejects', async () => {
+  it('returns the persisted pending state when upload rejects after attachment', async () => {
     const run = harness();
     jest.mocked(run.dependencies.uploadMedia).mockImplementation(async () => {
       run.calls.push('upload_attempt');
       throw new Error('media_runtime_failed');
     });
+
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
+    }), run.dependencies)).resolves.toEqual({
+      sightingId: response.sightingId,
+      visibility: 'hidden',
+      state: 'upload_pending',
+      receipt: {
+        sightingId: response.sightingId,
+        visibility: 'hidden',
+        mediaState: 'upload_pending',
+      },
+    });
+    expect(run.calls).toEqual(['save:tabby:normal', `attach:${response.sightingId}`, 'upload_attempt']);
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
+    expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
+  });
+
+  it('returns needs-user only when the retained draft records a media failure after upload rejects', async () => {
+    const run = harness({ current: mediaDraft({ mediaFailure: 'local_media_corrupt' }) });
+    jest.mocked(run.dependencies.uploadMedia).mockRejectedValue(new Error('media_runtime_failed'));
 
     await expect(submitReportWithMedia(submission({
       location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
@@ -269,9 +290,39 @@ describe('report submission lifecycle', () => {
         mediaState: 'needs_user',
       },
     });
-    expect(run.calls).toEqual(['save:tabby:normal', `attach:${response.sightingId}`, 'upload_attempt']);
     expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
-    expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
+    expect(run.current()).toMatchObject({
+      sightingId: response.sightingId,
+      ownerSubject: 'owner-12345678',
+      mediaFailure: 'local_media_corrupt',
+    });
+  });
+
+  it.each([
+    ['rejects', async () => { throw new Error('draft_read_failed'); }],
+    ['returns null', async () => null],
+  ])('returns neutral unavailable when the post-upload durable reread %s', async (_condition, failedRead) => {
+    const run = harness();
+    let reads = 0;
+    jest.mocked(run.dependencies.getDraft).mockImplementation(async () => {
+      reads += 1;
+      return reads === 3 ? failedRead() : run.current();
+    });
+    jest.mocked(run.dependencies.uploadMedia).mockRejectedValue(new Error('media_runtime_failed'));
+
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'device_once', latitude: 1.3521, longitude: 103.8198 },
+    }), run.dependencies)).resolves.toEqual({
+      sightingId: response.sightingId,
+      visibility: 'hidden',
+      state: 'unavailable',
+      receipt: {
+        sightingId: response.sightingId,
+        visibility: 'hidden',
+        mediaState: 'unavailable',
+      },
+    });
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
   });
 
   it.each([
