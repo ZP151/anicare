@@ -1235,7 +1235,7 @@ select lives_ok(
     if side_effect_count <> 0 then
       raise exception 'task3_review_committed_after_source_erasure';
     end if;
-  exception when others then
+  exception when query_canceled or others then
     perform pg_catalog.set_config('statement_timeout', '0', true);
     if 'task3_account_delete' = any(coalesce(
       extensions.dblink_get_connections(), '{}'::text[]
