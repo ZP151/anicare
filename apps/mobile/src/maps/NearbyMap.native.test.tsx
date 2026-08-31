@@ -56,7 +56,7 @@ describe('NearbyMap native privacy contract', () => {
     await view.unmount();
   });
 
-  it('falls back to the labelled safe atlas when a configured provider never becomes ready', async () => {
+  it('falls back to the accessible safe atlas when a configured provider never becomes ready', async () => {
     const view = await render(<NearbyMap googleMapsConfigured />);
 
     expect(view.getByTestId('google-map')).toBeTruthy();
@@ -65,7 +65,7 @@ describe('NearbyMap native privacy contract', () => {
     expect(view.getByLabelText(
       'Privacy-safe neighbourhood atlas. Google Maps unavailable; showing privacy-safe atlas fallback.',
     )).toBeTruthy();
-    expect(view.getByText('Privacy-safe atlas fallback')).toBeTruthy();
+    expect(view.queryByText('Privacy-safe atlas fallback')).toBeNull();
     await view.unmount();
   });
 

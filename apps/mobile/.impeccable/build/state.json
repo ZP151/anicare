@@ -55,7 +55,7 @@
       "status": "open",
       "openedAt": "2026-08-30T10:10:01.110Z",
       "closedAt": null,
-      "attempts": 2,
+      "attempts": 3,
       "notes": [],
       "gate": {
         "ok": false,
@@ -172,7 +172,7 @@
           "tab-following": "drift",
           "tab-profile": "drift"
         },
-        "at": "2026-08-30T17:09:49.764Z"
+        "at": "2026-08-31T16:10:46.538Z"
       },
       "forced": null,
       "records": 10,
@@ -207,17 +207,17 @@
         "text privacy-copy: ink is #92a5a3 in the build, #354446 in the comp; use the comp's colour": 1,
         "control report-sighting: its rule sits 82px into the box in the comp and 88px in the build (+6px), so the strip is taller than the comp's; match the height, not only the position": 1,
         "text atlas-zone-west: cap height 18px in the build, 23.7px in the comp (-24%); set font-size so the cap height renders at 23.7px": 2,
-        "text cat-name: cap height 23.2px in the build, 36.8px in the comp (-37%); set font-size so the cap height renders at 36.8px (font-match ranked Rosario 700 at 53px)": 4,
-        "text confirmed-status: cap height 8px in the build, 20.1px in the comp (-60%); set font-size so the cap height renders at 20.1px": 4,
-        "text seen-status: cap height 6px in the build, 17.8px in the comp (-66%); set font-size so the cap height renders at 17.8px": 4,
+        "text cat-name: cap height 23.2px in the build, 36.8px in the comp (-37%); set font-size so the cap height renders at 36.8px (font-match ranked Rosario 700 at 53px)": 5,
+        "text confirmed-status: cap height 8px in the build, 20.1px in the comp (-60%); set font-size so the cap height renders at 20.1px": 5,
+        "text seen-status: cap height 6px in the build, 17.8px in the comp (-66%); set font-size so the cap height renders at 17.8px": 5,
         "text privacy-title: the face renders 37% heavier than the comp's (ink density 0.67 vs 0.49); drop a weight step or use the ranked face": 2,
         "text privacy-title: ink is #1b3848 in the build, #1c5c53 in the comp; use the comp's colour": 2,
-        "text seen-status: ink is #1a384a in the build, #acb3b4 in the comp; use the comp's colour": 4,
+        "text seen-status: ink is #1a384a in the build, #acb3b4 in the comp; use the comp's colour": 5,
         "control report-sighting: its rule sits 82px into the box in the comp and 76px in the build (-6px), so the strip is shorter than the comp's; match the height, not only the position": 2,
-        "text atlas-zone-west: cap height 16px in the build, 23.7px in the comp (-32%); set font-size so the cap height renders at 23.7px": 2,
-        "text atlas-edge-label: cap height 20.8px in the build, 15.6px in the comp (+33%); set font-size so the cap height renders at 15.6px": 2,
-        "text atlas-zone-north: the face renders 41% heavier than the comp's (ink density 0.66 vs 0.47); drop a weight step or use the ranked face": 2,
-        "text atlas-zone-north: its first line starts 15px higher than in the comp (5px vs 20px into the region box); the spacing above it is too small": 2
+        "text atlas-zone-west: cap height 16px in the build, 23.7px in the comp (-32%); set font-size so the cap height renders at 23.7px": 3,
+        "text atlas-edge-label: cap height 20.8px in the build, 15.6px in the comp (+33%); set font-size so the cap height renders at 15.6px": 3,
+        "text atlas-zone-north: the face renders 41% heavier than the comp's (ink density 0.66 vs 0.47); drop a weight step or use the ranked face": 3,
+        "text atlas-zone-north: its first line starts 15px higher than in the comp (5px vs 20px into the region box); the spacing above it is too small": 3
       },
       "history": [
         {
@@ -260,6 +260,44 @@
         },
         {
           "at": "2026-08-30T17:09:49.765Z",
+          "score": 0.7857,
+          "worstIds": [
+            "atlas-zone-north",
+            "atlas-edge-label",
+            "atlas-zone-east"
+          ],
+          "regionVerdicts": {
+            "paper-ground": "match",
+            "nearby-title": "match",
+            "safety-button": "drift",
+            "coarse-atlas": "drift",
+            "atlas-zone-north": "missing",
+            "atlas-zone-west": "drift",
+            "atlas-zone-east": "drift",
+            "atlas-green-label": "drift",
+            "atlas-edge-label": "drift",
+            "privacy-banner": "drift",
+            "privacy-title": "drift",
+            "privacy-copy": "drift",
+            "cat-sheet": "drift",
+            "sheet-handle": "match",
+            "cat-portrait": "drift",
+            "cat-name": "drift",
+            "confirmed-status": "drift",
+            "seen-status": "drift",
+            "view-cat": "drift",
+            "report-sighting": "drift",
+            "tab-bar": "drift",
+            "tab-nearby": "contradicted",
+            "tab-map": "drift",
+            "tab-report": "drift",
+            "tab-following": "drift",
+            "tab-profile": "drift"
+          },
+          "artifactHash": null
+        },
+        {
+          "at": "2026-08-31T16:10:46.539Z",
           "score": 0.7857,
           "worstIds": [
             "atlas-zone-north",

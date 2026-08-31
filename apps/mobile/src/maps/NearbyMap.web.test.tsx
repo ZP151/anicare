@@ -3,14 +3,14 @@ import { render } from '@testing-library/react-native';
 import { NearbyMap } from './NearbyMap.web';
 
 describe('NearbyMap web fallback', () => {
-  it('keeps visible fallback state and semantics alongside the five safe atlas labels', async () => {
+  it('keeps fallback semantics without rendering development-only fallback chrome', async () => {
     const view = await render(<NearbyMap googleMapsConfigured />);
 
     expect(view.getByLabelText(
       'Privacy-safe neighbourhood atlas. Google Maps unavailable; showing privacy-safe atlas fallback.',
     )).toBeTruthy();
     expect(view.queryByText('Google Maps unavailable')).toBeNull();
-    expect(view.getByText('Privacy-safe atlas fallback')).toBeTruthy();
+    expect(view.queryByText('Privacy-safe atlas fallback')).toBeNull();
     expect([
       'North cluster',
       'West court',
