@@ -326,18 +326,24 @@ insert into private.identity_assistance_jobs (
 insert into public.identity_proposals (
   id, sighting_id, proposed_animal_id, proposer_id, source, status,
   model_version, confidence_band, reasons
-) values
-  ('00000000-0000-4000-8000-000000004401',
-    '00000000-0000-4000-8000-000000004104',
-    '00000000-0000-4000-8000-000000004501', null, 'ai_candidate',
-    'tentative', 'model.v1', 'likely', '["face_pattern_similar"]'::jsonb),
-  ('00000000-0000-4000-8000-000000004402',
-    '00000000-0000-4000-8000-000000004104',
-    '00000000-0000-4000-8000-000000004502', null, 'ai_candidate',
-    'tentative', 'model.v1', 'likely', '["coat_marking_similar"]'::jsonb);
+) values (
+  '00000000-0000-4000-8000-000000004402',
+  '00000000-0000-4000-8000-000000004104',
+  '00000000-0000-4000-8000-000000004502', null, 'ai_candidate',
+  'tentative', 'model.v1', 'likely', '["coat_marking_similar"]'::jsonb
+);
 update public.identity_proposals
    set status = 'confirmed', reviewed_at = pg_catalog.now()
  where id = '00000000-0000-4000-8000-000000004402';
+insert into public.identity_proposals (
+  id, sighting_id, proposed_animal_id, proposer_id, source, status,
+  model_version, confidence_band, reasons
+) values (
+  '00000000-0000-4000-8000-000000004401',
+  '00000000-0000-4000-8000-000000004104',
+  '00000000-0000-4000-8000-000000004501', null, 'ai_candidate',
+  'tentative', 'model.v1', 'likely', '["face_pattern_similar"]'::jsonb
+);
 insert into public.match_reviews (
   id, proposal_id, reviewer_id, decision, rationale, request_id
 ) values (
