@@ -1038,8 +1038,12 @@ select lives_ok(
     second_lease uuid;
     delete_pid integer;
     claim_pid integer;
+    replay_blocker_pid integer;
+    replay_pid integer;
     wait_deadline timestamptz;
     claim_waited_for_delete boolean := false;
+    replay_waited_for_validation boolean := false;
+    replay_outcome text;
     delete_claim_count bigint;
     delete_job_actionable bigint;
     local_connection text :=
@@ -1237,6 +1241,123 @@ select lives_ok(
       raise exception 'task4_claimers_duplicated_job_or_lease';
     end if;
 
+    -- A relation lock holds replay inside its canonical-source validation while
+    -- a committed job deletion removes one claim result. The observable
+    -- contract allows the complete pre-delete projection or the bounded
+    -- unavailable error, never an empty/partial success. pg_blocking_pids makes
+    -- the interleaving lock-coordinated rather than sleep-timed.
+    perform extensions.dblink_connect(
+      'task4_service_replay_blocker',
+      local_connection || ' application_name=task4_service_replay_blocker'
+    );
+    perform extensions.dblink_connect(
+      'task4_service_replay',
+      local_connection || ' application_name=task4_service_replay'
+    );
+    perform extensions.dblink_exec(
+      'task4_service_replay_blocker', 'set statement_timeout = ''12s'''
+    );
+    perform extensions.dblink_exec(
+      'task4_service_replay', 'set statement_timeout = ''12s'''
+    );
+    perform extensions.dblink_exec(
+      'task4_service_replay',
+      $remote$
+        create function pg_temp.task4_replay_outcome()
+        returns text
+        language plpgsql
+        set search_path = pg_catalog
+        as $helper$
+        declare
+          replay_count bigint;
+        begin
+          select pg_catalog.count(*)
+            into replay_count
+            from public.service_claim_identity_assistance_jobs(
+              'worker.contention.one', 1,
+              '00000000-0000-4000-8000-000000008851'
+            );
+          if replay_count = 1 then
+            return 'full';
+          end if;
+          return 'count:' || replay_count::text;
+        exception
+          when sqlstate 'P0001' then
+            if sqlerrm = 'identity_assistance_claim_outcome_unavailable' then
+              return 'unavailable';
+            end if;
+            raise;
+        end;
+        $helper$
+      $remote$
+    );
+    perform extensions.dblink_exec(
+      'task4_service_replay', 'set role service_role'
+    );
+    perform extensions.dblink_exec(
+      'task4_service_replay',
+      'set request.jwt.claim.role = ''service_role'''
+    );
+    perform extensions.dblink_exec('task4_service_replay_blocker', 'begin');
+    perform extensions.dblink_exec(
+      'task4_service_replay_blocker',
+      'lock table private.media_upload_jobs in access exclusive mode'
+    );
+    select remote_pid into replay_blocker_pid
+      from extensions.dblink(
+        'task4_service_replay_blocker', 'select pg_catalog.pg_backend_pid()'
+      ) as backend(remote_pid integer);
+    select remote_pid into replay_pid
+      from extensions.dblink(
+        'task4_service_replay', 'select pg_catalog.pg_backend_pid()'
+      ) as backend(remote_pid integer);
+    perform extensions.dblink_send_query(
+      'task4_service_replay', 'select pg_temp.task4_replay_outcome()'
+    );
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    loop
+      if replay_blocker_pid = any(pg_catalog.pg_blocking_pids(replay_pid)) then
+        replay_waited_for_validation := true;
+        exit;
+      end if;
+      exit when extensions.dblink_is_busy('task4_service_replay') = 0;
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'task4_replay_validation_lock_observation_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+    perform extensions.dblink_exec(
+      'task4_service_setup',
+      'set private.identity_assistance_job_deleter = ''00000000-0000-4000-8000-000000008841'''
+    );
+    perform extensions.dblink_exec(
+      'task4_service_setup',
+      'delete from private.identity_assistance_jobs where id = ''00000000-0000-4000-8000-000000008841'''
+    );
+    perform extensions.dblink_exec(
+      'task4_service_setup', 'reset private.identity_assistance_job_deleter'
+    );
+    perform extensions.dblink_exec('task4_service_replay_blocker', 'commit');
+    wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
+    while extensions.dblink_is_busy('task4_service_replay') = 1 loop
+      if pg_catalog.clock_timestamp() >= wait_deadline then
+        raise exception 'task4_replay_snapshot_outcome_timeout';
+      end if;
+      perform pg_catalog.pg_sleep(0.01);
+    end loop;
+    select remote_outcome into replay_outcome
+      from extensions.dblink_get_result('task4_service_replay')
+        as replay_result(remote_outcome text);
+    perform extensions.dblink_disconnect('task4_service_replay_blocker');
+    perform extensions.dblink_disconnect('task4_service_replay');
+
+    if not replay_waited_for_validation then
+      raise exception 'task4_replay_did_not_reach_validation_wait';
+    end if;
+    if replay_outcome not in ('full', 'unavailable') then
+      raise exception 'task4_replay_returned_unsafe_projection:%', replay_outcome;
+    end if;
+
     perform extensions.dblink_exec(
       'task4_service_setup', 'set session_replication_role = replica'
     );
@@ -1255,8 +1376,12 @@ select lives_ok(
          );
         delete from private.identity_assistance_events
          where job_id between
-           '00000000-0000-4000-8000-000000008840'
-           and '00000000-0000-4000-8000-000000008843';
+                 '00000000-0000-4000-8000-000000008840'
+                 and '00000000-0000-4000-8000-000000008843'
+            or request_id in (
+                 '00000000-0000-4000-8000-000000008851',
+                 '00000000-0000-4000-8000-000000008852'
+               );
         delete from private.identity_assistance_jobs
          where id between
            '00000000-0000-4000-8000-000000008840'
@@ -1487,7 +1612,7 @@ select lives_ok(
   end
   $main$;
   $orchestrator$,
-  'two claim sessions skip locked work without duplication and deletion wins safely'
+  'claim contention, replay deletion, and source deletion interleavings remain safe'
 );
 
 -- Cleanup owns only unselected operational retention. The fixtures distinguish
@@ -1667,18 +1792,58 @@ insert into private.identity_assistance_status_reads (
   '2026-06-05 00:00:00+00', '2026-06-05 00:01:00+00', 2
 );
 insert into private.identity_assistance_service_requests (
-  request_id, payload_sha256, operation, job_id
+  request_id, payload_sha256, operation, job_id, result_count
 ) values (
   '00000000-0000-4000-8000-000000009742',
-  pg_catalog.md5('task4-service-ledger') || pg_catalog.md5('task4-service-ledger'),
-  'claim', '00000000-0000-4000-8000-000000009341'
+  pg_catalog.encode(
+    extensions.digest(
+      pg_catalog.convert_to(
+        pg_catalog.jsonb_build_object(
+          'operation', 'claim',
+          'workerId', 'worker.cleanup-ledger',
+          'limit', 2
+        )::text,
+        'UTF8'
+      ),
+      'sha256'
+    ),
+    'hex'
+  ),
+  'claim', '00000000-0000-4000-8000-000000009341', 2
+), (
+  '00000000-0000-4000-8000-000000009743',
+  pg_catalog.encode(
+    extensions.digest(
+      pg_catalog.convert_to(
+        pg_catalog.jsonb_build_object(
+          'operation', 'fail',
+          'jobId', '00000000-0000-4000-8000-000000009342'::uuid,
+          'leaseId', '00000000-0000-4000-8000-000000009643'::uuid,
+          'attempt', 1,
+          'failureCode', 'internal_error',
+          'retryable', false
+        )::text,
+        'UTF8'
+      ),
+      'sha256'
+    ),
+    'hex'
+  ),
+  'fail', '00000000-0000-4000-8000-000000009342', null
 );
 insert into private.identity_assistance_claim_results (
   request_id, ordinal, job_id, lease_id, attempt, lease_expires_at, created_at
-) values (
+) values
+(
   '00000000-0000-4000-8000-000000009742', 1,
   '00000000-0000-4000-8000-000000009341',
   '00000000-0000-4000-8000-000000009642', 1,
+  '2026-06-05 00:02:00+00', '2026-06-05 00:00:00+00'
+),
+(
+  '00000000-0000-4000-8000-000000009742', 2,
+  '00000000-0000-4000-8000-000000009344',
+  '00000000-0000-4000-8000-000000009644', 1,
   '2026-06-05 00:02:00+00', '2026-06-05 00:00:00+00'
 );
 
@@ -1818,12 +1983,68 @@ select is(
   0::bigint,
   'physical cleanup purges tied status-read ledgers'
 );
-select is(
-  (select pg_catalog.count(*)
+select ok(
+  (select requests.operation = 'claim'
+      and requests.result_count = 2
+      and requests.job_id is null
      from private.identity_assistance_service_requests as requests
     where requests.request_id = '00000000-0000-4000-8000-000000009742'),
+  'cleanup retains the bounded claim tombstone and nulls only its deleted job link'
+);
+select results_eq(
+  $$select results.ordinal, results.job_id
+      from private.identity_assistance_claim_results as results
+     where results.request_id = '00000000-0000-4000-8000-000000009742'
+     order by results.ordinal$$,
+  $$values (2, '00000000-0000-4000-8000-000000009344'::uuid)$$,
+  'cleaning one claimed job cascades only its child and preserves the other result'
+);
+select throws_ok(
+  $$select * from public.service_claim_identity_assistance_jobs(
+      'worker.cleanup-ledger', 2,
+      '00000000-0000-4000-8000-000000009742'
+    )$$,
+  'P0001', 'identity_assistance_claim_outcome_unavailable',
+  'a partially cleaned claim replays as unavailable instead of a new claim'
+);
+select ok(
+  (select jobs.status = 'requested'
+      and jobs.attempt_count = 0
+      and jobs.lease_id is null
+     from private.identity_assistance_jobs as jobs
+    where jobs.id = '00000000-0000-4000-8000-000000009344'),
+  'unavailable claim replay cannot newly lease the surviving result job'
+);
+select is(
+  (select pg_catalog.count(*)
+     from private.identity_assistance_events as events
+    where events.request_id = '00000000-0000-4000-8000-000000009742'),
   0::bigint,
-  'physical cleanup purges tied service and cascading claim-result ledgers'
+  'unavailable claim replay creates no new claimed event'
+);
+select lives_ok(
+  $$select public.service_fail_identity_assistance_job(
+      '00000000-0000-4000-8000-000000009342',
+      '00000000-0000-4000-8000-000000009643', 1,
+      'internal_error', false,
+      '00000000-0000-4000-8000-000000009743'
+    )$$,
+  'exact failure replay remains a no-op after its terminal job is cleaned'
+);
+select ok(
+  (select requests.operation = 'fail'
+      and requests.job_id is null
+      and requests.result_count is null
+     from private.identity_assistance_service_requests as requests
+    where requests.request_id = '00000000-0000-4000-8000-000000009743'),
+  'cleanup retains the bounded fail tombstone with its job link nulled'
+);
+select is(
+  (select pg_catalog.count(*)
+     from private.identity_assistance_events as events
+    where events.request_id = '00000000-0000-4000-8000-000000009743'),
+  0::bigint,
+  'post-cleanup failure replay creates no second transition or event'
 );
 select is(
   (select pg_catalog.count(*)
