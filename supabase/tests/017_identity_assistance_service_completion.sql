@@ -948,6 +948,7 @@ select ok(
 -- Two distinct completion request IDs race on one lease.  A lower-class media
 -- lock makes both competitors observable with pg_blocking_pids before either
 -- is released; no sleep-only timing decides the result.
+set local statement_timeout = '45s';
 create temporary table pg_temp.task5_completion_race_result (
   lock_waited boolean not null,
   state_valid boolean not null
@@ -958,13 +959,21 @@ declare
     'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
     || ' port=' || pg_catalog.current_setting('port')
     || ' dbname=' || pg_catalog.current_database()
-    || ' user=' || session_user || ' password=' || session_user;
+    || ' user=' || session_user || ' password=' || session_user
+    || ' connect_timeout=5';
   locker_pid integer;
   first_pid integer;
   second_pid integer;
   wait_deadline timestamptz;
+  cleanup_deadline timestamptz;
   first_waited boolean := false;
-  second_finished boolean := false;
+  setup_connected boolean := false;
+  locker_connected boolean := false;
+  one_connected boolean := false;
+  two_connected boolean := false;
+  locker_in_transaction boolean := false;
+  one_async boolean := false;
+  two_async boolean := false;
   first_error text;
   second_error text;
   completed_count bigint;
@@ -980,6 +989,8 @@ begin
   perform extensions.dblink_connect(
     'task5_completion_setup', local_connection || ' application_name=task5_completion_setup'
   );
+  setup_connected := true;
+  perform extensions.dblink_exec('task5_completion_setup', 'set statement_timeout = ''12s''');
   perform extensions.dblink_exec('task5_completion_setup', 'set session_replication_role = replica');
   perform extensions.dblink_exec(
     'task5_completion_setup',
@@ -1045,16 +1056,20 @@ begin
   perform extensions.dblink_connect(
     'task5_completion_locker', local_connection || ' application_name=task5_completion_locker'
   );
+  locker_connected := true;
   perform extensions.dblink_connect(
     'task5_completion_one', local_connection || ' application_name=task5_completion_one'
   );
+  one_connected := true;
   perform extensions.dblink_connect(
     'task5_completion_two', local_connection || ' application_name=task5_completion_two'
   );
+  two_connected := true;
   perform extensions.dblink_exec('task5_completion_locker', 'set statement_timeout = ''12s''');
   perform extensions.dblink_exec('task5_completion_one', 'set statement_timeout = ''12s''');
   perform extensions.dblink_exec('task5_completion_two', 'set statement_timeout = ''12s''');
   perform extensions.dblink_exec('task5_completion_locker', 'begin');
+  locker_in_transaction := true;
   perform * from extensions.dblink(
     'task5_completion_locker',
     'select id from public.media_assets where id = ''00000000-0000-4000-8000-000000018120'' for update'
@@ -1072,9 +1087,9 @@ begin
   select remote_pid into second_pid from extensions.dblink(
     'task5_completion_two', 'select pg_catalog.pg_backend_pid()'
   ) as backend(remote_pid integer);
-  perform extensions.dblink_send_query(
-    'task5_completion_one',
-    $remote$
+  if extensions.dblink_send_query(
+       'task5_completion_one',
+       $remote$
       select pg_catalog.count(*) from (
         select public.service_complete_identity_assistance_job(
           '00000000-0000-4000-8000-000000018140',
@@ -1084,8 +1099,11 @@ begin
           false, '00000000-0000-4000-8000-000000018171'
         )
       ) as completed
-    $remote$
-  );
+       $remote$
+     ) <> 1 then
+    raise exception 'task5_completion_race_first_send_failed';
+  end if;
+  one_async := true;
   wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
   loop
     if locker_pid = any(pg_catalog.pg_blocking_pids(first_pid)) then
@@ -1098,9 +1116,9 @@ begin
     end if;
     perform pg_catalog.pg_sleep(0.01);
   end loop;
-  perform extensions.dblink_send_query(
-    'task5_completion_two',
-    $remote$
+  if extensions.dblink_send_query(
+       'task5_completion_two',
+       $remote$
       select pg_catalog.count(*) from (
         select public.service_complete_identity_assistance_job(
           '00000000-0000-4000-8000-000000018140',
@@ -1110,9 +1128,13 @@ begin
           false, '00000000-0000-4000-8000-000000018172'
         )
       ) as completed
-    $remote$
-  );
+       $remote$
+     ) <> 1 then
+    raise exception 'task5_completion_race_second_send_failed';
+  end if;
+  two_async := true;
   perform extensions.dblink_exec('task5_completion_locker', 'commit');
+  locker_in_transaction := false;
   wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
   while extensions.dblink_is_busy('task5_completion_one') = 1
      or extensions.dblink_is_busy('task5_completion_two') = 1 loop
@@ -1123,8 +1145,10 @@ begin
   end loop;
   perform * from extensions.dblink_get_result('task5_completion_one', false)
     as result(completion_count bigint);
+  one_async := false;
   perform * from extensions.dblink_get_result('task5_completion_two', false)
     as result(completion_count bigint);
+  two_async := false;
   first_error := extensions.dblink_error_message('task5_completion_one');
   second_error := extensions.dblink_error_message('task5_completion_two');
   select remote_count into completed_count from extensions.dblink(
@@ -1153,8 +1177,11 @@ begin
     $remote$
   ) as count_result(remote_count bigint);
   perform extensions.dblink_disconnect('task5_completion_locker');
+  locker_connected := false;
   perform extensions.dblink_disconnect('task5_completion_one');
+  one_connected := false;
   perform extensions.dblink_disconnect('task5_completion_two');
+  two_connected := false;
   perform extensions.dblink_exec('task5_completion_setup', 'set session_replication_role = replica');
   perform extensions.dblink_exec(
     'task5_completion_setup',
@@ -1162,6 +1189,7 @@ begin
       delete from private.identity_assistance_service_requests
        where request_id in ('00000000-0000-4000-8000-000000018171', '00000000-0000-4000-8000-000000018172');
       delete from private.identity_assistance_events where job_id = '00000000-0000-4000-8000-000000018140';
+      delete from private.identity_assistance_candidates where job_id = '00000000-0000-4000-8000-000000018140';
       delete from private.identity_assistance_jobs where id = '00000000-0000-4000-8000-000000018140';
       delete from private.media_upload_jobs where id = '00000000-0000-4000-8000-000000018130';
       delete from public.media_assets where id = '00000000-0000-4000-8000-000000018120';
@@ -1171,6 +1199,7 @@ begin
     $remote$
   );
   perform extensions.dblink_disconnect('task5_completion_setup');
+  setup_connected := false;
   insert into pg_temp.task5_completion_race_result (lock_waited, state_valid)
   values (
     first_waited,
@@ -1178,6 +1207,119 @@ begin
       and (first_error like '%identity_assistance_lease_not_current%'
         or second_error like '%identity_assistance_lease_not_current%')
   );
+exception
+  when others then
+    if locker_connected and locker_in_transaction then
+      begin
+        perform extensions.dblink_exec('task5_completion_locker', 'rollback');
+        locker_in_transaction := false;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+
+    if one_connected and one_async then
+      begin
+        if extensions.dblink_is_busy('task5_completion_one') = 1 then
+          perform extensions.dblink_cancel_query('task5_completion_one');
+        end if;
+        cleanup_deadline := pg_catalog.clock_timestamp() + interval '5 seconds';
+        while extensions.dblink_is_busy('task5_completion_one') = 1 loop
+          exit when pg_catalog.clock_timestamp() >= cleanup_deadline;
+          perform pg_catalog.pg_sleep(0.01);
+        end loop;
+        if extensions.dblink_is_busy('task5_completion_one') = 0 then
+          perform * from extensions.dblink_get_result('task5_completion_one', false)
+            as result(completion_count bigint);
+          one_async := false;
+        end if;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+
+    if two_connected and two_async then
+      begin
+        if extensions.dblink_is_busy('task5_completion_two') = 1 then
+          perform extensions.dblink_cancel_query('task5_completion_two');
+        end if;
+        cleanup_deadline := pg_catalog.clock_timestamp() + interval '5 seconds';
+        while extensions.dblink_is_busy('task5_completion_two') = 1 loop
+          exit when pg_catalog.clock_timestamp() >= cleanup_deadline;
+          perform pg_catalog.pg_sleep(0.01);
+        end loop;
+        if extensions.dblink_is_busy('task5_completion_two') = 0 then
+          perform * from extensions.dblink_get_result('task5_completion_two', false)
+            as result(completion_count bigint);
+          two_async := false;
+        end if;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+
+    if locker_connected then
+      begin
+        perform extensions.dblink_disconnect('task5_completion_locker');
+        locker_connected := false;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+    if one_connected then
+      begin
+        perform extensions.dblink_disconnect('task5_completion_one');
+        one_connected := false;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+    if two_connected then
+      begin
+        perform extensions.dblink_disconnect('task5_completion_two');
+        two_connected := false;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+
+    if setup_connected then
+      begin
+        perform extensions.dblink_exec('task5_completion_setup', 'set session_replication_role = replica');
+        perform extensions.dblink_exec(
+          'task5_completion_setup',
+          $remote$
+            delete from private.identity_assistance_service_requests
+             where request_id in ('00000000-0000-4000-8000-000000018171', '00000000-0000-4000-8000-000000018172');
+            delete from private.identity_assistance_events where job_id = '00000000-0000-4000-8000-000000018140';
+            delete from private.identity_assistance_candidates where job_id = '00000000-0000-4000-8000-000000018140';
+            delete from private.identity_assistance_jobs where id = '00000000-0000-4000-8000-000000018140';
+            delete from private.media_upload_jobs where id = '00000000-0000-4000-8000-000000018130';
+            delete from public.media_assets where id = '00000000-0000-4000-8000-000000018120';
+            delete from public.sightings where id = '00000000-0000-4000-8000-000000018110';
+            delete from public.animals where id = '00000000-0000-4000-8000-000000018150';
+            delete from public.user_profiles where id = '00000000-0000-4000-8000-000000018100';
+          $remote$
+        );
+      exception
+        when others then
+          null;
+      end;
+      begin
+        perform extensions.dblink_disconnect('task5_completion_setup');
+        setup_connected := false;
+      exception
+        when others then
+          null;
+      end;
+    end if;
+    raise;
 end;
 $completion_race$;
 select ok(
