@@ -67,6 +67,7 @@ select is(
   1::bigint,
   'manual-area retries create exactly one sighting'
 );
+reset role;
 select is(
   (select pg_catalog.count(*) from private.precise_locations where sighting_id = (
     select id from public.sightings where reporter_id = '00000000-0000-4000-8000-000000001901' and client_dedupe_key = 'manual-draft-12345678'
@@ -79,6 +80,7 @@ select is(
   1::bigint,
   'manual-area retries append one create audit record'
 );
+set local role service_role;
 select isnt(
   public.create_sighting_in_public_cell('00000000-0000-4000-8000-000000001902', '2026-08-31T08:00:00.000Z', '89652636d87ffff', 'afternoon', 'normal', 'public', '2026-08-31T10:00:00.000Z', '{}'::jsonb, null, 'manual-draft-12345678', 'manual-request-6'),
   (select id from public.sightings where reporter_id = '00000000-0000-4000-8000-000000001901' and client_dedupe_key = 'manual-draft-12345678'),
