@@ -784,11 +784,6 @@ begin
          and (
            proposal_row.proposed_animal_id is not null
            or evidence_row.selected_candidate_rank is not null
-           or exists (
-             select 1
-               from private.identity_assistance_candidates as candidates
-              where candidates.job_id = job_row.id
-           )
          )
        )
        or (
