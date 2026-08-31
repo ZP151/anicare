@@ -424,6 +424,23 @@ select lives_ok(
       where id = '00000000-0000-4000-8000-000000006000'$$,
   'account deletion invalidates every source-derived identity job before foreign-key anonymization'
 );
+do $red_contract$
+begin
+  if exists (
+    select 1
+      from private.identity_assistance_jobs
+     where id = '00000000-0000-4000-8000-000000006301'
+       and (
+         status is distinct from 'cancelled'::private.identity_assistance_job_status
+         or input_sha256 is not null
+         or result_invalidated_at is null
+       )
+  ) then
+    raise exception 'task3_account_erasure_did_not_invalidate_identity_jobs'
+      using errcode = 'P0001';
+  end if;
+end;
+$red_contract$;
 select is(
   current_setting('private.account_erasure_actor', true),
   'task3-outer-scope',
