@@ -9,6 +9,68 @@ select has_function(
   'public', 'review_identity_proposal', array['uuid', 'text', 'text', 'uuid'],
   'trusted reviewers use one atomic identity review RPC'
 );
+select is(
+  (select procedures.proargnames
+     from pg_proc as procedures
+    where procedures.oid =
+      'public.review_identity_proposal(uuid,text,text,uuid)'::regprocedure),
+  array[
+    'p_proposal_id', 'p_decision', 'p_rationale', 'p_request_id',
+    'proposalId', 'decision', 'status', 'animalId'
+  ]::text[],
+  'identity review retains exact input and response names'
+);
+select is(
+  (select array(
+     select mode::text
+       from unnest(procedures.proargmodes) with ordinality as modes(mode, ordinal)
+      order by ordinal
+   )
+     from pg_proc as procedures
+    where procedures.oid =
+      'public.review_identity_proposal(uuid,text,text,uuid)'::regprocedure),
+  array['i', 'i', 'i', 'i', 't', 't', 't', 't']::text[],
+  'identity review retains four inputs followed by four table outputs'
+);
+select is(
+  (select array(
+     select pg_catalog.format_type(type_oid, null)
+       from unnest(procedures.proallargtypes) with ordinality
+         as types(type_oid, ordinal)
+      order by ordinal
+   )
+     from pg_proc as procedures
+    where procedures.oid =
+      'public.review_identity_proposal(uuid,text,text,uuid)'::regprocedure),
+  array['uuid', 'text', 'text', 'uuid', 'uuid', 'text', 'text', 'uuid']::text[],
+  'identity review retains exact input and response types'
+);
+select ok(
+  (select procedures.prosecdef
+      and procedures.provolatile = 'v'
+      and procedures.proconfig = array['search_path=pg_catalog']::text[]
+     from pg_proc as procedures
+    where procedures.oid =
+      'public.review_identity_proposal(uuid,text,text,uuid)'::regprocedure),
+  'identity review remains volatile security definer with fixed pg_catalog search path'
+);
+with expected(role_name, allowed) as (
+  values
+    ('public', false),
+    ('anon', false),
+    ('authenticated', true),
+    ('service_role', false)
+)
+select is(
+  has_function_privilege(
+    role_name,
+    'public.review_identity_proposal(uuid,text,text,uuid)',
+    'execute'
+  ),
+  allowed,
+  role_name || ' identity review execute privilege remains unchanged'
+)
+from expected;
 select has_function(
   'public', 'service_submit_ai_identity_proposal', array['uuid', 'uuid', 'text', 'text', 'jsonb', 'uuid'],
   'AI candidates use one fixed service-only proposal RPC'

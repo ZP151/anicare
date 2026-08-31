@@ -1,25 +1,36 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(20);
 
 select has_function(
   'private', 'prepare_user_profile_account_erasure', array[]::text[],
   'trusted account-erasure trigger function exists'
 );
+select results_eq(
+  $$select trigger_name
+      from information_schema.triggers
+     where event_object_schema = 'public'
+       and event_object_table = 'user_profiles'
+       and event_manipulation = 'DELETE'
+     order by trigger_name$$,
+  $$values
+      ('user_profiles_account_erasure'::text),
+      ('user_profiles_legacy_media_deletion_outbox'::text)$$,
+  'profile deletion retains exactly the two established non-internal erasure triggers'
+);
+with expected(role_name) as (
+  values ('public'), ('anon'), ('authenticated'), ('service_role')
+)
 select ok(
-  exists (
-    select 1 from pg_trigger
-    where tgrelid = 'public.user_profiles'::regclass
-      and tgname = 'user_profiles_account_erasure'
-      and not tgisinternal
+  not has_function_privilege(
+    role_name,
+    'private.prepare_user_profile_account_erasure()',
+    'execute'
   ),
-  'profile deletion invokes the trusted account-erasure path'
-);
-select ok(
-  not has_function_privilege('authenticated', 'private.prepare_user_profile_account_erasure()', 'execute'),
-  'authenticated callers cannot invoke the trusted account-erasure function'
-);
+  role_name || ' cannot invoke the trusted account-erasure function'
+)
+from expected;
 
 set local session_replication_role = replica;
 insert into public.user_profiles (id, public_name, adult_confirmed_at)
@@ -90,9 +101,15 @@ insert into audit.access_audit (
   '00000000-0000-4000-8000-000000000704'
 );
 
+select set_config('private.account_erasure_actor', 'outer-erasure-scope', true);
 select lives_ok(
   $$delete from public.user_profiles where id = '00000000-0000-4000-8000-000000000701'$$,
   'deleting a moderator profile with retained media and history succeeds'
+);
+select is(
+  current_setting('private.account_erasure_actor', true),
+  'outer-erasure-scope',
+  'successful account erasure restores the caller scoped erasure context'
 );
 
 select ok(
@@ -114,6 +131,8 @@ select ok(
       and uploader_id is null
       and status = 'deletion_pending'
       and next_cleanup_at <= now()
+      and cleanup_claimed_at is null
+      and cleanup_claim_id is null
   ),
   'account erasure immediately schedules finalized media for deletion cleanup'
 );
@@ -149,6 +168,8 @@ select ok(
       and uploader_id is null
       and status = 'reserved'
       and next_cleanup_at <= now()
+      and cleanup_claimed_at is null
+      and cleanup_claim_id is null
   ),
   'an orphaned reserved job is immediately cleanup eligible'
 );
