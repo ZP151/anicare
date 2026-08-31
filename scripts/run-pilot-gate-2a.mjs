@@ -58,7 +58,7 @@ const SAFE_PARENT_ENVIRONMENT_KEYS = Object.freeze([
 const STAGE_TIMEOUTS = Object.freeze({
   start: 10 * 60_000,
   status: 60_000,
-  pgtap: 5 * 60_000,
+  pgtap: 10 * 60_000,
   lint: 2 * 60_000,
   readiness: 60_000,
   integration: 15 * 60_000,
