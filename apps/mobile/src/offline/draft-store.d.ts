@@ -32,6 +32,7 @@ export function cleanupQuarantinedMedia(id: string, revision: number): Promise<v
 export function deleteOfflineDraft(id: string): Promise<void>;
 export function cleanupPendingReviewedMediaReferences(): Promise<void>;
 export function cleanupPendingReviewedMediaForDraft(draftId: string): Promise<void>;
+export function removeReviewedMediaFromDraft(draftId: string): Promise<void>;
 export function getPendingReviewedMediaVersionMismatch(draft: StoredDraft): Readonly<{
   expectedRevision: number;
   expectedState: UploadJobState;

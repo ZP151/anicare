@@ -11,6 +11,7 @@ import {
   UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION,
   type StoredDraft,
 } from './draft-policy';
+import { sanitizeReportDraftPayload } from '../report/report-draft';
 import {
   createRetryableSingleFlight,
   loadOrCreateDatabaseKey,
@@ -26,11 +27,12 @@ export const LEGACY_REVIEWED_PATH_CLEAR_SQL = 'UPDATE sighting_drafts SET review
 export const ENCRYPTION_VERSION_BACKFILL_SQL = `UPDATE sighting_drafts
   SET encryption_version = 'aes-256-gcm.v1'
   WHERE reviewed_media_ref IS NOT NULL AND encryption_version IS NULL;`;
+export const REPORT_PAYLOAD_COLUMN = { report_payload_json: 'TEXT' } as const;
 export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
      (id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref, encryption_version,
       review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-      upload_resume_state, upload_attempt_started_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      upload_resume_state, upload_attempt_started_at, report_payload_json, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        notes = excluded.notes,
        risk = excluded.risk,
@@ -62,17 +64,18 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
          THEN excluded.upload_resume_state ELSE sighting_drafts.upload_resume_state END,
        upload_attempt_started_at = CASE WHEN excluded.media_id IS NOT NULL AND
          (sighting_drafts.media_id IS NULL OR
-          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
+         (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
          THEN excluded.upload_attempt_started_at ELSE sighting_drafts.upload_attempt_started_at END,
+       report_payload_json = COALESCE(excluded.report_payload_json, sighting_drafts.report_payload_json),
        revision = sighting_drafts.revision + 1,
        updated_at = excluded.updated_at`;
 export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-  upload_resume_state, upload_attempt_started_at, pending_media_cleanup_ref, revision
+  upload_resume_state, upload_attempt_started_at, report_payload_json, pending_media_cleanup_ref, revision
   FROM sighting_drafts ORDER BY updated_at DESC`;
 export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-  upload_resume_state, upload_attempt_started_at, pending_media_cleanup_ref, revision
+  upload_resume_state, upload_attempt_started_at, report_payload_json, pending_media_cleanup_ref, revision
   FROM sighting_drafts WHERE id = ?`;
 export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   media_id = ?,
@@ -141,8 +144,24 @@ export const PENDING_MEDIA_CLEANUP_LIST_SQL = `SELECT id, reviewed_media_ref,
 export const CLEAR_PENDING_MEDIA_CLEANUP_SQL = `UPDATE sighting_drafts SET
   pending_media_cleanup_ref = NULL,
   revision = revision + 1
-  WHERE id = ? AND revision = ? AND reviewed_media_ref = ?
+  WHERE id = ? AND revision = ? AND (reviewed_media_ref = ? OR (reviewed_media_ref IS NULL AND ? IS NULL))
     AND pending_media_cleanup_ref = ?`;
+export const REMOVE_REVIEWED_MEDIA_CAS_SQL = `UPDATE sighting_drafts SET
+  pending_media_cleanup_ref = reviewed_media_ref,
+  media_id = NULL,
+  reviewed_media_ref = NULL,
+  encryption_version = NULL,
+  review_receipt_json = NULL,
+  upload_state = NULL,
+  upload_attempts = NULL,
+  next_attempt_at = NULL,
+  last_error = NULL,
+  upload_resume_state = NULL,
+  upload_attempt_started_at = NULL,
+  revision = revision + 1
+  WHERE id = ? AND revision = ? AND sighting_id IS NULL AND pending_media_cleanup_ref IS NULL
+    AND media_id = ? AND reviewed_media_ref = ? AND upload_state = ?
+    AND upload_state IN ('local_persisting', 'upload_pending', 'needs_user')`;
 const ENSURE_DRAFT_ROW_SQL = `INSERT OR IGNORE INTO sighting_drafts
   (id, notes, risk, updated_at) VALUES (?, '', 'normal', ?)`;
 
@@ -162,6 +181,7 @@ type DraftRow = {
   last_error: string | null;
   upload_resume_state: string | null;
   upload_attempt_started_at: string | null;
+  report_payload_json?: string | null;
   pending_media_cleanup_ref?: string | null;
   revision: number;
 };
@@ -184,6 +204,7 @@ export function getPendingReviewedMediaVersionMismatch(
 }
 
 const SCHEMA_V2_COLUMNS = {
+  ...REPORT_PAYLOAD_COLUMN,
   media_id: 'TEXT',
   sighting_id: 'TEXT',
   owner_subject: 'TEXT',
@@ -240,6 +261,7 @@ async function initializeDraftDatabaseSchema(database: SQLite.SQLiteDatabase) {
       last_error TEXT,
       upload_resume_state TEXT,
       upload_attempt_started_at TEXT,
+      report_payload_json TEXT,
       pending_media_cleanup_ref TEXT,
       revision INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
@@ -302,6 +324,7 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
     draft.uploadJob?.lastError ?? null,
     draft.uploadJob?.resumeState ?? null,
     draft.uploadJob?.attemptStartedAt ?? null,
+    draft.report ? JSON.stringify(draft.report) : null,
     new Date().toISOString(),
   );
   return draft;
@@ -445,7 +468,7 @@ export async function saveReviewedMediaJournal(
 
 export type PendingReviewedMediaCleanup = Readonly<{
   draftId: string;
-  activeReference: string;
+  activeReference: string | null;
   pendingReference: string;
   revision: number;
 }>;
@@ -461,7 +484,7 @@ export async function cleanupPendingReviewedMediaReferencesWithDependencies(
 ): Promise<void> {
   for (const cleanup of await dependencies.listPendingCleanup()) {
     if (!isStableMediaId(cleanup.draftId) || !Number.isInteger(cleanup.revision) || cleanup.revision < 0 ||
-        !isReviewedMediaReference(cleanup.activeReference) ||
+        (cleanup.activeReference !== null && !isReviewedMediaReference(cleanup.activeReference)) ||
         !isReviewedMediaReference(cleanup.pendingReference) ||
         cleanup.activeReference === cleanup.pendingReference) {
       throw new Error('invalid_pending_media_cleanup');
@@ -486,7 +509,7 @@ function databasePendingCleanupDependencies(
         : await database.getAllAsync<DraftRow>(PENDING_MEDIA_CLEANUP_LIST_SQL);
       return rows.map((row) => ({
         draftId: row.id,
-        activeReference: row.reviewed_media_ref ?? '',
+        activeReference: row.reviewed_media_ref ?? null,
         pendingReference: row.pending_media_cleanup_ref ?? '',
         revision: row.revision,
       }));
@@ -497,6 +520,7 @@ function databasePendingCleanupDependencies(
         CLEAR_PENDING_MEDIA_CLEANUP_SQL,
         cleanup.draftId,
         cleanup.revision,
+        cleanup.activeReference,
         cleanup.activeReference,
         cleanup.pendingReference,
       );
@@ -726,6 +750,55 @@ export async function getOfflineDraft(id: string): Promise<StoredDraft | null> {
   return databaseCasDependencies(database).getOfflineDraft(id);
 }
 
+export type RemoveReviewedMediaFromDraftDependencies = Readonly<{
+  getOfflineDraft(id: string): Promise<StoredDraft | null>;
+  detachReviewedMedia(
+    id: string,
+    expectedRevision: number,
+    expectedState: 'local_persisting' | 'upload_pending' | 'needs_user',
+    expectedReference: string,
+  ): Promise<boolean>;
+  cleanupPendingMedia(id: string): Promise<void>;
+}>;
+
+function removableReviewedMedia(draft: StoredDraft): draft is StoredDraft & Required<Pick<
+  StoredDraft, 'mediaId' | 'encryptedReviewedRef' | 'uploadJob' | 'revision'
+>> & Readonly<{ uploadJob: UploadJob & { state: 'local_persisting' | 'upload_pending' | 'needs_user' } }> {
+  return draft.sightingId === undefined && !draft.pendingMediaCleanupRef && isStableMediaId(draft.mediaId) &&
+    isReviewedMediaReference(draft.encryptedReviewedRef, draft.mediaId) && !!draft.uploadJob &&
+    (draft.uploadJob.state === 'local_persisting' || draft.uploadJob.state === 'upload_pending' || draft.uploadJob.state === 'needs_user') &&
+    Number.isInteger(draft.revision) && (draft.revision ?? -1) >= 0;
+}
+
+export async function removeReviewedMediaFromDraftWithDependencies(
+  id: string,
+  dependencies: RemoveReviewedMediaFromDraftDependencies,
+): Promise<void> {
+  if (!isStableMediaId(id)) throw new Error('reviewed_media_removal_not_allowed');
+  const current = await dependencies.getOfflineDraft(id);
+  if (!current || !removableReviewedMedia(current)) throw new Error('reviewed_media_removal_not_allowed');
+  if (!await dependencies.detachReviewedMedia(id, current.revision, current.uploadJob.state, current.encryptedReviewedRef)) {
+    throw new Error('reviewed_media_removal_conflict');
+  }
+  await dependencies.cleanupPendingMedia(id);
+}
+
+export async function removeReviewedMediaFromDraft(id: string): Promise<void> {
+  const database = await getDatabase();
+  await removeReviewedMediaFromDraftWithDependencies(id, {
+    getOfflineDraft: async (draftId) => databaseCasDependencies(database).getOfflineDraft(draftId),
+    detachReviewedMedia: async (draftId, revision, state, reference) => {
+      const current = await database.getFirstAsync<DraftRow>(DRAFT_GET_SQL, draftId);
+      if (!current || current.media_id === null) return false;
+      const result = await database.runAsync(
+        REMOVE_REVIEWED_MEDIA_CAS_SQL, draftId, revision, current.media_id, reference, state,
+      );
+      return result.changes === 1;
+    },
+    cleanupPendingMedia: cleanupPendingReviewedMediaForDraft,
+  });
+}
+
 export type AttachSightingToDraftDependencies = Readonly<{
   getOfflineDraft(id: string): Promise<StoredDraft | null>;
   attachSightingId(id: string, sightingId: string, ownerSubject: string): Promise<boolean>;
@@ -824,10 +897,18 @@ export async function transitionClaimedMediaUpload(
 export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
   const drafts: StoredDraft[] = [];
   for (const row of rows) {
+    let report: StoredDraft['report'];
+    if (typeof row.report_payload_json === 'string') {
+      try {
+        report = sanitizeReportDraftPayload(JSON.parse(row.report_payload_json));
+      } catch {
+        report = undefined;
+      }
+    }
     let textOnly: StoredDraft;
     try {
       textOnly = {
-        ...sanitizeDraftForStorage({ id: row.id, notes: row.notes, risk: row.risk }),
+        ...sanitizeDraftForStorage({ id: row.id, notes: row.notes, risk: row.risk, ...(report ? { report } : {}) }),
         revision: Number.isInteger(row.revision) && row.revision >= 0 ? row.revision : 0,
       };
     } catch {

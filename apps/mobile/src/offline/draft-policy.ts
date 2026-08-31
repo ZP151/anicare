@@ -2,6 +2,7 @@ import type { SightingRisk } from '../api/sightings';
 import { MAX_REVIEWED_MEDIA_BYTES, type ReviewReceipt } from '../media/contracts';
 import { isReviewedMediaReference } from '../media/media-reference';
 import type { UploadJob, UploadResumeState } from './upload-job';
+import { sanitizeReportDraftPayload, type ReportDraftPayloadV1 } from '../report/report-draft';
 
 export const UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION = 'unsupported' as const;
 
@@ -19,6 +20,7 @@ export type StoredDraft = {
   uploadJob?: UploadJob;
   revision?: number;
   mediaFailure?: 'local_media_corrupt' | 'version_mismatch' | 'auth_ownership';
+  report?: ReportDraftPayloadV1;
 };
 
 const risks = new Set<SightingRisk>(['normal', 'sensitive', 'critical']);
@@ -93,10 +95,20 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     ? (input.risk as SightingRisk)
     : 'normal';
 
+  let report: ReportDraftPayloadV1 | undefined;
+  if (input.report !== undefined) {
+    try {
+      report = sanitizeReportDraftPayload(input.report);
+    } catch {
+      // A corrupt nested wizard payload must not hide media-cleanup metadata.
+      report = undefined;
+    }
+  }
   const draft: StoredDraft = {
     id: input.id,
     notes: typeof input.notes === 'string' ? input.notes.trim().slice(0, 1000) : '',
     risk,
+    ...(report ? { report } : {}),
   };
 
   const hasAnyMedia = input.mediaId !== undefined || input.encryptedReviewedRef !== undefined ||

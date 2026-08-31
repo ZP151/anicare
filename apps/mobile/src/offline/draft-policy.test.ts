@@ -1,6 +1,28 @@
 import { sanitizeDraftForStorage } from './draft-policy';
 
 describe('offline draft privacy', () => {
+  it('persists a report payload only when its strict nested contract is valid', () => {
+    const report = {
+      version: 1,
+      step: 'area',
+      occurredAt: '2026-08-31T10:00:00.000Z',
+      coat: ['tabby'],
+      markings: ['white-paws'],
+      condition: 'appears_well',
+      manualPublicCellId: null,
+      updatedAt: '2026-08-31T10:01:00.000Z',
+    };
+    expect(sanitizeDraftForStorage({ id: 'draft-12345678', report })).toMatchObject({ report });
+    expect(sanitizeDraftForStorage({
+      id: 'draft-12345678',
+      pendingMediaCleanupRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      report: { ...report, longitude: 103.8 },
+    })).toEqual({
+      id: 'draft-12345678', notes: '', risk: 'normal',
+      pendingMediaCleanupRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+    });
+  });
+
   it('never persists precise coordinates or access tokens', () => {
     expect(
       sanitizeDraftForStorage({

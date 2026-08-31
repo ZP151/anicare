@@ -66,3 +66,7 @@ export async function cleanupPendingReviewedMediaReferences(): Promise<void> {
 export async function cleanupPendingReviewedMediaForDraft(_draftId: string): Promise<void> {
   return unavailable();
 }
+
+export async function removeReviewedMediaFromDraft(_draftId: string): Promise<void> {
+  return unavailable();
+}
