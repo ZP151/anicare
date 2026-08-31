@@ -73,7 +73,15 @@ select is(
 from expected;
 select has_function(
   'public', 'service_submit_ai_identity_proposal', array['uuid', 'uuid', 'text', 'text', 'jsonb', 'uuid'],
-  'AI candidates use one fixed service-only proposal RPC'
+  'the legacy AI proposal bridge retains its identifiable frozen signature'
+);
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.service_submit_ai_identity_proposal(uuid,uuid,text,text,jsonb,uuid)',
+    'execute'
+  ),
+  'the legacy AI proposal bridge is no longer executable by service_role'
 );
 
 select ok(not has_table_privilege('authenticated', 'public.identity_proposals', 'insert'),
@@ -132,59 +140,6 @@ insert into public.sightings (
   ('00000000-0000-4000-8000-000000001305', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1305'),
   ('00000000-0000-4000-8000-000000001306', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1306'),
   ('00000000-0000-4000-8000-000000001307', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1307');
-
-set local role service_role;
-select set_config('request.jwt.claim.role', 'service_role', true);
-select throws_ok(
-  $$select * from public.service_submit_ai_identity_proposal(
-    '00000000-0000-4000-8000-000000001301',
-    '00000000-0000-4000-8000-000000001200',
-    'cat-embed.v1', 'possible', '["numeric score 0.9"]'::jsonb,
-    '00000000-0000-4000-8000-000000001450')$$,
-  '22023', 'invalid_ai_identity_proposal', 'service AI provenance rejects sensitive reason payloads'
-);
-select throws_ok(
-  $$select * from public.service_submit_ai_identity_proposal(
-    '00000000-0000-4000-8000-000000001301',
-    '00000000-0000-4000-8000-000000001200',
-    null, null, '["similar face and coat"]'::jsonb,
-    '00000000-0000-4000-8000-000000001451')$$,
-  '22023', 'invalid_ai_identity_proposal', 'service AI provenance requires a bounded model version and confidence band'
-);
-select lives_ok(
-  $$select * from public.service_submit_ai_identity_proposal(
-    '00000000-0000-4000-8000-000000001301',
-    '00000000-0000-4000-8000-000000001200',
-    'cat-embed.v1', 'possible', '["similar face and coat"]'::jsonb,
-    '00000000-0000-4000-8000-000000001452')$$,
-  'the trusted service boundary can create a bounded tentative AI candidate'
-);
-select lives_ok(
-  $$select * from public.service_submit_ai_identity_proposal(
-    '00000000-0000-4000-8000-000000001301',
-    '00000000-0000-4000-8000-000000001200',
-    'cat-embed.v1', 'possible', '["similar face and coat"]'::jsonb,
-    '00000000-0000-4000-8000-000000001452')$$,
-  'an exact AI proposal retry succeeds'
-);
-select throws_ok(
-  $$select * from public.service_submit_ai_identity_proposal(
-    '00000000-0000-4000-8000-000000001301',
-    '00000000-0000-4000-8000-000000001200',
-    'cat-embed.v2', 'likely', '["similar face and coat"]'::jsonb,
-    '00000000-0000-4000-8000-000000001452')$$,
-  'P0001', 'idempotency_conflict', 'conflicting AI request reuse fails closed'
-);
-reset role;
-select is(
-  (select concat_ws('|', proposer_id::text, source, model_version, confidence_band, reasons::text)
-     from public.identity_proposals where id = (
-       select proposal_id from private.ai_identity_requests
-       where request_id = '00000000-0000-4000-8000-000000001452'
-     )),
-  'ai_candidate|cat-embed.v1|possible|["similar face and coat"]',
-  'AI candidate storage contains broad bands and safe reasons but no user proposer'
-);
 
 set local role anon;
 select set_config('request.jwt.claim.role', 'anon', true);
@@ -347,18 +302,6 @@ select throws_ok(
     (select id from public.identity_proposals where sighting_id = '00000000-0000-4000-8000-000000001300'),
     'confirm', 'Independent evidence supports this match.', '00000000-0000-4000-8000-000000001502')$$,
   '42501', 'identity_reviewer_recusal_required', 'the proposed animal profile creator must recuse'
-);
-reset role;
-
-set local role authenticated;
-select set_config('request.jwt.claim.role', 'authenticated', true);
-select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000001102', true);
-select throws_ok(
-  $$select * from public.review_identity_proposal(
-    (select id from public.identity_proposals
-      where sighting_id = '00000000-0000-4000-8000-000000001301'),
-    'confirm', 'Independent evidence supports this match.', '00000000-0000-4000-8000-000000001509')$$,
-  '42501', 'identity_reviewer_recusal_required', 'the sighting reporter must recuse from a service proposal'
 );
 reset role;
 
