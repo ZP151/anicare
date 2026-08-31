@@ -991,7 +991,6 @@ select lives_ok(
     review_waited_for_delete boolean := false;
     review_error text;
     side_effect_count bigint;
-    diagnostic_stage text := 'setup-connect';
     local_connection text :=
       'host=' || pg_catalog.host(pg_catalog.inet_server_addr())
       || ' port=' || pg_catalog.current_setting('port')
@@ -1003,11 +1002,9 @@ select lives_ok(
       'task3_review_setup',
       local_connection || ' application_name=task3_review_setup'
     );
-    diagnostic_stage := 'setup-profiles';
     perform extensions.dblink_exec(
       'task3_review_setup', 'set session_replication_role = replica'
     );
-    diagnostic_stage := 'setup-fixture';
     perform extensions.dblink_exec(
       'task3_review_setup',
       $remote$
@@ -1148,7 +1145,6 @@ select lives_ok(
       'task3_account_delete',
       local_connection || ' application_name=task3_account_delete'
     );
-    diagnostic_stage := 'race-connect';
     perform extensions.dblink_connect(
       'task3_evidence_review',
       local_connection || ' application_name=task3_evidence_review'
@@ -1160,7 +1156,6 @@ select lives_ok(
       'task3_evidence_review', 'set statement_timeout = ''12s'''
     );
     perform extensions.dblink_exec('task3_account_delete', 'begin');
-    diagnostic_stage := 'delete-profile';
     perform extensions.dblink_exec(
       'task3_account_delete',
       $remote$
@@ -1168,7 +1163,6 @@ select lives_ok(
          where id = '00000000-0000-4000-8000-000000007000';
       $remote$
     );
-    diagnostic_stage := 'read-pids';
     select remote_pid into delete_pid
       from extensions.dblink(
         'task3_account_delete', 'select pg_catalog.pg_backend_pid()'
@@ -1190,7 +1184,6 @@ select lives_ok(
       'set request.jwt.claim.sub = ''00000000-0000-4000-8000-000000007001'''
     );
 
-    diagnostic_stage := 'send-review';
     perform extensions.dblink_send_query(
       'task3_evidence_review',
       $remote$
@@ -1201,7 +1194,6 @@ select lives_ok(
         );
       $remote$
     );
-    diagnostic_stage := 'observe-review-wait';
     wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
     loop
       if delete_pid = any(pg_catalog.pg_blocking_pids(review_pid)) then
@@ -1215,9 +1207,7 @@ select lives_ok(
       perform pg_catalog.pg_sleep(0.01);
     end loop;
 
-    diagnostic_stage := 'commit-delete';
     perform extensions.dblink_exec('task3_account_delete', 'commit');
-    diagnostic_stage := 'wait-review-completion';
     wait_deadline := pg_catalog.clock_timestamp() + interval '10 seconds';
     while extensions.dblink_is_busy('task3_evidence_review') = 1 loop
       if pg_catalog.clock_timestamp() >= wait_deadline then
@@ -1225,18 +1215,15 @@ select lives_ok(
       end if;
       perform pg_catalog.pg_sleep(0.01);
     end loop;
-    diagnostic_stage := 'collect-review-result';
     perform *
       from extensions.dblink_get_result('task3_evidence_review', false)
         as review_result(
           proposal_id uuid, decision text, status text, animal_id uuid
         );
     review_error := extensions.dblink_error_message('task3_evidence_review');
-    diagnostic_stage := 'disconnect-race';
     perform extensions.dblink_disconnect('task3_account_delete');
     perform extensions.dblink_disconnect('task3_evidence_review');
 
-    diagnostic_stage := 'read-side-effects';
     select remote_count into side_effect_count
       from extensions.dblink(
         'task3_review_setup',
@@ -1257,7 +1244,6 @@ select lives_ok(
         $remote$
       ) as effects(remote_count bigint);
 
-    diagnostic_stage := 'cleanup-fixture';
     perform extensions.dblink_exec(
       'task3_review_setup', 'set session_replication_role = replica'
     );
@@ -1293,7 +1279,6 @@ select lives_ok(
          );
       $remote$
     );
-    diagnostic_stage := 'disconnect-setup';
     perform extensions.dblink_disconnect('task3_review_setup');
 
     if not review_waited_for_delete then
@@ -1335,8 +1320,7 @@ select lives_ok(
       exception when others then null;
       end;
     end if;
-    raise exception 'task3_race_failed_at_%', diagnostic_stage
-      using errcode = 'P0001';
+    raise;
   end
   $main$;
   $orchestrator$,

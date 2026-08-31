@@ -723,7 +723,6 @@ begin
        or evidence_row.media_asset_id is distinct from discovered_evidence.media_asset_id
        or evidence_row.selector_id is null
        or evidence_row.selector_id is distinct from discovered_evidence.selector_id
-       or evidence_row.selected_candidate_rank is null
        or evidence_row.selected_candidate_rank is distinct from discovered_evidence.selected_candidate_rank
        or evidence_row.selected_at is distinct from discovered_evidence.selected_at
        or evidence_row.recipe_version is distinct from discovered_evidence.recipe_version
@@ -779,12 +778,32 @@ begin
        or evidence_row.embedding_contract_version is distinct from job_row.embedding_contract_version
        or evidence_row.identify_contract_version is distinct from job_row.identify_contract_version
        or evidence_row.callback_contract_version is distinct from job_row.callback_contract_version
-       or not exists (
-         select 1
-           from private.identity_assistance_candidates as candidates
-          where candidates.job_id = job_row.id
-            and candidates.rank = evidence_row.selected_candidate_rank
-            and candidates.animal_id = proposal_row.proposed_animal_id
+       or proposal_row.source not in ('ai_candidate', 'new_animal')
+       or (
+         proposal_row.source = 'new_animal'
+         and (
+           proposal_row.proposed_animal_id is not null
+           or evidence_row.selected_candidate_rank is not null
+           or exists (
+             select 1
+               from private.identity_assistance_candidates as candidates
+              where candidates.job_id = job_row.id
+           )
+         )
+       )
+       or (
+         proposal_row.source = 'ai_candidate'
+         and (
+           proposal_row.proposed_animal_id is null
+           or evidence_row.selected_candidate_rank is null
+           or not exists (
+             select 1
+               from private.identity_assistance_candidates as candidates
+              where candidates.job_id = job_row.id
+                and candidates.rank = evidence_row.selected_candidate_rank
+                and candidates.animal_id = proposal_row.proposed_animal_id
+           )
+         )
        ) then
       raise exception 'identity_proposal_not_actionable' using errcode = 'P0001';
     end if;
