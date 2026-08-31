@@ -907,6 +907,18 @@ insert into private.identity_assistance_jobs (
   pg_catalog.now() + interval '2 minutes', pg_catalog.now()
 );
 select pg_catalog.set_config(
+  'private.identity_assistance_candidate_writer',
+  '00000000-0000-4000-8000-000000008050', true
+);
+insert into private.identity_assistance_candidates (
+  job_id, rank, animal_id, confidence_band, reason_codes
+) values (
+  '00000000-0000-4000-8000-000000008050', 1,
+  '00000000-0000-4000-8000-000000006501', 'likely',
+  array['face_pattern_similar']::private.identity_assistance_reason_code[]
+);
+select pg_catalog.set_config('private.identity_assistance_candidate_writer', '', true);
+select pg_catalog.set_config(
   'private.identity_assistance_job_writer',
   '00000000-0000-4000-8000-000000008050', true
 );
@@ -945,8 +957,8 @@ insert into private.identity_proposal_evidence (
 select is(
   (select pg_catalog.count(*) from private.identity_assistance_candidates
     where job_id = '00000000-0000-4000-8000-000000008050'),
-  0::bigint,
-  'new-animal evidence has no selected candidate row'
+  1::bigint,
+  'new-animal evidence preserves returned candidates without selecting one'
 );
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
