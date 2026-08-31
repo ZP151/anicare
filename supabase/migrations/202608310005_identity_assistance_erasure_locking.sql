@@ -685,6 +685,8 @@ begin
     if animal_creator_id is distinct from discovered_animal_creator_id then
       raise exception 'identity_proposal_not_actionable' using errcode = 'P0001';
     end if;
+  elsif proposal_row.source <> 'new_animal' and has_evidence then
+    raise exception 'identity_proposal_not_actionable' using errcode = 'P0001';
   elsif proposal_row.source <> 'new_animal' then
     raise exception 'identity_animal_not_available' using errcode = 'P0001';
   end if;
