@@ -2,9 +2,18 @@ import { z } from 'zod';
 
 export const MAX_SIGHTING_SUBMISSION_BYTES = 64 * 1024;
 
-const createSubmissionSchema = z.object({
+const deviceOnceSubmissionSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
+  occurredAt: z.iso.datetime({ offset: true }),
+  risk: z.enum(['normal', 'sensitive', 'critical']).default('normal'),
+  traits: z.record(z.string(), z.unknown()).default({}),
+  notes: z.string().trim().max(2000).nullable().default(null),
+  clientDedupeKey: z.string().min(8).max(160),
+}).strict();
+
+const manualAreaSubmissionSchema = z.object({
+  manualPublicCellId: z.string().min(1).max(64),
   occurredAt: z.iso.datetime({ offset: true }),
   risk: z.enum(['normal', 'sensitive', 'critical']).default('normal'),
   traits: z.record(z.string(), z.unknown()).default({}),
@@ -31,7 +40,9 @@ const sightingSubmissionResponseSchema = z.object({
   requestId: z.string().uuid(),
 }).strict();
 
-export type CreateSightingSubmission = z.infer<typeof createSubmissionSchema>;
+export type DeviceOnceSightingSubmission = z.infer<typeof deviceOnceSubmissionSchema>;
+export type ManualAreaSightingSubmission = z.infer<typeof manualAreaSubmissionSchema>;
+export type CreateSightingSubmission = DeviceOnceSightingSubmission | ManualAreaSightingSubmission;
 export type RecoverSightingSubmission = z.infer<typeof recoverySubmissionSchema>;
 export type SightingSubmission = CreateSightingSubmission | RecoverSightingSubmission;
 export type StoredSightingSubmission = z.infer<typeof storedSightingSubmissionSchema>;
@@ -43,7 +54,7 @@ export type SightingSubmissionHandlers<T> = Readonly<{
 }>;
 
 export function parseSightingSubmission(value: unknown): SightingSubmission {
-  return z.union([createSubmissionSchema, recoverySubmissionSchema]).parse(value);
+  return z.union([deviceOnceSubmissionSchema, manualAreaSubmissionSchema, recoverySubmissionSchema]).parse(value);
 }
 
 export function executeSightingSubmission<T>(

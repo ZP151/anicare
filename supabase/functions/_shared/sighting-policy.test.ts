@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { prepareSightingRecord } from './sighting-policy.js';
+import { prepareManualSightingRecord, prepareSightingRecord } from './sighting-policy.js';
 
 describe('prepareSightingRecord', () => {
   const base = {
@@ -27,5 +27,27 @@ describe('prepareSightingRecord', () => {
     expect(prepareSightingRecord({ ...base, risk: 'sensitive' }).visibleAt).toBe(
       '2026-08-27T08:00:00.000Z',
     );
+  });
+
+  it('gives a valid manual public cell the same bucket and safety policy as device location', () => {
+    expect(prepareManualSightingRecord({
+      publicCellId: '89652636d87ffff',
+      occurredAt: base.occurredAt,
+      risk: base.risk,
+    })).toEqual(prepareSightingRecord(base));
+  });
+
+  it.each([
+    ['a malformed H3 value', 'not-an-h3-cell'],
+    ['a non-canonical uppercase H3 value', '89652636D87FFFF'],
+    ['a non-canonical zero-prefixed H3 value', '089652636d87ffff'],
+    ['a non-public H3 resolution', '88652636d9fffff'],
+    ['an H3 cell centered outside Singapore', '8928308280fffff'],
+  ])('rejects %s for manual submission', (_reason, publicCellId) => {
+    expect(() => prepareManualSightingRecord({
+      publicCellId,
+      occurredAt: base.occurredAt,
+      risk: base.risk,
+    })).toThrow('invalid_manual_public_cell');
   });
 });

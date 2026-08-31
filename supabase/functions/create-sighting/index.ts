@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { encryptPreciseLocation } from '../_shared/encryption.ts';
-import { prepareSightingRecord } from '../_shared/sighting-policy.ts';
+import { prepareManualSightingRecord, prepareSightingRecord } from '../_shared/sighting-policy.ts';
 import {
   executeSightingSubmission,
   ownedStoredSightingSubmission,
@@ -84,44 +84,74 @@ Deno.serve(async (request) => {
       }
     },
     create: async (creation) => {
-      const encryptionKey = Deno.env.get('PRECISE_LOCATION_ENCRYPTION_KEY');
-      if (!encryptionKey) {
-        console.error('create-sighting is missing required server configuration');
-        return json({ error: 'service_unavailable' }, 503);
-      }
-      const keyBytes = decodeBase64Key(encryptionKey);
-      if (keyBytes.byteLength !== 32) {
-        console.error('PRECISE_LOCATION_ENCRYPTION_KEY must decode to 32 bytes');
-        return json({ error: 'service_unavailable' }, 503);
-      }
+      let sightingId: string | null;
+      let insertError: { code?: string } | null;
+      if ('manualPublicCellId' in creation) {
+        let publicRecord;
+        try {
+          publicRecord = prepareManualSightingRecord({
+            publicCellId: creation.manualPublicCellId,
+            occurredAt: creation.occurredAt,
+            risk: creation.risk,
+          });
+        } catch {
+          return json({ error: 'invalid_request' }, 400);
+        }
+        ({ data: sightingId, error: insertError } = await admin.rpc(
+          'create_sighting_in_public_cell',
+          {
+            p_reporter_id: userData.user.id,
+            p_occurred_at: creation.occurredAt,
+            p_public_cell_id: publicRecord.publicCellId,
+            p_time_bucket: publicRecord.timeBucket,
+            p_risk: creation.risk,
+            p_visibility: publicRecord.visibility,
+            p_visible_at: publicRecord.visibleAt,
+            p_traits: creation.traits,
+            p_notes: creation.notes,
+            p_client_dedupe_key: creation.clientDedupeKey,
+            p_request_id: requestId,
+          },
+        ));
+      } else {
+        const encryptionKey = Deno.env.get('PRECISE_LOCATION_ENCRYPTION_KEY');
+        if (!encryptionKey) {
+          console.error('create-sighting is missing required server configuration');
+          return json({ error: 'service_unavailable' }, 503);
+        }
+        const keyBytes = decodeBase64Key(encryptionKey);
+        if (keyBytes.byteLength !== 32) {
+          console.error('PRECISE_LOCATION_ENCRYPTION_KEY must decode to 32 bytes');
+          return json({ error: 'service_unavailable' }, 503);
+        }
 
-      const publicRecord = prepareSightingRecord(creation);
-      const encrypted = await encryptPreciseLocation(
-        { latitude: creation.latitude, longitude: creation.longitude },
-        keyBytes,
-      );
-
-      const { data: sightingId, error: insertError } = await admin.rpc(
-        'create_sighting_with_location',
-        {
-          p_reporter_id: userData.user.id,
-          p_occurred_at: creation.occurredAt,
-          p_public_cell_id: publicRecord.publicCellId,
-          p_time_bucket: publicRecord.timeBucket,
-          p_risk: creation.risk,
-          p_visibility: publicRecord.visibility,
-          p_visible_at: publicRecord.visibleAt,
-          p_traits: creation.traits,
-          p_notes: creation.notes,
-          p_client_dedupe_key: creation.clientDedupeKey,
-          p_ciphertext: toPostgresBytea(encrypted.ciphertext),
-          p_nonce: toPostgresBytea(encrypted.nonce),
-          p_request_id: requestId,
-        },
-      );
+        const publicRecord = prepareSightingRecord(creation);
+        const encrypted = await encryptPreciseLocation(
+          { latitude: creation.latitude, longitude: creation.longitude },
+          keyBytes,
+        );
+        ({ data: sightingId, error: insertError } = await admin.rpc(
+          'create_sighting_with_location',
+          {
+            p_reporter_id: userData.user.id,
+            p_occurred_at: creation.occurredAt,
+            p_public_cell_id: publicRecord.publicCellId,
+            p_time_bucket: publicRecord.timeBucket,
+            p_risk: creation.risk,
+            p_visibility: publicRecord.visibility,
+            p_visible_at: publicRecord.visibleAt,
+            p_traits: creation.traits,
+            p_notes: creation.notes,
+            p_client_dedupe_key: creation.clientDedupeKey,
+            p_ciphertext: toPostgresBytea(encrypted.ciphertext),
+            p_nonce: toPostgresBytea(encrypted.nonce),
+            p_request_id: requestId,
+          },
+        ));
+      }
 
       if (insertError) {
-        console.error('create_sighting_with_location failed', {
+        console.error('create-sighting RPC failed', {
           requestId,
           code: insertError.code,
         });

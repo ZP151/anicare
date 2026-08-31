@@ -37,6 +37,39 @@ describe('sighting submission contract', () => {
     })).toThrow();
   });
 
+  it('accepts an exact manual coarse-area creation shape', () => {
+    expect(parseSightingSubmission({
+      manualPublicCellId: '89652636d87ffff',
+      occurredAt: '2026-08-31T08:00:00.000Z',
+      risk: 'normal',
+      traits: {},
+      notes: null,
+      clientDedupeKey: 'draft-12345678',
+    })).toEqual({
+      manualPublicCellId: '89652636d87ffff',
+      occurredAt: '2026-08-31T08:00:00.000Z',
+      risk: 'normal',
+      traits: {},
+      notes: null,
+      clientDedupeKey: 'draft-12345678',
+    });
+  });
+
+  it.each([
+    ['mixed precise and manual modes', { ...createSubmission, manualPublicCellId: '89652636d87ffff' }],
+    ['a partial precise mode', { ...createSubmission, longitude: undefined }],
+    ['a manual mode with a caller-controlled visibility', {
+      manualPublicCellId: '89652636d87ffff', occurredAt: '2026-08-31T08:00:00.000Z',
+      risk: 'normal', traits: {}, notes: null, clientDedupeKey: 'draft-12345678', visibility: 'public',
+    }],
+    ['a manual mode with an unknown key', {
+      manualPublicCellId: '89652636d87ffff', occurredAt: '2026-08-31T08:00:00.000Z',
+      risk: 'normal', traits: {}, notes: null, clientDedupeKey: 'draft-12345678', latitude: 1.3521,
+    }],
+  ])('rejects %s', (_reason, payload) => {
+    expect(() => parseSightingSubmission(payload)).toThrow();
+  });
+
   it('accepts only ASCII spaces between the bearer scheme and token', () => {
     expect(strictBearerToken(new Request('https://example.invalid', {
       headers: { authorization: 'Bearer access-token' },
