@@ -288,6 +288,9 @@ test('captures startup/status, masks status values, writes only custom Edge env,
   }
   const statusCall = processes.calls.find(({ stage }) => stage === 'status');
   assert.deepEqual(statusCall.args, ['status', '-o', 'env']);
+  const pgtapCall = processes.calls.find(({ stage }) => stage === 'pgtap');
+  assert.deepEqual(pgtapCall.args, ['test', 'db']);
+  assert.equal(pgtapCall.options.timeoutMs, 10 * 60_000);
   const stopCall = processes.calls.find(({ stage }) => stage === 'stop');
   assert.deepEqual(stopCall.args, ['stop', '--no-backup', '--project-id', 'animalhelper']);
   assert.equal(processes.calls.some(({ args = [] }) => args.includes('--all')), false);
