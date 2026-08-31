@@ -168,7 +168,8 @@ begin
 
   if asset.storage_bucket = 'media-staging' then
     if linked_upload_count <> 1 or finalized_upload_count <> 1 then
-      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable_upload_count'
+        using errcode = 'P0001';
     end if;
 
     select uploads.*
@@ -191,7 +192,8 @@ begin
        or upload_job.height is distinct from asset.height
        or upload_job.detector_versions is distinct from asset.detector_versions
        or upload_job.finalized_at is null then
-      raise exception 'media_deletion_unavailable' using errcode = 'P0001';
+      raise exception 'media_deletion_unavailable_upload_binding'
+        using errcode = 'P0001';
     end if;
   end if;
 
@@ -215,7 +217,8 @@ begin
 
   if revalidated_job_ids is distinct from affected_job_ids
      or revalidated_proposal_ids is distinct from affected_proposal_ids then
-    raise exception 'media_deletion_unavailable' using errcode = 'P0001';
+    raise exception 'media_deletion_unavailable_relationship_revalidation'
+      using errcode = 'P0001';
   end if;
 
   -- Tentative AI-selected work is withdrawn, not rejected. Deleting the
