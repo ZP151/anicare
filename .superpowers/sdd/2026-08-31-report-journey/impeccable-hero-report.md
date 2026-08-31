@@ -24,20 +24,31 @@ Scope was limited to the approved Sheltered Link Atlas Nearby first viewport.
 - Green: the same command passed 8 tests after removing that label.
 - `pnpm typecheck` passed.
 
-## Hero-gate blocker
+## DPR-equivalent capture and gate result
 
-No hero record or advance was run. The available in-app web capture surface
-does not produce a usable comp frame in this worktree:
+The capture workaround used an aspect-equivalent 405x876 CSS viewport. A
+non-full-page camera clip at `{ x: 0, y: 0, width: 405, height: 876 }` produced
+one complete 405x876 raw hero: atlas, privacy banner, sheet, and tab bar were
+all present with no blank space or duplicate fixed elements. The raw image was
+resampled once with high-quality bicubic interpolation to exactly 853x1844 and
+encoded as a real PNG at
+`apps/mobile/.impeccable/review/hero-repro.png`.
 
-- With a requested 853x1844 viewport, `tab.screenshot({ fullPage: false })`
-  emitted 853x876 JPEG data even when the destination had a PNG filename.
-- With `fullPage: true`, it emitted 853x1844, but rasterized the app only into
-  the left 568px; pixels at x=600 and x=800 were white while the browser DOM
-  reported `innerWidth`, document width, and root width all as 853px.
-- Repeating at 427x922 produced the same two-thirds-width raster and duplicate
-  tab labels at the bottom of the capture.
+`build-phase.mjs record hero` read that capture at 76% and named the protected
+atlas text regions as missing because the approved comp contains exact-looking
+block and bus-stop labels. One permitted structural rebase moved the generic
+labels to the corresponding atlas anchors without introducing the prohibited
+location data. `build-phase.mjs advance` still failed:
 
-The converted `hero-repro.png` is syntactically a 853x1844 PNG but is not
-valid visual evidence, so it must not be used for `build-phase.mjs record
-hero` or `advance`. A reliable browser/device screenshot surface is required
-to close the gate.
+- `atlas-zone-north` contradicted at 42%; its comp crop is `BLK 132`.
+- `atlas-zone-west` contradicted at 43%; its comp crop is `BLK 134`.
+- `atlas-edge-label` is the comp's bus-stop label.
+- The detector also reports the coarse-atlas plate clipped and the privacy
+  title missing, while the visually complete capture retains truthful product
+  copy and the required generic privacy-safe labels.
+
+No further edit was made: reintroducing exact blocks, a bus stop, routes, or
+station data would violate the binding product privacy contract. The gate stays
+open at HERO; no sections work was started. The raw JPEG is temporary and is
+removed after this validation; the final PNG, hero-diff report, and build state
+are the retained evidence.
