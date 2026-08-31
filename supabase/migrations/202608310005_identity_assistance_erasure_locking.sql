@@ -346,7 +346,7 @@ begin
                then 'deletion_pending'::private.media_upload_job_status
              else status
            end,
-           next_cleanup_at = invalidated_at,
+           next_cleanup_at = pg_catalog.now(),
            cleanup_claimed_at = null,
            cleanup_claim_id = null,
            updated_at = invalidated_at
