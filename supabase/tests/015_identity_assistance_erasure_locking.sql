@@ -856,6 +856,130 @@ select is(
   'authorized replay and later revoked replay retain one audit row'
 );
 
+insert into public.sightings (
+  id, reporter_id, occurred_at, public_cell_id, time_bucket, risk,
+  visibility, client_dedupe_key
+) values (
+  '00000000-0000-4000-8000-000000008020',
+  '00000000-0000-4000-8000-000000006003', pg_catalog.now(),
+  '8928308280fffff', 'morning', 'normal', 'limited',
+  'task3-evidence-new-animal-review'
+);
+insert into public.media_assets (
+  id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
+  redaction_confirmed_at, training_eligible, client_media_id, byte_length,
+  width, height, recipe_version, detector_versions, status, reviewed_at
+) values (
+  '00000000-0000-4000-8000-000000008030',
+  '00000000-0000-4000-8000-000000008020',
+  '00000000-0000-4000-8000-000000006003', 'media-staging',
+  'jobs/00000000-0000-4000-8000-000000008040.jpg', repeat('b', 64),
+  pg_catalog.now(), false, 'task3-evidence-new-animal', 4096, 512, 512,
+  'jpeg-srgb-2048-q88.v1',
+  '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+  'quarantined', pg_catalog.now()
+);
+insert into private.media_upload_jobs (
+  id, uploader_id, sighting_id, media_id, sha256, byte_length, width, height,
+  recipe_version, detector_versions, confirmed_at_local, object_path, status,
+  reserved_at, reservation_expires_at, upload_token_expires_at,
+  next_cleanup_at, finalized_at, media_asset_id
+) values (
+  '00000000-0000-4000-8000-000000008040',
+  '00000000-0000-4000-8000-000000006003',
+  '00000000-0000-4000-8000-000000008020', 'task3-evidence-new-animal',
+  repeat('b', 64), 4096, 512, 512, 'jpeg-srgb-2048-q88.v1',
+  '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,
+  pg_catalog.now(), 'jobs/00000000-0000-4000-8000-000000008040.jpg',
+  'finalized', pg_catalog.now(), pg_catalog.now() + interval '10 minutes',
+  pg_catalog.now() + interval '1 hour', 'infinity'::timestamptz,
+  pg_catalog.now(), '00000000-0000-4000-8000-000000008030'
+);
+insert into private.identity_assistance_jobs (
+  id, sighting_id, media_asset_id, requester_id, status, notice_version,
+  input_sha256, attempt_count, lease_id, lease_expires_at, processing_at
+) values (
+  '00000000-0000-4000-8000-000000008050',
+  '00000000-0000-4000-8000-000000008020',
+  '00000000-0000-4000-8000-000000008030',
+  '00000000-0000-4000-8000-000000006003', 'processing', 'notice.v1',
+  repeat('b', 64), 1, '00000000-0000-4000-8000-000000008055',
+  pg_catalog.now() + interval '2 minutes', pg_catalog.now()
+);
+select pg_catalog.set_config(
+  'private.identity_assistance_job_writer',
+  '00000000-0000-4000-8000-000000008050', true
+);
+update private.identity_assistance_jobs
+   set status = 'succeeded', lease_id = null, lease_expires_at = null,
+       model_version = 'model.v1',
+       callback_contract_version = 'identify-callback.v1',
+       new_cat_recommended = true, completed_at = pg_catalog.now(),
+       selected_at = pg_catalog.now()
+ where id = '00000000-0000-4000-8000-000000008050';
+select pg_catalog.set_config('private.identity_assistance_job_writer', '', true);
+insert into public.identity_proposals (
+  id, sighting_id, proposed_animal_id, proposer_id, source, status,
+  model_version, confidence_band, reasons
+) values (
+  '00000000-0000-4000-8000-000000008070',
+  '00000000-0000-4000-8000-000000008020', null,
+  '00000000-0000-4000-8000-000000006004', 'new_animal', 'tentative',
+  null, null, '[]'::jsonb
+);
+insert into private.identity_proposal_evidence (
+  proposal_id, job_id, selected_candidate_rank, media_asset_id,
+  recipe_version, crop_contract_version, embedding_contract_version,
+  identify_contract_version, model_version, callback_contract_version,
+  selector_id, selected_at
+) values (
+  '00000000-0000-4000-8000-000000008070',
+  '00000000-0000-4000-8000-000000008050', null,
+  '00000000-0000-4000-8000-000000008030',
+  'jpeg-srgb-2048-q88.v1', 'crop.v1', 'embedding.v1', 'identify.v1',
+  'model.v1', 'identify-callback.v1',
+  '00000000-0000-4000-8000-000000006004',
+  (select selected_at from private.identity_assistance_jobs
+    where id = '00000000-0000-4000-8000-000000008050')
+);
+select is(
+  (select pg_catalog.count(*) from private.identity_assistance_candidates
+    where job_id = '00000000-0000-4000-8000-000000008050'),
+  0::bigint,
+  'new-animal evidence has no selected candidate row'
+);
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006001', true);
+select lives_ok(
+  $$select * from public.review_identity_proposal(
+      '00000000-0000-4000-8000-000000008070', 'confirm',
+      'Independent evidence supports a new community cat outcome.',
+      '00000000-0000-4000-8000-000000008080'
+    )$$,
+  'valid evidence-backed new-animal work remains reviewable'
+);
+reset role;
+select results_eq(
+  $$select proposals.status::text collate "C",
+           reviews.decision collate "C", sightings.animal_id,
+           (select pg_catalog.count(*) from private.identity_requests
+             where request_id = '00000000-0000-4000-8000-000000008080'),
+           (select pg_catalog.count(*) from audit.access_audit
+             where request_id = '00000000-0000-4000-8000-000000008080')
+      from public.identity_proposals as proposals
+      join public.sightings as sightings on sightings.id = proposals.sighting_id
+      left join public.match_reviews as reviews
+        on reviews.proposal_id = proposals.id
+       and reviews.request_id = '00000000-0000-4000-8000-000000008080'
+     where proposals.id = '00000000-0000-4000-8000-000000008070'$$,
+  $$values (
+      'confirmed'::text collate "C", 'confirm'::text collate "C", null::uuid,
+      1::bigint, 1::bigint
+    )$$,
+  'evidence-backed new-animal confirmation writes one decision and no animal link'
+);
+
 set local statement_timeout = '45s';
 select lives_ok(
   $orchestrator$
