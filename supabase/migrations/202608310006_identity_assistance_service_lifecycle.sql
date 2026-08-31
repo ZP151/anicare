@@ -40,6 +40,7 @@ declare
   claimed_lease_ids uuid[] := '{}'::uuid[];
   claimed_lease_expires_at timestamptz[] := '{}'::timestamptz[];
   claimed_attempts integer[] := '{}'::integer[];
+  claimable_job_ids uuid[] := '{}'::uuid[];
   claimed_count integer := 0;
   replay_count integer;
   ordinal integer;
@@ -319,16 +320,30 @@ begin
     end if;
   end loop;
 
+  select coalesce(
+           pg_catalog.array_agg(
+             claimable.id order by claimable.requested_at, claimable.id
+           ),
+           '{}'::uuid[]
+         )
+    into claimable_job_ids
+    from (
+      select jobs.id, jobs.requested_at
+        from private.identity_assistance_jobs as jobs
+       where jobs.id = any(pool_job_ids)
+         and jobs.status = 'requested'::private.identity_assistance_job_status
+         and jobs.attempt_count < 3
+       order by jobs.requested_at, jobs.id
+       limit p_limit
+       for update of jobs skip locked
+    ) as claimable;
+
   processing_now := pg_catalog.clock_timestamp();
   for job_row in
     select jobs.*
       from private.identity_assistance_jobs as jobs
-     where jobs.id = any(pool_job_ids)
-       and jobs.status = 'requested'::private.identity_assistance_job_status
-       and jobs.attempt_count < 3
+     where jobs.id = any(claimable_job_ids)
      order by jobs.requested_at, jobs.id
-     limit p_limit
-     for update of jobs skip locked
   loop
     select (
       (select pg_catalog.count(*)
@@ -709,11 +724,6 @@ begin
       0
     )
   );
-  authoritative_now := pg_catalog.clock_timestamp();
-  if p_cutoff_time > authoritative_now then
-    raise exception 'invalid_identity_assistance_cleanup' using errcode = '22023';
-  end if;
-
   select requests.*
     into request_row
     from private.identity_assistance_service_requests as requests
@@ -724,6 +734,11 @@ begin
       raise exception 'idempotency_conflict' using errcode = 'P0001';
     end if;
     return;
+  end if;
+
+  authoritative_now := pg_catalog.clock_timestamp();
+  if p_cutoff_time > authoritative_now then
+    raise exception 'invalid_identity_assistance_cleanup' using errcode = '22023';
   end if;
 
   insert into private.identity_assistance_service_requests (
@@ -830,8 +845,10 @@ begin
         from private.identity_assistance_jobs as jobs
        where jobs.id = any(discovered_job_ids)
        order by jobs.id
-       for update of jobs skip locked
+      for update of jobs skip locked
     ) as locked;
+
+  authoritative_now := pg_catalog.clock_timestamp();
 
   for cleanup_row in
     with eligible as (
