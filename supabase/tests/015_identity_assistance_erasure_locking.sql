@@ -856,60 +856,6 @@ select is(
   'authorized replay and later revoked replay retain one audit row'
 );
 
-insert into public.media_assets (
-  id, uploader_id, storage_bucket, storage_path, sha256,
-  redaction_confirmed_at, training_eligible
-) values (
-  '00000000-0000-4000-8000-000000006299',
-  '00000000-0000-4000-8000-000000006005', 'public-media',
-  '00000000-0000-4000-8000-000000006005/task3-exception.jpg', repeat('f', 64),
-  pg_catalog.now(), false
-);
-create function pg_temp.fail_task3_account_erasure()
-returns trigger
-language plpgsql
-set search_path = pg_catalog
-as $failure$
-begin
-  raise exception 'task3_erasure_fixture_failure' using errcode = 'P0001';
-end;
-$failure$;
-create trigger task3_account_erasure_fixture_failure
-before update on public.media_assets
-for each row
-when (old.uploader_id = '00000000-0000-4000-8000-000000006005'::uuid)
-execute function pg_temp.fail_task3_account_erasure();
-select set_config('private.account_erasure_actor', 'task3-exception-scope', true);
-select set_config('private.identity_assistance_job_writer', 'task3-exception-job', true);
-select set_config('private.identity_assistance_candidate_writer', 'task3-exception-candidate', true);
-select throws_ok(
-  $$delete from public.user_profiles
-      where id = '00000000-0000-4000-8000-000000006005'$$,
-  'P0001', 'task3_erasure_fixture_failure',
-  'fixture forces the account-erasure exception path'
-);
-drop trigger task3_account_erasure_fixture_failure on public.media_assets;
-select is(
-  current_setting('private.account_erasure_actor', true),
-  'task3-exception-scope',
-  'exceptional account erasure restores the caller erasure context'
-);
-select is(
-  current_setting('private.identity_assistance_job_writer', true),
-  'task3-exception-job',
-  'exceptional account erasure restores the caller job-writer context'
-);
-select is(
-  current_setting('private.identity_assistance_candidate_writer', true),
-  'task3-exception-candidate',
-  'exceptional account erasure restores the caller candidate-writer context'
-);
-select ok(
-  exists (select 1 from public.user_profiles
-    where id = '00000000-0000-4000-8000-000000006005'),
-  'exceptional account erasure rolls back the profile deletion'
-);
-
 set local statement_timeout = '45s';
 select lives_ok(
   $orchestrator$
@@ -1273,6 +1219,63 @@ select lives_ok(
   'review waits on source profile deletion then revalidates and commits no decision'
 );
 set local statement_timeout = 0;
+
+-- Run the DDL-backed exception fixture after the remote race. CREATE TRIGGER
+-- keeps a table lock until this pgTAP transaction rolls back, which would
+-- otherwise prevent the remote fixture from inserting its media row.
+insert into public.media_assets (
+  id, uploader_id, storage_bucket, storage_path, sha256,
+  redaction_confirmed_at, training_eligible
+) values (
+  '00000000-0000-4000-8000-000000006299',
+  '00000000-0000-4000-8000-000000006005', 'public-media',
+  '00000000-0000-4000-8000-000000006005/task3-exception.jpg', repeat('f', 64),
+  pg_catalog.now(), false
+);
+create function pg_temp.fail_task3_account_erasure()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $failure$
+begin
+  raise exception 'task3_erasure_fixture_failure' using errcode = 'P0001';
+end;
+$failure$;
+create trigger task3_account_erasure_fixture_failure
+before update on public.media_assets
+for each row
+when (old.uploader_id = '00000000-0000-4000-8000-000000006005'::uuid)
+execute function pg_temp.fail_task3_account_erasure();
+select set_config('private.account_erasure_actor', 'task3-exception-scope', true);
+select set_config('private.identity_assistance_job_writer', 'task3-exception-job', true);
+select set_config('private.identity_assistance_candidate_writer', 'task3-exception-candidate', true);
+select throws_ok(
+  $$delete from public.user_profiles
+      where id = '00000000-0000-4000-8000-000000006005'$$,
+  'P0001', 'task3_erasure_fixture_failure',
+  'fixture forces the account-erasure exception path'
+);
+drop trigger task3_account_erasure_fixture_failure on public.media_assets;
+select is(
+  current_setting('private.account_erasure_actor', true),
+  'task3-exception-scope',
+  'exceptional account erasure restores the caller erasure context'
+);
+select is(
+  current_setting('private.identity_assistance_job_writer', true),
+  'task3-exception-job',
+  'exceptional account erasure restores the caller job-writer context'
+);
+select is(
+  current_setting('private.identity_assistance_candidate_writer', true),
+  'task3-exception-candidate',
+  'exceptional account erasure restores the caller candidate-writer context'
+);
+select ok(
+  exists (select 1 from public.user_profiles
+    where id = '00000000-0000-4000-8000-000000006005'),
+  'exceptional account erasure rolls back the profile deletion'
+);
 
 select * from finish();
 rollback;
