@@ -201,15 +201,33 @@ Impeccable, animation, accessibility and visual-regression reviews are recorded.
 
 - Strict crop, embedding, callback and public-result contracts, synthetic
   evaluation fixtures and a fail-closed internal identify route are implemented.
-- The database identity control plane now separates contributor manual/new-cat
-  proposals from service-only AI provenance, denies direct authenticated
-  mutations, enforces independent reviewer recusal, records idempotent
-  append-only decisions and atomically links a sighting only after confirmation.
-- The dormant private identity-assistance job, candidate, bounded-ledger,
-  event/access-aggregation and proposal-evidence schema foundation exists with
-  no direct table access. Contributor request/status/cancel/select RPCs,
-  broker claim/complete/fail/cleanup RPCs, lease-bound media fetch,
-  erasure/concurrency integration and the callback adapter remain open.
+- The database identity control plane separates contributor manual/new-cat
+  proposals, denies direct authenticated mutations, enforces independent
+  reviewer recusal, records idempotent append-only decisions and atomically
+  links a sighting only after confirmation. The legacy direct-service AI
+  proposal bridge is permanently disabled.
+- The completed database-only identity-assistance slice now has guarded job
+  state, media/account/animal invalidation and erasure integration, a claim
+  with a two-minute lease, retry/failure and cleanup paths, bounded atomic
+  completion, and a permanently retired legacy service proposal bridge. Its
+  completion path stores bounded candidate sets privately; it does not create
+  an `identity_proposals` row.
+- `service_submit_ai_identity_proposal` is permanently disabled. A future
+  authenticated owner-bound selection is the sole AI-result bridge to a
+  tentative `identity_proposals` row, and `review_identity_proposal` remains
+  the authoritative identity decision. This completed database slice is not
+  A1 product completion, A2, live recognition, broker media access, or
+  scheduler deployment.
+- Authenticated owner-bound contributor request/status/cancel/select RPCs,
+  worker credentials and Edge broker, lease-bound media authorization/fetch,
+  a strict callback adapter, scheduler deployment, hosted concurrency/Storage
+  evidence and Hosted Gate 2B remain open. Mobile/admin A2, dataset/model/ANN
+  A3 and live inference, legal approval, and Singapore pilot readiness also
+  remain open.
+- After this database checkpoint, stop adding backend control-plane surfaces
+  and prioritize `Report completion/recovery/My Reports → Following →
+  Profile/account/privacy center`. Public AI UI, live training, and automatic
+  identity confirmation remain prohibited.
 - No model weights, labelled dataset, ANN, queue, real callback, automatic
   detection or production identity/accuracy result exists. AI cannot confirm an
   animal identity.
@@ -244,12 +262,14 @@ and real post-token-expiry media cleanup/replay are outside Gate 2A.
 
 ## Prioritised next backlog
 
-1. Approve the five-tab function/state inventory and one non-generic mobile
-   visual direction, then implement Sprint 3A/3B in vertical journeys rather
-   than accumulating more isolated shell pages.
-2. Approve the provenance-bound AI identity-assistance written specification
-   and implement its disabled-by-default A1 data/service control plane; do not
-   expose A2 mobile/admin UI before the Sprint 3A/3B gates are met.
+1. Freeze additional backend control-plane work and complete the connected
+   product sequence: `Report completion/recovery/My Reports → Following →
+   Profile/account/privacy center`, within the approved five-tab function/state
+   inventory and visual direction.
+2. Keep public AI UI, live training, and automatic identity confirmation
+   prohibited. Do not expose mobile/admin A2 before the Sprint 3A/3B gates and
+   all explicitly open owner, broker, media, scheduler, and hosted gates are
+   independently implemented and verified.
 3. Run hosted Supabase Gate 2B and native end-to-end media checks, including
    true post-token-expiry cleanup/replay, then finish non-media two-session
    concurrency verification.

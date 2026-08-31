@@ -92,12 +92,29 @@ vendor, database, ANN index, network callback, or deployment is included.
 
 ## Persistence mapping and omissions
 
-An identify job is associated with `media_assets.id` and candidate proposals
-are persisted as tentative rows in `identity_proposals`. Human decisions belong
-in `match_reviews`; that review is the only authoritative identity outcome.
-The AI contract does not expose storage paths, exact locations, source media,
-vectors, scores, reporter identity, or model internals through any of these
-projections.
+An identity-assistance job is associated with `media_assets.id`. The completed
+database path persists bounded candidate sets only in private identity-assistance
+tables; it never creates an `identity_proposals` row. A future authenticated
+owner-bound selection is the sole AI-result bridge to a tentative
+`identity_proposals` row. `review_identity_proposal` remains the authoritative
+identity decision. The deprecated
+`service_submit_ai_identity_proposal(uuid,uuid,text,text,jsonb,uuid)` bridge is
+permanently disabled and is not a fallback path.
+
+The implemented database slice is limited to guarded job state,
+media/account/animal invalidation and erasure integration, claim with a
+two-minute lease, retry/failure and cleanup, bounded atomic completion, and
+retirement of that legacy bridge. It does not make A1 or A2 complete, enable
+live recognition, broker media access, or establish scheduler deployment.
+
+Authenticated owner-bound contributor request/status/cancel/select RPCs,
+worker credentials and an Edge broker, lease-bound media authorization/fetch,
+a strict callback adapter, scheduler deployment, hosted concurrency/Storage
+evidence and Hosted Gate 2B, mobile/admin A2, dataset/model/ANN A3 and live
+inference, legal approval, and Singapore pilot readiness remain explicitly
+open. The feature flag stays off. The AI contract does not expose storage paths,
+exact locations, source media, vectors, scores, reporter identity, or model
+internals through any projection.
 
 ## Synthetic evaluation gate
 
