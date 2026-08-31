@@ -205,7 +205,6 @@ select ok(
 from roles cross join tables cross join privileges;
 
 -- Authentication is independent for each RPC and precedes scalar/table work.
-set local role authenticated;
 select pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok(
   $$select * from public.service_claim_identity_assistance_jobs(null, null, null)$$,
@@ -224,9 +223,6 @@ select throws_ok(
   '42501', 'service_role_required',
   'cleanup independently requires the service role before scalar validation'
 );
-reset role;
-
-set local role service_role;
 select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 select throws_ok(
   $$select * from public.service_claim_identity_assistance_jobs(
@@ -390,8 +386,6 @@ select throws_ok(
   '22023', 'invalid_identity_assistance_cleanup',
   'cleanup requires a non-null request id'
 );
-reset role;
-
 -- Canonical media fixtures for ordinary claim/failure behavior.
 set local session_replication_role = replica;
 insert into public.user_profiles (id, public_name, adult_confirmed_at)
@@ -489,7 +483,6 @@ select pg_catalog.format(
          + fixture * interval '1 minute')
   from pg_catalog.generate_series(1, 5) as fixtures(fixture);
 
-set local role service_role;
 select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 select results_eq(
   $$select claims."jobId", claims.attempt
@@ -665,8 +658,6 @@ select results_eq(
   $$select null::uuid where false$$,
   'an exact original zero-result claim replays as zero rows'
 );
-reset role;
-
 -- Failure semantics use known lease envelopes and prove replay precedes lease
 -- validation, retry/terminal policy, stale-attempt isolation, and GUC restore.
 insert into private.identity_assistance_jobs (
@@ -718,7 +709,6 @@ insert into private.identity_assistance_jobs (
 select pg_catalog.set_config(
   'private.identity_assistance_job_writer', 'task4-outer-fail-writer', true
 );
-set local role service_role;
 select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 select lives_ok(
   $$select public.service_fail_identity_assistance_job(
@@ -907,7 +897,6 @@ select ok(
     where jobs.id = '00000000-0000-4000-8000-000000009310'),
   'newer lease state survives a stale prior-attempt failure'
 );
-reset role;
 select pg_catalog.set_config('private.identity_assistance_job_writer', '', true);
 
 -- Expired attempts are swept before requested selection. Attempts one/two
@@ -945,7 +934,6 @@ insert into private.identity_assistance_jobs (
     pg_catalog.clock_timestamp() - interval '3 minutes',
     '2026-05-22 00:00:00+00');
 
-set local role service_role;
 select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 select results_eq(
   $$select claims."jobId", claims.attempt
@@ -1036,8 +1024,6 @@ select is(
   0::bigint,
   'attempt four remains impossible after claim and sweep cycles'
 );
-reset role;
-
 -- CI-only committed interleavings use the established local SCRAM/dblink
 -- pattern. They prove SKIP LOCKED/disjoint leasing and lower-resource-first
 -- claim-versus-deletion serialization rather than simulating concurrency.
@@ -1702,7 +1688,6 @@ select pg_catalog.set_config(
 select pg_catalog.set_config(
   'private.identity_assistance_job_deleter', 'task4-outer-deleter', true
 );
-set local role service_role;
 select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 select lives_ok(
   $$select public.service_cleanup_identity_assistance(
@@ -1893,8 +1878,6 @@ select is(
   'task4-outer-deleter',
   'cleanup restores the caller job-deleter context on success'
 );
-reset role;
-
 -- A forced write failure proves exception-path restoration without expanding
 -- production exceptions. The failed service request is transactionally absent.
 insert into private.identity_assistance_jobs (
@@ -1925,7 +1908,6 @@ $$;
 create trigger task4_cleanup_fixture_failure
 before update on private.identity_assistance_jobs
 for each row execute function pg_temp.task4_cleanup_fixture_failure();
-set local role service_role;
 select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 select throws_ok(
   $$select public.service_cleanup_identity_assistance(
@@ -1957,7 +1939,6 @@ select is(
   0::bigint,
   'exception rollback leaves no cleanup idempotency row'
 );
-reset role;
 drop trigger task4_cleanup_fixture_failure on private.identity_assistance_jobs;
 
 select pg_catalog.set_config('private.identity_assistance_job_writer', '', true);
