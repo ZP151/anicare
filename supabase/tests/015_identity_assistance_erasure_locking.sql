@@ -384,10 +384,6 @@ insert into audit.access_audit (
   'identity_review', '00000000-0000-4000-8000-000000006601'
 );
 
-select * from finish();
-rollback;
-\quit
-
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006004', true);

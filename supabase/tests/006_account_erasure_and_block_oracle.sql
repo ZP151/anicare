@@ -8,15 +8,15 @@ select has_function(
   'trusted account-erasure trigger function exists'
 );
 select results_eq(
-  $$select trigger_name::text
+  $$select trigger_name::text collate "C"
       from information_schema.triggers
      where event_object_schema = 'public'
        and event_object_table = 'user_profiles'
        and event_manipulation = 'DELETE'
-     order by trigger_name$$,
+     order by trigger_name collate "C"$$,
   $$values
-      ('user_profiles_account_erasure'::text),
-      ('user_profiles_legacy_media_deletion_outbox'::text)$$,
+      ('user_profiles_account_erasure'::text collate "C"),
+      ('user_profiles_legacy_media_deletion_outbox'::text collate "C")$$,
   'profile deletion retains exactly the two established non-internal erasure triggers'
 );
 with expected(role_name) as (
