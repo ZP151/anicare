@@ -7,7 +7,7 @@ import type {
 import type { StoredDraft } from '../offline/draft-policy';
 import type { UploadJobState } from '../offline/upload-job';
 
-export type MediaSubmissionState = UploadJobState | 'not_ready' | 'unavailable' | 'stale';
+export type MediaSubmissionState = UploadJobState | 'cleanup_pending' | 'not_ready' | 'unavailable' | 'stale';
 
 export type SubmitReportWithMediaInput = Readonly<{
   draftId: string;
@@ -174,12 +174,20 @@ export async function submitReportWithMedia(
   }
 
   if (!hasMediaBoundary(durable)) {
-    await dependencies.deleteDraft(input.draftId);
-    return outcome(resolved.sighting, 'submitted_text_only');
+    try {
+      await dependencies.deleteDraft(input.draftId);
+      return outcome(resolved.sighting, 'submitted_text_only');
+    } catch {
+      return outcome(resolved.sighting, 'cleanup_pending');
+    }
   }
 
-  const state = await dependencies.uploadMedia(input.draftId);
-  return outcome(resolved.sighting, state);
+  try {
+    const state = await dependencies.uploadMedia(input.draftId);
+    return outcome(resolved.sighting, state);
+  } catch {
+    return outcome(resolved.sighting, 'needs_user');
+  }
 }
 
 export function reportSubmissionStatus(result: ReportSubmissionProgress): string {
@@ -200,6 +208,8 @@ export function reportSubmissionStatus(result: ReportSubmissionProgress): string
       return 'Private media upload retry is scheduled. It is not publicly available.';
     case 'needs_user':
       return 'The encrypted media needs review or recapture before it can be retried.';
+    case 'cleanup_pending':
+      return 'Text submission is committed. Local draft cleanup is pending and no media is publicly available.';
     case 'recovery_miss':
       return 'No prior submission was found. Choose a location to submit this draft again, or recapture and re-review if its media cannot be recovered.';
     case 'not_ready':

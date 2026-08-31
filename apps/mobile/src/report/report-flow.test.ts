@@ -38,10 +38,17 @@ describe('report workflow controller', () => {
     expect(earliestIncompleteStep(draft({ report: { ...payload, manualPublicCellId: null } }))).toBe('area');
   });
 
-  it('uses the saved non-review stage as the deterministic next stage', () => {
+  it('keeps the optional photo stage and valid saved non-review stages', () => {
     expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'photo' } }))).toBe('photo');
     expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'safety' } }))).toBe('safety');
     expect(earliestIncompleteStep(draft({ report: undefined }))).toBe('photo');
+  });
+
+  it('corrects stale Safety and Area saves to the earliest invalid prerequisite', () => {
+    expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'safety', condition: null } }))).toBe('details');
+    expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'area', manualPublicCellId: null } }))).toBe('area');
+    expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'area', condition: null, manualPublicCellId: null } })))
+      .toBe('details');
   });
 
   it('requires details, a supplied location mode, and explicit review before submission', () => {

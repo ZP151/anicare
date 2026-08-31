@@ -227,6 +227,53 @@ describe('report submission lifecycle', () => {
     ]);
   });
 
+  it('keeps a bound text draft and returns its committed receipt when cleanup rejects', async () => {
+    const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
+    jest.mocked(run.dependencies.deleteDraft).mockImplementation(async () => {
+      run.calls.push('delete_attempt');
+      throw new Error('cleanup_unavailable');
+    });
+
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'device_once', latitude: 1.3521, longitude: 103.8198 },
+    }), run.dependencies)).resolves.toEqual({
+      sightingId: response.sightingId,
+      visibility: 'hidden',
+      state: 'cleanup_pending',
+      receipt: {
+        sightingId: response.sightingId,
+        visibility: 'hidden',
+        mediaState: 'cleanup_pending',
+      },
+    });
+    expect(run.calls).toEqual(['save:tabby:normal', `attach:${response.sightingId}`, 'delete_attempt']);
+    expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
+  });
+
+  it('keeps a bound media draft and returns its committed receipt when upload rejects', async () => {
+    const run = harness();
+    jest.mocked(run.dependencies.uploadMedia).mockImplementation(async () => {
+      run.calls.push('upload_attempt');
+      throw new Error('media_runtime_failed');
+    });
+
+    await expect(submitReportWithMedia(submission({
+      location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
+    }), run.dependencies)).resolves.toEqual({
+      sightingId: response.sightingId,
+      visibility: 'hidden',
+      state: 'needs_user',
+      receipt: {
+        sightingId: response.sightingId,
+        visibility: 'hidden',
+        mediaState: 'needs_user',
+      },
+    });
+    expect(run.calls).toEqual(['save:tabby:normal', `attach:${response.sightingId}`, 'upload_attempt']);
+    expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
+    expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
+  });
+
   it.each([
     ['device-once', { kind: 'device_once' as const, latitude: 1.3521, longitude: 103.8198 }],
     ['manual-area', { kind: 'manual_area' as const, publicCellId: '89652636d87ffff' }],

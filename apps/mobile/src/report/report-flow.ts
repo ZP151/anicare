@@ -16,20 +16,15 @@ export type ReportTimelineItem = Readonly<{
   identityState: MyReportSummary['identityState'];
 }>;
 
-function persistedPrerequisites(payload: ReportDraftPayloadV1): readonly ReportPrerequisiteIssue[] {
-  const issues: ReportPrerequisiteIssue[] = [];
-  if (payload.condition === null) issues.push('details_required');
-  if (payload.manualPublicCellId === null) issues.push('area_required');
-  return issues;
-}
-
 export function earliestIncompleteStep(draft: StoredDraft): ReportDraftStep {
   const payload = draft.report;
   if (!payload) return 'photo';
-  if (payload.step !== 'review') return payload.step;
-  const prerequisites = persistedPrerequisites(payload);
-  if (prerequisites.includes('details_required')) return 'details';
-  if (prerequisites.includes('area_required')) return 'area';
+  if (payload.step === 'photo') return 'photo';
+  if (payload.condition === null) return 'details';
+  if (payload.step === 'details') return 'details';
+  if (payload.step === 'safety') return 'safety';
+  if (payload.manualPublicCellId === null) return 'area';
+  if (payload.step === 'area') return 'area';
   return 'review';
 }
 
