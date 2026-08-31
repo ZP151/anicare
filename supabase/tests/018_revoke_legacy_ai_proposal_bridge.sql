@@ -68,12 +68,12 @@ select is(
   expected.role_name || ' has no execute privilege on the disabled legacy bridge'
 )
 from expected;
-select like(
+select is(
   pg_catalog.obj_description(
     'public.service_submit_ai_identity_proposal(uuid,uuid,text,text,jsonb,uuid)'::regprocedure,
     'pg_proc'
   ),
-  '%permanently disabled%',
+  'Deprecated and permanently disabled legacy service proposal bridge. Completion persists bounded private candidate sets only; future authenticated owner-bound selection is the sole AI-result bridge to a tentative proposal.'::text,
   'the legacy bridge comment truthfully records permanent disablement'
 );
 
