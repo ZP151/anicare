@@ -1610,15 +1610,18 @@ insert into public.identity_proposals (
   ('00000000-0000-4000-8000-000000009548',
     '00000000-0000-4000-8000-000000009148',
     '00000000-0000-4000-8000-000000009601',
-    '00000000-0000-4000-8000-000000009100', 'ai_candidate', 'tentative',
+    null, 'ai_candidate', 'tentative',
     'identity.v1', 'likely', '["face_pattern_similar"]',
     '2026-05-10 00:00:00+00', null),
   ('00000000-0000-4000-8000-000000009549',
     '00000000-0000-4000-8000-000000009149',
     '00000000-0000-4000-8000-000000009602',
-    '00000000-0000-4000-8000-000000009100', 'ai_candidate', 'confirmed',
+    null, 'ai_candidate', 'tentative',
     'identity.v1', 'possible', '["coat_marking_similar"]',
-    '2026-05-11 00:00:00+00', '2026-05-12 00:00:00+00');
+    '2026-05-11 00:00:00+00', null);
+update public.identity_proposals
+   set status = 'confirmed', reviewed_at = '2026-05-12 00:00:00+00'
+ where id = '00000000-0000-4000-8000-000000009549';
 insert into public.match_reviews (
   id, proposal_id, reviewer_id, decision, rationale, created_at, request_id
 ) values (
