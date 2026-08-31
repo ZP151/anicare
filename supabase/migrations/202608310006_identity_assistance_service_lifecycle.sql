@@ -732,7 +732,7 @@ begin
 
   with eligible as (
     select jobs.id, jobs.sighting_id, jobs.media_asset_id,
-           pg_catalog.greatest(
+           greatest(
              jobs.expires_at, jobs.completed_at + interval '7 days'
            ) as retention_anchor
       from private.identity_assistance_jobs as jobs
@@ -836,7 +836,7 @@ begin
   for cleanup_row in
     with eligible as (
       select jobs.id, 'expire'::text as action,
-             pg_catalog.greatest(
+             greatest(
                jobs.expires_at, jobs.completed_at + interval '7 days'
              ) as retention_anchor
         from private.identity_assistance_jobs as jobs
