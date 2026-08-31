@@ -48,7 +48,7 @@ begin
     end if;
     candidate_ids := pg_catalog.array_append(candidate_ids, candidate_id);
 
-    select pg_catalog.coalesce(
+    select coalesce(
              pg_catalog.array_agg(reasons.value order by reasons.ordinal),
              '{}'::text[]
            )
@@ -128,7 +128,7 @@ begin
     raise exception 'invalid_identity_assistance_completion' using errcode = '22023';
   end if;
 
-  select pg_catalog.coalesce(
+  select coalesce(
            pg_catalog.array_agg((entries.value ->> 'animalId')::uuid order by entries.ordinal),
            '{}'::uuid[]
          )
