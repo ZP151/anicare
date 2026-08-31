@@ -296,7 +296,7 @@ $test$, 'unfinalized jobs are retried during token replay and terminally purged 
 
 select lives_ok($test$
 do $body$
-declare claim record; asset uuid;
+declare claim record; asset uuid; deletion record;
 begin
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'active-123456', repeat('d', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
   select public.finalize_media_upload_job(id, uploader_id, sighting_id, media_id, sha256) into asset from private.media_upload_jobs where media_id = 'active-123456';
@@ -304,7 +304,17 @@ begin
   select * into claim from public.claim_expired_media_staging_jobs(25) where job_id = (select id from private.media_upload_jobs where media_id = 'active-123456');
   if found then raise exception 'active finalized job was incorrectly scheduled for purge'; end if;
   if not exists (select 1 from private.media_upload_jobs where media_id = 'active-123456') or not exists (select 1 from public.media_assets where id = asset and deleted_at is null and status = 'quarantined') then raise exception 'active media lost its deletion cleanup record'; end if;
-  perform public.server_request_media_deletion('00000000-0000-0000-0000-000000000111', asset);
+  select * into deletion
+    from public.server_request_media_deletion(
+      '00000000-0000-0000-0000-000000000111', asset
+    );
+  if deletion.storage_bucket <> 'media-staging'
+    or deletion.storage_path is distinct from (
+      select object_path from private.media_upload_jobs where media_id = 'active-123456'
+    )
+    or deletion.remove_immediately is distinct from false then
+    raise exception 'staged deletion response contract changed';
+  end if;
   select * into claim from public.claim_expired_media_staging_jobs(25) where job_id = (select id from private.media_upload_jobs where media_id = 'active-123456');
   if not found or claim.cleanup_action <> 'remove_and_purge' then raise exception 'logical deletion after credential expiry did not create a terminal cleanup action'; end if;
   perform public.complete_media_staging_cleanup(claim.job_id, claim.object_path, claim.cleanup_claim_id, claim.cleanup_action, true);
@@ -315,12 +325,30 @@ $test$, 'an expired active finalized job is retained until user deletion creates
 
 select lives_ok($test$
 do $body$
-declare claim record; asset uuid;
+declare claim record; asset uuid; deletion record;
 begin
   perform public.reserve_media_upload_job('00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'deleted-12345', repeat('e', 64), 42, 1, 1, 'jpeg-srgb-2048-q88.v1', '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}', now());
   select public.finalize_media_upload_job(id, uploader_id, sighting_id, media_id, sha256) into asset from private.media_upload_jobs where media_id = 'deleted-12345';
   update private.media_upload_jobs set upload_token_expires_at = now() + interval '1 hour' where media_id = 'deleted-12345';
-  perform public.server_request_media_deletion('00000000-0000-0000-0000-000000000111', asset);
+  select * into deletion
+    from public.server_request_media_deletion(
+      '00000000-0000-0000-0000-000000000111', asset
+    );
+  if deletion.storage_bucket <> 'media-staging'
+    or deletion.storage_path is distinct from (
+      select object_path from private.media_upload_jobs where media_id = 'deleted-12345'
+    )
+    or deletion.remove_immediately is distinct from false then
+    raise exception 'staged logical deletion response contract changed';
+  end if;
+  begin
+    perform public.server_request_media_deletion(
+      '00000000-0000-0000-0000-000000000111', asset
+    );
+    raise exception 'exact logical deletion retry unexpectedly succeeded';
+  exception when sqlstate 'P0001' then
+    if sqlerrm <> 'media_deleted' then raise; end if;
+  end;
   begin
     perform public.finalize_media_upload_job((select id from private.media_upload_jobs where media_id = 'deleted-12345'), '00000000-0000-0000-0000-000000000111', '00000000-0000-0000-0000-000000000222', 'deleted-12345', repeat('e', 64));
     raise exception 'finalized retry unexpectedly returned active media';
