@@ -1,0 +1,49 @@
+{
+  "title": "Choose the Sheltered Link Atlas composition",
+  "question": "The visual world is fixed. Choose which Nearby composition should become the measured implementation contract.",
+  "options": [
+    {
+      "id": "composition-a",
+      "label": "Atlas + anchored cat sheet",
+      "kicker": "ORIGINAL DIRECTION",
+      "lineage": "map-first discovery with one selected cat",
+      "thesis": "The coarse neighbourhood atlas leads; one cat rises from it in a focused anchored sheet.",
+      "palette": ["#123B46", "#2E756C", "#F1EBDD", "#D55B3E", "#B8D8D0"],
+      "materials": ["enamel wayfinding", "weathered map paper", "selective system glass"],
+      "viewport": "Large privacy-safe atlas, contextual safety note, then a spacious selected-cat sheet immediately above the tab bar.",
+      "risk": "The selected sheet is tall and leaves less room for browsing multiple areas.",
+      "comp": ".impeccable/mocks/sheltered-link-atlas-a.png"
+    },
+    {
+      "id": "composition-b",
+      "label": "Atlas + area rail",
+      "kicker": "MAP-OPERATIONAL",
+      "lineage": "coarse-area selection before cat detail",
+      "thesis": "A keyed area rail turns the atlas into a usable discovery control before the selected cat opens.",
+      "palette": ["#123B46", "#2E756C", "#F1EBDD", "#D55B3E", "#B8D8D0"],
+      "materials": ["enamel legend rail", "one-pixel rules", "anchored system sheet"],
+      "viewport": "Large atlas, three privacy-safe area states, compact selected-cat sheet and familiar five-tab navigation.",
+      "risk": "The extra area rail adds density and needs careful large-text behavior.",
+      "comp": ".impeccable/mocks/sheltered-link-atlas-b.png"
+    },
+    {
+      "id": "composition-c",
+      "label": "Cat-first split atlas",
+      "kicker": "CARE-LED",
+      "lineage": "identity and care before spatial context",
+      "thesis": "Recognition comes first, with the coarse atlas supporting rather than leading the decision.",
+      "palette": ["#123B46", "#2E756C", "#F1EBDD", "#D55B3E", "#B8D8D0"],
+      "materials": ["wayfinding identity strip", "photo field", "enamel inset atlas"],
+      "viewport": "Large cat portrait and care state above a supporting coarse-area map and one nearby report action.",
+      "risk": "The photo/map split is less efficient when users want to scan several nearby cats.",
+      "comp": ".impeccable/mocks/sheltered-link-atlas-c.png"
+    }
+  ],
+  "reroll": false,
+  "buildPath": {
+    "value": "comp",
+    "toggle": false
+  },
+  "canon": false,
+  "steer": true
+}

@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pnpm install --frozen-lockfile
+      - run: python -m pip install -e "services/ai[dev]"
+      - run: pnpm peers check
+      - run: python -m ruff check services/ai
+      - run: python -m mypy services/ai/src
+      - run: pnpm validate:pilot-policies
+      - run: pnpm test:root-contracts
+      - run: pnpm verify
+      - run: git diff --check
+
+  database-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.5
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.84.2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:pilot-gate-2a-ci
+      - run: node scripts/pilot-gate-2a-inputs.mjs
+      - run: node --test scripts/pilot-gate-inputs.test.mjs
+      - run: node scripts/pilot-gate-inputs.mjs uuid
+      - run: node scripts/pilot-gate-inputs.mjs deno
+      - name: Run mandatory Pilot Gate 2A
+        id: pilot_gate_2a
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: pnpm pilot-gate-2a
+      - name: Upload sanitized Pilot Gate 2A failure diagnostics
+        if: failure() && steps.pilot_gate_2a.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilot-gate-2a-sanitized-runtime
+          path: ${{ runner.temp }}/animalhelper-pilot-gate-2a-failure.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Delete Pilot Gate 2A failure diagnostics
+        if: always()
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: pnpm pilot-gate-2a:cleanup-diagnostic

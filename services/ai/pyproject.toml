@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "animalhelper-ai"
+version = "0.1.0"
+description = "Privacy-aware community cat candidate ranking service"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "boto3>=1.40,<2",
+  "fastapi>=0.116,<1",
+  "mangum>=0.19,<1",
+  "numpy>=2.2,<3",
+  "onnxruntime>=1.22,<2",
+  "pydantic>=2.11,<3"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.4,<9", "ruff>=0.12,<1", "mypy>=1.17,<2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/animalhelper_ai"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+

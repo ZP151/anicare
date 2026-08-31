@@ -1,0 +1,5 @@
+Use case: photorealistic-natural
+Asset type: high-resolution selected community-cat portrait plate
+Canvas: vertical 295:435 aspect, at least 682px wide, edge-to-edge rectangular photo; no rounded mask.
+Reference fidelity: recreate the approved crop with near-pixel-level fidelity. One pale orange tabby sits in a three-quarter pose on the stone ledge. Both ears have generous forest background above; the head occupies about 47% of frame width; the body sits mostly on the right half; both front paws and one tucked rear paw remain visible; keep a broad dark tree-trunk strip on the left and softly blurred dark-green foliage on the right. Match the reference's lower contrast, softer detail, muted orange fur, camera height, warm daylight, and subject silhouette. Do not crop ears, paws, or tail.
+Constraints: fictional privacy-safe backdrop; no people, collars, tags, text, UI, border, corners, watermark, address, vehicle plate, recognizable landmark or extra animals.

@@ -1,0 +1,67 @@
+{
+  "name": "@animalhelper/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "build": "expo export --platform web",
+    "dev": "expo start",
+    "lint": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "typecheck": "tsc --noEmit",
+    "validate:native-config": "tsx scripts/validate-native-config.ts",
+    "validate:pilot-build": "tsx scripts/validate-pilot-build.ts",
+    "build:pilot:android": "pnpm dlx eas-cli@22.6.0 build --profile pilot --platform android",
+    "build:pilot:ios": "pnpm dlx eas-cli@22.6.0 build --profile pilot --platform ios"
+  },
+  "dependencies": {
+    "@animalhelper/domain": "workspace:*",
+    "@expo/vector-icons": "^15.1.1",
+    "@shopify/react-native-skia": "2.6.2",
+    "@supabase/supabase-js": "2.98.0",
+    "expo": "~57.0.17",
+    "expo-auth-session": "~57.0.10",
+    "expo-blur": "~57.0.1",
+    "expo-constants": "~57.0.16",
+    "expo-crypto": "~57.0.2",
+    "expo-file-system": "~57.0.6",
+    "expo-glass-effect": "~57.0.1",
+    "expo-image-manipulator": "~57.0.14",
+    "expo-image-picker": "~57.0.14",
+    "expo-linking": "~57.0.8",
+    "expo-localization": "~57.0.1",
+    "expo-location": "~57.0.14",
+    "expo-router": "~57.0.17",
+    "expo-secure-store": "~57.0.2",
+    "expo-sqlite": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "expo-web-browser": "~57.0.2",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-maps": "1.27.2",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@react-native/metro-config": "0.86.3",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "^29.5.14",
+    "@types/react": "~19.2.2",
+    "jest": "^29.7.0",
+    "jest-expo": "~57.0.5",
+    "tsx": "4.23.12",
+    "typescript": "~6.0.3"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.expo/"
+    ]
+  }
+}

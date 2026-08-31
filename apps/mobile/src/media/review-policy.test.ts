@@ -1,0 +1,86 @@
+import {
+  canStageMedia,
+  reduceMediaReview,
+} from './review-policy';
+import type { MediaReviewState } from './contracts';
+
+const rendered = {
+  uri: 'file:///reviewed.jpg',
+  sha256: 'abc123',
+  mimeType: 'image/jpeg' as const,
+  width: 100,
+  height: 100,
+  byteLength: 42,
+  recipeVersion: 'jpeg-srgb-2048-q88.v1',
+  detectorVersions: {},
+};
+
+const readyState: MediaReviewState = {
+  status: 'ready',
+  rendered,
+  masks: [],
+  receipt: null,
+};
+
+const reviewedState: MediaReviewState = {
+  ...readyState,
+  status: 'reviewed',
+  receipt: {
+    sanitizedSha256: 'abc123',
+    recipeVersion: 'jpeg-srgb-2048-q88.v1',
+    detectorVersions: {},
+    width: 100,
+    height: 100,
+    byteLength: 42,
+    confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+  },
+};
+
+describe('media review policy', () => {
+  it('fails closed until a rendered media receipt is confirmed', () => {
+    expect(canStageMedia(readyState)).toBe(false);
+    expect(canStageMedia(reduceMediaReview(readyState, { type: 'confirm' }))).toBe(true);
+  });
+
+  it('invalidates confirmation when masks change', () => {
+    const masks = [{ id: 'mask-1', rect: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 } }];
+    expect(reduceMediaReview(reviewedState, { type: 'masks_changed', masks })).toMatchObject({
+      status: 'needs_review',
+      receipt: null,
+    });
+  });
+
+  it('rejects receipts with mismatched processing provenance', () => {
+    expect(canStageMedia({ ...reviewedState, receipt: { ...reviewedState.receipt!, recipeVersion: 'other.v1' } })).toBe(false);
+    expect(canStageMedia({ ...reviewedState, receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'detector.v2' } } })).toBe(false);
+  });
+
+  it('matches detector versions semantically regardless of insertion order', () => {
+    expect(canStageMedia({ ...reviewedState, rendered: { ...rendered, detectorVersions: { plates: 'v1', people: 'v2' } }, receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'v2', plates: 'v1' } } })).toBe(true);
+    const mismatches: Array<Record<string, string>> = [{ people: 'v2' }, { people: 'v1', plates: 'v1' }, { people: 'v2', plates: 'v2' }];
+    for (const detectorVersions of mismatches) {
+      expect(canStageMedia({ ...reviewedState, rendered: { ...rendered, detectorVersions: { people: 'v2', plates: 'v1' } }, receipt: { ...reviewedState.receipt!, detectorVersions } })).toBe(false);
+    }
+  });
+
+  it('does not accept inherited detector version properties', () => {
+    const inherited = Object.create({ people: 'v1' }) as Record<string, string>;
+    inherited.other = 'v2';
+    expect(canStageMedia({
+      ...reviewedState,
+      rendered: { ...rendered, detectorVersions: inherited },
+      receipt: { ...reviewedState.receipt!, detectorVersions: { people: 'v1' } },
+    })).toBe(false);
+  });
+
+  it('rejects receipts with mismatched media bytes or dimensions', () => {
+    for (const receipt of [
+      { ...reviewedState.receipt!, sanitizedSha256: 'different' },
+      { ...reviewedState.receipt!, width: 101 },
+      { ...reviewedState.receipt!, height: 101 },
+      { ...reviewedState.receipt!, byteLength: 43 },
+    ]) {
+      expect(canStageMedia({ ...reviewedState, receipt })).toBe(false);
+    }
+  });
+});

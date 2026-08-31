@@ -1,0 +1,17 @@
+{
+  "cli": {
+    "version": "22.6.0",
+    "requireCommit": true
+  },
+  "build": {
+    "pilot": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    }
+  }
+}

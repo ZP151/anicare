@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+  - services/*
+  - supabase/functions
+  - tests/*
+
+allowBuilds:
+  '@shopify/react-native-skia': true
+  esbuild: true
+  unrs-resolver: set this to true or false

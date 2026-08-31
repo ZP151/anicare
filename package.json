@@ -1,0 +1,26 @@
+{
+  "name": "animalhelper",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "pilot-gate-2a": "node scripts/run-pilot-gate-2a.mjs",
+    "pilot-gate-2a:cleanup-diagnostic": "node scripts/run-pilot-gate-2a.mjs cleanup-diagnostic",
+    "test": "turbo run test",
+    "test:pilot-gate-2a-ci": "node --test scripts/pilot-gate-2a-inputs.test.mjs scripts/run-pilot-gate-2a.test.mjs",
+    "test:root-contracts": "node --test scripts/root-verify-contract.test.mjs",
+    "typecheck": "turbo run typecheck",
+    "validate:pilot-policies": "pnpm --filter @animalhelper/mobile validate:native-config && pnpm --filter @animalhelper/mobile validate:pilot-build",
+    "verify": "pnpm validate:pilot-policies && pnpm test:root-contracts && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "cross-env": "10.1.0",
+    "turbo": "2.10.11",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "endpoints": {
+    "cleanupMediaStaging": "cleanup-media-staging",
+    "createSighting": "create-sighting",
+    "deleteMedia": "delete-media",
+    "finalizeMediaUpload": "finalize-media-upload",
+    "reserveMediaUpload": "reserve-media-upload"
+  }
+}

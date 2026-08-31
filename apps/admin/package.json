@@ -1,0 +1,28 @@
+{
+  "name": "@animalhelper/admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@animalhelper/domain": "workspace:*",
+    "@supabase/ssr": "0.8.0",
+    "@supabase/supabase-js": "2.98.0",
+    "next": "latest",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "~19.2.2",
+    "@types/react-dom": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

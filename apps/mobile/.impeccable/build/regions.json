@@ -1,0 +1,30 @@
+{
+  "regions": [
+    { "id": "paper-ground", "kind": "texture", "box": { "x": 0.35, "y": 0.01, "w": 0.15, "h": 0.05 }, "note": "warm off-white paper grain used across header, sheet and tab bar" },
+    { "id": "nearby-title", "kind": "text", "box": { "x": 0.0574, "y": 0.0315, "w": 0.211, "h": 0.0228 }, "note": "Nearby screen title" },
+    { "id": "safety-button", "kind": "control", "box": { "x": 0.8593, "y": 0.0184, "w": 0.0926, "h": 0.0434 }, "note": "circular safety and privacy control with shield-check icon" },
+    { "id": "coarse-atlas", "kind": "image", "box": { "x": 0, "y": 0.0786, "w": 1, "h": 0.5201 }, "bleed": true, "note": "privacy-safe fictional neighbourhood atlas; production plate omits reversible labels" },
+    { "id": "atlas-zone-north", "kind": "text", "box": { "x": 0.48, "y": 0.145, "w": 0.18, "h": 0.024 }, "note": "generic north area label, never a real block number" },
+    { "id": "atlas-zone-west", "kind": "text", "box": { "x": 0.10, "y": 0.337, "w": 0.17, "h": 0.024 }, "note": "generic west area label, never a real block number" },
+    { "id": "atlas-zone-east", "kind": "text", "box": { "x": 0.70, "y": 0.307, "w": 0.18, "h": 0.024 }, "note": "generic east area label, never a real block number" },
+    { "id": "atlas-green-label", "kind": "text", "box": { "x": 0.36, "y": 0.36, "w": 0.24, "h": 0.037 }, "note": "generic communal green label" },
+    { "id": "atlas-edge-label", "kind": "text", "box": { "x": 0.07, "y": 0.455, "w": 0.18, "h": 0.026 }, "note": "generic public-edge label without route or station details" },
+    { "id": "privacy-banner", "kind": "chrome", "box": { "x": 0.0481, "y": 0.4978, "w": 0.9027, "h": 0.077 }, "note": "translucent privacy notice surface over atlas" },
+    { "id": "privacy-title", "kind": "text", "box": { "x": 0.1454, "y": 0.5152, "w": 0.61, "h": 0.021 }, "note": "Coarse neighbourhood view." },
+    { "id": "privacy-copy", "kind": "text", "box": { "x": 0.1454, "y": 0.5418, "w": 0.55, "h": 0.021 }, "note": "Exact locations are protected." },
+    { "id": "cat-sheet", "kind": "chrome", "box": { "x": 0, "y": 0.5987, "w": 1, "h": 0.3064 }, "container": true, "note": "anchored selected-cat bottom sheet" },
+    { "id": "sheet-handle", "kind": "control", "box": { "x": 0.4537, "y": 0.6117, "w": 0.0938, "h": 0.0049 }, "note": "sheet drag indicator" },
+    { "id": "cat-portrait", "kind": "image", "box": { "x": 0.0586, "y": 0.635, "w": 0.3458, "h": 0.2359 }, "bleed": true, "note": "Mochi ginger community cat portrait intentionally crops within its rounded frame" },
+    { "id": "cat-name", "kind": "text", "box": { "x": 0.4502, "y": 0.648, "w": 0.49, "h": 0.036 }, "note": "Mochi · 麻糬" },
+    { "id": "confirmed-status", "kind": "text", "box": { "x": 0.457, "y": 0.692, "w": 0.46, "h": 0.025 }, "note": "Community confirmed status with shield icon" },
+    { "id": "seen-status", "kind": "text", "box": { "x": 0.457, "y": 0.724, "w": 0.42, "h": 0.025 }, "note": "Seen this afternoon status with clock icon" },
+    { "id": "view-cat", "kind": "control", "box": { "x": 0.45, "y": 0.757, "w": 0.489, "h": 0.052 }, "note": "primary View cat action" },
+    { "id": "report-sighting", "kind": "control", "box": { "x": 0.45, "y": 0.825, "w": 0.489, "h": 0.052 }, "note": "secondary Report sighting action" },
+    { "id": "tab-bar", "kind": "chrome", "box": { "x": 0, "y": 0.9046, "w": 1, "h": 0.0954 }, "note": "five-destination bottom navigation" },
+    { "id": "tab-nearby", "kind": "control", "box": { "x": 0.03, "y": 0.916, "w": 0.14, "h": 0.068 }, "note": "selected Nearby destination" },
+    { "id": "tab-map", "kind": "control", "box": { "x": 0.23, "y": 0.916, "w": 0.14, "h": 0.068 }, "note": "Map destination" },
+    { "id": "tab-report", "kind": "control", "box": { "x": 0.43, "y": 0.916, "w": 0.14, "h": 0.068 }, "note": "Report destination" },
+    { "id": "tab-following", "kind": "control", "box": { "x": 0.62, "y": 0.916, "w": 0.16, "h": 0.068 }, "note": "Following destination" },
+    { "id": "tab-profile", "kind": "control", "box": { "x": 0.82, "y": 0.916, "w": 0.15, "h": 0.068 }, "note": "Profile destination" }
+  ]
+}
