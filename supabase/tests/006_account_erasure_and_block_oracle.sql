@@ -8,7 +8,7 @@ select has_function(
   'trusted account-erasure trigger function exists'
 );
 select results_eq(
-  $$select trigger_name
+  $$select trigger_name::text
       from information_schema.triggers
      where event_object_schema = 'public'
        and event_object_table = 'user_profiles'
