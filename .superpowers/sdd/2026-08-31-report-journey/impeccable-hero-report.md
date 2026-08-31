@@ -52,3 +52,41 @@ station data would violate the binding product privacy contract. The gate stays
 open at HERO; no sections work was started. The raw JPEG is temporary and is
 removed after this validation; the final PNG, hero-diff report, and build state
 are the retained evidence.
+
+## Privacy-comp rebaseline and current blocker
+
+The approved privacy-corrected comp was rebaselined exclusively through the
+official build-phase scripts:
+
+- `build-phase.mjs start --reset --comp .impeccable/mocks/sheltered-link-atlas-a-privacy.png --breakpoint 853x1844`
+- `comp-spec.mjs` regenerated the 26-region contract. Only the North cluster,
+  West court, and Community green boxes expanded for their approved two-line
+  generic labels.
+- All 11 text regions were measured and the lead heading was ranked before the
+  spec was closed.
+
+The script image generator then failed with `OPENAI_API_KEY is not set`. The
+native image fallback produced 1182px and 1183px-wide files, below the plates
+gate's 1280px shipping minimum, so neither was retained. A temporary official
+deterministic crop fallback was also removed on review: a crop-derived plate is
+not shippable under the no-comp-crop rule.
+
+The original production atlas was restored only after a blob hash check proved
+that `C:\\Users\\15492\\Develop\\animalhelper\\apps\\mobile\\assets\\plates\\coarse-atlas.png`
+and `HEAD:apps/mobile/assets/plates/coarse-atlas.png` were both
+`99c503be84e4ceb9f67e81959bf347c18e26c194`. A fresh official plates-gate run
+then refused that restored, previously proven plate:
+
+```text
+GATE PLATES FAILED (state unchanged)
+- plate assets\\plates\\coarse-atlas.png: carries detail the comp region
+  coarse-atlas does not have (added-detail 50% of cells): noise, grain, or a
+  busier subject where the comp is calm; regenerate from the crop reference
+  without adding texture
+```
+
+At the explicit stop condition, `comps` and `spec` are closed, `plates` is
+open, and `hero` remains pending. No further capture, hero edit, section work,
+or plate generation was performed. `hero-raw.png`, generated `.gitignore`,
+`expo-env.d.ts`, and fake-plate provenance were removed; the final prior
+853x1844 `hero-repro.png` and diffs remain diagnostic evidence only.
