@@ -43,6 +43,8 @@ declare
   claimable_job_ids uuid[] := '{}'::uuid[];
   claimed_count integer := 0;
   replay_count integer;
+  replay_canonical boolean;
+  replay_snapshot jsonb;
   ordinal integer;
   canonical_source boolean;
   authoritative_now timestamptz;
@@ -99,82 +101,110 @@ begin
         using errcode = 'P0001';
     end if;
 
-    select pg_catalog.count(*)
-      into replay_count
+    select pg_catalog.count(results.request_id)::integer,
+           coalesce(
+             pg_catalog.bool_and(
+               jobs.id is not null
+               and jobs.media_asset_id is not null
+               and jobs.input_sha256 is not null
+               and jobs.recipe_version is not null
+               and jobs.crop_contract_version is not null
+               and jobs.embedding_contract_version is not null
+               and jobs.identify_contract_version is not null
+               and (
+                 select pg_catalog.count(*)
+                   from private.media_upload_jobs as uploads
+                  where uploads.media_asset_id = jobs.media_asset_id
+               ) = 1
+               and exists (
+                 select 1
+                   from public.sightings as sightings
+                   join public.media_assets as assets
+                     on assets.id = jobs.media_asset_id
+                    and assets.sighting_id = sightings.id
+                   join private.media_upload_jobs as uploads
+                     on uploads.media_asset_id = assets.id
+                  where sightings.id = jobs.sighting_id
+                    and sightings.reporter_id = jobs.requester_id
+                    and assets.uploader_id = jobs.requester_id
+                    and uploads.uploader_id = jobs.requester_id
+                    and uploads.sighting_id = jobs.sighting_id
+                    and assets.sha256 = jobs.input_sha256
+                    and uploads.sha256 = jobs.input_sha256
+                    and assets.recipe_version = jobs.recipe_version
+                    and uploads.recipe_version = jobs.recipe_version
+                    and uploads.status = 'finalized'::private.media_upload_job_status
+                    and uploads.finalized_at is not null
+                    and assets.storage_bucket = 'media-staging'
+                    and assets.deleted_at is null
+                    and assets.status = 'quarantined'
+                    and assets.reviewed_at is not null
+                    and assets.storage_path = uploads.object_path
+                    and assets.client_media_id = uploads.media_id
+                    and assets.byte_length = uploads.byte_length
+                    and assets.width = uploads.width
+                    and assets.height = uploads.height
+                    and assets.detector_versions = uploads.detector_versions
+               )
+             ),
+             true
+           ),
+           coalesce(
+             pg_catalog.jsonb_agg(
+               pg_catalog.jsonb_build_object(
+                 'jobId', jobs.id,
+                 'mediaAssetId', jobs.media_asset_id,
+                 'inputSha256', jobs.input_sha256,
+                 'recipeVersion', jobs.recipe_version,
+                 'cropContractVersion', jobs.crop_contract_version,
+                 'embeddingContractVersion', jobs.embedding_contract_version,
+                 'identifyContractVersion', jobs.identify_contract_version,
+                 'leaseId', results.lease_id,
+                 'leaseExpiresAt', results.lease_expires_at,
+                 'attempt', results.attempt
+               )
+               order by results.ordinal
+             ),
+             '[]'::jsonb
+           )
+      into replay_count, replay_canonical, replay_snapshot
       from private.identity_assistance_claim_results as results
+      left join private.identity_assistance_jobs as jobs
+        on jobs.id = results.job_id
      where results.request_id = p_request_id;
 
     if replay_count <> request_row.result_count
-       or exists (
-         select 1
-           from private.identity_assistance_claim_results as results
-           left join private.identity_assistance_jobs as jobs
-             on jobs.id = results.job_id
-          where results.request_id = p_request_id
-            and (
-              jobs.id is null
-              or jobs.media_asset_id is null
-              or jobs.input_sha256 is null
-              or jobs.recipe_version is null
-              or jobs.crop_contract_version is null
-              or jobs.embedding_contract_version is null
-              or jobs.identify_contract_version is null
-              or (
-                select pg_catalog.count(*)
-                  from private.media_upload_jobs as uploads
-                 where uploads.media_asset_id = jobs.media_asset_id
-              ) <> 1
-              or not exists (
-                select 1
-                  from public.sightings as sightings
-                  join public.media_assets as assets
-                    on assets.id = jobs.media_asset_id
-                   and assets.sighting_id = sightings.id
-                  join private.media_upload_jobs as uploads
-                    on uploads.media_asset_id = assets.id
-                 where sightings.id = jobs.sighting_id
-                   and sightings.reporter_id = jobs.requester_id
-                   and assets.uploader_id = jobs.requester_id
-                   and uploads.uploader_id = jobs.requester_id
-                   and uploads.sighting_id = jobs.sighting_id
-                   and assets.sha256 = jobs.input_sha256
-                   and uploads.sha256 = jobs.input_sha256
-                   and assets.recipe_version = jobs.recipe_version
-                   and uploads.recipe_version = jobs.recipe_version
-                   and uploads.status = 'finalized'::private.media_upload_job_status
-                   and uploads.finalized_at is not null
-                   and assets.storage_bucket = 'media-staging'
-                   and assets.deleted_at is null
-                   and assets.status = 'quarantined'
-                   and assets.reviewed_at is not null
-                   and assets.storage_path = uploads.object_path
-                   and assets.client_media_id = uploads.media_id
-                   and assets.byte_length = uploads.byte_length
-                   and assets.width = uploads.width
-                   and assets.height = uploads.height
-                   and assets.detector_versions = uploads.detector_versions
-              )
-            )
-       ) then
+       or not replay_canonical then
       raise exception 'identity_assistance_claim_outcome_unavailable'
         using errcode = 'P0001';
     end if;
 
     return query
-    select jobs.id,
-           jobs.media_asset_id,
-           jobs.input_sha256,
-           jobs.recipe_version,
-           jobs.crop_contract_version,
-           jobs.embedding_contract_version,
-           jobs.identify_contract_version,
-           results.lease_id,
-           results.lease_expires_at,
-           results.attempt
-      from private.identity_assistance_claim_results as results
-      join private.identity_assistance_jobs as jobs on jobs.id = results.job_id
-     where results.request_id = p_request_id
-     order by results.ordinal;
+    select cached."jobId",
+           cached."mediaAssetId",
+           cached."inputSha256",
+           cached."recipeVersion",
+           cached."cropContractVersion",
+           cached."embeddingContractVersion",
+           cached."identifyContractVersion",
+           cached."leaseId",
+           cached."leaseExpiresAt",
+           cached.attempt
+      from pg_catalog.jsonb_array_elements(replay_snapshot)
+           with ordinality as entries(value, ordinal)
+      cross join lateral pg_catalog.jsonb_to_record(entries.value) as cached(
+        "jobId" uuid,
+        "mediaAssetId" uuid,
+        "inputSha256" text,
+        "recipeVersion" text,
+        "cropContractVersion" text,
+        "embeddingContractVersion" text,
+        "identifyContractVersion" text,
+        "leaseId" uuid,
+        "leaseExpiresAt" timestamptz,
+        attempt integer
+      )
+     order by entries.ordinal;
     return;
   end if;
 
@@ -944,17 +974,10 @@ begin
        where requests.job_id = cleanup_row.id;
       delete from private.identity_assistance_status_reads as reads
        where reads.job_id = cleanup_row.id;
-      delete from private.identity_assistance_service_requests as requests
-       where requests.request_id <> p_request_id
-         and (
-           requests.job_id = cleanup_row.id
-           or exists (
-             select 1
-               from private.identity_assistance_claim_results as results
-              where results.request_id = requests.request_id
-                and results.job_id = cleanup_row.id
-           )
-         );
+      -- The parent request is an idempotency tombstone. Deleting the job
+      -- naturally nulls its direct request link and cascades only claim-result
+      -- children for that job, while the parent result_count remains available
+      -- to reject partial claim replays without creating a new lease.
       insert into private.identity_assistance_events (
         job_id, request_id, event_type, reason_code, occurred_at
       ) values (
