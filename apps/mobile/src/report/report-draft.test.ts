@@ -52,6 +52,17 @@ describe('report draft payload', () => {
     expect(() => sanitizeReportDraftPayload(payload)).toThrow('invalid_report_draft');
   });
 
+  it('requires a real canonical H3 resolution-9 manual-area cell', () => {
+    expect(sanitizeReportDraftPayload({
+      ...validPayload,
+      manualPublicCellId: '89652636d87ffff',
+    }).manualPublicCellId).toBe('89652636d87ffff');
+    for (const manualPublicCellId of ['890000000000000', '88652636d9fffff', '89084000003ffff']) {
+      expect(() => sanitizeReportDraftPayload({ ...validPayload, manualPublicCellId }))
+        .toThrow('invalid_report_draft');
+    }
+  });
+
   it('creates an immutable empty V1 draft at the supplied time', () => {
     const payload = createReportDraftPayload(new Date('2026-08-31T10:00:00.000Z'));
     expect(payload).toEqual({

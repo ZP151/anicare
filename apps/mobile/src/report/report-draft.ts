@@ -19,6 +19,7 @@ const reportSteps = new Set<ReportDraftStep>(['photo', 'details', 'safety', 'are
 const reportConditions = new Set<ReportCondition>(['appears_well', 'needs_attention', 'urgent']);
 const coatValues = new Set(['tabby', 'black', 'white', 'ginger', 'grey', 'calico', 'tortoiseshell', 'brown']);
 const markingValues = new Set(['white-paws', 'white-chest', 'white-tail-tip', 'ear-tip', 'collar', 'scar', 'striped', 'spotted']);
+const pentagonBaseCells = new Set([4, 14, 24, 38, 49, 58, 63, 72, 83, 97, 107, 117]);
 const payloadKeys = [
   'version', 'step', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'updatedAt',
 ] as const;
@@ -44,7 +45,25 @@ function sanitizeTraits(value: unknown, allowed: ReadonlySet<string>): readonly 
 }
 
 function isCanonicalPublicCell(value: unknown): value is string {
-  return typeof value === 'string' && /^89[0-9a-f]{13}$/.test(value);
+  if (typeof value !== 'string' || !/^[0-9a-f]{15}$/.test(value)) return false;
+  const index = BigInt(`0x${value}`);
+  const mode = Number((index >> 59n) & 0xfn);
+  const reserved = Number((index >> 56n) & 0x7n);
+  const resolution = Number((index >> 52n) & 0xfn);
+  const baseCell = Number((index >> 45n) & 0x7fn);
+  if (mode !== 1 || reserved !== 0 || resolution !== 9 || baseCell > 121) return false;
+
+  let leadingNonZeroDigit = 0;
+  for (let digitIndex = 1; digitIndex <= 15; digitIndex += 1) {
+    const digit = Number((index >> BigInt((15 - digitIndex) * 3)) & 0x7n);
+    if (digitIndex <= resolution) {
+      if (digit === 7) return false;
+      if (leadingNonZeroDigit === 0 && digit !== 0) leadingNonZeroDigit = digit;
+    } else if (digit !== 7) {
+      return false;
+    }
+  }
+  return !pentagonBaseCells.has(baseCell) || leadingNonZeroDigit !== 1;
 }
 
 export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1 {

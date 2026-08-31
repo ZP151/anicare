@@ -936,6 +936,7 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
         mediaId: row.media_id,
         sightingId: row.sighting_id ?? undefined,
         ownerSubject: row.owner_subject ?? undefined,
+        ...(report ? { report } : {}),
         encryptedReviewedRef: row.reviewed_media_ref,
         encryptionVersion: 'aes-256-gcm.v1',
         receipt: JSON.parse(row.review_receipt_json ?? ''),

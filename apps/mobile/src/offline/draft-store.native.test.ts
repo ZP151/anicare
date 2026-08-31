@@ -81,6 +81,39 @@ describe('native draft storage privacy boundary', () => {
     expect(draft.report).toBeUndefined();
   });
 
+  it('retains a valid resumable payload with its complete reviewed-media and cleanup metadata', () => {
+    const report = {
+      version: 1,
+      step: 'review',
+      occurredAt: '2026-08-31T10:00:00.000Z',
+      coat: ['tabby'],
+      markings: ['white-paws'],
+      condition: 'appears_well',
+      manualPublicCellId: null,
+      updatedAt: '2026-08-31T10:01:00.000Z',
+    };
+    const [draft] = deserializeDraftRows([{
+      id: 'draft-12345678', notes: '', risk: 'normal', media_id: 'media-12345678', sighting_id: null,
+      owner_subject: 'owner-12345678', reviewed_media_ref: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      encryption_version: 'aes-256-gcm.v1',
+      review_receipt_json: JSON.stringify({
+        sanitizedSha256: 'a'.repeat(64), recipeVersion: 'jpeg-srgb-2048-q88.v1',
+        detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+        width: 100, height: 100, byteLength: 100, confirmedAtLocal: '2026-08-27T00:00:00.000Z',
+      }),
+      upload_state: 'upload_pending', upload_attempts: 0, next_attempt_at: null, last_error: null,
+      upload_resume_state: null, upload_attempt_started_at: null, revision: 2,
+      pending_media_cleanup_ref: 'reviewed-media/media-87654321.commit-87654321.agcm',
+      report_payload_json: JSON.stringify(report),
+    }]);
+    expect(draft).toMatchObject({
+      report,
+      mediaId: 'media-12345678',
+      encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+      pendingMediaCleanupRef: 'reviewed-media/media-87654321.commit-87654321.agcm',
+    });
+  });
+
   it('detaches only eligible unsubmitted media through durable CAS before cleanup', async () => {
     let current: StoredDraft = {
       id: 'draft-12345678', notes: '', risk: 'normal' as const, mediaId: 'media-12345678',
