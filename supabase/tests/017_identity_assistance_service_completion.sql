@@ -661,7 +661,7 @@ select throws_ok(
 select lives_ok(
   $$select * from public.server_request_media_deletion(
       '00000000-0000-4000-8000-000000017100',
-      '00000000-0000-4000-8000-000000017221'
+      '00000000-0000-4000-8000-000000001721'
     )$$,
   'governed source deletion invalidates an already-completed no-match job'
 );
@@ -754,7 +754,7 @@ select throws_ok(
 set local session_replication_role = replica;
 update public.media_assets
    set sha256 = pg_catalog.repeat('f', 64)
- where id = '00000000-0000-4000-8000-000000017229';
+ where id = '00000000-0000-4000-8000-000000001729';
 set local session_replication_role = origin;
 select throws_ok(
   $$select public.service_complete_identity_assistance_job(
