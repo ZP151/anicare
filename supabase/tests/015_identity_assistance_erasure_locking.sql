@@ -2,7 +2,7 @@ begin;
 create extension if not exists dblink with schema extensions;
 select no_plan();
 
-\echo task3_stage_profiles
+\echo 015_task3_stage_profiles.sql
 
 set local session_replication_role = replica;
 insert into public.user_profiles (id, public_name, adult_confirmed_at)
@@ -37,7 +37,6 @@ insert into public.role_grants (
     '00000000-0000-4000-8000-000000006002', null, null,
     'task3_replay', pg_catalog.now());
 
-\echo task3_stage_sightings
 insert into public.sightings (
   id, reporter_id, occurred_at, public_cell_id, time_bucket, risk,
   visibility, client_dedupe_key
@@ -53,7 +52,7 @@ select pg_catalog.format(
        'task3-identity-source-' || fixture::text
   from generate_series(1, 15) as fixtures(fixture);
 
-\echo task3_stage_media_assets
+\echo 015_task3_stage_media_assets.sql
 insert into public.media_assets (
   id, sighting_id, uploader_id, storage_bucket, storage_path, sha256,
   redaction_confirmed_at, training_eligible, client_media_id, byte_length,
@@ -81,7 +80,6 @@ select pg_catalog.format(
   from unnest(array[1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14])
     as fixtures(fixture);
 
-\echo task3_stage_upload_jobs
 insert into private.media_upload_jobs (
   id, uploader_id, sighting_id, media_id, sha256, byte_length, width, height,
   recipe_version, detector_versions, confirmed_at_local, object_path, status,
@@ -115,7 +113,6 @@ select pg_catalog.format(
   from unnest(array[1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14])
     as fixtures(fixture);
 
-\echo task3_stage_animals
 insert into public.animals (id, primary_alias, profile_created_by, visibility)
 values
   ('00000000-0000-4000-8000-000000006501', 'Task 3 Stable Candidate',
@@ -129,7 +126,7 @@ values
   ('00000000-0000-4000-8000-000000006505', 'Task 3 Media Candidate',
     '00000000-0000-4000-8000-000000006002', 'limited');
 
-\echo task3_stage_jobs
+\echo 015_task3_stage_jobs.sql
 insert into private.identity_assistance_jobs (
   id, sighting_id, media_asset_id, requester_id, notice_version, input_sha256
 ) values (
@@ -176,7 +173,6 @@ insert into private.identity_assistance_jobs (
   repeat('6', 64), 1, pg_catalog.now(), 'internal_error'
 );
 
-\echo task3_stage_candidates
 do $fixture$
 declare
   fixture integer;
@@ -220,7 +216,7 @@ begin
 end;
 $fixture$;
 
-\echo task3_stage_proposals
+\echo 015_task3_stage_proposals.sql
 insert into public.identity_proposals (
   id, sighting_id, proposed_animal_id, proposer_id, source, status,
   model_version, confidence_band, reasons
@@ -283,7 +279,6 @@ update public.identity_proposals
    set status = 'rejected', reviewed_at = pg_catalog.now()
  where id = '00000000-0000-4000-8000-000000006407';
 
-\echo task3_stage_reviews
 insert into public.match_reviews (
   id, proposal_id, reviewer_id, decision, rationale, request_id
 ) values
@@ -308,7 +303,6 @@ insert into public.match_reviews (
     'Confirmed manual history must remain deidentified.',
     '00000000-0000-4000-8000-000000006469');
 
-\echo task3_stage_evidence
 insert into private.identity_proposal_evidence (
   proposal_id, job_id, selected_candidate_rank, media_asset_id,
   recipe_version, crop_contract_version, embedding_contract_version,
@@ -340,7 +334,7 @@ select pg_catalog.format(
          )::uuid)
   from unnest(array[4, 5, 7, 10, 11, 12, 13, 14]) as fixtures(fixture);
 
-\echo task3_stage_ledgers
+\echo 015_task3_stage_ledgers.sql
 insert into private.identity_assistance_requests (
   actor_id, request_id, payload_sha256, operation, job_id, proposal_id
 ) values (
@@ -396,7 +390,6 @@ insert into audit.access_audit (
   'identity_review', '00000000-0000-4000-8000-000000006601'
 );
 
-\echo task3_stage_selector_recusal
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006004', true);
@@ -429,7 +422,7 @@ select is(
   'selector recusal writes no audit row'
 );
 
-\echo task3_stage_account_erasure
+\echo 015_task3_stage_account_erasure.sql
 select set_config('private.account_erasure_actor', 'task3-outer-scope', true);
 select set_config('private.identity_assistance_job_writer', 'task3-outer-job', true);
 select set_config('private.identity_assistance_candidate_writer', 'task3-outer-candidate', true);
@@ -651,7 +644,6 @@ select ok(
   'moderation and audit history remains pseudonymized under the established erasure contract'
 );
 
-\echo task3_stage_erased_source_review
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006001', true);
@@ -672,7 +664,7 @@ select is(
   'account-invalidated review writes no decision'
 );
 
-\echo task3_stage_candidate_invalidation
+\echo 015_task3_stage_candidate_invalidation.sql
 update public.animals
    set visibility = 'hidden'
  where id = '00000000-0000-4000-8000-000000006502';
@@ -705,7 +697,6 @@ select is(
   'animal unavailability marks every affected selected result non-actionable'
 );
 
-\echo task3_stage_invalidated_candidate_review
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006001', true);
@@ -770,7 +761,6 @@ select is(
   'animal-invalidated review attempts never link a sighting'
 );
 
-\echo task3_stage_media_invalidation
 select lives_ok(
   $$select * from public.server_request_media_deletion(
       '00000000-0000-4000-8000-000000006003',
@@ -802,7 +792,7 @@ select is(
   'media-invalidated review writes no review ledger or audit side effect'
 );
 
-\echo task3_stage_manual_review
+\echo 015_task3_stage_manual_review.sql
 set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006006', true);
@@ -828,7 +818,6 @@ select lives_ok(
   'an authorized exact review replay remains idempotent'
 );
 reset role;
-\echo task3_stage_replay_authorization
 update public.role_grants
    set revoked_at = pg_catalog.clock_timestamp()
  where id = '00000000-0000-4000-8000-000000006056';
@@ -858,7 +847,6 @@ select is(
   'authorized replay and later revoked replay retain one audit row'
 );
 
-\echo task3_stage_erasure_exception
 insert into public.media_assets (
   id, uploader_id, storage_bucket, storage_path, sha256,
   redaction_confirmed_at, training_eligible
@@ -913,7 +901,7 @@ select ok(
   'exceptional account erasure rolls back the profile deletion'
 );
 
-\echo task3_stage_race
+\echo 015_task3_stage_race.sql
 select lives_ok(
   $orchestrator$
   do $main$
