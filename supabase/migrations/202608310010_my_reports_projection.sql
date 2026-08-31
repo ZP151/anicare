@@ -7,7 +7,9 @@ create index if not exists media_assets_sighting_status_idx
 create index if not exists identity_proposals_sighting_status_idx
   on public.identity_proposals (sighting_id, status);
 
-revoke all on table public.identity_proposals from public, anon, authenticated;
+-- The existing identity control plane uses RLS-scoped authenticated SELECT to
+-- resolve proposal rows before its security-definer RPCs. This owner projection
+-- deliberately preserves that established contract and adds no table grants.
 
 create or replace function public.list_my_sighting_summaries(
   p_limit integer default 50,

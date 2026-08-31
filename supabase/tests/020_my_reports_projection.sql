@@ -25,8 +25,10 @@ select ok(
   'raw media grant remains revoked'
 );
 select ok(
-  not has_table_privilege('authenticated', 'public.identity_proposals', 'select'),
-  'raw identity-proposal grant remains revoked'
+  not has_table_privilege('authenticated', 'public.identity_proposals', 'insert')
+    and not has_table_privilege('authenticated', 'public.identity_proposals', 'update')
+    and not has_table_privilege('authenticated', 'public.identity_proposals', 'delete'),
+  'My Reports adds no raw identity-proposal mutations; existing RLS-scoped SELECT is preserved for identity review'
 );
 select ok(
   not has_table_privilege('authenticated', 'private.media_upload_jobs', 'select'),
