@@ -44,19 +44,20 @@ confirmation UI was added.
 - Exact `pnpm --filter @animalhelper/mobile test -- --runInBand`: not runnable
   as written because the package script already supplies `--runInBand`; Jest
   interprets the forwarded flag as a test-name pattern and reports no tests.
-- Canonical `pnpm --filter @animalhelper/mobile test`: 58 suites/671 tests
-  passed; 2 suites/3 stale-or-regression failures remain under controller
-  investigation in `feed-screens.test.tsx` and `tab-style.test.ts`, outside
-  this task's file scope.
+- Canonical `pnpm --filter @animalhelper/mobile test`: PASS — 60 suites/678
+  tests. The two stale feed-route assertions now cover the approved
+  save-draft-then-`/report/new` behavior, and the tab assertion matches the
+  approved 88-point visual contract; no production behavior was changed.
 - `pnpm pilot-gate-2a`: PASS on Windows Docker Desktop with the pinned Supabase
   CLI 2.84.2 — local credential validation, pgTAP, warning-level database lint,
   readiness and the serialized integration suite all passed. The guarded
   runner excludes the out-of-scope `logflare`/`vector` observability services
   and invokes `pnpm` through the Windows command processor without enabling the
   insecure Docker TCP endpoint.
-- `pnpm verify`: stops at the same mobile-suite failures.
-- `.venv\\Scripts\\python.exe -m ruff check services/ai` and mypy: unavailable;
-  the repository virtual environment is absent.
+- `pnpm verify`: PASS — pilot policies, root contracts, lint, typecheck, all
+  package tests and all production builds.
+- `.venv\\Scripts\\python.exe -m ruff check services/ai`: PASS.
+- `.venv\\Scripts\\python.exe -m mypy services/ai/src`: PASS — 9 source files.
 - `git diff --check`: PASS (Windows line-ending notices only).
 
 Hosted Gate 2B, true iOS/Android Google Maps/Hermes and media/recovery checks,

@@ -7,8 +7,10 @@ const mockPush = jest.fn();
 const mockNearbyMapMount = jest.fn();
 const mockRequestForegroundPermissionsAsync = jest.fn();
 const mockGetCurrentPositionAsync = jest.fn();
+const mockSaveOfflineDraft = jest.fn();
 const mockLocale = { value: 'en' as 'en' | 'zh-CN' };
 const mockReactStateValues: unknown[] = [];
+const reportDraftId = '00000000-0000-4000-8000-000000000303';
 
 jest.mock('react', () => {
   const actual = jest.requireActual<typeof import('react')>('react');
@@ -50,6 +52,10 @@ jest.mock('expo-router', () => ({
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: (...args: unknown[]) => mockRequestForegroundPermissionsAsync(...args),
   getCurrentPositionAsync: (...args: unknown[]) => mockGetCurrentPositionAsync(...args),
+}));
+jest.mock('expo-crypto', () => ({ randomUUID: () => reportDraftId }));
+jest.mock('../offline/draft-store', () => ({
+  saveOfflineDraft: (...args: unknown[]) => mockSaveOfflineDraft(...args),
 }));
 jest.mock('../maps/NearbyMap', () => {
   const React = require('react');
@@ -106,6 +112,7 @@ describe('fail-closed feed screens', () => {
     mockNearbyMapMount.mockReset();
     mockRequestForegroundPermissionsAsync.mockReset();
     mockGetCurrentPositionAsync.mockReset();
+    mockSaveOfflineDraft.mockReset().mockResolvedValue(undefined);
     mockLocale.value = 'en';
     mockReactStateValues.length = 0;
   });
@@ -120,7 +127,15 @@ describe('fail-closed feed screens', () => {
     await fireEvent.press(nearby.getByRole('button', { name: 'View Mochi' }));
     await fireEvent.press(nearby.getByRole('button', { name: 'Report a sighting of Mochi' }));
     expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-cat');
-    expect(mockPush).toHaveBeenNthCalledWith(2, { pathname: '/report', params: { animalId: 'demo-cat' } });
+    await waitFor(() => expect(mockPush).toHaveBeenNthCalledWith(2, {
+      pathname: '/report/new',
+      params: { draftId: reportDraftId },
+    }));
+    expect(mockSaveOfflineDraft).toHaveBeenCalledWith(expect.objectContaining({
+      id: reportDraftId,
+      notes: '',
+      risk: 'normal',
+    }));
     await fireEvent.press(nearby.getByRole('button', { name: 'How locations are protected' }));
     expect(nearby.getByText('No user location is requested. Cat locations, routes and timestamps remain hidden.')).toBeTruthy();
     await nearby.unmount();
@@ -242,7 +257,15 @@ describe('fail-closed feed screens', () => {
     await fireEvent.press(map.getByRole('button', { name: 'View Demo Meow One' }));
     await fireEvent.press(map.getByRole('button', { name: 'Report from Community area 1' }));
     expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-community-cat-1');
-    expect(mockPush).toHaveBeenNthCalledWith(2, { pathname: '/report', params: { source: 'community-map' } });
+    await waitFor(() => expect(mockPush).toHaveBeenNthCalledWith(2, {
+      pathname: '/report/new',
+      params: { draftId: reportDraftId, step: 'area', manualArea: 'required' },
+    }));
+    expect(mockSaveOfflineDraft).toHaveBeenCalledWith(expect.objectContaining({
+      id: reportDraftId,
+      notes: '',
+      risk: 'normal',
+    }));
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('demo-cell-1');
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('public-area-1');
     await map.unmount();
