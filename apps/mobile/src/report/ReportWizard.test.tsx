@@ -50,6 +50,12 @@ function ManualAreaPicker({ onSelect }: Readonly<{ onSelect(selection: { publicC
   return <Pressable accessibilityRole="button" accessibilityLabel="Tap broad Singapore map" onPress={() => onSelect({ publicCellId: '89652636d87ffff' })} />;
 }
 
+function deferredLocation() {
+  let resolve!: (value: { kind: 'granted'; latitude: number; longitude: number }) => void;
+  const promise = new Promise<{ kind: 'granted'; latitude: number; longitude: number }>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
 describe('ReportWizard', () => {
   it('loads a validated draft at its earliest incomplete stage and saves the sanitized payload when advancing', async () => {
     const saveDraft = jest.fn(async () => undefined);
@@ -168,6 +174,65 @@ describe('ReportWizard', () => {
     appStateSpy.mockRestore();
   });
 
+  it('does not submit delayed device coordinates after background invalidates the attempt', async () => {
+    const location = deferredLocation();
+    let listener: ((state: string) => void) | undefined;
+    const subscription = { remove: jest.fn() };
+    const appStateSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_event: 'change', callback: (state: import('react-native').AppStateStatus) => void) => {
+      listener = callback as (state: string) => void;
+      return subscription;
+    }) as never);
+    const submit = jest.fn(async () => ({ sightingId, state: 'submitted_text_only' }));
+    const navigate = jest.fn();
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ navigate, requestDeviceLocation: () => location.promise, submit })} initialStage="review" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+    await waitFor(() => expect(location.promise).toBeTruthy());
+    await act(async () => { listener?.('background'); location.resolve({ kind: 'granted', latitude: 1.3521, longitude: 103.8198 }); });
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    await view.unmount();
+    appStateSpy.mockRestore();
+  });
+
+  it('does not submit delayed device coordinates after save and exit cancels the attempt', async () => {
+    const location = deferredLocation();
+    const submit = jest.fn(async () => ({ sightingId, state: 'submitted_text_only' }));
+    const navigate = jest.fn();
+    const exit = jest.fn();
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ exit, navigate, requestDeviceLocation: () => location.promise, submit })} initialStage="review" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Save and exit' }));
+    await waitFor(() => expect(exit).toHaveBeenCalledTimes(1));
+    await act(async () => { location.resolve({ kind: 'granted', latitude: 1.3521, longitude: 103.8198 }); });
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('does not submit delayed device coordinates after unmount invalidates the attempt', async () => {
+    const location = deferredLocation();
+    const submit = jest.fn(async () => ({ sightingId, state: 'submitted_text_only' }));
+    const navigate = jest.fn();
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ navigate, requestDeviceLocation: () => location.promise, submit })} initialStage="review" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+    await view.unmount();
+    await act(async () => { location.resolve({ kind: 'granted', latitude: 1.3521, longitude: 103.8198 }); });
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('navigates to a committed receipt with only sightingId and clears active device coordinates', async () => {
     const requestDeviceLocation = jest.fn(async () => ({ kind: 'granted' as const, latitude: 1.3521, longitude: 103.8198 }));
     const navigate = jest.fn();
@@ -179,6 +244,21 @@ describe('ReportWizard', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/report/receipt?sightingId=${sightingId}`));
     expect(JSON.stringify(navigate.mock.calls)).not.toMatch(/latitude|longitude|notes|media|status/);
+    await view.unmount();
+  });
+
+  it('keeps an invalid injected sighting ID in the truthful recovery state instead of routing', async () => {
+    const navigate = jest.fn();
+    const requestDeviceLocation = jest.fn(async () => ({ kind: 'granted' as const, latitude: 1.3521, longitude: 103.8198 }));
+    const submit = jest.fn(async () => ({ sightingId: 'not-a-uuid', state: 'submitted_text_only' }));
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ navigate, requestDeviceLocation, submit })} initialStage="review" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+
+    await waitFor(() => expect(view.getByText('Your saved draft remains available. Try again when ready.')).toBeTruthy());
+    expect(navigate).not.toHaveBeenCalled();
     await view.unmount();
   });
 

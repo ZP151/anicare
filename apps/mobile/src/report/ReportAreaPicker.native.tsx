@@ -4,16 +4,19 @@ import MapView, { PROVIDER_GOOGLE, type MapPressEvent } from 'react-native-maps'
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
+import type { Locale } from '../i18n/catalog';
 import { PUBLIC_GOOGLE_MAP_STYLE, PUBLIC_MAP_REGION } from '../maps/public-map-policy';
+import { getReportCopy } from './report-copy';
 
 export type ReportAreaSelection = Readonly<{ publicCellId: string }>;
 
 type AreaMapBoundaryProps = Readonly<{ onPress(event: MapPressEvent): void }>;
 
-function NativeAreaMap({ onPress }: AreaMapBoundaryProps) {
+function NativeAreaMap({ onPress, locale = 'en' }: AreaMapBoundaryProps & Readonly<{ locale?: Locale }>) {
+  const copy = getReportCopy(locale);
   return (
-    <View accessibilityLabel="Choose a coarse area on a Google map" style={styles.frame}>
-      <Text style={styles.copy}>Tap the broad map to choose a coarse area. Your exact tap is discarded immediately.</Text>
+    <View accessibilityLabel={copy.wizardAreaMapLabel} style={styles.frame}>
+      <Text style={styles.copy}>{copy.wizardAreaMapInstruction}</Text>
       <View style={styles.mapFrame}>
         <MapView
           customMapStyle={PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({ ...entry, stylers: entry.stylers.map((styler) => ({ ...styler })) }))}
@@ -42,11 +45,13 @@ function NativeAreaMap({ onPress }: AreaMapBoundaryProps) {
 export function ReportAreaPicker({
   onSelect,
   MapBoundary = NativeAreaMap,
+  locale = 'en',
 }: Readonly<{
   onSelect(selection: ReportAreaSelection): void;
-  MapBoundary?: ComponentType<AreaMapBoundaryProps>;
+  MapBoundary?: ComponentType<AreaMapBoundaryProps & Readonly<{ locale?: Locale }>>;
+  locale?: Locale;
 }>) {
-  return <MapBoundary onPress={(event) => {
+  return <MapBoundary locale={locale} onPress={(event) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
     const { cellId } = toPublicLocationCell({ latitude, longitude });
     onSelect({ publicCellId: cellId });

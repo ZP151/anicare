@@ -68,6 +68,52 @@ export type MessageKey =
   | 'report.wizard.unavailableTitle'
   | 'report.wizard.unavailableCopy'
   | 'report.wizard.saveAndExit'
+  | 'report.wizard.progress'
+  | 'report.wizard.stagesLabel'
+  | 'report.wizard.saveFailed'
+  | 'report.wizard.photoReady'
+  | 'report.wizard.photoIntro'
+  | 'report.wizard.photoAdd'
+  | 'report.wizard.photoReplace'
+  | 'report.wizard.photoRemove'
+  | 'report.wizard.photoSkip'
+  | 'report.wizard.photoRemoved'
+  | 'report.wizard.photoRemoveFailed'
+  | 'report.wizard.detailsIntro'
+  | 'report.wizard.conditionWell'
+  | 'report.wizard.conditionNeedsAttention'
+  | 'report.wizard.conditionUrgent'
+  | 'report.wizard.notesLabel'
+  | 'report.wizard.notesPlaceholder'
+  | 'report.wizard.continue'
+  | 'report.wizard.continueToSafety'
+  | 'report.wizard.safetyIntro'
+  | 'report.wizard.riskNormal'
+  | 'report.wizard.riskSensitive'
+  | 'report.wizard.riskCritical'
+  | 'report.wizard.riskNormalConsequence'
+  | 'report.wizard.riskSensitiveConsequence'
+  | 'report.wizard.riskCriticalConsequence'
+  | 'report.wizard.continueToArea'
+  | 'report.wizard.areaIntro'
+  | 'report.wizard.deviceLocation'
+  | 'report.wizard.manualArea'
+  | 'report.wizard.continueToReview'
+  | 'report.wizard.devicePending'
+  | 'report.wizard.manualSelected'
+  | 'report.wizard.locationDenied'
+  | 'report.wizard.areaRequired'
+  | 'report.wizard.recovery'
+  | 'report.wizard.reviewIntro'
+  | 'report.wizard.edit'
+  | 'report.wizard.submitDisabledReason'
+  | 'report.wizard.submit'
+  | 'report.wizard.areaMapLabel'
+  | 'report.wizard.areaMapInstruction'
+  | 'report.wizard.webAreaLabel'
+  | 'report.wizard.webAreaUnavailable'
+  | 'report.wizard.webDeviceLocation'
+  | 'report.wizard.webManualArea'
   | 'following.title'
   | 'following.subtitle'
   | 'profile.title'
@@ -141,6 +187,52 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.unavailableTitle': 'Report unavailable',
     'report.wizard.unavailableCopy': 'This saved report is unavailable. Return to Report and start again.',
     'report.wizard.saveAndExit': 'Save and exit',
+    'report.wizard.progress': 'Step {current} of {total} · {step}',
+    'report.wizard.stagesLabel': 'Report stages',
+    'report.wizard.saveFailed': 'Your changes could not be saved. Please try again.',
+    'report.wizard.photoReady': 'Private photo ready',
+    'report.wizard.photoIntro': 'A photo is optional. If you add one, review and redact it before it is saved privately.',
+    'report.wizard.photoAdd': 'Add private photo',
+    'report.wizard.photoReplace': 'Replace private photo',
+    'report.wizard.photoRemove': 'Remove private photo',
+    'report.wizard.photoSkip': 'Skip photo for now',
+    'report.wizard.photoRemoved': 'The private photo was removed from this saved report.',
+    'report.wizard.photoRemoveFailed': 'The private photo could not be removed safely. Please try again.',
+    'report.wizard.detailsIntro': 'How did the cat appear?',
+    'report.wizard.conditionWell': 'Appears well',
+    'report.wizard.conditionNeedsAttention': 'Needs attention',
+    'report.wizard.conditionUrgent': 'Urgent',
+    'report.wizard.notesLabel': 'Optional notes',
+    'report.wizard.notesPlaceholder': 'Optional notes',
+    'report.wizard.continue': 'Continue',
+    'report.wizard.continueToSafety': 'Continue to safety',
+    'report.wizard.safetyIntro': 'Choose the level of care needed. Critical reports are not publicly visible.',
+    'report.wizard.riskNormal': 'normal',
+    'report.wizard.riskSensitive': 'sensitive',
+    'report.wizard.riskCritical': 'critical',
+    'report.wizard.riskNormalConsequence': 'Normal reports use the standard community visibility.',
+    'report.wizard.riskSensitiveConsequence': 'Sensitive reports reduce public visibility.',
+    'report.wizard.riskCriticalConsequence': 'Critical reports are not publicly visible.',
+    'report.wizard.continueToArea': 'Continue to area',
+    'report.wizard.areaIntro': 'Choose a broad area. Exact device coordinates are used only for this active submission and are never saved in the draft.',
+    'report.wizard.deviceLocation': 'Use device location',
+    'report.wizard.manualArea': 'Choose an area manually',
+    'report.wizard.continueToReview': 'Continue to review',
+    'report.wizard.devicePending': 'Your device location will be requested only when you submit this report.',
+    'report.wizard.manualSelected': 'A broad area was selected. Your exact map tap was discarded.',
+    'report.wizard.locationDenied': 'Location permission was not granted. Choose an area manually instead.',
+    'report.wizard.areaRequired': 'Choose an area before submitting.',
+    'report.wizard.recovery': 'Your saved draft remains available. Try again when ready.',
+    'report.wizard.reviewIntro': 'Check your details, safety choice and broad area before submitting. You can use the stages above to edit any section.',
+    'report.wizard.edit': 'Edit {step}',
+    'report.wizard.submitDisabledReason': 'Choose a device or broad manual area before submitting.',
+    'report.wizard.submit': 'Submit report',
+    'report.wizard.areaMapLabel': 'Choose a coarse area on a Google map',
+    'report.wizard.areaMapInstruction': 'Tap the broad map to choose a coarse area. Your exact tap is discarded immediately.',
+    'report.wizard.webAreaLabel': 'Area capture unavailable on web',
+    'report.wizard.webAreaUnavailable': 'Area capture is available only in native iOS and Android builds.',
+    'report.wizard.webDeviceLocation': 'Use device location',
+    'report.wizard.webManualArea': 'Choose an area on the map',
     'following.title': 'Following',
     'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
     'profile.title': 'Your profile',
@@ -213,6 +305,52 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.unavailableTitle': '报告不可用',
     'report.wizard.unavailableCopy': '这份已保存的报告无法使用。请返回“报告”后重新开始。',
     'report.wizard.saveAndExit': '保存并退出',
+    'report.wizard.progress': '第{current}步，共{total}步 · {step}',
+    'report.wizard.stagesLabel': '报告步骤',
+    'report.wizard.saveFailed': '无法保存你的更改，请重试。',
+    'report.wizard.photoReady': '私密照片已准备好',
+    'report.wizard.photoIntro': '照片为可选项。添加照片后，请先检查并遮挡，再私密保存。',
+    'report.wizard.photoAdd': '添加私密照片',
+    'report.wizard.photoReplace': '更换私密照片',
+    'report.wizard.photoRemove': '移除私密照片',
+    'report.wizard.photoSkip': '暂时跳过照片',
+    'report.wizard.photoRemoved': '已从这份保存的报告中移除私密照片。',
+    'report.wizard.photoRemoveFailed': '无法安全移除私密照片，请重试。',
+    'report.wizard.detailsIntro': '这只猫看起来如何？',
+    'report.wizard.conditionWell': '状况良好',
+    'report.wizard.conditionNeedsAttention': '需要关注',
+    'report.wizard.conditionUrgent': '紧急',
+    'report.wizard.notesLabel': '可选备注',
+    'report.wizard.notesPlaceholder': '可选备注',
+    'report.wizard.continue': '继续',
+    'report.wizard.continueToSafety': '继续到安全设置',
+    'report.wizard.safetyIntro': '请选择所需的照护程度。紧急报告不会公开显示。',
+    'report.wizard.riskNormal': '一般',
+    'report.wizard.riskSensitive': '敏感',
+    'report.wizard.riskCritical': '紧急',
+    'report.wizard.riskNormalConsequence': '一般报告采用标准的社区可见性。',
+    'report.wizard.riskSensitiveConsequence': '敏感报告会降低公开可见性。',
+    'report.wizard.riskCriticalConsequence': '紧急报告不会公开显示。',
+    'report.wizard.continueToArea': '继续到区域',
+    'report.wizard.areaIntro': '请选择一个宽泛区域。精确设备坐标仅用于这一次提交，绝不会保存在草稿中。',
+    'report.wizard.deviceLocation': '使用设备位置',
+    'report.wizard.manualArea': '手动选择区域',
+    'report.wizard.continueToReview': '继续到确认',
+    'report.wizard.devicePending': '仅会在你提交这份报告时请求设备位置。',
+    'report.wizard.manualSelected': '已选择宽泛区域，精确地图点按位置已立即丢弃。',
+    'report.wizard.locationDenied': '未获得位置权限，请改为手动选择区域。',
+    'report.wizard.areaRequired': '请先选择区域再提交。',
+    'report.wizard.recovery': '已保存的草稿仍可使用，准备好后请重试。',
+    'report.wizard.reviewIntro': '提交前请检查详情、安全选择和宽泛区域。可使用上方步骤编辑任一部分。',
+    'report.wizard.edit': '编辑{step}',
+    'report.wizard.submitDisabledReason': '提交前请选择设备位置或宽泛手动区域。',
+    'report.wizard.submit': '提交报告',
+    'report.wizard.areaMapLabel': '在 Google 地图上选择宽泛区域',
+    'report.wizard.areaMapInstruction': '点按宽泛地图以选择粗略区域，精确点按位置会立即丢弃。',
+    'report.wizard.webAreaLabel': '网页端无法采集区域',
+    'report.wizard.webAreaUnavailable': '区域采集仅可在原生 iOS 和 Android 版本中使用。',
+    'report.wizard.webDeviceLocation': '使用设备位置',
+    'report.wizard.webManualArea': '在地图上选择区域',
     'following.title': '关注',
     'following.subtitle': '获取你关注的猫和区域的去敏更新。',
     'profile.title': '我的',

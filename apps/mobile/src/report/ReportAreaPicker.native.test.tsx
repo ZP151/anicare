@@ -25,4 +25,12 @@ describe('ReportAreaPicker native privacy boundary', () => {
     expect(JSON.stringify(onSelect.mock.calls)).not.toContain('103.8198');
     await view.unmount();
   });
+
+  it('renders native manual-area instructions in Simplified Chinese', async () => {
+    const view = await render(<ReportAreaPicker locale="zh-CN" onSelect={jest.fn()} />);
+
+    expect(view.getByLabelText('在 Google 地图上选择宽泛区域')).toBeTruthy();
+    expect(view.getByText('点按宽泛地图以选择粗略区域，精确点按位置会立即丢弃。')).toBeTruthy();
+    await view.unmount();
+  });
 });

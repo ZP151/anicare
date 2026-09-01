@@ -10,6 +10,7 @@ import { earliestIncompleteStep, reportTraits } from './report-flow';
 import { createReportDraftPayload, sanitizeReportDraftPayload, type ReportCondition, type ReportDraftStep } from './report-draft';
 import { ReportAreaPicker } from './ReportAreaPicker';
 import { getReportCopy } from './report-copy';
+import { isOpaqueReportId } from './ReportRouteShell';
 
 type DeviceLocationResult =
   | Readonly<{ kind: 'granted'; latitude: number; longitude: number }>
@@ -54,7 +55,7 @@ export function ReportWizard({
   draftId: string;
   dependencies: ReportWizardDependencies;
   initialStage?: ReportDraftStep;
-  AreaPicker?: ComponentType<Readonly<{ onSelect(selection: { publicCellId: string }): void }>>;
+  AreaPicker?: ComponentType<Readonly<{ locale?: Locale; onSelect(selection: { publicCellId: string }): void }>>;
   captureAvailable?: boolean;
   locale?: Locale;
 }>) {
@@ -67,10 +68,29 @@ export function ReportWizard({
   const coordinatesRef = useRef<Readonly<{ latitude: number; longitude: number }> | null>(null);
   const locationPromptedRef = useRef(false);
   const mountedRef = useRef(true);
+  const deviceAttemptRef = useRef(0);
   const currentDraftRef = useRef<StoredDraft | null>(null);
   const currentStageRef = useRef<ReportDraftStep | null>(null);
+  const conditionLabels: Readonly<Record<ReportCondition, string>> = {
+    appears_well: copy.wizardConditionWell,
+    needs_attention: copy.wizardConditionNeedsAttention,
+    urgent: copy.wizardConditionUrgent,
+  };
+  const riskLabels: Readonly<Record<SightingRisk, string>> = {
+    normal: copy.wizardRiskNormal,
+    sensitive: copy.wizardRiskSensitive,
+    critical: copy.wizardRiskCritical,
+  };
 
   const clearActiveDeviceLocation = useCallback(() => {
+    deviceAttemptRef.current += 1;
+    coordinatesRef.current = null;
+    if (mountedRef.current) setDeviceAreaSelected(false);
+  }, []);
+
+  const completeDeviceAttempt = useCallback((attempt: number) => {
+    if (deviceAttemptRef.current !== attempt) return;
+    deviceAttemptRef.current += 1;
     coordinatesRef.current = null;
     if (mountedRef.current) setDeviceAreaSelected(false);
   }, []);
@@ -85,7 +105,7 @@ export function ReportWizard({
     mountedRef.current = true;
     void dependencies.loadDraft(draftId).then((loaded) => {
       if (!active || !loaded?.report) {
-        if (active) setStatus('This saved report is unavailable. Return to Report and start again.');
+        if (active) setStatus(copy.wizardUnavailableCopy);
         return;
       }
       try {
@@ -94,15 +114,15 @@ export function ReportWizard({
         setDraft(validDraft);
         setStage(initialStage ?? earliestIncompleteStep(validDraft));
       } catch {
-        setStatus('This saved report is unavailable. Return to Report and start again.');
+        setStatus(copy.wizardUnavailableCopy);
       }
-    }).catch(() => { if (active) setStatus('This saved report is unavailable. Return to Report and start again.'); });
+    }).catch(() => { if (active) setStatus(copy.wizardUnavailableCopy); });
     return () => {
       active = false;
       mountedRef.current = false;
       clearActiveDeviceLocation();
     };
-  }, [clearActiveDeviceLocation, dependencies, draftId, initialStage]);
+  }, [clearActiveDeviceLocation, copy.wizardUnavailableCopy, dependencies, draftId, initialStage]);
 
   const save = useCallback(async (nextDraft: StoredDraft, nextStage: ReportDraftStep) => {
     const current = nextDraft.report ?? createReportDraftPayload(dependencies.now());
@@ -121,11 +141,11 @@ export function ReportWizard({
       const currentDraft = currentDraftRef.current;
       const currentStage = currentStageRef.current;
       if (currentDraft && currentStage) {
-        void save(currentDraft, currentStage).catch(() => setStatus('Your changes could not be saved. Please try again.'));
+        void save(currentDraft, currentStage).catch(() => setStatus(copy.wizardSaveFailed));
       }
     });
     return () => subscription?.remove?.();
-  }, [clearActiveDeviceLocation, save]);
+  }, [clearActiveDeviceLocation, copy.wizardSaveFailed, save]);
 
   const advance = async () => {
     if (!draft || !stage) return;
@@ -133,7 +153,7 @@ export function ReportWizard({
       await save(draft, followingStage(stage));
       setStatus(null);
     } catch {
-      setStatus('Your changes could not be saved. Please try again.');
+      setStatus(copy.wizardSaveFailed);
     }
   };
 
@@ -146,7 +166,7 @@ export function ReportWizard({
     if (locationPromptedRef.current) return;
     setDeviceAreaSelected(true);
     setManualSelectionRequested(false);
-    setStatus('Your device location will be requested only when you submit this report.');
+    setStatus(copy.wizardDevicePending);
   };
 
   const selectManualArea = (selection: { publicCellId: string }) => {
@@ -160,19 +180,22 @@ export function ReportWizard({
       }),
     });
     setManualSelectionRequested(false);
-    setStatus('A broad area was selected. Your exact map tap was discarded.');
+    setStatus(copy.wizardManualSelected);
   };
 
   const submit = async () => {
     if (!draft?.report) return;
+    const attempt = ++deviceAttemptRef.current;
+    const attemptIsCurrent = () => mountedRef.current && deviceAttemptRef.current === attempt;
     try {
       let location: Readonly<{ kind: 'device_once'; latitude: number; longitude: number }> | Readonly<{ kind: 'manual_area'; publicCellId: string }> | null = null;
       if (deviceAreaSelected) {
         locationPromptedRef.current = true;
         const result = await dependencies.requestDeviceLocation();
+        if (!attemptIsCurrent()) return;
         if (result.kind !== 'granted') {
           setManualSelectionRequested(true);
-          setStatus('Location permission was not granted. Choose an area manually instead.');
+          setStatus(copy.wizardLocationDenied);
           return;
         }
         coordinatesRef.current = { latitude: result.latitude, longitude: result.longitude };
@@ -181,9 +204,10 @@ export function ReportWizard({
         location = { kind: 'manual_area', publicCellId: draft.report.manualPublicCellId };
       }
       if (!location) {
-        setStatus('Choose an area before submitting.');
+        setStatus(copy.wizardAreaRequired);
         return;
       }
+      if (!attemptIsCurrent()) return;
       const result = await dependencies.submit({
         draftId,
         notes: draft.notes,
@@ -192,20 +216,20 @@ export function ReportWizard({
         occurredAt: new Date(draft.report.occurredAt),
         location,
       });
-      if (!mountedRef.current) return;
-      if (result.sightingId) dependencies.navigate(`/report/receipt?sightingId=${result.sightingId}`);
-      else setStatus('Your saved draft remains available. Try again when ready.');
+      if (!attemptIsCurrent()) return;
+      if (isOpaqueReportId(result.sightingId)) dependencies.navigate(`/report/receipt?sightingId=${result.sightingId}`);
+      else setStatus(copy.wizardRecovery);
     } catch {
-      setStatus('Your saved draft remains available. Try again when ready.');
+      if (attemptIsCurrent()) setStatus(copy.wizardRecovery);
     } finally {
-      clearActiveDeviceLocation();
+      completeDeviceAttempt(attempt);
     }
   };
 
   const saveAndExit = async () => {
     clearActiveDeviceLocation();
     if (draft && stage) {
-      try { await save(draft, stage); } catch { setStatus('Your changes could not be saved. Please try again.'); return; }
+      try { await save(draft, stage); } catch { setStatus(copy.wizardSaveFailed); return; }
     }
     dependencies.exit();
   };
@@ -214,9 +238,9 @@ export function ReportWizard({
     try {
       await dependencies.removeReviewedMedia(draftId);
       if (draft) setDraft({ ...draft, mediaId: undefined, encryptedReviewedRef: undefined });
-      setStatus('The private photo was removed from this saved report.');
+      setStatus(copy.wizardPhotoRemoved);
     } catch {
-      setStatus('The private photo could not be removed safely. Please try again.');
+      setStatus(copy.wizardPhotoRemoveFailed);
     }
   };
 
@@ -227,48 +251,51 @@ export function ReportWizard({
   const canSubmit = deviceAreaSelected || !!draft.report.manualPublicCellId;
 
   return (
-    <ScreenScaffold title={copy.wizardTitle} subtitle={`Step ${stages.indexOf(stage) + 1} of 5 · ${copy.stepLabel(stage)}`} trailing={
+    <ScreenScaffold title={copy.wizardTitle} subtitle={copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage))} trailing={
       <Pressable accessibilityLabel={copy.wizardSaveAndExit} accessibilityRole="button" onPress={() => { void saveAndExit(); }} style={styles.exit}><Text style={styles.exitText}>{copy.wizardSaveAndExit}</Text></Pressable>
     }>
-      <View accessibilityLabel="Report stages" style={styles.stages}>{stages.map((item) => <Text key={item} style={item === stage ? styles.currentStage : styles.stage}>{copy.stepLabel(item)}</Text>)}</View>
+      <View accessibilityLabel={copy.wizardStagesLabel} style={styles.stages}>{stages.map((item) => <Text key={item} style={item === stage ? styles.currentStage : styles.stage}>{copy.stepLabel(item)}</Text>)}</View>
       <Text accessibilityRole="header" style={styles.sectionTitle}>{copy.stepLabel(stage)}</Text>
 
       {stage === 'photo' ? <View style={styles.group}>
-        <Text style={styles.copy}>{photoReady ? 'Private photo ready' : 'A photo is optional. If you add one, review and redact it before it is saved privately.'}</Text>
-        <Pressable accessibilityLabel={photoReady ? 'Replace private photo' : 'Add private photo'} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/redaction-review?draftId=${draftId}`)} style={styles.primary}><Text style={styles.primaryText}>{photoReady ? 'Replace private photo' : 'Add private photo'}</Text></Pressable>
-        {photoReady ? <Pressable accessibilityLabel="Remove private photo" accessibilityRole="button" onPress={() => { void removePhoto(); }} style={styles.secondary}><Text style={styles.secondaryText}>Remove private photo</Text></Pressable> : <Pressable accessibilityLabel="Skip photo for now" accessibilityRole="button" onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>Skip photo for now</Text></Pressable>}
+        <Text style={styles.copy}>{photoReady ? copy.wizardPhotoReady : copy.wizardPhotoIntro}</Text>
+        <Pressable accessibilityLabel={photoReady ? copy.wizardPhotoReplace : copy.wizardPhotoAdd} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/redaction-review?draftId=${draftId}`)} style={styles.primary}><Text style={styles.primaryText}>{photoReady ? copy.wizardPhotoReplace : copy.wizardPhotoAdd}</Text></Pressable>
+        {photoReady ? <Pressable accessibilityLabel={copy.wizardPhotoRemove} accessibilityRole="button" onPress={() => { void removePhoto(); }} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardPhotoRemove}</Text></Pressable> : <Pressable accessibilityLabel={copy.wizardPhotoSkip} accessibilityRole="button" onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardPhotoSkip}</Text></Pressable>}
       </View> : null}
 
       {stage === 'details' ? <View style={styles.group}>
-        <Text style={styles.copy}>How did the cat appear?</Text>
-        {(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={styles.option}><Text style={styles.optionText}>{condition.replace('_', ' ')}</Text></Pressable>)}
-        <TextInput accessibilityLabel="Optional notes" multiline onChangeText={(notes) => setDraft({ ...draft, notes })} placeholder="Optional notes" style={styles.notes} value={draft.notes} />
-        <Pressable accessibilityLabel="Continue to safety" accessibilityRole="button" disabled={!draft.report.condition} onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>Continue</Text></Pressable>
+        <Text style={styles.copy}>{copy.wizardDetailsIntro}</Text>
+        {(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityLabel={conditionLabels[condition]} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={styles.option}><Text style={styles.optionText}>{conditionLabels[condition]}</Text></Pressable>)}
+        <TextInput accessibilityLabel={copy.wizardNotesLabel} multiline onChangeText={(notes) => setDraft({ ...draft, notes })} placeholder={copy.wizardNotesPlaceholder} style={styles.notes} value={draft.notes} />
+        <Pressable accessibilityLabel={copy.wizardContinueToSafety} accessibilityRole="button" disabled={!draft.report.condition} onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable>
       </View> : null}
 
       {stage === 'safety' ? <View style={styles.group}>
-        <Text style={styles.copy}>Choose the level of care needed. Critical reports are not publicly visible.</Text>
-        {(['normal', 'sensitive', 'critical'] as const).map((risk) => <Pressable key={risk} accessibilityRole="button" accessibilityState={{ selected: draft.risk === risk }} onPress={() => setDraft({ ...draft, risk })} style={styles.option}><Text style={styles.optionText}>{risk}</Text></Pressable>)}
-        <Text style={styles.copy}>{draft.risk === 'critical' ? 'Critical reports are not publicly visible.' : draft.risk === 'sensitive' ? 'Sensitive reports reduce public visibility.' : 'Normal reports use the standard community visibility.'}</Text>
-        <Pressable accessibilityLabel="Continue to area" accessibilityRole="button" onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>Continue</Text></Pressable>
+        <Text style={styles.copy}>{copy.wizardSafetyIntro}</Text>
+        {(['normal', 'sensitive', 'critical'] as const).map((risk) => <Pressable key={risk} accessibilityLabel={riskLabels[risk]} accessibilityRole="button" accessibilityState={{ selected: draft.risk === risk }} onPress={() => setDraft({ ...draft, risk })} style={styles.option}><Text style={styles.optionText}>{riskLabels[risk]}</Text></Pressable>)}
+        <Text style={styles.copy}>{draft.risk === 'critical' ? copy.wizardRiskCriticalConsequence : draft.risk === 'sensitive' ? copy.wizardRiskSensitiveConsequence : copy.wizardRiskNormalConsequence}</Text>
+        <Pressable accessibilityLabel={copy.wizardContinueToArea} accessibilityRole="button" onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable>
       </View> : null}
 
       {stage === 'area' || stage === 'review' ? <View style={styles.group}>
-        <Text style={styles.copy}>Choose a broad area. Exact device coordinates are used only for this active submission and are never saved in the draft.</Text>
-        {!captureAvailable ? <AreaPicker onSelect={selectManualArea} /> : <>
-          <Pressable accessibilityLabel="Use device location" accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={selectDeviceArea} style={styles.primary}><Text style={styles.primaryText}>Use device location</Text></Pressable>
-          {manualSelectionRequested ? <AreaPicker onSelect={selectManualArea} /> : <Pressable accessibilityLabel="Choose an area manually" accessibilityRole="button" onPress={() => setManualSelectionRequested(true)} style={styles.secondary}><Text style={styles.secondaryText}>Choose an area manually</Text></Pressable>}
-          {stage === 'area' ? <Pressable accessibilityLabel="Continue to review" accessibilityRole="button" disabled={!canSubmit} onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>Continue to review</Text></Pressable> : null}
+        <Text style={styles.copy}>{copy.wizardAreaIntro}</Text>
+        {!captureAvailable ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <>
+          <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={selectDeviceArea} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardDeviceLocation}</Text></Pressable>
+          {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => setManualSelectionRequested(true)} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardManualArea}</Text></Pressable>}
+          {stage === 'area' ? <Pressable accessibilityLabel={copy.wizardContinueToReview} accessibilityRole="button" disabled={!canSubmit} onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardContinueToReview}</Text></Pressable> : null}
         </>}
       </View> : null}
 
       {stage === 'review' ? <View style={styles.group}>
-        <Text style={styles.copy}>Check your details, safety choice and broad area before submitting. You can use the stages above to edit any section.</Text>
+        <Text style={styles.copy}>{copy.wizardReviewIntro}</Text>
         <View style={styles.reviewLinks}>
-          {(['photo', 'details', 'safety', 'area'] as const).map((item) => <Pressable key={item} accessibilityLabel={`Edit ${copy.stepLabel(item).toLowerCase()}`} accessibilityRole="button" onPress={() => setStage(item)} style={styles.editLink}><Text style={styles.editLinkText}>Edit {copy.stepLabel(item).toLowerCase()}</Text></Pressable>)}
+          {(['photo', 'details', 'safety', 'area'] as const).map((item) => {
+            const label = locale === 'en' ? copy.stepLabel(item).toLowerCase() : copy.stepLabel(item);
+            return <Pressable key={item} accessibilityLabel={copy.wizardEdit(label)} accessibilityRole="button" onPress={() => setStage(item)} style={styles.editLink}><Text style={styles.editLinkText}>{copy.wizardEdit(label)}</Text></Pressable>;
+          })}
         </View>
-        {!canSubmit ? <Text style={styles.disabledReason}>Choose a device or broad manual area before submitting.</Text> : null}
-        <Pressable accessibilityLabel="Submit report" accessibilityRole="button" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={() => { void submit(); }} style={[styles.primary, !canSubmit && styles.disabled]}><Text style={styles.primaryText}>Submit report</Text></Pressable>
+        {!canSubmit ? <Text style={styles.disabledReason}>{copy.wizardSubmitDisabledReason}</Text> : null}
+        <Pressable accessibilityLabel={copy.wizardSubmit} accessibilityRole="button" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={() => { void submit(); }} style={[styles.primary, !canSubmit && styles.disabled]}><Text style={styles.primaryText}>{copy.wizardSubmit}</Text></Pressable>
       </View> : null}
       {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </ScreenScaffold>

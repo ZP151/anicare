@@ -45,4 +45,43 @@ describe('ReportWizard web capture boundary', () => {
     expect(view.getByRole('button', { name: 'Submit report' }).props.accessibilityState.disabled).toBe(true);
     await view.unmount();
   });
+
+  it('renders a complete Simplified Chinese review without visible English fallback', async () => {
+    const draft: StoredDraft = {
+      id: draftId,
+      notes: '',
+      risk: 'critical',
+      report: {
+        version: 1,
+        step: 'review',
+        occurredAt: '2026-08-31T00:00:00.000Z',
+        coat: [],
+        markings: [],
+        condition: 'urgent',
+        manualPublicCellId: null,
+        updatedAt: '2026-08-31T00:00:00.000Z',
+      },
+    };
+    const dependencies: ReportWizardDependencies = {
+      loadDraft: async () => draft,
+      saveDraft: async () => undefined,
+      removeReviewedMedia: async () => undefined,
+      requestDeviceLocation: async () => ({ kind: 'denied' }),
+      submit: async () => ({ sightingId: null, state: 'queued' }),
+      now: () => new Date('2026-08-31T00:01:00.000Z'),
+      navigate: () => undefined,
+      exit: () => undefined,
+    };
+    const view = await render(<ReportWizard AreaPicker={() => null} captureAvailable={false} draftId={draftId} dependencies={dependencies} initialStage="review" locale="zh-CN" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: '确认' })).toBeTruthy());
+    expect(view.getByRole('button', { name: '提交报告' }).props.accessibilityState.disabled).toBe(true);
+    const renderedJson = JSON.stringify((view as unknown as { toJSON(): unknown }).toJSON());
+    expect(renderedJson).not.toContain('Step ');
+    expect(renderedJson).not.toContain('Choose a broad area');
+    expect(renderedJson).not.toContain('Check your details');
+    expect(renderedJson).not.toContain('Edit ');
+    expect(renderedJson).not.toContain('Submit report');
+    await view.unmount();
+  });
 });
