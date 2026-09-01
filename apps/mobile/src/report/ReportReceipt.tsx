@@ -16,19 +16,20 @@ export type ReportReceiptDependencies = Readonly<{
   navigate(path: string): void;
 }>;
 
-type ReceiptState = Readonly<{ status: ReportReceiptStatus | null; remoteUnavailable: boolean }>;
+type ReceiptState = Readonly<{ status: ReportReceiptStatus | null; source: 'remote' | 'unavailable' | 'local_recovery' }>;
+type RemoteLookup = Readonly<{ kind: 'found'; report: MyReportSummary }> | Readonly<{ kind: 'not_found' }>;
 
 async function findRemoteReport(
   sightingId: string,
   listReports: ReportReceiptDependencies['listReports'],
-): Promise<MyReportSummary | null> {
+): Promise<RemoteLookup> {
   let cursor: MyReportsCursor | null = null;
   const seen = new Set<string>();
   for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
     const page = await listReports({ cursor });
     const item = page.items.find((candidate) => candidate.sightingId === sightingId);
-    if (item) return item;
-    if (!page.nextCursor) return null;
+    if (item) return { kind: 'found', report: item };
+    if (!page.nextCursor) return { kind: 'not_found' };
     const key = `${page.nextCursor.createdAt}:${page.nextCursor.sightingId}`;
     if (seen.has(key)) throw new Error('invalid_my_reports_response');
     seen.add(key);
@@ -57,9 +58,16 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
       const drafts = await dependencies.loadDrafts().catch(() => [] as readonly StoredDraft[]);
       try {
         const remote = await findRemoteReport(sightingId, dependencies.listReports);
-        if (mounted) setState({ status: mergeReceiptStatus(remote, localDraftForSighting(drafts, sightingId)), remoteUnavailable: false });
+        const local = localDraftForSighting(drafts, sightingId);
+        if (!mounted) return;
+        if (remote.kind === 'found') {
+          setState({ status: mergeReceiptStatus(remote.report, local), source: 'remote' });
+          return;
+        }
+        const recovery = mergeReceiptStatus(null, local);
+        setState({ status: recovery?.mediaState === 'needs_user' ? recovery : null, source: 'local_recovery' });
       } catch {
-        if (mounted) setState({ status: mergeReceiptStatus(null, localDraftForSighting(drafts, sightingId)), remoteUnavailable: true });
+        if (mounted) setState({ status: mergeReceiptStatus(null, localDraftForSighting(drafts, sightingId)), source: 'unavailable' });
       }
     })();
     return () => { mounted = false; };
@@ -73,10 +81,11 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
 
   return <ScreenScaffold subtitle={copy.receiptSubtitle} title={copy.receiptTitle}>
     {state === null ? <View accessibilityLiveRegion="polite" style={styles.loading}><ActivityIndicator color={colors.leaf} /><Text style={styles.notice}>{copy.receiptLoading}</Text></View> : null}
-    {state !== null && state.status === null ? <View style={styles.section}><Text accessibilityRole="header" style={styles.stateTitle}>{copy.routeUnavailableTitle}</Text><Text accessibilityLiveRegion="polite" style={styles.notice}>{state.remoteUnavailable ? copy.receiptRemoteUnavailable : copy.receiptUnavailable}</Text><ReceiptActions copy={copy} navigate={dependencies.navigate} /></View> : null}
+    {state !== null && state.status === null ? <View style={styles.section}><Text accessibilityRole="header" style={styles.stateTitle}>{copy.routeUnavailableTitle}</Text><Text accessibilityLiveRegion="polite" style={styles.notice}>{state.source === 'unavailable' ? copy.receiptRemoteUnavailable : copy.receiptUnavailable}</Text><ReceiptActions copy={copy} navigate={dependencies.navigate} /></View> : null}
     {state?.status ? <View style={styles.section} accessibilityLiveRegion="polite">
-      <Text accessibilityRole="header" style={styles.stateTitle}>{copy.receiptReceived}</Text>
-      {state.remoteUnavailable ? <Text style={styles.notice}>{copy.receiptRemoteUnavailable}</Text> : null}
+      <Text accessibilityRole="header" style={styles.stateTitle}>{state.source === 'local_recovery' ? copy.receiptLocalRecoveryTitle : copy.receiptReceived}</Text>
+      {state.source === 'unavailable' ? <Text style={styles.notice}>{copy.receiptRemoteUnavailable}</Text> : null}
+      {state.source === 'local_recovery' ? <Text style={styles.notice}>{copy.receiptLocalRecovery}</Text> : null}
       <View style={styles.statusList}>
         <Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text>
         <Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text>

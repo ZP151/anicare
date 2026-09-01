@@ -25,12 +25,22 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
   const copy = getReportCopy(locale);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
+  const requestRef = useRef(0);
   const [state, setState] = useState<HistoryState>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const saveSnapshot = useCallback((next: Snapshot) => { snapshotRef.current = next; setSnapshot(next); }, []);
+  const expireSession = useCallback(() => {
+    requestRef.current += 1;
+    snapshotRef.current = null;
+    setSnapshot(null);
+    setState('signed_out');
+    dependencies.navigate('/profile');
+  }, [dependencies]);
   const load = useCallback(async (mode: 'initial' | 'refresh' | 'more') => {
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
     const prior = snapshotRef.current;
     if (mode === 'more' && (!prior || !prior.nextCursor)) return;
     if (mode === 'refresh') setRefreshing(true);
@@ -38,25 +48,37 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
     if (mode === 'initial') setState('loading');
     try {
       if (!await dependencies.getSession()) {
-        snapshotRef.current = null;
-        setSnapshot(null);
-        setState('signed_out');
+        expireSession();
         return;
       }
       const page = await dependencies.listReports({ cursor: mode === 'more' ? prior!.nextCursor : null });
+      if (!await dependencies.getSession()) {
+        expireSession();
+        return;
+      }
       const drafts = await dependencies.loadDrafts().catch(() => [] as readonly StoredDraft[]);
+      if (!await dependencies.getSession()) {
+        expireSession();
+        return;
+      }
+      if (requestRef.current !== requestId) return;
       const remote = mode === 'more' && prior
         ? [...prior.remote, ...page.items]
         : page.items;
       saveSnapshot({ remote, rows: mergeReportRecovery(remote, drafts), nextCursor: page.nextCursor });
       setState('ready');
     } catch (error) {
+      if (!await dependencies.getSession().catch(() => true)) {
+        expireSession();
+        return;
+      }
+      if (requestRef.current !== requestId) return;
       if (snapshotRef.current) setState('offline');
       else setState(isInvalidResponse(error) ? 'invalid' : 'offline');
     } finally {
       setRefreshing(false); setLoadingMore(false);
     }
-  }, [dependencies, saveSnapshot]);
+  }, [dependencies, expireSession, saveSnapshot]);
 
   useEffect(() => { void load('initial'); }, [load]);
   const rows = snapshot?.rows ?? [];

@@ -76,6 +76,27 @@ describe('ReportReceipt', () => {
     expect(view.getByText('Private media awaiting validation')).toBeTruthy();
   });
 
+  it('does not resurrect stale local pending media after an authoritative lookup says the report is absent', async () => {
+    const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
+      listReports: async () => page([]),
+      loadDrafts: async () => [local({ uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
+    })} locale="en" />);
+
+    await waitFor(() => expect(view.getByText('Report unavailable')).toBeTruthy());
+    expect(view.queryByText('Report received')).toBeNull();
+    expect(view.queryByText('Media upload pending')).toBeNull();
+  });
+
+  it('keeps only an explicit local needs-user recovery after an authoritative lookup says the report is absent', async () => {
+    const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
+      listReports: async () => page([]),
+      loadDrafts: async () => [local({ uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
+    })} locale="en" />);
+
+    await waitFor(() => expect(view.getByText('Local media recovery needs your attention.')).toBeTruthy());
+    expect(view.getByText('Media needs your attention')).toBeTruthy();
+  });
+
   it('rejects missing or malformed sighting IDs without loading status', async () => {
     const run = dependencies();
     const view = await render(<ReportReceipt sightingId="not-an-id" dependencies={run} locale="en" />);

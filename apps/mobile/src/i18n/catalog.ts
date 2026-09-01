@@ -69,6 +69,8 @@ export type MessageKey =
   | 'report.receipt.received'
   | 'report.receipt.unavailable'
   | 'report.receipt.remoteUnavailable'
+  | 'report.receipt.localRecoveryTitle'
+  | 'report.receipt.localRecovery'
   | 'report.receipt.viewReports'
   | 'report.receipt.nearby'
   | 'report.receipt.reportState.draft'
@@ -222,6 +224,8 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.receipt.received': 'Report received',
     'report.receipt.unavailable': 'This report is unavailable.',
     'report.receipt.remoteUnavailable': 'Remote status is unavailable. Showing status saved on this device.',
+    'report.receipt.localRecoveryTitle': 'Local media recovery',
+    'report.receipt.localRecovery': 'Local media recovery needs your attention.',
     'report.receipt.viewReports': 'View My Reports',
     'report.receipt.nearby': 'Browse Nearby',
     'report.receipt.reportState.draft': 'Report saved on this device',
@@ -374,6 +378,8 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.receipt.received': '已收到报告',
     'report.receipt.unavailable': '这份报告无法使用。',
     'report.receipt.remoteUnavailable': '远程状态暂不可用。正在显示此设备上保存的状态。',
+    'report.receipt.localRecoveryTitle': '本地媒体恢复',
+    'report.receipt.localRecovery': '本地媒体恢复需要你处理。',
     'report.receipt.viewReports': '查看我的报告',
     'report.receipt.nearby': '浏览附近',
     'report.receipt.reportState.draft': '报告已保存在此设备上',

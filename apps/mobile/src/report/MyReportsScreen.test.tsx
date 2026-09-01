@@ -86,6 +86,59 @@ describe('MyReportsScreen', () => {
     expect(view.queryByText('Private review')).toBeNull();
   });
 
+  it('does not apply a late successful refresh after the session expires during the request', async () => {
+    let resolveRefresh!: (value: MyReportsPage) => void;
+    const listReports = jest.fn()
+      .mockResolvedValueOnce(page([first]))
+      .mockImplementationOnce(() => new Promise<MyReportsPage>((resolve) => { resolveRefresh = resolve; }));
+    const getSession = jest.fn(async () => true);
+    const run = dependencies({ listReports, getSession });
+    const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
+    await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
+    await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
+    getSession.mockResolvedValueOnce(false);
+    await act(async () => { resolveRefresh(page([second])); });
+    await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
+    expect(view.queryByText('Private review')).toBeNull();
+    expect(view.queryByText('Delayed after review')).toBeNull();
+    expect(run.navigate).toHaveBeenCalledWith('/profile');
+  });
+
+  it('does not apply a refresh snapshot when the session expires while local recovery is loading', async () => {
+    let resolveDrafts!: (value: readonly StoredDraft[]) => void;
+    const loadDrafts = jest.fn()
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(() => new Promise<readonly StoredDraft[]>((resolve) => { resolveDrafts = resolve; }));
+    const getSession = jest.fn(async () => true);
+    const run = dependencies({ loadDrafts, getSession });
+    const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
+    await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
+    await waitFor(() => expect(loadDrafts).toHaveBeenCalledTimes(2));
+    getSession.mockResolvedValueOnce(false);
+    await act(async () => { resolveDrafts([]); });
+    await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
+    expect(view.queryByText('Private review')).toBeNull();
+    expect(run.navigate).toHaveBeenCalledWith('/profile');
+  });
+
+  it('clears the snapshot when a request fails after the session expires', async () => {
+    const listReports = jest.fn()
+      .mockResolvedValueOnce(page([first]))
+      .mockRejectedValueOnce(new Error('my_reports_unavailable'));
+    const getSession = jest.fn(async () => true);
+    const run = dependencies({ listReports, getSession });
+    const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
+    await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
+    getSession.mockResolvedValueOnce(false);
+    await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
+    await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
+    expect(view.queryByText('Private review')).toBeNull();
+    expect(view.queryByText('Offline — showing the last loaded reports from this session.')).toBeNull();
+    expect(run.navigate).toHaveBeenCalledWith('/profile');
+  });
+
   it('labels malformed responses without retaining untrusted content', async () => {
     const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({ listReports: async () => { throw new Error('invalid_my_reports_response'); } })} />);
     await waitFor(() => expect(view.getByText('Your report history could not be verified. Try again.')).toBeTruthy());
