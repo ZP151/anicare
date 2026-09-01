@@ -300,8 +300,13 @@ test('captures startup/status, masks status values, writes only custom Edge env,
   assert.deepEqual(pgtapCall.args, ['test', 'db']);
   assert.equal(pgtapCall.options.timeoutMs, 10 * 60_000);
   const readinessCall = processes.calls.find(({ stage }) => stage === 'readiness');
-  assert.equal(readinessCall.command, 'C:\\Windows\\System32\\cmd.exe');
-  assert.deepEqual(readinessCall.args.slice(0, 4), ['/d', '/s', '/c', 'pnpm']);
+  if (process.platform === 'win32') {
+    assert.equal(readinessCall.command, 'C:\\Windows\\System32\\cmd.exe');
+    assert.deepEqual(readinessCall.args.slice(0, 4), ['/d', '/s', '/c', 'pnpm']);
+  } else {
+    assert.equal(readinessCall.command, 'pnpm');
+    assert.deepEqual(readinessCall.args.slice(0, 2), ['--filter', '@animalhelper/pilot-gate-2a']);
+  }
   const stopCall = processes.calls.find(({ stage }) => stage === 'stop');
   assert.deepEqual(stopCall.args, ['stop', '--no-backup', '--project-id', 'animalhelper']);
   assert.equal(processes.calls.some(({ args = [] }) => args.includes('--all')), false);
