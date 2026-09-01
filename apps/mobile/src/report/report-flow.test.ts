@@ -3,6 +3,7 @@ import type { StoredDraft } from '../offline/draft-policy';
 import {
   earliestIncompleteStep,
   mergeReportRecovery,
+  mergeReceiptStatus,
   reportTraits,
   validateReportForSubmission,
 } from './report-flow';
@@ -109,5 +110,19 @@ describe('report workflow controller', () => {
     expect(JSON.stringify(timeline)).not.toContain('reviewed-media');
     expect(JSON.stringify(timeline)).not.toContain('latitude');
     expect(JSON.stringify(timeline)).not.toContain('longitude');
+  });
+
+  it('keeps remote report lifecycle authoritative while surfacing only durable local media recovery', () => {
+    expect(mergeReceiptStatus(remote, draft({
+      sightingId: remote.sightingId,
+      uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null },
+    }))).toEqual({ reportState: 'private_review', mediaState: 'needs_user', identityState: 'pending_review' });
+  });
+
+  it('does not let a stale local quarantine override authoritative remote media status', () => {
+    expect(mergeReceiptStatus({ ...remote, mediaState: 'removed' }, draft({
+      sightingId: remote.sightingId,
+      uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null },
+    }))).toEqual({ reportState: 'private_review', mediaState: 'removed', identityState: 'pending_review' });
   });
 });

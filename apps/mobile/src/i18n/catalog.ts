@@ -63,6 +63,40 @@ export type MessageKey =
   | 'report.shell.invalidDraftId'
   | 'report.shell.invalidReceiptId'
   | 'report.shell.backAction'
+  | 'report.receipt.title'
+  | 'report.receipt.subtitle'
+  | 'report.receipt.loading'
+  | 'report.receipt.received'
+  | 'report.receipt.unavailable'
+  | 'report.receipt.remoteUnavailable'
+  | 'report.receipt.viewReports'
+  | 'report.receipt.nearby'
+  | 'report.receipt.reportState.draft'
+  | 'report.receipt.reportState.privateReview'
+  | 'report.receipt.reportState.delayed'
+  | 'report.receipt.reportState.published'
+  | 'report.receipt.reportState.archived'
+  | 'report.receipt.mediaState.none'
+  | 'report.receipt.mediaState.pending'
+  | 'report.receipt.mediaState.quarantined'
+  | 'report.receipt.mediaState.cleanupPending'
+  | 'report.receipt.mediaState.removed'
+  | 'report.receipt.mediaState.needsUser'
+  | 'report.receipt.identityState.notRequested'
+  | 'report.receipt.identityState.pendingReview'
+  | 'report.receipt.identityState.linked'
+  | 'report.receipt.identityState.closed'
+  | 'report.history.title'
+  | 'report.history.subtitle'
+  | 'report.history.loading'
+  | 'report.history.emptyTitle'
+  | 'report.history.emptyCopy'
+  | 'report.history.loadMore'
+  | 'report.history.refresh'
+  | 'report.history.offlineSnapshot'
+  | 'report.history.offlineEmpty'
+  | 'report.history.invalid'
+  | 'report.history.signIn'
   | 'report.wizard.title'
   | 'report.wizard.loading'
   | 'report.wizard.unavailableTitle'
@@ -182,6 +216,40 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.shell.invalidDraftId': 'A valid saved-report ID is required to continue.',
     'report.shell.invalidReceiptId': 'A valid report ID is required to view this receipt.',
     'report.shell.backAction': 'Back to Report',
+    'report.receipt.title': 'Report receipt',
+    'report.receipt.subtitle': 'Private status for your submitted report.',
+    'report.receipt.loading': 'Loading report status…',
+    'report.receipt.received': 'Report received',
+    'report.receipt.unavailable': 'This report is unavailable.',
+    'report.receipt.remoteUnavailable': 'Remote status is unavailable. Showing status saved on this device.',
+    'report.receipt.viewReports': 'View My Reports',
+    'report.receipt.nearby': 'Browse Nearby',
+    'report.receipt.reportState.draft': 'Report saved on this device',
+    'report.receipt.reportState.privateReview': 'Private review',
+    'report.receipt.reportState.delayed': 'Delayed after review',
+    'report.receipt.reportState.published': 'Published after review',
+    'report.receipt.reportState.archived': 'Archived',
+    'report.receipt.mediaState.none': 'Text-only report',
+    'report.receipt.mediaState.pending': 'Media upload pending',
+    'report.receipt.mediaState.quarantined': 'Private media awaiting validation',
+    'report.receipt.mediaState.cleanupPending': 'Private media cleanup pending',
+    'report.receipt.mediaState.removed': 'Private media removed',
+    'report.receipt.mediaState.needsUser': 'Media needs your attention',
+    'report.receipt.identityState.notRequested': 'Identity assistance not requested',
+    'report.receipt.identityState.pendingReview': 'Identity review pending',
+    'report.receipt.identityState.linked': 'Identity linked',
+    'report.receipt.identityState.closed': 'Identity review closed',
+    'report.history.title': 'My Reports',
+    'report.history.subtitle': 'Private status for reports you submitted.',
+    'report.history.loading': 'Loading your reports…',
+    'report.history.emptyTitle': 'No submitted reports yet',
+    'report.history.emptyCopy': 'Submitted reports will appear here with their current private status.',
+    'report.history.loadMore': 'Load more reports',
+    'report.history.refresh': 'Refresh reports',
+    'report.history.offlineSnapshot': 'Offline — showing the last loaded reports from this session.',
+    'report.history.offlineEmpty': 'Reports are unavailable offline. Connect and try again.',
+    'report.history.invalid': 'Your report history could not be verified. Try again.',
+    'report.history.signIn': 'Sign in to view your submitted reports.',
     'report.wizard.title': 'Report a sighting',
     'report.wizard.loading': 'Loading saved report…',
     'report.wizard.unavailableTitle': 'Report unavailable',
@@ -300,6 +368,40 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.shell.invalidDraftId': '需要有效的已保存报告 ID 才能继续。',
     'report.shell.invalidReceiptId': '需要有效的报告 ID 才能查看此回执。',
     'report.shell.backAction': '返回报告',
+    'report.receipt.title': '报告回执',
+    'report.receipt.subtitle': '你已提交报告的私密状态。',
+    'report.receipt.loading': '正在加载报告状态…',
+    'report.receipt.received': '已收到报告',
+    'report.receipt.unavailable': '这份报告无法使用。',
+    'report.receipt.remoteUnavailable': '远程状态暂不可用。正在显示此设备上保存的状态。',
+    'report.receipt.viewReports': '查看我的报告',
+    'report.receipt.nearby': '浏览附近',
+    'report.receipt.reportState.draft': '报告已保存在此设备上',
+    'report.receipt.reportState.privateReview': '私密审核中',
+    'report.receipt.reportState.delayed': '审核后延迟显示',
+    'report.receipt.reportState.published': '审核后已发布',
+    'report.receipt.reportState.archived': '已归档',
+    'report.receipt.mediaState.none': '纯文本报告',
+    'report.receipt.mediaState.pending': '媒体上传等待中',
+    'report.receipt.mediaState.quarantined': '私密媒体等待验证',
+    'report.receipt.mediaState.cleanupPending': '私密媒体等待清理',
+    'report.receipt.mediaState.removed': '私密媒体已移除',
+    'report.receipt.mediaState.needsUser': '媒体需要你处理',
+    'report.receipt.identityState.notRequested': '未请求身份协助',
+    'report.receipt.identityState.pendingReview': '身份审核等待中',
+    'report.receipt.identityState.linked': '身份已关联',
+    'report.receipt.identityState.closed': '身份审核已关闭',
+    'report.history.title': '我的报告',
+    'report.history.subtitle': '你所提交报告的私密状态。',
+    'report.history.loading': '正在加载你的报告…',
+    'report.history.emptyTitle': '还没有已提交的报告',
+    'report.history.emptyCopy': '已提交的报告及其当前私密状态将显示在这里。',
+    'report.history.loadMore': '加载更多报告',
+    'report.history.refresh': '刷新报告',
+    'report.history.offlineSnapshot': '当前离线 — 正在显示本次会话中最后加载的报告。',
+    'report.history.offlineEmpty': '离线时无法查看报告。请连接网络后重试。',
+    'report.history.invalid': '无法验证你的报告历史。请重试。',
+    'report.history.signIn': '登录后即可查看你已提交的报告。',
     'report.wizard.title': '报告目击',
     'report.wizard.loading': '正在加载已保存的报告…',
     'report.wizard.unavailableTitle': '报告不可用',

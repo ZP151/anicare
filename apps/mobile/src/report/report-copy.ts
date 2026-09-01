@@ -32,6 +32,28 @@ export type ReportCopy = Readonly<{
   invalidDraftId: string;
   invalidReceiptId: string;
   backToReportAction: string;
+  receiptTitle: string;
+  receiptSubtitle: string;
+  receiptLoading: string;
+  receiptReceived: string;
+  receiptUnavailable: string;
+  receiptRemoteUnavailable: string;
+  viewReportsAction: string;
+  browseNearbyAction: string;
+  reportStateLabel: (state: 'draft' | 'private_review' | 'delayed' | 'published' | 'archived') => string;
+  mediaStateLabel: (state: 'none' | 'pending' | 'quarantined' | 'cleanup_pending' | 'removed' | 'needs_user') => string;
+  identityStateLabel: (state: 'not_requested' | 'pending_review' | 'linked' | 'closed') => string;
+  historyTitle: string;
+  historySubtitle: string;
+  historyLoading: string;
+  historyEmptyTitle: string;
+  historyEmptyCopy: string;
+  loadMoreReports: string;
+  refreshReports: string;
+  offlineSnapshot: string;
+  offlineEmpty: string;
+  invalidHistory: string;
+  historySignIn: string;
   wizardTitle: string;
   wizardLoading: string;
   wizardUnavailableTitle: string;
@@ -119,6 +141,28 @@ export function getReportCopy(locale: Locale): ReportCopy {
     invalidDraftId: translate(locale, 'report.shell.invalidDraftId'),
     invalidReceiptId: translate(locale, 'report.shell.invalidReceiptId'),
     backToReportAction: translate(locale, 'report.shell.backAction'),
+    receiptTitle: translate(locale, 'report.receipt.title'),
+    receiptSubtitle: translate(locale, 'report.receipt.subtitle'),
+    receiptLoading: translate(locale, 'report.receipt.loading'),
+    receiptReceived: translate(locale, 'report.receipt.received'),
+    receiptUnavailable: translate(locale, 'report.receipt.unavailable'),
+    receiptRemoteUnavailable: translate(locale, 'report.receipt.remoteUnavailable'),
+    viewReportsAction: translate(locale, 'report.receipt.viewReports'),
+    browseNearbyAction: translate(locale, 'report.receipt.nearby'),
+    reportStateLabel: (state) => translate(locale, `report.receipt.reportState.${state === 'private_review' ? 'privateReview' : state}` as never),
+    mediaStateLabel: (state) => translate(locale, `report.receipt.mediaState.${state === 'cleanup_pending' ? 'cleanupPending' : state === 'needs_user' ? 'needsUser' : state}` as never),
+    identityStateLabel: (state) => translate(locale, `report.receipt.identityState.${state === 'not_requested' ? 'notRequested' : state === 'pending_review' ? 'pendingReview' : state}` as never),
+    historyTitle: translate(locale, 'report.history.title'),
+    historySubtitle: translate(locale, 'report.history.subtitle'),
+    historyLoading: translate(locale, 'report.history.loading'),
+    historyEmptyTitle: translate(locale, 'report.history.emptyTitle'),
+    historyEmptyCopy: translate(locale, 'report.history.emptyCopy'),
+    loadMoreReports: translate(locale, 'report.history.loadMore'),
+    refreshReports: translate(locale, 'report.history.refresh'),
+    offlineSnapshot: translate(locale, 'report.history.offlineSnapshot'),
+    offlineEmpty: translate(locale, 'report.history.offlineEmpty'),
+    invalidHistory: translate(locale, 'report.history.invalid'),
+    historySignIn: translate(locale, 'report.history.signIn'),
     wizardTitle: translate(locale, 'report.wizard.title'),
     wizardLoading: translate(locale, 'report.wizard.loading'),
     wizardUnavailableTitle: translate(locale, 'report.wizard.unavailableTitle'),

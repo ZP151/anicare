@@ -16,6 +16,12 @@ export type ReportTimelineItem = Readonly<{
   identityState: MyReportSummary['identityState'];
 }>;
 
+export type ReportReceiptStatus = Readonly<{
+  reportState: MyReportSummary['reportState'] | 'draft';
+  mediaState: MyReportSummary['mediaState'] | 'needs_user';
+  identityState: MyReportSummary['identityState'];
+}>;
+
 export function earliestIncompleteStep(draft: StoredDraft): ReportDraftStep {
   const payload = draft.report;
   if (!payload) return 'photo';
@@ -104,4 +110,16 @@ export function mergeReportRecovery(
     const time = right.occurredAt.localeCompare(left.occurredAt);
     return time !== 0 ? time : left.key.localeCompare(right.key);
   }));
+}
+
+export function mergeReceiptStatus(remote: MyReportSummary | null, local: StoredDraft | null): ReportReceiptStatus | null {
+  if (remote) {
+    const localState = local ? localMediaState(local) : 'none';
+    const mediaState = localState === 'needs_user'
+      ? localState
+      : remote.mediaState;
+    return Object.freeze({ reportState: remote.reportState, mediaState, identityState: remote.identityState });
+  }
+  const recovery = local ? recoveryTimelineItem(local) : null;
+  return recovery ? Object.freeze({ reportState: recovery.reportState, mediaState: recovery.mediaState, identityState: recovery.identityState }) : null;
 }
