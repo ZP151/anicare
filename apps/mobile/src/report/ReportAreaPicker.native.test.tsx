@@ -1,9 +1,11 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import { Pressable } from 'react-native';
 
+const mockMapProps = jest.fn();
+
 jest.mock('react-native-maps', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: Record<string, unknown>) => { mockMapProps(props); return null; },
   PROVIDER_GOOGLE: 'google',
 }));
 
@@ -31,6 +33,17 @@ describe('ReportAreaPicker native privacy boundary', () => {
 
     expect(view.getByLabelText('在 Google 地图上选择宽泛区域')).toBeTruthy();
     expect(view.getByText('点按宽泛地图以选择粗略区域，精确点按位置会立即丢弃。')).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('exposes the manual-area map as an accessible selection control', async () => {
+    mockMapProps.mockClear();
+    const view = await render(<ReportAreaPicker onSelect={jest.fn()} />);
+
+    expect(mockMapProps.mock.calls.at(-1)?.[0]).toMatchObject({
+      accessibilityLabel: 'Choose a coarse area on a Google map',
+      accessibilityRole: 'button',
+    });
     await view.unmount();
   });
 });

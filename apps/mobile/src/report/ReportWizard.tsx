@@ -1,3 +1,4 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
 import { AppState, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -65,8 +66,10 @@ export function ReportWizard({
   const [status, setStatus] = useState<string | null>(null);
   const [manualSelectionRequested, setManualSelectionRequested] = useState(false);
   const [deviceAreaSelected, setDeviceAreaSelected] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const coordinatesRef = useRef<Readonly<{ latitude: number; longitude: number }> | null>(null);
   const locationPromptedRef = useRef(false);
+  const submitInFlightRef = useRef(false);
   const mountedRef = useRef(true);
   const deviceAttemptRef = useRef(0);
   const currentDraftRef = useRef<StoredDraft | null>(null);
@@ -171,6 +174,7 @@ export function ReportWizard({
 
   const selectManualArea = (selection: { publicCellId: string }) => {
     if (!draft?.report) return;
+    setDeviceAreaSelected(false);
     setDraft({
       ...draft,
       report: sanitizeReportDraftPayload({
@@ -184,7 +188,9 @@ export function ReportWizard({
   };
 
   const submit = async () => {
-    if (!draft?.report) return;
+    if (!draft?.report || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    setSubmitting(true);
     const attempt = ++deviceAttemptRef.current;
     const attemptIsCurrent = () => mountedRef.current && deviceAttemptRef.current === attempt;
     try {
@@ -223,6 +229,8 @@ export function ReportWizard({
       if (attemptIsCurrent()) setStatus(copy.wizardRecovery);
     } finally {
       completeDeviceAttempt(attempt);
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
@@ -254,7 +262,14 @@ export function ReportWizard({
     <ScreenScaffold title={copy.wizardTitle} subtitle={copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage))} trailing={
       <Pressable accessibilityLabel={copy.wizardSaveAndExit} accessibilityRole="button" onPress={() => { void saveAndExit(); }} style={styles.exit}><Text style={styles.exitText}>{copy.wizardSaveAndExit}</Text></Pressable>
     }>
-      <View accessibilityLabel={copy.wizardStagesLabel} style={styles.stages}>{stages.map((item) => <Text key={item} style={item === stage ? styles.currentStage : styles.stage}>{copy.stepLabel(item)}</Text>)}</View>
+      <View
+        accessibilityLabel={copy.wizardStagesLabel}
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 1, now: stages.indexOf(stage) + 1, max: stages.length, text: copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage)) }}
+        style={styles.stages}
+      >
+        {stages.map((item) => <Text key={item} style={item === stage ? styles.currentStage : styles.stage}>{copy.stepLabel(item)}</Text>)}
+      </View>
       <Text accessibilityRole="header" style={styles.sectionTitle}>{copy.stepLabel(stage)}</Text>
 
       {stage === 'photo' ? <View style={styles.group}>
@@ -265,14 +280,14 @@ export function ReportWizard({
 
       {stage === 'details' ? <View style={styles.group}>
         <Text style={styles.copy}>{copy.wizardDetailsIntro}</Text>
-        {(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityLabel={conditionLabels[condition]} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={styles.option}><Text style={styles.optionText}>{conditionLabels[condition]}</Text></Pressable>)}
+        {(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityLabel={conditionLabels[condition]} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={[styles.option, draft.report!.condition === condition && styles.optionSelected]}><Text style={styles.optionText}>{conditionLabels[condition]}</Text>{draft.report!.condition === condition ? <MaterialCommunityIcons accessibilityElementsHidden color={colors.actionPrimary} name="check-circle" size={20} /> : null}</Pressable>)}
         <TextInput accessibilityLabel={copy.wizardNotesLabel} multiline onChangeText={(notes) => setDraft({ ...draft, notes })} placeholder={copy.wizardNotesPlaceholder} style={styles.notes} value={draft.notes} />
         <Pressable accessibilityLabel={copy.wizardContinueToSafety} accessibilityRole="button" disabled={!draft.report.condition} onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable>
       </View> : null}
 
       {stage === 'safety' ? <View style={styles.group}>
         <Text style={styles.copy}>{copy.wizardSafetyIntro}</Text>
-        {(['normal', 'sensitive', 'critical'] as const).map((risk) => <Pressable key={risk} accessibilityLabel={riskLabels[risk]} accessibilityRole="button" accessibilityState={{ selected: draft.risk === risk }} onPress={() => setDraft({ ...draft, risk })} style={styles.option}><Text style={styles.optionText}>{riskLabels[risk]}</Text></Pressable>)}
+        {(['normal', 'sensitive', 'critical'] as const).map((risk) => <Pressable key={risk} accessibilityLabel={riskLabels[risk]} accessibilityRole="button" accessibilityState={{ selected: draft.risk === risk }} onPress={() => setDraft({ ...draft, risk })} style={[styles.option, draft.risk === risk && styles.optionSelected]}><Text style={styles.optionText}>{riskLabels[risk]}</Text>{draft.risk === risk ? <MaterialCommunityIcons accessibilityElementsHidden color={colors.actionPrimary} name="check-circle" size={20} /> : null}</Pressable>)}
         <Text style={styles.copy}>{draft.risk === 'critical' ? copy.wizardRiskCriticalConsequence : draft.risk === 'sensitive' ? copy.wizardRiskSensitiveConsequence : copy.wizardRiskNormalConsequence}</Text>
         <Pressable accessibilityLabel={copy.wizardContinueToArea} accessibilityRole="button" onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable>
       </View> : null}
@@ -288,6 +303,12 @@ export function ReportWizard({
 
       {stage === 'review' ? <View style={styles.group}>
         <Text style={styles.copy}>{copy.wizardReviewIntro}</Text>
+        <View style={styles.reviewSummary}>
+          <Text style={styles.summaryItem}>{photoReady ? copy.wizardPhotoReady : copy.wizardPhotoSkip}</Text>
+          {draft.report.condition ? <Text style={styles.summaryItem}>{conditionLabels[draft.report.condition]}</Text> : null}
+          <Text style={styles.summaryItem}>{riskLabels[draft.risk]}</Text>
+          <Text style={styles.summaryItem}>{draft.report.manualPublicCellId ? copy.wizardManualSelected : copy.wizardDevicePending}</Text>
+        </View>
         <View style={styles.reviewLinks}>
           {(['photo', 'details', 'safety', 'area'] as const).map((item) => {
             const label = locale === 'en' ? copy.stepLabel(item).toLowerCase() : copy.stepLabel(item);
@@ -295,7 +316,7 @@ export function ReportWizard({
           })}
         </View>
         {!canSubmit ? <Text style={styles.disabledReason}>{copy.wizardSubmitDisabledReason}</Text> : null}
-        <Pressable accessibilityLabel={copy.wizardSubmit} accessibilityRole="button" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={() => { void submit(); }} style={[styles.primary, !canSubmit && styles.disabled]}><Text style={styles.primaryText}>{copy.wizardSubmit}</Text></Pressable>
+        <Pressable accessibilityLabel={copy.wizardSubmit} accessibilityRole="button" accessibilityState={{ disabled: !canSubmit || submitting, busy: submitting }} disabled={!canSubmit || submitting} onPress={() => { void submit(); }} style={[styles.primary, (!canSubmit || submitting) && styles.disabled]}><Text style={styles.primaryText}>{copy.wizardSubmit}</Text></Pressable>
       </View> : null}
       {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </ScreenScaffold>
@@ -316,12 +337,15 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   secondary: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.actionPrimary },
   secondaryText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' },
-  option: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
+  option: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
+  optionSelected: { borderColor: colors.actionPrimary, borderWidth: 2 },
   optionText: { color: colors.ink, fontSize: 16, textTransform: 'capitalize' },
   notes: { minHeight: 96, padding: 14, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, color: colors.ink, textAlignVertical: 'top' },
   status: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   disabledReason: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   reviewLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reviewSummary: { gap: 4, paddingVertical: 4 },
+  summaryItem: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '700' },
   editLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 10, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line },
   editLinkText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '700' },
 });

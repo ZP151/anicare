@@ -40,6 +40,8 @@ export type ReportCopy = Readonly<{
   receiptRemoteUnavailable: string;
   receiptLocalRecoveryTitle: string;
   receiptLocalRecovery: string;
+  receiptReference: (id: string) => string;
+  receiptSubmittedAt: (time: string) => string;
   viewReportsAction: string;
   browseNearbyAction: string;
   reportStateLabel: (state: 'draft' | 'private_review' | 'delayed' | 'published' | 'archived') => string;
@@ -151,6 +153,8 @@ export function getReportCopy(locale: Locale): ReportCopy {
     receiptRemoteUnavailable: translate(locale, 'report.receipt.remoteUnavailable'),
     receiptLocalRecoveryTitle: translate(locale, 'report.receipt.localRecoveryTitle'),
     receiptLocalRecovery: translate(locale, 'report.receipt.localRecovery'),
+    receiptReference: (id) => translate(locale, 'report.receipt.reference').replace('{id}', id),
+    receiptSubmittedAt: (time) => translate(locale, 'report.receipt.submittedAt').replace('{time}', time),
     viewReportsAction: translate(locale, 'report.receipt.viewReports'),
     browseNearbyAction: translate(locale, 'report.receipt.nearby'),
     reportStateLabel: (state) => translate(locale, `report.receipt.reportState.${state === 'private_review' ? 'privateReview' : state}` as never),

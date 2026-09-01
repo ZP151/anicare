@@ -106,7 +106,7 @@ export default function MapScreen() {
 
         {layer === 'map' ? (
           <View style={styles.mapStage}>
-            <NearbyMap key={mapResetKey} />
+            <NearbyMap fallbackLabel={t('map.mapUnavailable')} key={mapResetKey} />
             {statusCopy ? (
               <StatusBadge announce={status !== 'demo'} text={statusCopy} unavailable={status === 'unavailable'} />
             ) : null}

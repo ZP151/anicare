@@ -19,6 +19,8 @@ function NativeAreaMap({ onPress, locale = 'en' }: AreaMapBoundaryProps & Readon
       <Text style={styles.copy}>{copy.wizardAreaMapInstruction}</Text>
       <View style={styles.mapFrame}>
         <MapView
+          accessibilityLabel={copy.wizardAreaMapLabel}
+          accessibilityRole="button"
           customMapStyle={PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({ ...entry, stylers: entry.stylers.map((styler) => ({ ...styler })) }))}
           initialRegion={PUBLIC_MAP_REGION}
           maxZoomLevel={14}

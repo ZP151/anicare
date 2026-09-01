@@ -45,7 +45,7 @@ function pickPublicCat(sightings: readonly PublicSighting[]): SelectedCatSummary
 }
 
 export default function NearbyScreen() {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const router = useRouter();
   const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
   const [status, setStatus] = useState<FeedStatus>(client ? 'loading' : 'demo');
@@ -101,8 +101,8 @@ export default function NearbyScreen() {
         style={styles.paperGround}
       />
       <View style={styles.mapStage}>
-        <View style={styles.atlasFrame}>
-          <NearbyMap />
+        <View style={styles.mapFrame}>
+          <NearbyMap fallbackLabel={t('map.mapUnavailable')} />
         </View>
 
         <View style={styles.topBar}>
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, paddingBottom: tabVisualContract.barHeight, backgroundColor: colors.paper },
   paperGround: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', opacity: 0.22 },
   mapStage: { flex: 1, minHeight: 330, overflow: 'hidden', backgroundColor: colors.paper },
-  atlasFrame: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
+  mapFrame: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
   topBar: {
     position: 'absolute',
     top: 0,

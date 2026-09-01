@@ -47,25 +47,24 @@ describe('NearbyMap native privacy contract', () => {
     await view.unmount();
   });
 
-  it('fails closed to the safe atlas when native keys are absent', async () => {
-    const view = await render(<NearbyMap googleMapsConfigured={false} />);
-    expect(view.getByLabelText(
-      'Privacy-safe neighbourhood atlas. Google Maps unavailable; showing privacy-safe atlas fallback.',
-    )).toBeTruthy();
+  it('uses an honest no-map state when native keys are absent', async () => {
+    const fallbackLabel = 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.';
+    const view = await render(<NearbyMap fallbackLabel={fallbackLabel} googleMapsConfigured={false} />);
+    expect(view.getByLabelText(fallbackLabel)).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/atlas|coarse-atlas/i);
     expect(mockMapProps).not.toHaveBeenCalled();
     await view.unmount();
   });
 
-  it('falls back to the accessible safe atlas when a configured provider never becomes ready', async () => {
-    const view = await render(<NearbyMap googleMapsConfigured />);
+  it('uses the honest no-map state when a configured provider never becomes ready', async () => {
+    const fallbackLabel = 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.';
+    const view = await render(<NearbyMap fallbackLabel={fallbackLabel} googleMapsConfigured />);
 
     expect(view.getByTestId('google-map')).toBeTruthy();
     await act(async () => { jest.advanceTimersByTime(10_000); });
 
-    expect(view.getByLabelText(
-      'Privacy-safe neighbourhood atlas. Google Maps unavailable; showing privacy-safe atlas fallback.',
-    )).toBeTruthy();
-    expect(view.queryByText('Privacy-safe atlas fallback')).toBeNull();
+    expect(view.getByLabelText(fallbackLabel)).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/atlas|coarse-atlas/i);
     await view.unmount();
   });
 
@@ -85,7 +84,7 @@ describe('NearbyMap native privacy contract', () => {
       await act(async () => { jest.advanceTimersByTime(60_000); });
 
       expect(view.getByTestId('google-map')).toBeTruthy();
-      expect(view.queryByText('Privacy-safe atlas fallback')).toBeNull();
+      expect(view.queryByText(/atlas/i)).toBeNull();
       await view.unmount();
     },
   );
@@ -97,7 +96,7 @@ describe('NearbyMap native privacy contract', () => {
     await act(async () => { jest.advanceTimersByTime(60_000); });
 
     expect(view.getByTestId('google-map')).toBeTruthy();
-    expect(view.queryByText('Privacy-safe atlas fallback')).toBeNull();
+    expect(view.queryByText(/atlas/i)).toBeNull();
     await view.unmount();
   });
 

@@ -16,7 +16,7 @@ export type ReportReceiptDependencies = Readonly<{
   navigate(path: string): void;
 }>;
 
-type ReceiptState = Readonly<{ status: ReportReceiptStatus | null; source: 'remote' | 'unavailable' | 'local_recovery' }>;
+type ReceiptState = Readonly<{ status: ReportReceiptStatus | null; source: 'remote' | 'unavailable' | 'local_recovery'; submittedAt: string | null }>;
 type RemoteLookup = Readonly<{ kind: 'found'; report: MyReportSummary }> | Readonly<{ kind: 'not_found' }>;
 
 async function findRemoteReport(
@@ -61,13 +61,13 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
         const local = localDraftForSighting(drafts, sightingId);
         if (!mounted) return;
         if (remote.kind === 'found') {
-          setState({ status: mergeReceiptStatus(remote.report, local), source: 'remote' });
+          setState({ status: mergeReceiptStatus(remote.report, local), source: 'remote', submittedAt: remote.report.createdAt });
           return;
         }
         const recovery = mergeReceiptStatus(null, local);
-        setState({ status: recovery?.mediaState === 'needs_user' ? recovery : null, source: 'local_recovery' });
+        setState({ status: recovery?.mediaState === 'needs_user' ? recovery : null, source: 'local_recovery', submittedAt: null });
       } catch {
-        if (mounted) setState({ status: mergeReceiptStatus(null, localDraftForSighting(drafts, sightingId)), source: 'unavailable' });
+        if (mounted) setState({ status: mergeReceiptStatus(null, localDraftForSighting(drafts, sightingId)), source: 'unavailable', submittedAt: null });
       }
     })();
     return () => { mounted = false; };
@@ -87,6 +87,8 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
       {state.source === 'unavailable' ? <Text style={styles.notice}>{copy.receiptRemoteUnavailable}</Text> : null}
       {state.source === 'local_recovery' ? <Text style={styles.notice}>{copy.receiptLocalRecovery}</Text> : null}
       <View style={styles.statusList}>
+        <Text style={styles.notice}>{copy.receiptReference(sightingId)}</Text>
+        {state.submittedAt ? <Text style={styles.notice}>{copy.receiptSubmittedAt(new Date(state.submittedAt).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG'))}</Text> : null}
         <Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text>
         <Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text>
         <Text style={styles.status}>{copy.identityStateLabel(state.status.identityState)}</Text>

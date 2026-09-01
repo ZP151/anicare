@@ -22,6 +22,7 @@ export type MessageKey =
   | 'map.loadingStatus'
   | 'map.emptyStatus'
   | 'map.unavailableStatus'
+  | 'map.mapUnavailable'
   | 'map.detail.viewAction'
   | 'map.detail.followAction'
   | 'map.detail.followDisabledReason'
@@ -71,6 +72,8 @@ export type MessageKey =
   | 'report.receipt.remoteUnavailable'
   | 'report.receipt.localRecoveryTitle'
   | 'report.receipt.localRecovery'
+  | 'report.receipt.reference'
+  | 'report.receipt.submittedAt'
   | 'report.receipt.viewReports'
   | 'report.receipt.nearby'
   | 'report.receipt.reportState.draft'
@@ -177,6 +180,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.loadingStatus': 'Loading delayed community activity…',
     'map.emptyStatus': 'No delayed community activity yet',
     'map.unavailableStatus': 'Community feed unavailable · map remains privacy-safe',
+    'map.mapUnavailable': 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.',
     'map.detail.viewAction': 'View',
     'map.detail.followAction': 'Follow area',
     'map.detail.followDisabledReason': 'Sign-in and hosted area-follow support are required.',
@@ -226,6 +230,8 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.receipt.remoteUnavailable': 'Remote status is unavailable. Showing status saved on this device.',
     'report.receipt.localRecoveryTitle': 'Local media recovery',
     'report.receipt.localRecovery': 'Local media recovery needs your attention.',
+    'report.receipt.reference': 'Report ID: {id}',
+    'report.receipt.submittedAt': 'Submitted at {time}',
     'report.receipt.viewReports': 'View My Reports',
     'report.receipt.nearby': 'Browse Nearby',
     'report.receipt.reportState.draft': 'Report saved on this device',
@@ -331,6 +337,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.loadingStatus': '正在加载延迟显示的社区活动…',
     'map.emptyStatus': '暂时没有延迟显示的社区活动',
     'map.unavailableStatus': '社区动态暂不可用 · 地图仍保持隐私安全',
+    'map.mapUnavailable': 'Google 地图暂不可用。请切换到区域列表浏览延迟显示的社区活动。',
     'map.detail.viewAction': '查看',
     'map.detail.followAction': '关注区域',
     'map.detail.followDisabledReason': '需要登录；区域关注服务上线后才能使用此功能。',
@@ -380,6 +387,8 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.receipt.remoteUnavailable': '远程状态暂不可用。正在显示此设备上保存的状态。',
     'report.receipt.localRecoveryTitle': '本地媒体恢复',
     'report.receipt.localRecovery': '本地媒体恢复需要你处理。',
+    'report.receipt.reference': '报告 ID：{id}',
+    'report.receipt.submittedAt': '提交时间：{time}',
     'report.receipt.viewReports': '查看我的报告',
     'report.receipt.nearby': '浏览附近',
     'report.receipt.reportState.draft': '报告已保存在此设备上',

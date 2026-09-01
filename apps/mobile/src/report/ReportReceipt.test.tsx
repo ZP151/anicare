@@ -41,6 +41,8 @@ describe('ReportReceipt', () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies()} locale="en" />);
 
     await waitFor(() => expect(view.getByText('Report received')).toBeTruthy());
+    expect(view.getByText(`Report ID: ${sightingId}`)).toBeTruthy();
+    expect(view.getByText(/Submitted at /)).toBeTruthy();
     expect(view.getByText('Text-only report')).toBeTruthy();
     const output = JSON.stringify(view.toJSON());
     expect(output).not.toMatch(/89652636d87ffff|Private note|tabby|white-paws|candidate|confidence|model|reviewed-media|public cell/i);

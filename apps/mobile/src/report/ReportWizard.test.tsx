@@ -57,6 +57,21 @@ function deferredLocation() {
 }
 
 describe('ReportWizard', () => {
+  it('exposes the active wizard stage as a five-step progress indicator', async () => {
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="safety" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Safety' })).toBeTruthy());
+    const stages = view.getByLabelText('Report stages');
+    expect(stages.props.accessibilityRole).toBe('progressbar');
+    expect(stages.props.accessibilityValue).toEqual({
+      min: 1,
+      now: 3,
+      max: 5,
+      text: 'Step 3 of 5 · Safety',
+    });
+    await view.unmount();
+  });
+
   it('loads a validated draft at its earliest incomplete stage and saves the sanitized payload when advancing', async () => {
     const saveDraft = jest.fn(async () => undefined);
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ saveDraft })} />);
@@ -101,6 +116,39 @@ describe('ReportWizard', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
     await waitFor(() => expect(view.getByText('Location permission was not granted. Choose an area manually instead.')).toBeTruthy());
     expect(requestDeviceLocation).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
+  it('uses the manual area instead of requesting device coordinates after the contributor changes location modes', async () => {
+    const requestDeviceLocation = jest.fn(async () => ({ kind: 'granted' as const, latitude: 1.3521, longitude: 103.8198 }));
+    const submit = jest.fn(async () => ({ sightingId, state: 'submitted_text_only' as const }));
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ requestDeviceLocation, submit })} initialStage="review" AreaPicker={ManualAreaPicker as never} />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Choose an area manually' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ location: { kind: 'manual_area', publicCellId: '89652636d87ffff' } })));
+    expect(requestDeviceLocation).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('submits only once while a report submission is in flight', async () => {
+    let resolveSubmission!: (value: { sightingId: string; state: string }) => void;
+    const submit = jest.fn(() => new Promise<{ sightingId: string; state: string }>((resolve) => { resolveSubmission = resolve; }));
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ submit })} initialStage="review" AreaPicker={ManualAreaPicker as never} />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Choose an area manually' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
+    const submitButton = view.getByRole('button', { name: 'Submit report' });
+    await fireEvent.press(submitButton);
+    await fireEvent.press(submitButton);
+
+    expect(submit).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveSubmission({ sightingId, state: 'submitted_text_only' }); });
     await view.unmount();
   });
 
@@ -271,6 +319,24 @@ describe('ReportWizard', () => {
     expect(view.getByRole('button', { name: 'Edit safety' })).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Edit area' }));
     expect(view.getByRole('header', { name: 'Area' })).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('summarizes the selected photo, condition, safety and broad-area choices before submission', async () => {
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      loadDraft: async () => draft({
+        mediaId: 'media-12345678',
+        encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
+        risk: 'sensitive',
+        report: { ...draft().report!, step: 'review', condition: 'needs_attention', manualPublicCellId: '89652636d87ffff' },
+      }),
+    })} initialStage="review" />);
+
+    await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
+    expect(view.getByText('Private photo ready')).toBeTruthy();
+    expect(view.getByText('Needs attention')).toBeTruthy();
+    expect(view.getByText('sensitive')).toBeTruthy();
+    expect(view.getByText('A broad area was selected. Your exact map tap was discarded.')).toBeTruthy();
     await view.unmount();
   });
 
