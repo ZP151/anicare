@@ -63,6 +63,11 @@ export type MessageKey =
   | 'report.shell.invalidDraftId'
   | 'report.shell.invalidReceiptId'
   | 'report.shell.backAction'
+  | 'report.wizard.title'
+  | 'report.wizard.loading'
+  | 'report.wizard.unavailableTitle'
+  | 'report.wizard.unavailableCopy'
+  | 'report.wizard.saveAndExit'
   | 'following.title'
   | 'following.subtitle'
   | 'profile.title'
@@ -131,6 +136,11 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.shell.invalidDraftId': 'A valid saved-report ID is required to continue.',
     'report.shell.invalidReceiptId': 'A valid report ID is required to view this receipt.',
     'report.shell.backAction': 'Back to Report',
+    'report.wizard.title': 'Report a sighting',
+    'report.wizard.loading': 'Loading saved report…',
+    'report.wizard.unavailableTitle': 'Report unavailable',
+    'report.wizard.unavailableCopy': 'This saved report is unavailable. Return to Report and start again.',
+    'report.wizard.saveAndExit': 'Save and exit',
     'following.title': 'Following',
     'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
     'profile.title': 'Your profile',
@@ -198,6 +208,11 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.shell.invalidDraftId': '需要有效的已保存报告 ID 才能继续。',
     'report.shell.invalidReceiptId': '需要有效的报告 ID 才能查看此回执。',
     'report.shell.backAction': '返回报告',
+    'report.wizard.title': '报告目击',
+    'report.wizard.loading': '正在加载已保存的报告…',
+    'report.wizard.unavailableTitle': '报告不可用',
+    'report.wizard.unavailableCopy': '这份已保存的报告无法使用。请返回“报告”后重新开始。',
+    'report.wizard.saveAndExit': '保存并退出',
     'following.title': '关注',
     'following.subtitle': '获取你关注的猫和区域的去敏更新。',
     'profile.title': '我的',

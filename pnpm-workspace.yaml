@@ -9,3 +9,6 @@ allowBuilds:
   '@shopify/react-native-skia': true
   esbuild: true
   unrs-resolver: set this to true or false
+
+patchedDependencies:
+  h3-js@4.5.0: patches/h3-js@4.5.0.patch

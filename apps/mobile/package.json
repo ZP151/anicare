@@ -59,6 +59,9 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "moduleNameMapper": {
+      "^@animalhelper/domain$": "<rootDir>/../../packages/domain/dist/location-policy.js"
+    },
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/.expo/"

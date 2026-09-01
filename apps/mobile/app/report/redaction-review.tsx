@@ -233,7 +233,7 @@ export default function RedactionReviewScreen() {
       await cacheLifecycle.abandonAll();
       setPending(null);
       setStatus('Encrypted reviewed media saved privately. It has not been uploaded or published.');
-      router.back();
+      router.replace({ pathname: '/report/new', params: { draftId } } as never);
     } catch (error) {
       await cacheLifecycle.abandonAll();
       if (mountedRef.current) {

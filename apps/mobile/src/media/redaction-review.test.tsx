@@ -12,8 +12,8 @@ jest.mock('../components/ScreenScaffold', () => {
   };
 });
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn() },
-  useLocalSearchParams: () => ({ draftId: 'draft-12345678' }),
+  router: { back: jest.fn(), replace: jest.fn() },
+  useLocalSearchParams: () => ({ draftId: '00000000-0000-4000-8000-000000000606' }),
 }));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
@@ -39,6 +39,7 @@ jest.mock('../../src/api/supabase', () => ({
 }));
 
 import RedactionReviewScreen from '../../app/report/redaction-review';
+import { router } from 'expo-router';
 import { launchImageLibraryAsync } from 'expo-image-picker';
 import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { prepareCanonical, renderOpaqueMasks } from './processor';
@@ -121,6 +122,20 @@ describe('private redaction review screen', () => {
     expect(view.getByText('Cat detection: unavailable')).toBeTruthy();
     expect(view.getByRole('button', { name: 'Choose photo for private review' })).toBeTruthy();
     expect(view.queryByText(/public upload|publish/i)).toBeNull();
+  });
+
+  it('returns to a freshly loaded wizard using only the same draft ID after private media commits', async () => {
+    jest.mocked(verifyReviewedMedia).mockResolvedValueOnce('absent').mockResolvedValueOnce('valid');
+    const view = await renderPreparedReview();
+
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/report/new',
+      params: { draftId: '00000000-0000-4000-8000-000000000606' },
+    }));
+    expect(router.back).not.toHaveBeenCalled();
+    expect(JSON.stringify(jest.mocked(router.replace).mock.calls)).not.toMatch(/file:|media-|status|uri/);
   });
 
   it('cleans every owned plaintext output when the review screen unmounts', async () => {

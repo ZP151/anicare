@@ -32,6 +32,11 @@ export type ReportCopy = Readonly<{
   invalidDraftId: string;
   invalidReceiptId: string;
   backToReportAction: string;
+  wizardTitle: string;
+  wizardLoading: string;
+  wizardUnavailableTitle: string;
+  wizardUnavailableCopy: string;
+  wizardSaveAndExit: string;
 }>;
 
 export function getReportCopy(locale: Locale): ReportCopy {
@@ -68,5 +73,10 @@ export function getReportCopy(locale: Locale): ReportCopy {
     invalidDraftId: translate(locale, 'report.shell.invalidDraftId'),
     invalidReceiptId: translate(locale, 'report.shell.invalidReceiptId'),
     backToReportAction: translate(locale, 'report.shell.backAction'),
+    wizardTitle: translate(locale, 'report.wizard.title'),
+    wizardLoading: translate(locale, 'report.wizard.loading'),
+    wizardUnavailableTitle: translate(locale, 'report.wizard.unavailableTitle'),
+    wizardUnavailableCopy: translate(locale, 'report.wizard.unavailableCopy'),
+    wizardSaveAndExit: translate(locale, 'report.wizard.saveAndExit'),
   };
 }

@@ -8,6 +8,8 @@ describe('report hub copy', () => {
     expect(Object.keys(english).sort()).toEqual(Object.keys(chinese).sort());
     expect(english.startAction).toBe('Start a report');
     expect(chinese.startAction).toBe('开始报告');
+    expect(english.wizardTitle).toBe('Report a sighting');
+    expect(chinese.wizardTitle).toBe('报告目击');
   });
 
   it('does not make an AI, model, or candidate promise in the report hub', () => {

@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  h3-js@4.5.0: 3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8
+
 importers:
 
   .:
@@ -189,10 +192,10 @@ importers:
     dependencies:
       h3-js:
         specifier: latest
-        version: 4.5.0
+        version: 4.5.0(patch_hash=3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8)
       zod:
         specifier: latest
-        version: 4.5.2
+        version: 4.5.4
     devDependencies:
       typescript:
         specifier: latest
@@ -207,10 +210,10 @@ importers:
     dependencies:
       h3-js:
         specifier: latest
-        version: 4.5.0
+        version: 4.5.0(patch_hash=3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8)
       zod:
         specifier: latest
-        version: 4.5.2
+        version: 4.5.4
     devDependencies:
       typescript:
         specifier: latest
@@ -4949,8 +4952,8 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.5.2:
-    resolution: {integrity: sha512-XkYXCol10+ba/6F/cueWV+TezUeOqXW0hdeJt5CdXjTYeAgAQg5N03RQdJ80mhfFE72+pblvYMW4wy2Qp4Qbrg==}
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
 snapshots:
 
@@ -6163,7 +6166,7 @@ snapshots:
     dependencies:
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 26.2.0
+      '@types/node': 26.4.0
       jest-mock: 29.7.0
 
   '@jest/expect-utils@29.7.0':
@@ -6181,7 +6184,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@sinonjs/fake-timers': 10.3.0
-      '@types/node': 26.2.0
+      '@types/node': 26.4.0
       jest-message-util: 29.7.0
       jest-mock: 29.7.0
       jest-util: 29.7.0
@@ -8110,7 +8113,7 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  h3-js@4.5.0: {}
+  h3-js@4.5.0(patch_hash=3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8): {}
 
   has-flag@3.0.0: {}
 
@@ -8420,7 +8423,7 @@ snapshots:
       '@jest/environment': 29.7.0
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 26.2.0
+      '@types/node': 26.4.0
       jest-mock: 29.7.0
       jest-util: 29.7.0
 
@@ -8503,7 +8506,7 @@ snapshots:
   jest-mock@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 26.2.0
+      '@types/node': 26.4.0
       jest-util: 29.7.0
 
   jest-pnp-resolver@1.2.3(jest-resolve@29.7.0):
@@ -8612,7 +8615,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 26.2.0
+      '@types/node': 26.4.0
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -10212,4 +10215,4 @@ snapshots:
 
   zod@3.25.76: {}
 
-  zod@4.5.2: {}
+  zod@4.5.4: {}
