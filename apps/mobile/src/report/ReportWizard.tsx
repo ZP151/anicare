@@ -109,7 +109,7 @@ export function ReportWizard({
   useEffect(() => {
     let active = true;
     mountedRef.current = true;
-    void Promise.all([dependencies.loadDraft(draftId), dependencies.getSessionSubject().catch(() => null)]).then(([loaded, ownerSubject]) => {
+    void Promise.all([dependencies.loadDraft(draftId), dependencies.getSessionSubject()]).then(([loaded, ownerSubject]) => {
       if (!active || !loaded?.report) {
         if (active) setStatus(copy.wizardUnavailableCopy);
         return;
@@ -120,6 +120,11 @@ export function ReportWizard({
       }
       try {
         const report = sanitizeReportDraftPayload(loaded.report);
+        if (loaded.ownerSubject === undefined &&
+            (report.creatorMode !== 'anonymous' || ownerSubject !== null)) {
+          setStatus(copy.wizardUnavailableCopy);
+          return;
+        }
         const validDraft = { ...loaded, report };
         setDraft(validDraft);
         setStage(initialStage ?? earliestIncompleteStep(validDraft));
@@ -284,6 +289,7 @@ export function ReportWizard({
   if (!draft?.report) return <ScreenScaffold title={copy.wizardUnavailableTitle} subtitle={status ?? copy.wizardUnavailableCopy} />;
 
   const photoReady = reviewedMediaPresent(draft);
+  const manualAreaRequired = draft.report.areaSelectionMode === 'manual_required';
   const validationLocation = draft.report.manualPublicCellId
     ? { kind: 'manual_area' as const, publicCellId: draft.report.manualPublicCellId }
     : deviceAreaSelected ? { kind: 'device_once' as const, latitude: 0, longitude: 0 } : null;
@@ -337,11 +343,11 @@ export function ReportWizard({
 
       {stage === 'area' || stage === 'review' ? <View style={styles.group}>
         <Text style={styles.copy}>{copy.wizardAreaIntro}</Text>
-        {!captureAvailable ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <>
+        {!captureAvailable || manualAreaRequired ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <>
           <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={selectDeviceArea} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardDeviceLocation}</Text></Pressable>
           {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => setManualSelectionRequested(true)} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardManualArea}</Text></Pressable>}
-          {stage === 'area' ? <Pressable accessibilityLabel={areaContinueLabel} accessibilityRole="button" disabled={!canContinueFromArea} onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>{areaContinueLabel}</Text></Pressable> : null}
         </>}
+        {stage === 'area' ? <Pressable accessibilityLabel={areaContinueLabel} accessibilityRole="button" disabled={!canContinueFromArea} onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>{areaContinueLabel}</Text></Pressable> : null}
       </View> : null}
 
       {stage === 'review' ? <View style={styles.group}>

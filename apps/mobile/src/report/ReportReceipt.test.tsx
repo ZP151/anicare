@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import type { MyReportsPage, MyReportSummary } from '../api/my-reports';
 import type { StoredDraft } from '../offline/draft-policy';
@@ -30,14 +30,33 @@ const local = (overrides: Partial<StoredDraft> = {}): StoredDraft => ({
 function dependencies(overrides: Partial<ReportReceiptDependencies> = {}): ReportReceiptDependencies {
   return {
     getSessionSubject: jest.fn(async () => 'owner-12345678'),
+    subscribeToAuthChanges: jest.fn(() => () => undefined),
     listReports: jest.fn(async () => page([remote()])),
     loadDrafts: jest.fn(async () => []),
+    deleteReceiptAnchor: jest.fn(async () => undefined),
     navigate: jest.fn(),
     ...overrides,
   };
 }
 
 describe('ReportReceipt', () => {
+  it('does not render account A local anchor when a rejected lookup races an A-to-B auth change', async () => {
+    let subject = 'owner-aaaaaaaa';
+    let listener: ((next: string | null) => void) | null = null;
+    let rejectRemote!: (error: Error) => void;
+    const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
+      getSessionSubject: async () => subject,
+      subscribeToAuthChanges: (next) => { listener = next; return () => undefined; },
+      listReports: () => new Promise((_resolve, reject) => { rejectRemote = reject; }),
+      loadDrafts: async () => [local({
+        notes: '', report: undefined, ownerSubject: 'owner-aaaaaaaa',
+        textReceiptCommittedAt: '2026-08-31T09:01:00.000Z',
+      })],
+    })} locale="en" />);
+    subject = 'owner-bbbbbbbb';
+    await act(async () => { listener?.(subject); rejectRemote(new Error('offline')); });
+    await waitFor(() => expect(view.queryByText(`Report ID: ${sightingId}`)).toBeNull());
+  });
   it('shows a submitted text-only report without exposing private report fields', async () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies()} locale="en" />);
 
@@ -47,6 +66,19 @@ describe('ReportReceipt', () => {
     expect(view.getByText('Text-only report')).toBeTruthy();
     const output = JSON.stringify(view.toJSON());
     expect(output).not.toMatch(/89652636d87ffff|Private note|tabby|white-paws|candidate|confidence|model|reviewed-media|public cell/i);
+  });
+
+  it('reconciles a minimal local receipt anchor after remote authority confirms the report', async () => {
+    const deleteReceiptAnchor = jest.fn(async () => undefined);
+    const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
+      deleteReceiptAnchor,
+      loadDrafts: async () => [local({
+        notes: '', report: undefined, ownerSubject: 'owner-12345678',
+        textReceiptCommittedAt: '2026-08-31T09:01:00.000Z',
+      })],
+    })} locale="en" />);
+    await waitFor(() => expect(view.getByText('Report received')).toBeTruthy());
+    await waitFor(() => expect(deleteReceiptAnchor).toHaveBeenCalledWith('draft-12345678', 'owner-12345678'));
   });
 
   it.each([
@@ -82,12 +114,17 @@ describe('ReportReceipt', () => {
   it('always shows the committed reference from a subject-matched text-only local anchor when remote lookup fails', async () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
       listReports: async () => { throw new Error('my_reports_unavailable'); },
-      loadDrafts: async () => [local({ ownerSubject: 'owner-12345678' })],
+      loadDrafts: async () => [local({
+        notes: '', report: undefined, ownerSubject: 'owner-12345678',
+        textReceiptCommittedAt: '2026-08-31T09:01:00.000Z',
+      })],
     })} locale="en" />);
 
     await waitFor(() => expect(view.getByText(`Report ID: ${sightingId}`)).toBeTruthy());
     expect(view.getByText('Submission committed on this device')).toBeTruthy();
+    expect(view.getByText(/Submitted at /)).toBeTruthy();
     expect(view.getByText('Remote status is unavailable. Showing status saved on this device.')).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/private note|tabby|white-paws|89652636d87ffff/i);
   });
 
   it('does not expose another account local receipt anchor', async () => {

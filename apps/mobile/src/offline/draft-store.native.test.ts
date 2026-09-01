@@ -13,6 +13,7 @@ import {
   DRAFT_LIST_SQL,
   DRAFT_SAVE_SQL,
   ENCRYPTION_VERSION_BACKFILL_SQL,
+  TEXT_RECEIPT_BACKFILL_SQL,
   ensureDraftTransportSchemaWithDependencies,
   getPendingReviewedMediaVersionMismatch,
   LEGACY_REVIEWED_PATH_CLEAR_SQL,
@@ -37,6 +38,7 @@ describe('native draft storage privacy boundary', () => {
     const report = {
       version: 1,
       step: 'review',
+      areaSelectionMode: 'either',
       occurredAt: '2026-08-31T10:00:00.000Z',
       coat: ['tabby'],
       markings: ['white-paws'],
@@ -185,9 +187,9 @@ describe('native draft storage privacy boundary', () => {
     expect(detachReviewedMedia).not.toHaveBeenCalled();
   });
 
-  it('attaches a recovered sighting through a narrow immutable update', async () => {
-    let current = { id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const };
-    const updates: Array<[string, string]> = [];
+  it('atomically replaces a text-only ordinary draft with a minimal receipt anchor', async () => {
+    let current: StoredDraft = { id: 'draft-12345678', notes: 'tabby', risk: 'normal' };
+    const updates: Array<[string, string, string]> = [];
 
     await expect(attachSightingToDraftWithDependencies(
       'draft-12345678',
@@ -195,18 +197,48 @@ describe('native draft storage privacy boundary', () => {
       'owner-12345678',
       {
         getOfflineDraft: async () => current,
-        attachSightingId: async (id, sightingId) => {
-          updates.push([id, sightingId]);
-          current = { ...current, sightingId, ownerSubject: 'owner-12345678' } as typeof current;
+        attachSightingId: async (id, sightingId, _ownerSubject, committedAt) => {
+          updates.push([id, sightingId, committedAt]);
+          current = {
+            id, notes: '', risk: 'normal', sightingId,
+            ownerSubject: 'owner-12345678', textReceiptCommittedAt: committedAt,
+          };
           return true;
         },
       },
+      new Date('2026-09-01T12:00:00.000Z'),
     )).resolves.toBe(true);
 
-    expect(updates).toEqual([['draft-12345678', '12345678-1234-1234-1234-123456789abc']]);
+    expect(updates).toEqual([[
+      'draft-12345678', '12345678-1234-1234-1234-123456789abc', '2026-09-01T12:00:00.000Z',
+    ]]);
     expect(ATTACH_SIGHTING_TO_DRAFT_SQL).toContain('sighting_id = ?');
-    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).not.toContain('notes =');
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).toContain('notes = CASE');
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).toContain('report_payload_json = CASE');
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).toContain('text_committed_at = CASE');
     expect(ATTACH_SIGHTING_TO_DRAFT_SQL).not.toContain('reviewed_media_ref =');
+  });
+
+  it('deserializes a text receipt with time but never its former notes, traits, or area', () => {
+    const [anchor] = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'private note', risk: 'sensitive', media_id: null,
+      sighting_id: '12345678-1234-1234-1234-123456789abc', owner_subject: 'owner-12345678',
+      reviewed_media_ref: null, encryption_version: null, review_receipt_json: null,
+      upload_state: null, upload_attempts: null, next_attempt_at: null, last_error: null,
+      upload_resume_state: null, upload_attempt_started_at: null, revision: 4,
+      text_committed_at: '2026-09-01T12:00:00.000Z',
+      report_payload_json: JSON.stringify({
+        version: 1, step: 'review', occurredAt: '2026-09-01T10:00:00.000Z',
+        coat: ['tabby'], markings: ['white-paws'], condition: 'appears_well',
+        manualPublicCellId: '89652636d87ffff', updatedAt: '2026-09-01T11:00:00.000Z',
+      }),
+    }]);
+    expect(anchor).toEqual({
+      id: 'draft-12345678', notes: '', risk: 'normal', revision: 4,
+      sightingId: '12345678-1234-1234-1234-123456789abc', ownerSubject: 'owner-12345678',
+      textReceiptCommittedAt: '2026-09-01T12:00:00.000Z',
+    });
+    expect(JSON.stringify(anchor)).not.toMatch(/private note|tabby|white-paws|89652636d87ffff/);
   });
 
   it('allows only the matching immutable sighting id to replay after a lost response', async () => {
@@ -214,6 +246,7 @@ describe('native draft storage privacy boundary', () => {
       id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const,
       sightingId: '12345678-1234-1234-1234-123456789abc',
       ownerSubject: 'owner-12345678',
+      textReceiptCommittedAt: '2026-09-01T12:00:00.000Z',
     };
     const attachSightingId = jest.fn(async () => true);
 
@@ -230,6 +263,7 @@ describe('native draft storage privacy boundary', () => {
     const current = {
       id: 'draft-12345678', notes: 'tabby', risk: 'normal' as const,
       sightingId: '12345678-1234-1234-1234-123456789abc', ownerSubject: 'owner-12345678',
+      textReceiptCommittedAt: '2026-09-01T12:00:00.000Z',
     };
     const attachSightingId = jest.fn(async () => true);
     await expect(attachSightingToDraftWithDependencies(
@@ -299,6 +333,14 @@ describe('native draft storage privacy boundary', () => {
     expect(ENCRYPTION_VERSION_BACKFILL_SQL).toContain('encryption_version IS NULL');
   });
 
+  it('backfills legacy completed text rows into minimal receipt anchors', () => {
+    expect(TEXT_RECEIPT_BACKFILL_SQL).toContain("notes = ''");
+    expect(TEXT_RECEIPT_BACKFILL_SQL).toContain('report_payload_json = NULL');
+    expect(TEXT_RECEIPT_BACKFILL_SQL).toContain('text_committed_at = COALESCE(text_committed_at, updated_at)');
+    expect(TEXT_RECEIPT_BACKFILL_SQL).toContain('sighting_id IS NOT NULL');
+    expect(TEXT_RECEIPT_BACKFILL_SQL).toContain('reviewed_media_ref IS NULL');
+  });
+
   it('executes migration/backfill invariants against an injected state model', async () => {
     const events: string[] = [];
     const columns = new Set([
@@ -324,6 +366,7 @@ describe('native draft storage privacy boundary', () => {
         events.push('backfill');
         if (row.reviewed_media_ref && row.encryption_version === null) row.encryption_version = 'aes-256-gcm.v1';
       },
+      backfillTextReceiptAnchors: async () => { events.push('backfill-text-receipts'); },
       clearLegacyReviewedPath: async () => { events.push('clear-legacy-path'); row.reviewed_media_path = null; },
     });
     expect(columns.has('upload_resume_state')).toBe(true);
@@ -339,7 +382,8 @@ describe('native draft storage privacy boundary', () => {
       owner_subject: 'owner-12345678',
       pending_media_cleanup_ref: null,
     });
-    expect(events.at(-2)).toBe('backfill');
+    expect(events.at(-3)).toBe('backfill');
+    expect(events.at(-2)).toBe('backfill-text-receipts');
     expect(events.at(-1)).toBe('clear-legacy-path');
   });
 
@@ -569,6 +613,17 @@ describe('native draft storage privacy boundary', () => {
     expect(DRAFT_SAVE_SQL).toContain('revision = sighting_drafts.revision + 1');
   });
 
+  it('never repopulates private text after a draft becomes a receipt anchor', () => {
+    expect(DRAFT_SAVE_SQL).toContain(
+      'notes = CASE WHEN sighting_drafts.sighting_id IS NULL THEN excluded.notes ELSE sighting_drafts.notes END',
+    );
+    expect(DRAFT_SAVE_SQL).toContain(
+      'risk = CASE WHEN sighting_drafts.sighting_id IS NULL THEN excluded.risk ELSE sighting_drafts.risk END',
+    );
+    expect(DRAFT_SAVE_SQL).not.toContain('\n       notes = excluded.notes');
+    expect(DRAFT_SAVE_SQL).not.toContain('\n       risk = excluded.risk');
+  });
+
   it('never replaces immutable media identities or lets a generic save overwrite an active CAS state', () => {
     for (const field of ['media_id', 'sighting_id', 'reviewed_media_ref', 'encryption_version', 'review_receipt_json']) {
       expect(DRAFT_SAVE_SQL).toContain(`${field} = COALESCE(sighting_drafts.${field}, excluded.${field})`);
@@ -681,7 +736,7 @@ describe('native draft storage privacy boundary', () => {
     }]);
 
     expect(drafts).toEqual([{
-      id: 'draft-12345678', notes: 'saved text', risk: 'sensitive',
+      id: 'draft-12345678', notes: '', risk: 'normal',
       sightingId: '12345678-1234-1234-1234-123456789abc', revision: 4,
     }]);
   });

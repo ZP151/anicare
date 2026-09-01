@@ -20,6 +20,7 @@ describe('report draft payload', () => {
     expect(sanitizeReportDraftPayload(validPayload)).toEqual({
       version: 1,
       step: 'details',
+      areaSelectionMode: 'either',
       occurredAt: '2026-08-31T10:00:00.000Z',
       coat: ['tabby'],
       markings: ['white-paws'],
@@ -63,11 +64,21 @@ describe('report draft payload', () => {
     }
   });
 
+  it('persists only the bounded manual-required map origin state', () => {
+    expect(sanitizeReportDraftPayload({
+      ...validPayload,
+      areaSelectionMode: 'manual_required',
+    }).areaSelectionMode).toBe('manual_required');
+    expect(() => sanitizeReportDraftPayload({ ...validPayload, areaSelectionMode: 'device_only' }))
+      .toThrow('invalid_report_draft');
+  });
+
   it('creates an immutable empty V1 draft at the supplied time', () => {
     const payload = createReportDraftPayload(new Date('2026-08-31T10:00:00.000Z'));
     expect(payload).toEqual({
       version: 1,
       step: 'photo',
+      areaSelectionMode: 'either',
       occurredAt: '2026-08-31T10:00:00.000Z',
       coat: [],
       markings: [],

@@ -83,13 +83,13 @@ function committedTimelineItem(summary: MyReportSummary, local: StoredDraft | nu
 }
 
 function recoveryTimelineItem(draft: StoredDraft): ReportTimelineItem | null {
-  if (!draft.report) return null;
+  if (!draft.report && !draft.textReceiptCommittedAt) return null;
   return Object.freeze({
     key: `recovery:${draft.id}`,
     kind: 'recovery',
     sightingId: draft.sightingId ?? null,
     draftId: draft.id,
-    occurredAt: draft.report.occurredAt,
+    occurredAt: draft.report?.occurredAt ?? draft.textReceiptCommittedAt!,
     reportState: draft.sightingId && !hasMediaBoundary(draft) ? 'submitted' : 'draft',
     mediaState: localMediaState(draft),
     identityState: 'not_requested',

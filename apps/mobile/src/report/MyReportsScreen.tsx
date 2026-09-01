@@ -11,6 +11,7 @@ import { getReportCopy } from './report-copy';
 
 export type MyReportsDependencies = Readonly<{
   getSessionSubject(): Promise<string | null>;
+  subscribeToAuthChanges(listener: (subject: string | null) => void): () => void;
   listReports(input: Readonly<{ cursor?: MyReportsCursor | null }>): Promise<MyReportsPage>;
   loadDrafts(): Promise<readonly StoredDraft[]>;
   navigate(path: string): void;
@@ -90,6 +91,19 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
   }, [dependencies, expireSession, saveSnapshot]);
 
   useEffect(() => { void load('initial'); }, [load]);
+  useEffect(() => dependencies.subscribeToAuthChanges((subject) => {
+    requestRef.current += 1;
+    snapshotRef.current = null;
+    ownerSubjectRef.current = subject;
+    setSnapshot(null);
+    if (!subject) {
+      setState('signed_out');
+      dependencies.navigate('/profile');
+      return;
+    }
+    setState('loading');
+    void load('initial');
+  }), [dependencies, load]);
   const rows = snapshot?.rows ?? [];
   const refresh = () => { void load('refresh'); };
 

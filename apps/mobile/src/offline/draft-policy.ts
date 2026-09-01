@@ -13,6 +13,7 @@ export type StoredDraft = {
   mediaId?: string;
   sightingId?: string;
   ownerSubject?: string;
+  textReceiptCommittedAt?: string;
   pendingMediaCleanupRef?: string;
   encryptedReviewedRef?: string;
   encryptionVersion?: 'aes-256-gcm.v1' | typeof UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION;

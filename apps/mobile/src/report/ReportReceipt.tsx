@@ -12,8 +12,10 @@ import { isOpaqueReportId } from './ReportRouteShell';
 
 export type ReportReceiptDependencies = Readonly<{
   getSessionSubject(): Promise<string | null>;
+  subscribeToAuthChanges(listener: (subject: string | null) => void): () => void;
   listReports(input: Readonly<{ cursor?: MyReportsCursor | null }>): Promise<MyReportsPage>;
   loadDrafts(): Promise<readonly StoredDraft[]>;
+  deleteReceiptAnchor(draftId: string, ownerSubject: string): Promise<void>;
   navigate(path: string): void;
 }>;
 
@@ -52,6 +54,12 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
   const copy = getReportCopy(locale);
   const validSightingId = isOpaqueReportId(sightingId);
   const [state, setState] = useState<ReceiptState | null>(null);
+  const [authEpoch, setAuthEpoch] = useState(0);
+
+  useEffect(() => dependencies.subscribeToAuthChanges(() => {
+    setState(null);
+    setAuthEpoch((epoch) => epoch + 1);
+  }), [dependencies]);
 
   useEffect(() => {
     if (!validSightingId) return;
@@ -69,20 +77,33 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
         if (!mounted) return;
         if (remote.kind === 'found') {
           setState({ status: mergeReceiptStatus(remote.report, local), source: 'remote', submittedAt: remote.report.createdAt });
+          if (local?.textReceiptCommittedAt && ownerSubject) {
+            void dependencies.deleteReceiptAnchor(local.id, ownerSubject).catch(() => undefined);
+          }
           return;
         }
         const recovery = mergeReceiptStatus(null, local);
-        if (recovery?.reportState === 'submitted') {
-          setState({ status: recovery, source: 'local_commit', submittedAt: null });
+        if (recovery?.reportState === 'submitted' && local?.textReceiptCommittedAt) {
+          setState({ status: recovery, source: 'local_commit', submittedAt: local.textReceiptCommittedAt });
         } else {
           setState({ status: recovery?.mediaState === 'needs_user' ? recovery : null, source: 'local_recovery', submittedAt: null });
         }
       } catch {
-        if (mounted) setState({ status: mergeReceiptStatus(null, local), source: 'unavailable', submittedAt: null });
+        if (await dependencies.getSessionSubject().catch(() => null) !== ownerSubject) {
+          if (mounted) setState({ status: null, source: 'unavailable', submittedAt: null });
+          return;
+        }
+        const recovery = mergeReceiptStatus(null, local);
+        const status = recovery?.reportState === 'submitted' && !local?.textReceiptCommittedAt ? null : recovery;
+        if (mounted) setState({
+          status,
+          source: 'unavailable',
+          submittedAt: status?.reportState === 'submitted' ? local?.textReceiptCommittedAt ?? null : null,
+        });
       }
     })();
     return () => { mounted = false; };
-  }, [dependencies, sightingId, validSightingId]);
+  }, [authEpoch, dependencies, sightingId, validSightingId]);
 
   if (!validSightingId) {
     return <ScreenScaffold subtitle={copy.invalidReceiptId} title={copy.receiptTitle}>

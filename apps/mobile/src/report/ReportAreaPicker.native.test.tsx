@@ -66,8 +66,9 @@ describe('ReportAreaPicker native privacy boundary', () => {
     const onSelect = jest.fn();
     const view = await render(<ReportAreaPicker googleMapsConfigured={false} onSelect={onSelect} />);
     expect(mockMapProps).not.toHaveBeenCalled();
-    expect(view.getByText('Google Maps is unavailable. Choose a broad Singapore area from the list.')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Central Singapore' }));
+    expect(view.getByText('Google Maps is unavailable. Choose a community location that corresponds to one actual H3-9 cell.')).toBeTruthy();
+    expect(view.queryByText(/West Singapore|Central Singapore|East Singapore/)).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'MacRitchie Nature Trail vicinity' }));
     expect(onSelect).toHaveBeenCalledWith({ publicCellId: '89652636d87ffff' });
   });
 
@@ -75,7 +76,7 @@ describe('ReportAreaPicker native privacy boundary', () => {
     jest.useFakeTimers();
     const view = await render(<ReportAreaPicker googleMapsConfigured onSelect={jest.fn()} />);
     await act(async () => { jest.advanceTimersByTime(10_000); });
-    expect(view.getByText('Google Maps is unavailable. Choose a broad Singapore area from the list.')).toBeTruthy();
+    expect(view.getByText('Google Maps is unavailable. Choose a community location that corresponds to one actual H3-9 cell.')).toBeTruthy();
     jest.useRealTimers();
   });
 });

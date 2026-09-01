@@ -7,9 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listPublicSightings, type NarrowRpcClient } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
+import { readSessionSubjectStrict } from '../../src/auth/session-subject';
 import { CoarseAreaDetailSheet } from '../../src/components/CoarseAreaDetailSheet';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
-import { createReportDraftPayload } from '../../src/report/report-draft';
+import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
 import { colors, radii } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { getCommunityMapCopy } from '../../src/i18n/catalog';
@@ -153,9 +154,15 @@ export default function MapScreen() {
             area={selectedArea}
             locale={locale}
             onReportFromArea={async ({ startAt }) => {
-              const draftId = Crypto.randomUUID();
-              const report = createReportDraftPayload(new Date());
-              await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: { ...report, step: startAt } });
+              const draftId = await createOwnerAwareReportDraft({
+                readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
+                saveDraft: saveOfflineDraft,
+                createId: Crypto.randomUUID,
+                now: () => new Date(),
+              }, {
+                step: startAt,
+                areaSelectionMode: 'manual_required',
+              });
               router.push({ pathname: '/report/new', params: { draftId } } as never);
             }}
             onViewCat={(animalId) => router.push(`/cat/${animalId}` as never)}

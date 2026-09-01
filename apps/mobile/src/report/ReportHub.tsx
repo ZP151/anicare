@@ -6,7 +6,8 @@ import { ScreenScaffold } from '../components/ScreenScaffold';
 import { colors, radii } from '../design/theme';
 import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
-import { createReportDraftPayload, reportDraftSummary, type ReportDraftStep } from './report-draft';
+import { reportDraftSummary, type ReportDraftStep } from './report-draft';
+import { createOwnerAwareReportDraft } from './report-draft-factory';
 import { getReportCopy } from './report-copy';
 import { isOpaqueReportId } from './ReportRouteShell';
 
@@ -15,6 +16,7 @@ export type ReportHubDependencies = Readonly<{
   saveDraft(input: Record<string, unknown>): Promise<StoredDraft>;
   deleteDraft(id: string, expectedOwnerSubject: string | null): Promise<void>;
   getSessionSubject(): Promise<string | null>;
+  subscribeToAuthChanges(listener: (subject: string | null) => void): () => void;
   claimDraftOwner(id: string, ownerSubject: string): Promise<boolean>;
   createId(): string;
   now(): Date;
@@ -34,7 +36,10 @@ function isDraftStep(value: string): value is ReportDraftStep {
 
 function summarizeDrafts(drafts: readonly StoredDraft[], ownerSubject: string | null): readonly DraftSummary[] {
   return drafts
-    .filter((draft) => !draft.sightingId && (draft.ownerSubject === undefined || draft.ownerSubject === ownerSubject))
+    .filter((draft) => !draft.sightingId && (
+      draft.ownerSubject === ownerSubject ||
+      (draft.ownerSubject === undefined && draft.report?.creatorMode === 'anonymous')
+    ))
     .map((draft) => {
       const summary = reportDraftSummary(draft);
       return summary ? { ...summary, claimRequired: ownerSubject !== null && draft.ownerSubject === undefined, ownerSubject: draft.ownerSubject ?? null } : null;
@@ -56,9 +61,9 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
     setDraftStatus('loading');
     setMessage(null);
     try {
-      const subject = await dependencies.getSessionSubject().catch(() => null);
+      const subject = await dependencies.getSessionSubject();
       const loaded = await dependencies.loadDrafts();
-      const verifiedSubject = await dependencies.getSessionSubject().catch(() => null);
+      const verifiedSubject = await dependencies.getSessionSubject();
       if (verifiedSubject !== subject) {
         setOwnerSubject(verifiedSubject);
         setSignedIn(verifiedSubject !== null);
@@ -75,19 +80,25 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
   }, [dependencies]);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => dependencies.subscribeToAuthChanges((subject) => {
+    setDrafts([]);
+    setMessage(null);
+    setOwnerSubject(subject);
+    setSignedIn(subject !== null);
+    setDraftStatus('loading');
+    void reload();
+  }), [dependencies, reload]);
 
   async function startReport() {
     setStarting(true);
     setMessage(null);
-    const id = dependencies.createId();
-    if (!isOpaqueReportId(id)) {
-      setStarting(false);
-      setMessage(copy.startFailed);
-      return;
-    }
     try {
-      const subject = await dependencies.getSessionSubject().catch(() => null);
-      await dependencies.saveDraft({ id, notes: '', risk: 'normal', ...(subject ? { ownerSubject: subject } : {}), report: createReportDraftPayload(dependencies.now()) });
+      const id = await createOwnerAwareReportDraft({
+        readAuthSnapshot: async () => ({ ownerSubject: await dependencies.getSessionSubject() }),
+        saveDraft: dependencies.saveDraft,
+        createId: dependencies.createId,
+        now: dependencies.now,
+      });
       dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
     } catch {
       setMessage(copy.startFailed);

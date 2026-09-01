@@ -22,6 +22,9 @@ native-device signoff.
 | Details omitted bounded traits; submission validator was test-only | Fixed in final closeout | Accessible coat/marking multi-selects persist only approved values and the production submit path persists Review then runs `validateReportForSubmission`. |
 | Manual Report map had no missing-key/provider fallback and map-origin routing used control flags | Fixed in final closeout | Native picker now shares configured/readiness gating, uses an honest broad-area list fallback, validates the H3-9 cell center, and map-origin routes carry only the opaque draft ID. |
 | Approved photo-retake action was missing | Fixed in final closeout | Camera retake enters the same canonicalize, manual-redact and encrypt flow; camera permission is explicit, microphone permission remains blocked. |
+| Exact-head rereview found incomplete Profile return, manual-only origin and oversized text receipts | Fixed in rereview closeout | Profile validates the opaque return ID and authorizes the draft owner before resuming; map origin persists `manual_required`; text success atomically becomes a minimal owner/time/sighting anchor and reconciles after remote confirmation. |
+| Security rereview found unbound alternate entries and idle-screen/media auth races | Fixed in rereview closeout | Nearby, Map, Cat Detail and Report use one owner-aware factory with explicit anonymous provenance; Hub/My Reports/Receipt subscribe to auth epochs; decrypt/reserve/PUT/finalize recheck the live owner and auth changes abort the foreground run. |
+| Fallback labels implied region-wide precision for one H3-9 cell | Fixed in rereview closeout | Each fallback option names the actual community vicinity represented by its single H3-9 cell instead of West/Central/East Singapore. |
 
 The native Google Maps path remains `react-native-maps` with `PROVIDER_GOOGLE`.
 `GOOGLE_MAPS_IOS_API_KEY` and `GOOGLE_MAPS_ANDROID_API_KEY` are native build
@@ -31,7 +34,8 @@ second map provider is part of this Report/MVP change.
 The optional native camera permission exists only for the approved retake action.
 It does not add microphone access, automatic detection, background capture or a
 new upload path: source pixels still enter the existing local private-review
-boundary and are never uploaded directly.
+boundary and are never uploaded directly. App-owned camera cache sources are
+deleted after canonicalization; gallery originals are never deleted.
 
 ## Privacy audit
 
@@ -71,15 +75,22 @@ confirmation UI was added.
 - Controller closeout tests for bilingual redaction/Cat Detail, localized draft
   titles and Singapore map bounds: PASS — 4 suites/35 tests; mobile typecheck
   and clean 18-route Web export also passed.
-- Final-review closeout: canonical mobile suite PASS — 60 suites/700 tests;
+- Final-review closeout: canonical mobile suite PASS — 63 suites/721 tests;
   domain suite PASS — 3 files/11 tests; mobile typecheck, native-config policy,
   pilot-build policy and the 18-route Web export PASS. This closeout covers
   account-switch fail-closed submission, subject-filtered drafts/history/receipt,
   durable deletion retry, committed local receipt anchors, bounded traits,
   camera retake, production prerequisite validation, map readiness/list fallback
   and opaque-only map-origin routing.
+- Exact-head rereview closeout: `pnpm verify` PASS; Docker-backed
+  `pnpm pilot-gate-2a` PASS through credentials, pgTAP, database lint,
+  readiness and integration; 18-route Web export PASS. Focused auth/profile,
+  owner-aware entry, auth-epoch, minimal receipt, map-origin/fallback and media
+  boundary tests are included in the canonical 721-test mobile suite.
 - `git diff --check`: PASS (Windows line-ending notices only).
 
 Hosted Gate 2B, true iOS/Android Google Maps/Hermes and media/recovery checks,
 and all public-AI gates remain open. Following and Profile/privacy-center work
-remain open.
+remain open. The service-role-only manual-area RPC defense-in-depth hardening
+remains a documented Minor follow-up for its dedicated backend release track;
+no new backend control-plane scope was added here.

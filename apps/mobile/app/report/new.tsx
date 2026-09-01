@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { developmentInsecureOrigins } from '../../src/api/development-origin';
 import { recoverSightingSubmission, submitSighting } from '../../src/api/sightings';
 import { getSupabaseClient } from '../../src/api/supabase';
+import { subscribeSessionSubject } from '../../src/auth/session-subject';
 import { uploadDraftMediaNow } from '../../src/media/media-upload-runtime';
 import {
   attachSightingToDraft,
@@ -75,9 +76,17 @@ export default function NewReportRoute() {
             });
           },
           attachSighting: attachSightingToDraft,
-          uploadMedia: (stableDraftId, expectedOwnerSubject) => uploadDraftMediaNow(
-            stableDraftId, undefined, expectedOwnerSubject,
-          ),
+          uploadMedia: async (stableDraftId, expectedOwnerSubject) => {
+            const controller = new AbortController();
+            const unsubscribe = subscribeSessionSubject((subject) => {
+              if (subject !== expectedOwnerSubject) controller.abort();
+            });
+            try {
+              return await uploadDraftMediaNow(stableDraftId, controller.signal, expectedOwnerSubject);
+            } finally {
+              unsubscribe();
+            }
+          },
           deleteDraft: deleteOfflineDraft,
         });
         return { sightingId: result.sightingId, state: result.state };

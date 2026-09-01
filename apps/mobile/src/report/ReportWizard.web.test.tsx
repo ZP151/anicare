@@ -20,6 +20,7 @@ describe('ReportWizard web capture boundary', () => {
       report: {
         version: 1,
         step: 'review',
+        creatorMode: 'anonymous',
         occurredAt: '2026-08-31T00:00:00.000Z',
         coat: [],
         markings: [],
@@ -55,6 +56,7 @@ describe('ReportWizard web capture boundary', () => {
       report: {
         version: 1,
         step: 'review',
+        creatorMode: 'anonymous',
         occurredAt: '2026-08-31T00:00:00.000Z',
         coat: [],
         markings: [],

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listPublicSightings, type NarrowRpcClient, type PublicSighting } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
+import { readSessionSubjectStrict } from '../../src/auth/session-subject';
 import { AnchoredCatSheet, type SelectedCatSummary } from '../../src/components/AnchoredCatSheet';
 import { GlassSurface } from '../../src/design/GlassSurface';
 import { colors, radii } from '../../src/design/theme';
@@ -14,7 +15,7 @@ import { NearbyMap } from '../../src/maps/NearbyMap';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
 import { tabVisualContract } from '../../src/navigation/tab-style';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
-import { createReportDraftPayload } from '../../src/report/report-draft';
+import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
 import { getReportCopy } from '../../src/report/report-copy';
 import { useLocale } from '../../src/i18n/LocaleContext';
 
@@ -81,9 +82,13 @@ export default function NearbyScreen() {
 
   async function startLinkedReport() {
     if (!selectedCat) return;
-    const draftId = Crypto.randomUUID();
     try {
-      await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });
+      const draftId = await createOwnerAwareReportDraft({
+        readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
+        saveDraft: saveOfflineDraft,
+        createId: Crypto.randomUUID,
+        now: () => new Date(),
+      });
       const params = opaqueAnimalId.test(selectedCat.animalId) ? { draftId, animalId: selectedCat.animalId } : { draftId };
       router.push({ pathname: '/report/new', params } as never);
     } catch {

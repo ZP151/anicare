@@ -3,10 +3,14 @@ import type { StoredDraft } from '../offline/draft-policy';
 
 export type ReportDraftStep = 'photo' | 'details' | 'safety' | 'area' | 'review';
 export type ReportCondition = 'appears_well' | 'needs_attention' | 'urgent';
+export type ReportAreaSelectionMode = 'either' | 'manual_required';
+export type ReportDraftCreatorMode = 'anonymous' | 'authenticated';
 
 export type ReportDraftPayloadV1 = Readonly<{
   version: 1;
   step: ReportDraftStep;
+  areaSelectionMode?: ReportAreaSelectionMode;
+  creatorMode?: ReportDraftCreatorMode;
   occurredAt: string;
   coat: readonly string[];
   markings: readonly string[];
@@ -17,12 +21,15 @@ export type ReportDraftPayloadV1 = Readonly<{
 
 const reportSteps = new Set<ReportDraftStep>(['photo', 'details', 'safety', 'area', 'review']);
 const reportConditions = new Set<ReportCondition>(['appears_well', 'needs_attention', 'urgent']);
+const areaSelectionModes = new Set<ReportAreaSelectionMode>(['either', 'manual_required']);
+const creatorModes = new Set<ReportDraftCreatorMode>(['anonymous', 'authenticated']);
 const coatValues = new Set(['tabby', 'black', 'white', 'ginger', 'grey', 'calico', 'tortoiseshell', 'brown']);
 const markingValues = new Set(['white-paws', 'white-chest', 'white-tail-tip', 'ear-tip', 'collar', 'scar', 'striped', 'spotted']);
 const pentagonBaseCells = new Set([4, 14, 24, 38, 49, 58, 63, 72, 83, 97, 107, 117]);
 const payloadKeys = [
-  'version', 'step', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'updatedAt',
+  'version', 'step', 'areaSelectionMode', 'creatorMode', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'updatedAt',
 ] as const;
+const requiredPayloadKeys = payloadKeys.filter((key) => key !== 'areaSelectionMode' && key !== 'creatorMode');
 
 function invalid(): never {
   throw new Error('invalid_report_draft');
@@ -70,8 +77,13 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) invalid();
   const candidate = value as Record<string, unknown>;
   const keys = Object.keys(candidate);
-  if (keys.length !== payloadKeys.length || keys.some((key) => !payloadKeys.includes(key as typeof payloadKeys[number]))) invalid();
+  if (keys.some((key) => !payloadKeys.includes(key as typeof payloadKeys[number])) ||
+      requiredPayloadKeys.some((key) => !Object.prototype.hasOwnProperty.call(candidate, key))) invalid();
+  const areaSelectionMode = candidate.areaSelectionMode ?? 'either';
   if (candidate.version !== 1 || typeof candidate.step !== 'string' || !reportSteps.has(candidate.step as ReportDraftStep) ||
+      typeof areaSelectionMode !== 'string' || !areaSelectionModes.has(areaSelectionMode as ReportAreaSelectionMode) ||
+      (candidate.creatorMode !== undefined &&
+        (typeof candidate.creatorMode !== 'string' || !creatorModes.has(candidate.creatorMode as ReportDraftCreatorMode))) ||
       !isCanonicalIsoTimestamp(candidate.occurredAt) || !isCanonicalIsoTimestamp(candidate.updatedAt) ||
       (candidate.condition !== null && (typeof candidate.condition !== 'string' || !reportConditions.has(candidate.condition as ReportCondition))) ||
       (candidate.manualPublicCellId !== null && !isCanonicalPublicCell(candidate.manualPublicCellId))) invalid();
@@ -79,6 +91,8 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
   return Object.freeze({
     version: 1,
     step: candidate.step as ReportDraftStep,
+    areaSelectionMode: areaSelectionMode as ReportAreaSelectionMode,
+    ...(candidate.creatorMode ? { creatorMode: candidate.creatorMode as ReportDraftCreatorMode } : {}),
     occurredAt: candidate.occurredAt,
     coat: sanitizeTraits(candidate.coat, coatValues),
     markings: sanitizeTraits(candidate.markings, markingValues),
@@ -88,12 +102,17 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
   });
 }
 
-export function createReportDraftPayload(now: Date): ReportDraftPayloadV1 {
+export function createReportDraftPayload(
+  now: Date,
+  options: Readonly<{ areaSelectionMode?: ReportAreaSelectionMode; creatorMode?: ReportDraftCreatorMode }> = {},
+): ReportDraftPayloadV1 {
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) invalid();
   const timestamp = now.toISOString();
   return sanitizeReportDraftPayload({
     version: 1,
     step: 'photo',
+    areaSelectionMode: 'either',
+    ...options,
     occurredAt: timestamp,
     coat: [],
     markings: [],

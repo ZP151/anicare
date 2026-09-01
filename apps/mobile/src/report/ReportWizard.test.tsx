@@ -21,6 +21,7 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
     report: {
       version: 1,
       step: 'photo',
+      creatorMode: 'anonymous',
       occurredAt: '2026-08-31T00:00:00.000Z',
       coat: [],
       markings: [],
@@ -66,6 +67,15 @@ describe('ReportWizard', () => {
     await waitFor(() => expect(view.getByText('This saved report is unavailable. Return to Report and start again.')).toBeTruthy());
     expect(view.queryByText('Private note')).toBeNull();
   });
+
+  it('fails closed when the current auth subject cannot be verified', async () => {
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      getSessionSubject: async () => { throw new Error('session_unavailable'); },
+    })} />);
+    await waitFor(() => expect(view.getByText('This saved report is unavailable. Return to Report and start again.')).toBeTruthy());
+    expect(view.queryByText('Private note')).toBeNull();
+  });
+
   it('exposes the active wizard stage as a five-step progress indicator', async () => {
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="safety" />);
 
@@ -99,11 +109,14 @@ describe('ReportWizard', () => {
 
   it('opens a map-origin draft at manual Area, then continues to Details without route flags', async () => {
     const saveDraft = jest.fn(async () => undefined);
+    const requestDeviceLocation = jest.fn(async () => ({ kind: 'granted' as const, latitude: 1.3521, longitude: 103.8198 }));
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
-      saveDraft,
-      loadDraft: async () => draft({ report: { ...draft().report!, step: 'area', condition: null } }),
+      saveDraft, requestDeviceLocation,
+      loadDraft: async () => draft({ report: { ...draft().report!, step: 'area', condition: null, areaSelectionMode: 'manual_required' } }),
     })} AreaPicker={ManualAreaPicker as never} />);
     await waitFor(() => expect(view.getByRole('header', { name: 'Area' })).toBeTruthy());
+    expect(view.queryByRole('button', { name: 'Use device location once' })).toBeNull();
+    expect(requestDeviceLocation).not.toHaveBeenCalled();
     expect(view.getByRole('button', { name: 'Tap broad Singapore map' })).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));

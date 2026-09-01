@@ -27,6 +27,12 @@ export const LEGACY_REVIEWED_PATH_CLEAR_SQL = 'UPDATE sighting_drafts SET review
 export const ENCRYPTION_VERSION_BACKFILL_SQL = `UPDATE sighting_drafts
   SET encryption_version = 'aes-256-gcm.v1'
   WHERE reviewed_media_ref IS NOT NULL AND encryption_version IS NULL;`;
+export const TEXT_RECEIPT_BACKFILL_SQL = `UPDATE sighting_drafts
+  SET notes = '', risk = 'normal', report_payload_json = NULL,
+      text_committed_at = COALESCE(text_committed_at, updated_at)
+  WHERE sighting_id IS NOT NULL AND media_id IS NULL AND reviewed_media_ref IS NULL
+    AND review_receipt_json IS NULL AND encryption_version IS NULL
+    AND upload_state IS NULL AND pending_media_cleanup_ref IS NULL;`;
 export const REPORT_PAYLOAD_COLUMN = { report_payload_json: 'TEXT' } as const;
 export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
      (id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref, encryption_version,
@@ -34,8 +40,8 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
       upload_resume_state, upload_attempt_started_at, report_payload_json, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
-       notes = excluded.notes,
-       risk = excluded.risk,
+       notes = CASE WHEN sighting_drafts.sighting_id IS NULL THEN excluded.notes ELSE sighting_drafts.notes END,
+       risk = CASE WHEN sighting_drafts.sighting_id IS NULL THEN excluded.risk ELSE sighting_drafts.risk END,
        media_id = COALESCE(sighting_drafts.media_id, excluded.media_id),
        sighting_id = COALESCE(sighting_drafts.sighting_id, excluded.sighting_id),
        owner_subject = COALESCE(sighting_drafts.owner_subject, excluded.owner_subject),
@@ -66,14 +72,16 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
          (sighting_drafts.media_id IS NULL OR
          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
          THEN excluded.upload_attempt_started_at ELSE sighting_drafts.upload_attempt_started_at END,
-       report_payload_json = COALESCE(excluded.report_payload_json, sighting_drafts.report_payload_json),
+       report_payload_json = CASE WHEN sighting_drafts.sighting_id IS NULL
+         THEN COALESCE(excluded.report_payload_json, sighting_drafts.report_payload_json)
+         ELSE sighting_drafts.report_payload_json END,
        revision = sighting_drafts.revision + 1,
        updated_at = excluded.updated_at`;
-export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
+export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, text_committed_at, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
   upload_resume_state, upload_attempt_started_at, report_payload_json, pending_media_cleanup_ref, revision
   FROM sighting_drafts ORDER BY updated_at DESC`;
-export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref,
+export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, text_committed_at, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
   upload_resume_state, upload_attempt_started_at, report_payload_json, pending_media_cleanup_ref, revision
   FROM sighting_drafts WHERE id = ?`;
@@ -129,6 +137,14 @@ export const MEDIA_UPLOAD_CAS_SQL = `UPDATE sighting_drafts SET
 export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
   sighting_id = ?,
   owner_subject = ?,
+  notes = CASE WHEN media_id IS NULL AND reviewed_media_ref IS NULL AND review_receipt_json IS NULL
+    AND encryption_version IS NULL AND upload_state IS NULL AND pending_media_cleanup_ref IS NULL THEN '' ELSE notes END,
+  risk = CASE WHEN media_id IS NULL AND reviewed_media_ref IS NULL AND review_receipt_json IS NULL
+    AND encryption_version IS NULL AND upload_state IS NULL AND pending_media_cleanup_ref IS NULL THEN 'normal' ELSE risk END,
+  report_payload_json = CASE WHEN media_id IS NULL AND reviewed_media_ref IS NULL AND review_receipt_json IS NULL
+    AND encryption_version IS NULL AND upload_state IS NULL AND pending_media_cleanup_ref IS NULL THEN NULL ELSE report_payload_json END,
+  text_committed_at = CASE WHEN media_id IS NULL AND reviewed_media_ref IS NULL AND review_receipt_json IS NULL
+    AND encryption_version IS NULL AND upload_state IS NULL AND pending_media_cleanup_ref IS NULL THEN ? ELSE text_committed_at END,
   revision = revision + 1,
   updated_at = ?
   WHERE id = ? AND (
@@ -177,6 +193,7 @@ type DraftRow = {
   media_id: string | null;
   sighting_id: string | null;
   owner_subject?: string | null;
+  text_committed_at?: string | null;
   reviewed_media_ref: string | null;
   encryption_version: string | null;
   review_receipt_json: string | null;
@@ -223,6 +240,7 @@ const SCHEMA_V2_COLUMNS = {
   upload_resume_state: 'TEXT',
   upload_attempt_started_at: 'TEXT',
   pending_media_cleanup_ref: 'TEXT',
+  text_committed_at: 'TEXT',
   revision: 'INTEGER NOT NULL DEFAULT 0',
 } as const;
 
@@ -230,6 +248,7 @@ export type DraftTransportSchemaDependencies = Readonly<{
   listColumns(): Promise<readonly string[]>;
   addColumn(name: keyof typeof SCHEMA_V2_COLUMNS, type: string): Promise<void>;
   backfillEncryptionVersion(): Promise<void>;
+  backfillTextReceiptAnchors(): Promise<void>;
   clearLegacyReviewedPath(): Promise<void>;
 }>;
 
@@ -243,6 +262,7 @@ export async function ensureDraftTransportSchemaWithDependencies(
     if (!existing.has(name)) await dependencies.addColumn(name, type);
   }
   await dependencies.backfillEncryptionVersion();
+  await dependencies.backfillTextReceiptAnchors();
   if (existing.has('reviewed_media_path')) await dependencies.clearLegacyReviewedPath();
 }
 
@@ -281,6 +301,7 @@ async function initializeDraftDatabaseSchema(database: SQLite.SQLiteDatabase) {
       await database.execAsync(`ALTER TABLE sighting_drafts ADD COLUMN ${name} ${type};`);
     },
     backfillEncryptionVersion: async () => { await database.execAsync(ENCRYPTION_VERSION_BACKFILL_SQL); },
+    backfillTextReceiptAnchors: async () => { await database.execAsync(TEXT_RECEIPT_BACKFILL_SQL); },
     clearLegacyReviewedPath: async () => { await database.execAsync(LEGACY_REVIEWED_PATH_CLEAR_SQL); },
   });
 }
@@ -806,7 +827,7 @@ export async function removeReviewedMediaFromDraft(id: string): Promise<void> {
 
 export type AttachSightingToDraftDependencies = Readonly<{
   getOfflineDraft(id: string): Promise<StoredDraft | null>;
-  attachSightingId(id: string, sightingId: string, ownerSubject: string): Promise<boolean>;
+  attachSightingId(id: string, sightingId: string, ownerSubject: string, committedAt: string): Promise<boolean>;
 }>;
 
 /**
@@ -818,14 +839,19 @@ export async function attachSightingToDraftWithDependencies(
   sightingId: string,
   ownerSubject: string,
   dependencies: AttachSightingToDraftDependencies,
+  now = new Date(),
 ): Promise<boolean> {
-  if (!isStableMediaId(id) || !isStableMediaId(sightingId) || !isStableMediaId(ownerSubject)) return false;
+  if (!isStableMediaId(id) || !isStableMediaId(sightingId) || !isStableMediaId(ownerSubject) ||
+      !(now instanceof Date) || !Number.isFinite(now.getTime())) return false;
   const current = await dependencies.getOfflineDraft(id);
   if (!current) return false;
   if (current.ownerSubject !== undefined && current.ownerSubject !== ownerSubject) return false;
   if (current.mediaId !== undefined && current.ownerSubject !== ownerSubject) return false;
-  if (current.sightingId !== undefined) return current.sightingId === sightingId && current.ownerSubject === ownerSubject;
-  if (await dependencies.attachSightingId(id, sightingId, ownerSubject)) return true;
+  if (current.sightingId !== undefined &&
+      (current.sightingId !== sightingId || current.ownerSubject !== ownerSubject)) return false;
+  if (current.sightingId !== undefined &&
+      (current.mediaId !== undefined || current.textReceiptCommittedAt !== undefined)) return true;
+  if (await dependencies.attachSightingId(id, sightingId, ownerSubject, now.toISOString())) return true;
   const after = await dependencies.getOfflineDraft(id);
   return after?.sightingId === sightingId && after.ownerSubject === ownerSubject;
 }
@@ -834,12 +860,13 @@ export async function attachSightingToDraft(id: string, sightingId: string, owne
   const database = await getDatabase();
   return attachSightingToDraftWithDependencies(id, sightingId, ownerSubject, {
     getOfflineDraft: async (draftId) => databaseCasDependencies(database).getOfflineDraft(draftId),
-    attachSightingId: async (draftId, attachedSightingId, attachedOwnerSubject) => {
+    attachSightingId: async (draftId, attachedSightingId, attachedOwnerSubject, committedAt) => {
       const result = await database.runAsync(
         ATTACH_SIGHTING_TO_DRAFT_SQL,
         attachedSightingId,
         attachedOwnerSubject,
-        new Date().toISOString(),
+        committedAt,
+        committedAt,
         draftId,
         attachedOwnerSubject,
         attachedSightingId,
@@ -940,8 +967,18 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
       continue;
     }
     if (!hasMediaTuple && !hasUploadWorkflow && row.sighting_id && isStableMediaId(row.sighting_id)) {
-      drafts.push({ ...textOnly, sightingId: row.sighting_id,
-        ...(isStableMediaId(row.owner_subject) ? { ownerSubject: row.owner_subject } : {}) });
+      const committedAt = row.text_committed_at;
+      const validCommittedAt = typeof committedAt === 'string' && committedAt.length <= 40 &&
+        Number.isFinite(Date.parse(committedAt)) && new Date(Date.parse(committedAt)).toISOString() === committedAt;
+      drafts.push({
+        id: textOnly.id,
+        notes: '',
+        risk: 'normal',
+        revision: textOnly.revision,
+        sightingId: row.sighting_id,
+        ...(isStableMediaId(row.owner_subject) ? { ownerSubject: row.owner_subject } : {}),
+        ...(validCommittedAt ? { textReceiptCommittedAt: committedAt } : {}),
+      });
       continue;
     }
     try {

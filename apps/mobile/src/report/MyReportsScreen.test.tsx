@@ -16,10 +16,24 @@ function recovery(overrides: Partial<StoredDraft> = {}): StoredDraft {
   return { id: 'draft-12345678', notes: 'Do not show private notes', risk: 'normal', report: { version: 1, step: 'review', occurredAt: '2026-08-29T08:00:00.000Z', coat: ['black'], markings: ['white-paws'], condition: 'needs_attention', manualPublicCellId: '89652636d87ffff', updatedAt: '2026-08-29T08:00:00.000Z' }, ...overrides };
 }
 function dependencies(overrides: Partial<MyReportsDependencies> = {}): MyReportsDependencies {
-  return { getSessionSubject: jest.fn(async () => 'owner-12345678'), listReports: jest.fn(async () => page([first])), loadDrafts: jest.fn(async () => []), navigate: jest.fn(), ...overrides };
+  return { getSessionSubject: jest.fn(async () => 'owner-12345678'), subscribeToAuthChanges: jest.fn(() => () => undefined), listReports: jest.fn(async () => page([first])), loadDrafts: jest.fn(async () => []), navigate: jest.fn(), ...overrides };
 }
 
 describe('MyReportsScreen', () => {
+  it('clears account A history immediately when auth changes to B', async () => {
+    let subject = 'owner-aaaaaaaa';
+    let listener: ((next: string | null) => void) | null = null;
+    let calls = 0;
+    const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({
+      getSessionSubject: async () => subject,
+      subscribeToAuthChanges: (next) => { listener = next; return () => undefined; },
+      listReports: async () => calls++ === 0 ? page([first]) : new Promise(() => undefined),
+    })} />);
+    await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
+    subject = 'owner-bbbbbbbb';
+    await act(async () => { listener?.(subject); });
+    expect(view.queryByText('Private review')).toBeNull();
+  });
   it('shows an accessible initial loading state', async () => {
     let resolve!: (value: MyReportsPage) => void;
     const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({ listReports: () => new Promise((done) => { resolve = done; }) })} />);

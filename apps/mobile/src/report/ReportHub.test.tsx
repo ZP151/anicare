@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { ReportHub, type ReportHubDependencies } from './ReportHub';
 
@@ -9,6 +9,7 @@ const firstDraft = {
   report: {
     version: 1 as const,
     step: 'details' as const,
+    creatorMode: 'anonymous' as const,
     occurredAt: '2026-09-01T08:00:00.000Z',
     coat: [],
     markings: [],
@@ -30,6 +31,7 @@ function dependencies(overrides: Partial<ReportHubDependencies> = {}): ReportHub
     saveDraft: jest.fn(async (input) => input as never),
     deleteDraft: jest.fn(async () => undefined),
     getSessionSubject: jest.fn(async () => null),
+    subscribeToAuthChanges: jest.fn(() => () => undefined),
     claimDraftOwner: jest.fn(async () => true),
     createId: jest.fn(() => '00000000-0000-4000-8000-000000000113'),
     now: jest.fn(() => new Date('2026-09-01T10:00:00.000Z')),
@@ -39,6 +41,19 @@ function dependencies(overrides: Partial<ReportHubDependencies> = {}): ReportHub
 }
 
 describe('ReportHub', () => {
+  it('clears account A drafts immediately when the auth epoch changes to B', async () => {
+    let subject: string | null = 'owner-aaaaaaaa';
+    let listener: ((next: string | null) => void) | null = null;
+    const view = await render(<ReportHub dependencies={dependencies({
+      getSessionSubject: async () => subject,
+      subscribeToAuthChanges: (next) => { listener = next; return () => undefined; },
+      loadDrafts: async () => [{ ...firstDraft, ownerSubject: 'owner-aaaaaaaa' }],
+    })} locale="en" />);
+    await waitFor(() => expect(view.getByRole('button', { name: /Continue report draft/i })).toBeTruthy());
+    subject = 'owner-bbbbbbbb';
+    await act(async () => { listener?.(subject); });
+    await waitFor(() => expect(view.queryByRole('button', { name: /Continue report draft/i })).toBeNull());
+  });
   it('shows a useful loading state before local drafts resolve', async () => {
     let resolveDrafts: ((drafts: typeof firstDraft[]) => void) | undefined;
     const loadDrafts = jest.fn(() => new Promise<typeof firstDraft[]>((resolve) => { resolveDrafts = resolve; }));
@@ -102,7 +117,7 @@ describe('ReportHub', () => {
 
     expect(run.saveDraft).toHaveBeenCalledWith({
       id: '00000000-0000-4000-8000-000000000113', notes: '', risk: 'normal', report: {
-        version: 1, step: 'photo', occurredAt: '2026-09-01T10:00:00.000Z', coat: [], markings: [],
+        version: 1, step: 'photo', areaSelectionMode: 'either', creatorMode: 'anonymous', occurredAt: '2026-09-01T10:00:00.000Z', coat: [], markings: [],
         condition: null, manualPublicCellId: null, updatedAt: '2026-09-01T10:00:00.000Z',
       },
     });

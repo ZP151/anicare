@@ -14,9 +14,9 @@ export type ReportAreaSelection = Readonly<{ publicCellId: string }>;
 type AreaMapBoundaryProps = Readonly<{ onPress(event: MapPressEvent): void; onReady?(): void }>;
 const MAP_READINESS_TIMEOUT_MS = 8_000;
 const FALLBACK_AREAS = Object.freeze([
-  { label: { en: 'West Singapore', 'zh-CN': '新加坡西部' }, publicCellId: '896520ca163ffff' },
-  { label: { en: 'Central Singapore', 'zh-CN': '新加坡中部' }, publicCellId: '89652636d87ffff' },
-  { label: { en: 'East Singapore', 'zh-CN': '新加坡东部' }, publicCellId: '896526add03ffff' },
+  { label: { en: 'Jurong West Street 62 vicinity', 'zh-CN': '裕廊西 62 街附近' }, publicCellId: '896520ca163ffff' },
+  { label: { en: 'MacRitchie Nature Trail vicinity', 'zh-CN': '麦里芝自然步道附近' }, publicCellId: '89652636d87ffff' },
+  { label: { en: 'Tampines Avenue 5 vicinity', 'zh-CN': '淡滨尼 5 道附近' }, publicCellId: '896526add03ffff' },
 ]);
 
 const SINGAPORE_BOUNDS = Object.freeze({
@@ -95,7 +95,7 @@ export function ReportAreaPicker({
   }, [googleMapsConfigured]);
   if (!googleMapsConfigured || providerUnavailable) {
     return <View style={styles.frame}>
-      <Text accessibilityLiveRegion="polite" style={styles.copy}>{locale === 'zh-CN' ? 'Google 地图暂不可用。请从列表选择新加坡的宽泛区域。' : 'Google Maps is unavailable. Choose a broad Singapore area from the list.'}</Text>
+      <Text accessibilityLiveRegion="polite" style={styles.copy}>{locale === 'zh-CN' ? 'Google 地图暂不可用。请选择与实际 H3-9 网格对应的社区位置。' : 'Google Maps is unavailable. Choose a community location that corresponds to one actual H3-9 cell.'}</Text>
       {FALLBACK_AREAS.map((area) => <Pressable
         accessibilityLabel={area.label[locale]}
         accessibilityRole="button"

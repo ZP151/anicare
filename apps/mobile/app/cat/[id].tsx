@@ -5,6 +5,7 @@ import { StyleSheet, Text } from 'react-native';
 
 import { listPublicSightings, type NarrowRpcClient } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
+import { readSessionSubjectStrict } from '../../src/auth/session-subject';
 import { CatDetailScreen } from '../../src/components/CatDetailScreen';
 import type { SelectedCatSummary } from '../../src/components/AnchoredCatSheet';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -12,7 +13,7 @@ import { colors } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
-import { createReportDraftPayload } from '../../src/report/report-draft';
+import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
 
 const previewCat: SelectedCatSummary = {
   animalId: 'demo-cat',
@@ -70,8 +71,12 @@ export default function CatRoute() {
         fixture={fixture}
         locale={locale}
         onReportSighting={async (selectedAnimalId) => {
-          const draftId = Crypto.randomUUID();
-          await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });
+          const draftId = await createOwnerAwareReportDraft({
+            readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
+            saveDraft: saveOfflineDraft,
+            createId: Crypto.randomUUID,
+            now: () => new Date(),
+          });
           const params = opaqueAnimalId.test(selectedAnimalId) ? { draftId, animalId: selectedAnimalId } : { draftId };
           router.push({ pathname: '/report/new', params } as never);
         }}

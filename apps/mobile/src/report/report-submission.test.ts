@@ -77,7 +77,13 @@ function harness(overrides: Record<string, unknown> = {}) {
     createSighting: jest.fn(async () => response),
     attachSighting: jest.fn(async (_draftId: string, sightingId: string, ownerSubject: string) => {
       calls.push(`attach:${sightingId}`);
-      current = { ...current, sightingId, ownerSubject };
+      const hasMedia = !!(current?.mediaId || current?.encryptedReviewedRef || current?.receipt || current?.uploadJob);
+      current = hasMedia
+        ? { ...current, sightingId, ownerSubject }
+        : {
+            id: current.id, notes: '', risk: 'normal', sightingId, ownerSubject,
+            textReceiptCommittedAt: '2026-08-27T00:00:00.000Z',
+          };
       return true;
     }),
     uploadMedia: jest.fn(async (draftId: string) => {
@@ -231,6 +237,10 @@ describe('report submission lifecycle', () => {
       `attach:${response.sightingId}`,
     ]);
     expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
+    expect(run.current()).toEqual({
+      id: 'draft-12345678', notes: '', risk: 'normal', sightingId: response.sightingId,
+      ownerSubject: 'owner-12345678', textReceiptCommittedAt: '2026-08-27T00:00:00.000Z',
+    });
   });
 
   it.each(['before_recovery', 'between_recovery_and_create', 'before_attachment', 'before_media_continuation'] as const)(

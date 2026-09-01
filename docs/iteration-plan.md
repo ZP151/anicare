@@ -117,8 +117,12 @@ page map so every main tab supports a useful task, a next action and a way back.
   A submission pins one authenticated subject across recovery, creation,
   attachment and media continuation; shared-device drafts, history and receipt
   anchors are subject-isolated. Missing native Google Maps configuration or
-  readiness falls back to a truthful broad-area list, while camera retake uses
+  readiness falls back to truthful community-labelled H3-9 cells, while camera retake uses
   the same local redaction/encryption path and never enables microphone access.
+  Nearby, Map, Cat Detail and Report creation bind verified signed-in owners or
+  persist explicit anonymous provenance; auth-epoch changes clear owner-only
+  local views and abort in-flight media boundaries. Text-only completion keeps
+  only a minimal, owner-bound receipt anchor until remote reconciliation.
   Public AI controls, candidate lists, live inference, training consent and
   automatic identity confirmation remain disabled.
 

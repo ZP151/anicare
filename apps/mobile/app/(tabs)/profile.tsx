@@ -1,22 +1,53 @@
 import { makeRedirectUri } from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { buildOAuthOptions, extractAuthCode, normalizeContributionEmail } from '../../src/api/auth';
+import { resumeValidatedReportDraft, validatedReturnDraftId } from '../../src/auth/profile-report-return';
 import { getSupabaseClient } from '../../src/api/supabase';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors, radii } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
+import { claimOfflineDraftOwner, getOfflineDraft } from '../../src/offline/draft-store';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function ProfileScreen() {
+  const params = useLocalSearchParams<{ returnDraftId?: string | string[] }>();
+  const router = useRouter();
+  const returnDraftId = validatedReturnDraftId(params.returnDraftId);
   const { locale, setLocale, t } = useLocale();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  const resumeReport = async () => resumeValidatedReportDraft(
+    returnDraftId,
+    async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) return null;
+      const { data } = await supabase.auth.getSession();
+      return data.session?.user.id ?? null;
+    },
+    async (draftId, ownerSubject) => {
+      const draft = await getOfflineDraft(draftId);
+      if (!draft) return false;
+      if (draft.ownerSubject === ownerSubject) return true;
+      if (draft.ownerSubject !== undefined || draft.report?.creatorMode !== 'anonymous') return false;
+      if (!await claimOfflineDraftOwner(draftId, ownerSubject)) return false;
+      return (await getOfflineDraft(draftId))?.ownerSubject === ownerSubject;
+    },
+    (path) => router.replace(path as never),
+  );
+
+  useEffect(() => {
+    if (returnDraftId) void resumeReport();
+    // The validated opaque ID is the only return intent carried across auth.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnDraftId]);
 
   async function sendMagicLink() {
     let normalized: string;
@@ -34,7 +65,9 @@ export default function ProfileScreen() {
     setSending(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: normalized,
-      options: { emailRedirectTo: Linking.createURL('/auth/callback') },
+      options: {
+        emailRedirectTo: Linking.createURL('/auth/callback', returnDraftId ? { queryParams: { returnDraftId } } : undefined),
+      },
     });
     setSending(false);
     setStatus(error ? error.message : 'Check your email for a secure sign-in link.');
@@ -88,6 +121,7 @@ export default function ProfileScreen() {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
       if (exchangeError) throw exchangeError;
       setStatus(`Signed in with ${provider === 'apple' ? 'Apple' : 'Google'}.`);
+      await resumeReport();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Sign-in failed.');
     } finally {
@@ -104,6 +138,13 @@ export default function ProfileScreen() {
           <Pressable onPress={() => setLocale('zh-CN')} style={[styles.choice, locale === 'zh-CN' && styles.selected]}><Text>简体中文</Text></Pressable>
         </View>
       </View>
+      {returnDraftId ? <View style={styles.card}>
+        <Text style={styles.label}>Saved report waiting</Text>
+        <Text style={styles.value}>Sign in, then resume the same private draft. No report content is placed in this link.</Text>
+        <Pressable accessibilityRole="button" onPress={() => { void resumeReport(); }} style={styles.primary}>
+          <Text style={styles.primaryText}>Resume saved report</Text>
+        </Pressable>
+      </View> : null}
       <View style={styles.card}>
         <Text style={styles.label}>Email sign-in</Text>
         <Text style={styles.value}>Browsing stays anonymous. Sign in only when you want to contribute.</Text>

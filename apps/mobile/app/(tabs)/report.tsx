@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 
-import { getSupabaseClient } from '../../src/api/supabase';
+import { readSessionSubjectStrict, subscribeSessionSubject } from '../../src/auth/session-subject';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { claimOfflineDraftOwner, deleteOfflineDraft, listOfflineDrafts, saveOfflineDraft } from '../../src/offline/draft-store';
 import { ReportHub, type ReportHubDependencies } from '../../src/report/ReportHub';
@@ -14,12 +14,8 @@ export default function ReportScreen() {
     loadDrafts: listOfflineDrafts,
     saveDraft: saveOfflineDraft,
     deleteDraft: deleteOfflineDraft,
-    getSessionSubject: async () => {
-      const client = getSupabaseClient();
-      if (!client) return null;
-      const { data } = await client.auth.getSession();
-      return data.session?.user.id ?? null;
-    },
+    getSessionSubject: readSessionSubjectStrict,
+    subscribeToAuthChanges: subscribeSessionSubject,
     claimDraftOwner: claimOfflineDraftOwner,
     createId: Crypto.randomUUID,
     now: () => new Date(),

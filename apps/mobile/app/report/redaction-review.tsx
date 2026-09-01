@@ -17,6 +17,7 @@ import { getSupabaseClient } from '../../src/api/supabase';
 import { colors, radii } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
+import { cleanupOwnedCameraSource } from '../../src/media/camera-source-cleanup';
 import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
 import { MaskEditorOverlay } from '../../src/media/MaskEditorOverlay';
 import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
@@ -78,6 +79,7 @@ export default function RedactionReviewScreen() {
   }, [cacheLifecycle, renderCoordinator]);
 
   async function choosePhoto(source: 'library' | 'camera' = 'library') {
+    let ownedCameraSourceUri: string | null = null;
     const operation = renderCoordinator.beginSelection();
     renderCurrentRef.current = false;
     gestureStartRenderCurrentRef.current = null;
@@ -109,6 +111,7 @@ export default function RedactionReviewScreen() {
       await cacheLifecycle.startSelection(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       const sourceUri = selected.assets[0].uri;
+      if (source === 'camera') ownedCameraSourceUri = sourceUri;
       const prepared = await prepareCanonical(sourceUri);
       await cacheLifecycle.adopt(operation.token, prepared.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;
@@ -128,6 +131,7 @@ export default function RedactionReviewScreen() {
         ? copy.secureProcessingUnavailable
         : copy.photoPreparationFailed);
     } finally {
+      if (ownedCameraSourceUri) await cleanupOwnedCameraSource(ownedCameraSourceUri).catch(() => false);
       await cacheLifecycle.endAsyncWork();
       if (renderCoordinator.finish(operation.token)) {
         busyRef.current = false;
@@ -250,9 +254,11 @@ export default function RedactionReviewScreen() {
       await cacheLifecycle.abandonAll();
       if (mountedRef.current) {
         if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
-        setStatus(error instanceof Error && error.message === 'authentication_required'
-          ? copy.signInAgain
-          : copy.privateStorageFailed);
+        const authenticationRequired = error instanceof Error && error.message === 'authentication_required';
+        setStatus(authenticationRequired ? copy.signInAgain : copy.privateStorageFailed);
+        if (authenticationRequired) {
+          router.replace(`/profile?returnDraftId=${encodeURIComponent(draftId)}` as never);
+        }
       }
     } finally {
       await cacheLifecycle.endAsyncWork();
