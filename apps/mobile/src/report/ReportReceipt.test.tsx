@@ -29,6 +29,7 @@ const local = (overrides: Partial<StoredDraft> = {}): StoredDraft => ({
 
 function dependencies(overrides: Partial<ReportReceiptDependencies> = {}): ReportReceiptDependencies {
   return {
+    getSessionSubject: jest.fn(async () => 'owner-12345678'),
     listReports: jest.fn(async () => page([remote()])),
     loadDrafts: jest.fn(async () => []),
     navigate: jest.fn(),
@@ -60,7 +61,7 @@ describe('ReportReceipt', () => {
   it('never labels quarantined media public and keeps durable local recovery status', async () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
       listReports: async () => page([remote({ mediaState: 'quarantined', identityState: 'pending_review' })]),
-      loadDrafts: async () => [local({ uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
+      loadDrafts: async () => [local({ ownerSubject: 'owner-12345678', uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
     })} locale="en" />);
 
     await waitFor(() => expect(view.getByText('Media needs your attention')).toBeTruthy());
@@ -71,17 +72,37 @@ describe('ReportReceipt', () => {
   it('uses only durable local status while remote status is unavailable', async () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
       listReports: async () => { throw new Error('my_reports_unavailable'); },
-      loadDrafts: async () => [local({ uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
+      loadDrafts: async () => [local({ ownerSubject: 'owner-12345678', uploadJob: { state: 'quarantined', attempts: 1, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
     })} locale="en" />);
 
     await waitFor(() => expect(view.getByText('Remote status is unavailable. Showing status saved on this device.')).toBeTruthy());
     expect(view.getByText('Private media awaiting validation')).toBeTruthy();
   });
 
+  it('always shows the committed reference from a subject-matched text-only local anchor when remote lookup fails', async () => {
+    const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
+      listReports: async () => { throw new Error('my_reports_unavailable'); },
+      loadDrafts: async () => [local({ ownerSubject: 'owner-12345678' })],
+    })} locale="en" />);
+
+    await waitFor(() => expect(view.getByText(`Report ID: ${sightingId}`)).toBeTruthy());
+    expect(view.getByText('Submission committed on this device')).toBeTruthy();
+    expect(view.getByText('Remote status is unavailable. Showing status saved on this device.')).toBeTruthy();
+  });
+
+  it('does not expose another account local receipt anchor', async () => {
+    const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
+      listReports: async () => { throw new Error('my_reports_unavailable'); },
+      loadDrafts: async () => [local({ ownerSubject: 'owner-bbbbbbbb' })],
+    })} locale="en" />);
+    await waitFor(() => expect(view.getByText('Report unavailable')).toBeTruthy());
+    expect(view.queryByText(`Report ID: ${sightingId}`)).toBeNull();
+  });
+
   it('does not resurrect stale local pending media after an authoritative lookup says the report is absent', async () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
       listReports: async () => page([]),
-      loadDrafts: async () => [local({ uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
+      loadDrafts: async () => [local({ ownerSubject: 'owner-12345678', uploadJob: { state: 'upload_pending', attempts: 0, nextAttemptAt: null, lastError: null, resumeState: null, attemptStartedAt: null } })],
     })} locale="en" />);
 
     await waitFor(() => expect(view.getByText('Report unavailable')).toBeTruthy());
@@ -92,7 +113,7 @@ describe('ReportReceipt', () => {
   it('keeps only an explicit local needs-user recovery after an authoritative lookup says the report is absent', async () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies({
       listReports: async () => page([]),
-      loadDrafts: async () => [local({ uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
+      loadDrafts: async () => [local({ ownerSubject: 'owner-12345678', uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })],
     })} locale="en" />);
 
     await waitFor(() => expect(view.getByText('Local media recovery needs your attention.')).toBeTruthy());

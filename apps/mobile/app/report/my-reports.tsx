@@ -11,11 +11,11 @@ export default function MyReportsRoute() {
   const router = useRouter();
   const { locale } = useLocale();
   const dependencies = useMemo<MyReportsDependencies>(() => ({
-    getSession: async () => {
+    getSessionSubject: async () => {
       const client = getSupabaseClient();
-      if (!client) return false;
+      if (!client) return null;
       const { data } = await client.auth.getSession();
-      return !!data.session;
+      return data.session?.user.id ?? null;
     },
     listReports: ({ cursor }) => listMyReports({ cursor }),
     loadDrafts: listOfflineDrafts,

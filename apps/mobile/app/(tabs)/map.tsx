@@ -154,8 +154,9 @@ export default function MapScreen() {
             locale={locale}
             onReportFromArea={async ({ startAt }) => {
               const draftId = Crypto.randomUUID();
-              await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });
-              router.push({ pathname: '/report/new', params: { draftId, step: startAt, manualArea: 'required' } } as never);
+              const report = createReportDraftPayload(new Date());
+              await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: { ...report, step: startAt } });
+              router.push({ pathname: '/report/new', params: { draftId } } as never);
             }}
             onViewCat={(animalId) => router.push(`/cat/${animalId}` as never)}
           />

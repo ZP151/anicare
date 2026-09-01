@@ -46,6 +46,7 @@ export type MessageKey =
   | 'report.hub.startFailed'
   | 'report.hub.deleteFailed'
   | 'report.hub.continueDraftLabel'
+  | 'report.hub.claimContinueDraftLabel'
   | 'report.hub.deleteDraftLabel'
   | 'report.hub.deleteAction'
   | 'report.hub.step.photo'
@@ -77,6 +78,7 @@ export type MessageKey =
   | 'report.receipt.viewReports'
   | 'report.receipt.nearby'
   | 'report.receipt.reportState.draft'
+  | 'report.receipt.reportState.submitted'
   | 'report.receipt.reportState.privateReview'
   | 'report.receipt.reportState.delayed'
   | 'report.receipt.reportState.published'
@@ -114,11 +116,30 @@ export type MessageKey =
   | 'report.wizard.photoIntro'
   | 'report.wizard.photoAdd'
   | 'report.wizard.photoReplace'
+  | 'report.wizard.photoRetake'
   | 'report.wizard.photoRemove'
   | 'report.wizard.photoSkip'
   | 'report.wizard.photoRemoved'
   | 'report.wizard.photoRemoveFailed'
   | 'report.wizard.detailsIntro'
+  | 'report.wizard.coatTitle'
+  | 'report.wizard.markingsTitle'
+  | 'report.wizard.coat.tabby'
+  | 'report.wizard.coat.black'
+  | 'report.wizard.coat.white'
+  | 'report.wizard.coat.ginger'
+  | 'report.wizard.coat.grey'
+  | 'report.wizard.coat.calico'
+  | 'report.wizard.coat.tortoiseshell'
+  | 'report.wizard.coat.brown'
+  | 'report.wizard.marking.white-paws'
+  | 'report.wizard.marking.white-chest'
+  | 'report.wizard.marking.white-tail-tip'
+  | 'report.wizard.marking.ear-tip'
+  | 'report.wizard.marking.collar'
+  | 'report.wizard.marking.scar'
+  | 'report.wizard.marking.striped'
+  | 'report.wizard.marking.spotted'
   | 'report.wizard.conditionWell'
   | 'report.wizard.conditionNeedsAttention'
   | 'report.wizard.conditionUrgent'
@@ -146,6 +167,9 @@ export type MessageKey =
   | 'report.wizard.reviewIntro'
   | 'report.wizard.edit'
   | 'report.wizard.submitDisabledReason'
+  | 'report.wizard.detailsRequired'
+  | 'report.wizard.reviewRequired'
+  | 'report.wizard.signInRequired'
   | 'report.wizard.submit'
   | 'report.wizard.areaMapLabel'
   | 'report.wizard.areaMapInstruction'
@@ -204,6 +228,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.hub.startFailed': 'A saved report could not be created. Try again on a native device.',
     'report.hub.deleteFailed': 'This saved report could not be deleted. Try again.',
     'report.hub.continueDraftLabel': 'Continue report draft from {step}',
+    'report.hub.claimContinueDraftLabel': 'Claim and continue report draft from {step}',
     'report.hub.deleteDraftLabel': 'Delete report draft from {step}',
     'report.hub.deleteAction': 'Delete',
     'report.hub.step.photo': 'Photo',
@@ -235,6 +260,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.receipt.viewReports': 'View My Reports',
     'report.receipt.nearby': 'Browse Nearby',
     'report.receipt.reportState.draft': 'Report saved on this device',
+    'report.receipt.reportState.submitted': 'Submission committed on this device',
     'report.receipt.reportState.privateReview': 'Private review',
     'report.receipt.reportState.delayed': 'Delayed after review',
     'report.receipt.reportState.published': 'Published after review',
@@ -272,11 +298,30 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.photoIntro': 'A photo is optional. If you add one, review and redact it before it is saved privately.',
     'report.wizard.photoAdd': 'Add private photo',
     'report.wizard.photoReplace': 'Replace private photo',
+    'report.wizard.photoRetake': 'Retake private photo',
     'report.wizard.photoRemove': 'Remove private photo',
     'report.wizard.photoSkip': 'Skip photo for now',
     'report.wizard.photoRemoved': 'The private photo was removed from this saved report.',
     'report.wizard.photoRemoveFailed': 'The private photo could not be removed safely. Please try again.',
     'report.wizard.detailsIntro': 'How did the cat appear?',
+    'report.wizard.coatTitle': 'Coat',
+    'report.wizard.markingsTitle': 'Markings',
+    'report.wizard.coat.tabby': 'Tabby coat',
+    'report.wizard.coat.black': 'Black coat',
+    'report.wizard.coat.white': 'White coat',
+    'report.wizard.coat.ginger': 'Ginger coat',
+    'report.wizard.coat.grey': 'Grey coat',
+    'report.wizard.coat.calico': 'Calico coat',
+    'report.wizard.coat.tortoiseshell': 'Tortoiseshell coat',
+    'report.wizard.coat.brown': 'Brown coat',
+    'report.wizard.marking.white-paws': 'White paws marking',
+    'report.wizard.marking.white-chest': 'White chest marking',
+    'report.wizard.marking.white-tail-tip': 'White tail tip marking',
+    'report.wizard.marking.ear-tip': 'Ear tip marking',
+    'report.wizard.marking.collar': 'Collar marking',
+    'report.wizard.marking.scar': 'Scar marking',
+    'report.wizard.marking.striped': 'Striped marking',
+    'report.wizard.marking.spotted': 'Spotted marking',
     'report.wizard.conditionWell': 'Appears well',
     'report.wizard.conditionNeedsAttention': 'Needs attention',
     'report.wizard.conditionUrgent': 'Urgent',
@@ -304,6 +349,9 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.reviewIntro': 'Check your details, safety choice and broad area before submitting. You can use the stages above to edit any section.',
     'report.wizard.edit': 'Edit {step}',
     'report.wizard.submitDisabledReason': 'Choose a device or broad manual area before submitting.',
+    'report.wizard.detailsRequired': 'Choose the cat’s condition before submitting.',
+    'report.wizard.reviewRequired': 'Review the report before submitting.',
+    'report.wizard.signInRequired': 'Sign in from Profile, then return to this saved report.',
     'report.wizard.submit': 'Submit report',
     'report.wizard.areaMapLabel': 'Choose a coarse area on a Google map',
     'report.wizard.areaMapInstruction': 'Tap the broad map to choose a coarse area. Your exact tap is discarded immediately.',
@@ -361,6 +409,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.hub.startFailed': '无法创建已保存的报告，请在原生设备上重试。',
     'report.hub.deleteFailed': '无法删除这份已保存的报告，请重试。',
     'report.hub.continueDraftLabel': '从{step}继续报告草稿',
+    'report.hub.claimContinueDraftLabel': '认领并从{step}继续报告草稿',
     'report.hub.deleteDraftLabel': '删除{step}报告草稿',
     'report.hub.deleteAction': '删除',
     'report.hub.step.photo': '照片',
@@ -392,6 +441,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.receipt.viewReports': '查看我的报告',
     'report.receipt.nearby': '浏览附近',
     'report.receipt.reportState.draft': '报告已保存在此设备上',
+    'report.receipt.reportState.submitted': '提交已在此设备上确认',
     'report.receipt.reportState.privateReview': '私密审核中',
     'report.receipt.reportState.delayed': '审核后延迟显示',
     'report.receipt.reportState.published': '审核后已发布',
@@ -429,11 +479,30 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.photoIntro': '照片为可选项。添加照片后，请先检查并遮挡，再私密保存。',
     'report.wizard.photoAdd': '添加私密照片',
     'report.wizard.photoReplace': '更换私密照片',
+    'report.wizard.photoRetake': '重新拍摄私密照片',
     'report.wizard.photoRemove': '移除私密照片',
     'report.wizard.photoSkip': '暂时跳过照片',
     'report.wizard.photoRemoved': '已从这份保存的报告中移除私密照片。',
     'report.wizard.photoRemoveFailed': '无法安全移除私密照片，请重试。',
     'report.wizard.detailsIntro': '这只猫看起来如何？',
+    'report.wizard.coatTitle': '毛色',
+    'report.wizard.markingsTitle': '特征',
+    'report.wizard.coat.tabby': '虎斑毛色',
+    'report.wizard.coat.black': '黑色毛色',
+    'report.wizard.coat.white': '白色毛色',
+    'report.wizard.coat.ginger': '橘色毛色',
+    'report.wizard.coat.grey': '灰色毛色',
+    'report.wizard.coat.calico': '三花毛色',
+    'report.wizard.coat.tortoiseshell': '玳瑁毛色',
+    'report.wizard.coat.brown': '棕色毛色',
+    'report.wizard.marking.white-paws': '白爪特征',
+    'report.wizard.marking.white-chest': '白胸特征',
+    'report.wizard.marking.white-tail-tip': '白色尾尖特征',
+    'report.wizard.marking.ear-tip': '剪耳特征',
+    'report.wizard.marking.collar': '项圈特征',
+    'report.wizard.marking.scar': '疤痕特征',
+    'report.wizard.marking.striped': '条纹特征',
+    'report.wizard.marking.spotted': '斑点特征',
     'report.wizard.conditionWell': '状况良好',
     'report.wizard.conditionNeedsAttention': '需要关注',
     'report.wizard.conditionUrgent': '紧急',
@@ -461,6 +530,9 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.reviewIntro': '提交前请检查详情、安全选择和宽泛区域。可使用上方步骤编辑任一部分。',
     'report.wizard.edit': '编辑{step}',
     'report.wizard.submitDisabledReason': '提交前请选择设备位置或宽泛手动区域。',
+    'report.wizard.detailsRequired': '提交前请选择猫的状态。',
+    'report.wizard.reviewRequired': '提交前请先检查报告。',
+    'report.wizard.signInRequired': '请先前往个人页登录，然后返回这份已保存的报告。',
     'report.wizard.submit': '提交报告',
     'report.wizard.areaMapLabel': '在 Google 地图上选择宽泛区域',
     'report.wizard.areaMapInstruction': '点按宽泛地图以选择粗略区域，精确点按位置会立即丢弃。',

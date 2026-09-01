@@ -18,11 +18,20 @@ native-device signoff.
 | Generated atlas was reachable as a map fallback | Fixed by user-directed correction | Web/native map tests prove a truthful no-map/list fallback and no production atlas reference. |
 | Redaction-review and Cat Detail Chinese-copy findings | Fixed in controller closeout | Bilingual screen tests reject English control/governance copy on the Simplified Chinese surfaces. |
 | Chinese draft title and out-of-Singapore map taps | Fixed in controller closeout | Report Hub localizes the saved-report title; the native picker rejects the same out-of-bounds coordinates that the server refuses. |
+| Final review found account-switch, local-ownership, deletion and receipt races | Fixed in final closeout | One auth context is pinned through recovery/create/attach, the live subject is rechecked before each irreversible boundary, local views filter by subject, deletion keeps retryable references until ciphertext cleanup succeeds, and text commits retain an owner-bound receipt anchor. |
+| Details omitted bounded traits; submission validator was test-only | Fixed in final closeout | Accessible coat/marking multi-selects persist only approved values and the production submit path persists Review then runs `validateReportForSubmission`. |
+| Manual Report map had no missing-key/provider fallback and map-origin routing used control flags | Fixed in final closeout | Native picker now shares configured/readiness gating, uses an honest broad-area list fallback, validates the H3-9 cell center, and map-origin routes carry only the opaque draft ID. |
+| Approved photo-retake action was missing | Fixed in final closeout | Camera retake enters the same canonicalize, manual-redact and encrypt flow; camera permission is explicit, microphone permission remains blocked. |
 
 The native Google Maps path remains `react-native-maps` with `PROVIDER_GOOGLE`.
 `GOOGLE_MAPS_IOS_API_KEY` and `GOOGLE_MAPS_ANDROID_API_KEY` are native build
 keys for that SDK/tile service only. No OpenAI key, generated map image or
 second map provider is part of this Report/MVP change.
+
+The optional native camera permission exists only for the approved retake action.
+It does not add microphone access, automatic detection, background capture or a
+new upload path: source pixels still enter the existing local private-review
+boundary and are never uploaded directly.
 
 ## Privacy audit
 
@@ -62,6 +71,13 @@ confirmation UI was added.
 - Controller closeout tests for bilingual redaction/Cat Detail, localized draft
   titles and Singapore map bounds: PASS — 4 suites/35 tests; mobile typecheck
   and clean 18-route Web export also passed.
+- Final-review closeout: canonical mobile suite PASS — 60 suites/700 tests;
+  domain suite PASS — 3 files/11 tests; mobile typecheck, native-config policy,
+  pilot-build policy and the 18-route Web export PASS. This closeout covers
+  account-switch fail-closed submission, subject-filtered drafts/history/receipt,
+  durable deletion retry, committed local receipt anchors, bounded traits,
+  camera retake, production prerequisite validation, map readiness/list fallback
+  and opaque-only map-origin routing.
 - `git diff --check`: PASS (Windows line-ending notices only).
 
 Hosted Gate 2B, true iOS/Android Google Maps/Hermes and media/recovery checks,

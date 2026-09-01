@@ -10,7 +10,7 @@ import { mergeReportRecovery, type ReportTimelineItem } from './report-flow';
 import { getReportCopy } from './report-copy';
 
 export type MyReportsDependencies = Readonly<{
-  getSession(): Promise<boolean>;
+  getSessionSubject(): Promise<string | null>;
   listReports(input: Readonly<{ cursor?: MyReportsCursor | null }>): Promise<MyReportsPage>;
   loadDrafts(): Promise<readonly StoredDraft[]>;
   navigate(path: string): void;
@@ -26,6 +26,7 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
   const requestRef = useRef(0);
+  const ownerSubjectRef = useRef<string | null>(null);
   const [state, setState] = useState<HistoryState>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -34,6 +35,7 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
   const expireSession = useCallback(() => {
     requestRef.current += 1;
     snapshotRef.current = null;
+    ownerSubjectRef.current = null;
     setSnapshot(null);
     setState('signed_out');
     dependencies.navigate('/profile');
@@ -47,17 +49,23 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
     if (mode === 'more') setLoadingMore(true);
     if (mode === 'initial') setState('loading');
     try {
-      if (!await dependencies.getSession()) {
+      const ownerSubject = await dependencies.getSessionSubject();
+      if (!ownerSubject) {
         expireSession();
         return;
       }
+      if (ownerSubjectRef.current !== null && ownerSubjectRef.current !== ownerSubject) {
+        expireSession();
+        return;
+      }
+      ownerSubjectRef.current = ownerSubject;
       const page = await dependencies.listReports({ cursor: mode === 'more' ? prior!.nextCursor : null });
-      if (!await dependencies.getSession()) {
+      if (await dependencies.getSessionSubject() !== ownerSubject) {
         expireSession();
         return;
       }
       const drafts = await dependencies.loadDrafts().catch(() => [] as readonly StoredDraft[]);
-      if (!await dependencies.getSession()) {
+      if (await dependencies.getSessionSubject() !== ownerSubject) {
         expireSession();
         return;
       }
@@ -65,10 +73,11 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
       const remote = mode === 'more' && prior
         ? [...prior.remote, ...page.items]
         : page.items;
-      saveSnapshot({ remote, rows: mergeReportRecovery(remote, drafts), nextCursor: page.nextCursor });
+      saveSnapshot({ remote, rows: mergeReportRecovery(remote, drafts.filter((draft) => draft.ownerSubject === ownerSubject)), nextCursor: page.nextCursor });
       setState('ready');
     } catch (error) {
-      if (!await dependencies.getSession().catch(() => true)) {
+      const liveSubject = await dependencies.getSessionSubject().catch(() => null);
+      if (!liveSubject || liveSubject !== ownerSubjectRef.current) {
         expireSession();
         return;
       }
@@ -101,5 +110,5 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.canvas }, content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 120, gap: 14 }, heading: { gap: 6 }, title: { color: colors.ink, fontSize: 32, lineHeight: 38, fontWeight: '800' }, subtitle: { color: colors.muted, fontSize: 16, lineHeight: 23 }, refreshAction: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: 10 }, refreshText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '800' }, loading: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 }, notice: { color: colors.muted, fontSize: 15, lineHeight: 22 }, error: { color: colors.danger, fontSize: 15, lineHeight: 22, fontWeight: '700' }, state: { gap: 9, paddingVertical: 12 }, emptyTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' }, profileAction: { minHeight: 48, borderWidth: 1, borderColor: colors.actionPrimary, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center' }, profileText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' }, row: { gap: 3, paddingVertical: 14, borderBottomWidth: 1, borderColor: colors.line }, date: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '800' }, label: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' }, loadMore: { minHeight: 48, borderRadius: radii.small, borderWidth: 1, borderColor: colors.actionPrimary, alignItems: 'center', justifyContent: 'center' }, loadMoreText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' }, pressed: { opacity: 0.76 },
+  safeArea: { flex: 1, backgroundColor: colors.canvas }, content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 120, gap: 14 }, heading: { gap: 6 }, title: { color: colors.ink, fontSize: 32, lineHeight: 38, fontWeight: '800' }, subtitle: { color: colors.muted, fontSize: 16, lineHeight: 23 }, refreshAction: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 }, refreshText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '800' }, loading: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 }, notice: { color: colors.muted, fontSize: 15, lineHeight: 22 }, error: { color: colors.danger, fontSize: 15, lineHeight: 22, fontWeight: '700' }, state: { gap: 9, paddingVertical: 12 }, emptyTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' }, profileAction: { minHeight: 48, borderWidth: 1, borderColor: colors.actionPrimary, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center' }, profileText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' }, row: { gap: 3, paddingVertical: 14, borderBottomWidth: 1, borderColor: colors.line }, date: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '800' }, label: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' }, loadMore: { minHeight: 48, borderRadius: radii.small, borderWidth: 1, borderColor: colors.actionPrimary, alignItems: 'center', justifyContent: 'center' }, loadMoreText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' }, pressed: { opacity: 0.76 },
 });

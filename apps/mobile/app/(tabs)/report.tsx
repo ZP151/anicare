@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { getSupabaseClient } from '../../src/api/supabase';
 import { useLocale } from '../../src/i18n/LocaleContext';
-import { deleteOfflineDraft, listOfflineDrafts, saveOfflineDraft } from '../../src/offline/draft-store';
+import { claimOfflineDraftOwner, deleteOfflineDraft, listOfflineDrafts, saveOfflineDraft } from '../../src/offline/draft-store';
 import { ReportHub, type ReportHubDependencies } from '../../src/report/ReportHub';
 
 export default function ReportScreen() {
@@ -14,12 +14,13 @@ export default function ReportScreen() {
     loadDrafts: listOfflineDrafts,
     saveDraft: saveOfflineDraft,
     deleteDraft: deleteOfflineDraft,
-    getSession: async () => {
+    getSessionSubject: async () => {
       const client = getSupabaseClient();
-      if (!client) return false;
+      if (!client) return null;
       const { data } = await client.auth.getSession();
-      return !!data.session;
+      return data.session?.user.id ?? null;
     },
+    claimDraftOwner: claimOfflineDraftOwner,
     createId: Crypto.randomUUID,
     now: () => new Date(),
     navigate: (path) => router.push(path as never),

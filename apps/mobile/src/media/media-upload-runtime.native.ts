@@ -56,7 +56,11 @@ function isRetryCandidate(draft: StoredDraft, now: Date, leaseMs: number): boole
 }
 
 export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDependencies) {
-  async function uploadDraftMediaNow(draftId: string, signal?: AbortSignal): Promise<MediaUploadRuntimeResult> {
+  async function uploadDraftMediaNow(
+    draftId: string,
+    signal?: AbortSignal,
+    expectedOwnerSubject?: string,
+  ): Promise<MediaUploadRuntimeResult> {
     const isLiveOwner = async (ownerSubject: string) => {
       if (signal?.aborted) return false;
       const liveOwner = await dependencies.getOwnerSubject();
@@ -66,6 +70,7 @@ export function createMediaUploadRuntime(dependencies: MediaUploadRuntimeDepende
     if (signal?.aborted) return 'stale';
     const ownerSubject = await dependencies.getOwnerSubject();
     if (!ownerSubject) return 'not_ready';
+    if (expectedOwnerSubject !== undefined && ownerSubject !== expectedOwnerSubject) return 'stale';
     const current = await dependencies.getDraft(draftId);
     if (current?.mediaId && current.ownerSubject !== ownerSubject) return 'needs_user';
     if (current?.mediaFailure || current?.uploadJob?.state === 'needs_user') return 'needs_user';

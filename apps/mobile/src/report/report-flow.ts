@@ -11,13 +11,13 @@ export type ReportTimelineItem = Readonly<{
   sightingId: string | null;
   draftId: string | null;
   occurredAt: string;
-  reportState: MyReportSummary['reportState'] | 'draft';
+  reportState: MyReportSummary['reportState'] | 'draft' | 'submitted';
   mediaState: MyReportSummary['mediaState'] | 'needs_user';
   identityState: MyReportSummary['identityState'];
 }>;
 
 export type ReportReceiptStatus = Readonly<{
-  reportState: MyReportSummary['reportState'] | 'draft';
+  reportState: MyReportSummary['reportState'] | 'draft' | 'submitted';
   mediaState: MyReportSummary['mediaState'] | 'needs_user';
   identityState: MyReportSummary['identityState'];
 }>;
@@ -26,6 +26,7 @@ export function earliestIncompleteStep(draft: StoredDraft): ReportDraftStep {
   const payload = draft.report;
   if (!payload) return 'photo';
   if (payload.step === 'photo') return 'photo';
+  if (payload.step === 'area' && payload.condition === null) return 'area';
   if (payload.condition === null) return 'details';
   if (payload.step === 'details') return 'details';
   if (payload.step === 'safety') return 'safety';
@@ -68,7 +69,7 @@ function localMediaState(draft: StoredDraft): ReportTimelineItem['mediaState'] {
   return 'pending';
 }
 
-function committedTimelineItem(summary: MyReportSummary): ReportTimelineItem {
+function committedTimelineItem(summary: MyReportSummary, local: StoredDraft | null = null): ReportTimelineItem {
   return Object.freeze({
     key: `committed:${summary.sightingId}`,
     kind: 'committed',
@@ -76,7 +77,7 @@ function committedTimelineItem(summary: MyReportSummary): ReportTimelineItem {
     draftId: null,
     occurredAt: summary.occurredAt,
     reportState: summary.reportState,
-    mediaState: summary.mediaState,
+    mediaState: local && localMediaState(local) === 'needs_user' ? 'needs_user' : summary.mediaState,
     identityState: summary.identityState,
   });
 }
@@ -89,7 +90,7 @@ function recoveryTimelineItem(draft: StoredDraft): ReportTimelineItem | null {
     sightingId: draft.sightingId ?? null,
     draftId: draft.id,
     occurredAt: draft.report.occurredAt,
-    reportState: 'draft',
+    reportState: draft.sightingId && !hasMediaBoundary(draft) ? 'submitted' : 'draft',
     mediaState: localMediaState(draft),
     identityState: 'not_requested',
   });
@@ -100,7 +101,8 @@ export function mergeReportRecovery(
   local: readonly StoredDraft[],
 ): readonly ReportTimelineItem[] {
   const remoteSightingIds = new Set(remote.map((summary) => summary.sightingId));
-  const items: ReportTimelineItem[] = remote.map(committedTimelineItem);
+  const localBySighting = new Map(local.filter((draft) => draft.sightingId).map((draft) => [draft.sightingId!, draft]));
+  const items: ReportTimelineItem[] = remote.map((summary) => committedTimelineItem(summary, localBySighting.get(summary.sightingId) ?? null));
   for (const draft of local) {
     if (draft.sightingId && remoteSightingIds.has(draft.sightingId)) continue;
     const item = recoveryTimelineItem(draft);

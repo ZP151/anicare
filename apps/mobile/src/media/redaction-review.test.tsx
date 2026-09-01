@@ -18,6 +18,8 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
 }));
 jest.mock('../../src/media/processor', () => ({
   prepareCanonical: jest.fn(),
@@ -44,7 +46,7 @@ jest.mock('../../src/i18n/LocaleContext', () => ({
 
 import RedactionReviewScreen from '../../app/report/redaction-review';
 import { router } from 'expo-router';
-import { launchImageLibraryAsync } from 'expo-image-picker';
+import { launchCameraAsync, launchImageLibraryAsync, requestCameraPermissionsAsync } from 'expo-image-picker';
 import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { prepareCanonical, renderOpaqueMasks } from './processor';
 import { saveReviewedMediaJournal } from '../offline/draft-store';
@@ -119,6 +121,16 @@ beforeEach(() => {
 });
 
 describe('private redaction review screen', () => {
+  it('supports an explicit camera retake through the same private canonicalization flow', async () => {
+    jest.mocked(requestCameraPermissionsAsync).mockResolvedValue({ granted: true } as never);
+    jest.mocked(launchCameraAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///camera/retake.jpg' }] } as never);
+    jest.mocked(prepareCanonical).mockResolvedValue(canonical);
+    jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(rendered);
+    const view = await render(<RedactionReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' }));
+    await waitFor(() => expect(prepareCanonical).toHaveBeenCalledWith('file:///camera/retake.jpg'));
+    expect(launchCameraAsync).toHaveBeenCalledWith(expect.objectContaining({ exif: false }));
+  });
   it('renders the complete Simplified Chinese review surface without English control copy', async () => {
     mockLocale.value = 'zh-CN';
     jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);

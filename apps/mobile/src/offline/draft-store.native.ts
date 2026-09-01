@@ -136,6 +136,11 @@ export const ATTACH_SIGHTING_TO_DRAFT_SQL = `UPDATE sighting_drafts SET
       (owner_subject IS NULL AND media_id IS NULL AND reviewed_media_ref IS NULL)))
     OR (sighting_id = ? AND owner_subject = ?)
   )`;
+export const CLAIM_DRAFT_OWNER_SQL = `UPDATE sighting_drafts SET
+  owner_subject = ?,
+  revision = revision + 1,
+  updated_at = ?
+  WHERE id = ? AND (owner_subject IS NULL OR owner_subject = ?)`;
 export const QUARANTINED_MEDIA_CLEANUP_SQL = `DELETE FROM sighting_drafts
   WHERE id = ? AND revision = ? AND upload_state = 'quarantined'`;
 export const PENDING_MEDIA_CLEANUP_LIST_SQL = `SELECT id, reviewed_media_ref,
@@ -845,6 +850,17 @@ export async function attachSightingToDraft(id: string, sightingId: string, owne
   });
 }
 
+export async function claimOfflineDraftOwner(id: string, ownerSubject: string): Promise<boolean> {
+  if (!isStableMediaId(id) || !isStableMediaId(ownerSubject)) return false;
+  const database = await getDatabase();
+  const result = await database.runAsync(
+    CLAIM_DRAFT_OWNER_SQL, ownerSubject, new Date().toISOString(), id, ownerSubject,
+  );
+  if (result.changes === 1) return true;
+  const current = await databaseCasDependencies(database).getOfflineDraft(id);
+  return current?.ownerSubject === ownerSubject;
+}
+
 export type CleanupQuarantinedMediaDependencies = Readonly<{
   deleteQuarantinedMedia(id: string, revision: number): Promise<boolean>;
 }>;
@@ -1022,37 +1038,53 @@ function failedMediaJob(
 }
 
 export type DeleteDraftDependencies = Readonly<{
-  loadReviewedReferences(id: string): Promise<Readonly<{ active: string | null; pending: string | null }>>;
-  deleteRow(id: string): Promise<void>;
+  loadReviewedReferences(id: string): Promise<Readonly<{ active: string | null; pending: string | null; ownerSubject: string | null }>>;
+  deleteRowIfReferencesMatch(id: string, active: string | null, pending: string | null): Promise<boolean>;
   deleteOwnedReference(reference: string): Promise<void>;
 }>;
 
-export async function deleteOfflineDraftWithDependencies(id: string, dependencies: DeleteDraftDependencies): Promise<void> {
+export async function deleteOfflineDraftWithDependencies(
+  id: string,
+  expectedOwnerSubject: string | null,
+  dependencies: DeleteDraftDependencies,
+): Promise<void> {
   const references = await dependencies.loadReviewedReferences(id);
-  await dependencies.deleteRow(id);
+  if (references.ownerSubject !== expectedOwnerSubject) throw new Error('auth_ownership');
   const owned = [...new Set([references.active, references.pending].filter(
     (reference): reference is string => isReviewedMediaReference(reference),
   ))];
   for (const reference of owned) await dependencies.deleteOwnedReference(reference);
+  if (!await dependencies.deleteRowIfReferencesMatch(id, references.active, references.pending)) {
+    throw new Error('draft_delete_conflict');
+  }
 }
 
-export async function deleteOfflineDraft(id: string) {
+export async function deleteOfflineDraft(id: string, expectedOwnerSubject: string | null = null) {
   const database = await getDatabase();
-  await deleteOfflineDraftWithDependencies(id, {
+  await deleteOfflineDraftWithDependencies(id, expectedOwnerSubject, {
     loadReviewedReferences: async (draftId) => {
       const row = await database.getFirstAsync<{
         reviewed_media_ref: string | null;
         pending_media_cleanup_ref: string | null;
+        owner_subject: string | null;
       }>(
-        `SELECT reviewed_media_ref, pending_media_cleanup_ref
+        `SELECT reviewed_media_ref, pending_media_cleanup_ref, owner_subject
          FROM sighting_drafts WHERE id = ?`, draftId,
       );
       return {
         active: row?.reviewed_media_ref ?? null,
         pending: row?.pending_media_cleanup_ref ?? null,
+        ownerSubject: row?.owner_subject ?? null,
       };
     },
-    deleteRow: async (draftId) => { await database.runAsync('DELETE FROM sighting_drafts WHERE id = ?', draftId); },
-    deleteOwnedReference: async (reference) => { await deleteReviewedMediaReference(reference).catch(() => undefined); },
+    deleteRowIfReferencesMatch: async (draftId, active, pending) => {
+      const result = await database.runAsync(
+        `DELETE FROM sighting_drafts WHERE id = ?
+         AND reviewed_media_ref IS ? AND pending_media_cleanup_ref IS ?`,
+        draftId, active, pending,
+      );
+      return result.changes === 1;
+    },
+    deleteOwnedReference: deleteReviewedMediaReference,
   });
 }

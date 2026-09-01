@@ -259,12 +259,13 @@ describe('fail-closed feed screens', () => {
     expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-community-cat-1');
     await waitFor(() => expect(mockPush).toHaveBeenNthCalledWith(2, {
       pathname: '/report/new',
-      params: { draftId: reportDraftId, step: 'area', manualArea: 'required' },
+      params: { draftId: reportDraftId },
     }));
     expect(mockSaveOfflineDraft).toHaveBeenCalledWith(expect.objectContaining({
       id: reportDraftId,
       notes: '',
       risk: 'normal',
+      report: expect.objectContaining({ step: 'area', manualPublicCellId: null }),
     }));
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('demo-cell-1');
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('public-area-1');

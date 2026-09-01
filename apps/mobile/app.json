@@ -11,11 +11,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "sg.animalhelper.app",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Choose a cat photo to create a private reviewed copy. Selected source media is never uploaded."
+        "NSPhotoLibraryUsageDescription": "Choose a cat photo to create a private reviewed copy. Selected source media is never uploaded.",
+        "NSCameraUsageDescription": "Take a cat photo for private review and redaction. Source media is never uploaded."
       }
     },
     "android": {
       "package": "sg.animalhelper.app",
+      "permissions": ["android.permission.CAMERA"],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -36,7 +38,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose a cat photo to attach to your report. Review and redact bystanders before upload.",
-          "cameraPermission": false,
+          "cameraPermission": "Take a cat photo for private review and redaction. Source media is never uploaded.",
           "microphonePermission": false
         }
       ],

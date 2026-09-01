@@ -114,6 +114,11 @@ page map so every main tab supports a useful task, a next action and a way back.
   create, save, exit, resume, clean up and submit a privacy-safe report; valid
   text-first submissions reach a durable receipt and the owner-only My Reports
   projection. Media recovery is explicit and remote authority remains primary.
+  A submission pins one authenticated subject across recovery, creation,
+  attachment and media continuation; shared-device drafts, history and receipt
+  anchors are subject-isolated. Missing native Google Maps configuration or
+  readiness falls back to a truthful broad-area list, while camera retake uses
+  the same local redaction/encryption path and never enables microphone access.
   Public AI controls, candidate lists, live inference, training consent and
   automatic identity confirmation remain disabled.
 

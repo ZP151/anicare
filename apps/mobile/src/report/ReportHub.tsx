@@ -13,14 +13,15 @@ import { isOpaqueReportId } from './ReportRouteShell';
 export type ReportHubDependencies = Readonly<{
   loadDrafts(): Promise<readonly StoredDraft[]>;
   saveDraft(input: Record<string, unknown>): Promise<StoredDraft>;
-  deleteDraft(id: string): Promise<void>;
-  getSession(): Promise<boolean>;
+  deleteDraft(id: string, expectedOwnerSubject: string | null): Promise<void>;
+  getSessionSubject(): Promise<string | null>;
+  claimDraftOwner(id: string, ownerSubject: string): Promise<boolean>;
   createId(): string;
   now(): Date;
   navigate(path: string): void;
 }>;
 
-type DraftSummary = NonNullable<ReturnType<typeof reportDraftSummary>>;
+type DraftSummary = NonNullable<ReturnType<typeof reportDraftSummary>> & Readonly<{ claimRequired: boolean; ownerSubject: string | null }>;
 type DraftStatus = 'loading' | 'ready' | 'storage_unavailable' | 'error';
 
 function isStorageUnavailable(error: unknown): boolean {
@@ -31,9 +32,13 @@ function isDraftStep(value: string): value is ReportDraftStep {
   return value === 'photo' || value === 'details' || value === 'safety' || value === 'area' || value === 'review';
 }
 
-function summarizeDrafts(drafts: readonly StoredDraft[]): readonly DraftSummary[] {
+function summarizeDrafts(drafts: readonly StoredDraft[], ownerSubject: string | null): readonly DraftSummary[] {
   return drafts
-    .map(reportDraftSummary)
+    .filter((draft) => !draft.sightingId && (draft.ownerSubject === undefined || draft.ownerSubject === ownerSubject))
+    .map((draft) => {
+      const summary = reportDraftSummary(draft);
+      return summary ? { ...summary, claimRequired: ownerSubject !== null && draft.ownerSubject === undefined, ownerSubject: draft.ownerSubject ?? null } : null;
+    })
     .filter((summary): summary is DraftSummary => summary !== null && isOpaqueReportId(summary.id) && isDraftStep(summary.step))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
@@ -43,6 +48,7 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
   const [drafts, setDrafts] = useState<readonly DraftSummary[]>([]);
   const [draftStatus, setDraftStatus] = useState<DraftStatus>('loading');
   const [signedIn, setSignedIn] = useState(false);
+  const [ownerSubject, setOwnerSubject] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
@@ -50,7 +56,18 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
     setDraftStatus('loading');
     setMessage(null);
     try {
-      setDrafts(summarizeDrafts(await dependencies.loadDrafts()));
+      const subject = await dependencies.getSessionSubject().catch(() => null);
+      const loaded = await dependencies.loadDrafts();
+      const verifiedSubject = await dependencies.getSessionSubject().catch(() => null);
+      if (verifiedSubject !== subject) {
+        setOwnerSubject(verifiedSubject);
+        setSignedIn(verifiedSubject !== null);
+        setDrafts([]);
+      } else {
+        setOwnerSubject(subject);
+        setSignedIn(subject !== null);
+        setDrafts(summarizeDrafts(loaded, subject));
+      }
       setDraftStatus('ready');
     } catch (error) {
       setDraftStatus(isStorageUnavailable(error) ? 'storage_unavailable' : 'error');
@@ -58,11 +75,6 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
   }, [dependencies]);
 
   useEffect(() => { void reload(); }, [reload]);
-  useEffect(() => {
-    let mounted = true;
-    void dependencies.getSession().then((value) => { if (mounted) setSignedIn(value); }).catch(() => { if (mounted) setSignedIn(false); });
-    return () => { mounted = false; };
-  }, [dependencies]);
 
   async function startReport() {
     setStarting(true);
@@ -74,7 +86,8 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
       return;
     }
     try {
-      await dependencies.saveDraft({ id, notes: '', risk: 'normal', report: createReportDraftPayload(dependencies.now()) });
+      const subject = await dependencies.getSessionSubject().catch(() => null);
+      await dependencies.saveDraft({ id, notes: '', risk: 'normal', ...(subject ? { ownerSubject: subject } : {}), report: createReportDraftPayload(dependencies.now()) });
       dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
     } catch {
       setMessage(copy.startFailed);
@@ -83,14 +96,23 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
     }
   }
 
-  function continueDraft(id: string) {
-    if (isOpaqueReportId(id)) dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
+  async function continueDraft(id: string, claimRequired: boolean) {
+    if (!isOpaqueReportId(id)) return;
+    if (claimRequired) {
+      if (!ownerSubject || !await dependencies.claimDraftOwner(id, ownerSubject)) {
+        setMessage(copy.startFailed);
+        return;
+      }
+    }
+    dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
   }
 
-  async function deleteDraft(id: string) {
+  async function deleteDraft(id: string, expectedOwnerSubject: string | null) {
     setMessage(null);
     try {
-      await dependencies.deleteDraft(id);
+      const liveSubject = await dependencies.getSessionSubject().catch(() => null);
+      if (liveSubject !== expectedOwnerSubject) throw new Error('auth_ownership');
+      await dependencies.deleteDraft(id, expectedOwnerSubject);
       await reload();
     } catch {
       setMessage(copy.deleteFailed);
@@ -99,7 +121,7 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
 
   async function openMyReports() {
     try {
-      if (await dependencies.getSession()) {
+      if (await dependencies.getSessionSubject()) {
         setSignedIn(true);
         dependencies.navigate('/report/my-reports');
         return;
@@ -126,12 +148,12 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
         {draftStatus === 'ready' && drafts.length === 0 ? <View style={styles.empty}><MaterialCommunityIcons color={colors.aquaDeep} name="file-document-outline" size={22} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>{copy.emptyTitle}</Text><Text style={styles.muted}>{copy.emptyCopy}</Text></View></View> : null}
         {draftStatus === 'ready' ? drafts.map((draft) => (
           <View key={draft.id} style={styles.draftRow}>
-            <Pressable accessibilityLabel={copy.continueDraftLabel(draft.step)} accessibilityRole="button" onPress={() => continueDraft(draft.id)} style={({ pressed }) => [styles.draftMain, pressed && styles.pressed]}>
+            <Pressable accessibilityLabel={draft.claimRequired ? copy.claimContinueDraftLabel(draft.step) : copy.continueDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void continueDraft(draft.id, draft.claimRequired); }} style={({ pressed }) => [styles.draftMain, pressed && styles.pressed]}>
               <MaterialCommunityIcons color={colors.community} name={draft.hasReviewedMedia ? 'image-check-outline' : 'file-edit-outline'} size={21} />
               <View style={styles.draftCopy}><Text style={styles.draftTitle}>{copy.draftShellTitle}</Text><Text style={styles.muted}>{copy.stepLabel(draft.step)}</Text></View>
               <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
             </Pressable>
-            <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><Text style={styles.deleteActionText}>{copy.deleteAction}</Text></Pressable>
+            <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id, draft.ownerSubject); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><Text style={styles.deleteActionText}>{copy.deleteAction}</Text></Pressable>
           </View>
         )) : null}
       </View>
@@ -157,7 +179,7 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   notice: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   statusRow: { gap: 8 },
-  textAction: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  textAction: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center' },
   textActionLabel: { color: colors.actionPrimary, fontSize: 14, fontWeight: '800' },
   empty: { minHeight: 64, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
   emptyCopy: { flex: 1, gap: 2 },
@@ -166,7 +188,7 @@ const styles = StyleSheet.create({
   draftMain: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 },
   draftCopy: { flex: 1, gap: 1 },
   draftTitle: { color: colors.ink, fontSize: 16, lineHeight: 21, fontWeight: '800' },
-  deleteAction: { alignSelf: 'flex-start', minHeight: 44, paddingRight: 12, justifyContent: 'center' },
+  deleteAction: { alignSelf: 'flex-start', minHeight: 48, paddingRight: 12, justifyContent: 'center' },
   deleteActionText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
   reportsAction: { minHeight: 54, paddingHorizontal: 14, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.paper },
   reportsCopy: { flex: 1, gap: 1 },

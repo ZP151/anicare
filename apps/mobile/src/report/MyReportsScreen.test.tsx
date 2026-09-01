@@ -16,7 +16,7 @@ function recovery(overrides: Partial<StoredDraft> = {}): StoredDraft {
   return { id: 'draft-12345678', notes: 'Do not show private notes', risk: 'normal', report: { version: 1, step: 'review', occurredAt: '2026-08-29T08:00:00.000Z', coat: ['black'], markings: ['white-paws'], condition: 'needs_attention', manualPublicCellId: '89652636d87ffff', updatedAt: '2026-08-29T08:00:00.000Z' }, ...overrides };
 }
 function dependencies(overrides: Partial<MyReportsDependencies> = {}): MyReportsDependencies {
-  return { getSession: jest.fn(async () => true), listReports: jest.fn(async () => page([first])), loadDrafts: jest.fn(async () => []), navigate: jest.fn(), ...overrides };
+  return { getSessionSubject: jest.fn(async () => 'owner-12345678'), listReports: jest.fn(async () => page([first])), loadDrafts: jest.fn(async () => []), navigate: jest.fn(), ...overrides };
 }
 
 describe('MyReportsScreen', () => {
@@ -68,7 +68,7 @@ describe('MyReportsScreen', () => {
   });
 
   it('routes an expired session to Profile', async () => {
-    const run = dependencies({ getSession: async () => false });
+    const run = dependencies({ getSessionSubject: async () => null });
     const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
     await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Go to Profile to sign in' }));
@@ -76,11 +76,11 @@ describe('MyReportsScreen', () => {
   });
 
   it('clears the in-memory snapshot and routes to Profile when refresh finds an expired session', async () => {
-    const getSession = jest.fn(async () => true);
-    const run = dependencies({ getSession });
+    const getSessionSubject = jest.fn(async (): Promise<string | null> => 'owner-12345678');
+    const run = dependencies({ getSessionSubject });
     const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
     await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
-    getSession.mockResolvedValueOnce(false);
+    getSessionSubject.mockResolvedValueOnce(null);
     await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
     await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
     expect(view.queryByText('Private review')).toBeNull();
@@ -91,13 +91,13 @@ describe('MyReportsScreen', () => {
     const listReports = jest.fn()
       .mockResolvedValueOnce(page([first]))
       .mockImplementationOnce(() => new Promise<MyReportsPage>((resolve) => { resolveRefresh = resolve; }));
-    const getSession = jest.fn(async () => true);
-    const run = dependencies({ listReports, getSession });
+    const getSessionSubject = jest.fn(async (): Promise<string | null> => 'owner-12345678');
+    const run = dependencies({ listReports, getSessionSubject });
     const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
     await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
     await waitFor(() => expect(listReports).toHaveBeenCalledTimes(2));
-    getSession.mockResolvedValueOnce(false);
+    getSessionSubject.mockResolvedValueOnce(null);
     await act(async () => { resolveRefresh(page([second])); });
     await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
     expect(view.queryByText('Private review')).toBeNull();
@@ -110,13 +110,13 @@ describe('MyReportsScreen', () => {
     const loadDrafts = jest.fn()
       .mockResolvedValueOnce([])
       .mockImplementationOnce(() => new Promise<readonly StoredDraft[]>((resolve) => { resolveDrafts = resolve; }));
-    const getSession = jest.fn(async () => true);
-    const run = dependencies({ loadDrafts, getSession });
+    const getSessionSubject = jest.fn(async (): Promise<string | null> => 'owner-12345678');
+    const run = dependencies({ loadDrafts, getSessionSubject });
     const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
     await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
     await waitFor(() => expect(loadDrafts).toHaveBeenCalledTimes(2));
-    getSession.mockResolvedValueOnce(false);
+    getSessionSubject.mockResolvedValueOnce(null);
     await act(async () => { resolveDrafts([]); });
     await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
     expect(view.queryByText('Private review')).toBeNull();
@@ -127,11 +127,11 @@ describe('MyReportsScreen', () => {
     const listReports = jest.fn()
       .mockResolvedValueOnce(page([first]))
       .mockRejectedValueOnce(new Error('my_reports_unavailable'));
-    const getSession = jest.fn(async () => true);
-    const run = dependencies({ listReports, getSession });
+    const getSessionSubject = jest.fn(async (): Promise<string | null> => 'owner-12345678');
+    const run = dependencies({ listReports, getSessionSubject });
     const view = await render(<MyReportsScreen locale="en" dependencies={run} />);
     await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
-    getSession.mockResolvedValueOnce(false);
+    getSessionSubject.mockResolvedValueOnce(null);
     await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
     await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
     expect(view.queryByText('Private review')).toBeNull();
@@ -145,8 +145,19 @@ describe('MyReportsScreen', () => {
   });
 
   it('merges a local recovery row by sighting ID rather than duplicating the remote report', async () => {
-    const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({ loadDrafts: async () => [recovery({ sightingId: first.sightingId, uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })] })} />);
+    const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({ loadDrafts: async () => [recovery({ ownerSubject: 'owner-12345678', sightingId: first.sightingId, uploadJob: { state: 'needs_user', attempts: 1, nextAttemptAt: null, lastError: 'local_media_corrupt', resumeState: null, attemptStartedAt: null } })] })} />);
     await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
     expect(view.queryByText('Draft saved on this device')).toBeNull();
+    expect(view.getByText('Media needs your attention')).toBeTruthy();
+  });
+
+  it('clears the snapshot when account A changes to account B', async () => {
+    const getSessionSubject = jest.fn(async (): Promise<string | null> => 'owner-12345678');
+    const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({ getSessionSubject })} />);
+    await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
+    getSessionSubject.mockResolvedValueOnce('owner-bbbbbbbb');
+    await fireEvent.press(view.getByRole('button', { name: 'Refresh reports' }));
+    await waitFor(() => expect(view.getByText('Sign in to view your submitted reports.')).toBeTruthy());
+    expect(view.queryByText('Private review')).toBeNull();
   });
 });

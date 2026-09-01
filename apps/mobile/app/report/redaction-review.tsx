@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Platform,
 } from 'react-native';
 
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -76,7 +77,7 @@ export default function RedactionReviewScreen() {
     };
   }, [cacheLifecycle, renderCoordinator]);
 
-  async function choosePhoto() {
+  async function choosePhoto(source: 'library' | 'camera' = 'library') {
     const operation = renderCoordinator.beginSelection();
     renderCurrentRef.current = false;
     gestureStartRenderCurrentRef.current = null;
@@ -87,7 +88,14 @@ export default function RedactionReviewScreen() {
     setBusy(true);
     setStatus(copy.preparingPrivateCopy);
     try {
-      const selected = await ImagePicker.launchImageLibraryAsync({
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setStatus(copy.cameraDenied);
+          return;
+        }
+      }
+      const selected = await (source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync)({
         mediaTypes: ['images'],
         allowsEditing: false,
         exif: false,
@@ -305,9 +313,14 @@ export default function RedactionReviewScreen() {
           />
         </View>
       ) : (
-        <Pressable accessibilityLabel={copy.choosePhoto} accessibilityRole="button" disabled={busy} onPress={choosePhoto} style={styles.photoButton}>
-          <Text style={styles.photoButtonText}>{busy ? copy.preparing : copy.choosePhoto}</Text>
-        </Pressable>
+        <View style={styles.photoChoices}>
+          <Pressable accessibilityLabel={copy.choosePhoto} accessibilityRole="button" disabled={busy} onPress={() => { void choosePhoto('library'); }} style={styles.photoButton}>
+            <Text style={styles.photoButtonText}>{busy ? copy.preparing : copy.choosePhoto}</Text>
+          </Pressable>
+          {Platform.OS !== 'web' ? <Pressable accessibilityLabel={copy.takePhoto} accessibilityRole="button" disabled={busy} onPress={() => { void choosePhoto('camera'); }} style={styles.secondary}>
+            <Text style={styles.secondaryText}>{copy.takePhoto}</Text>
+          </Pressable> : null}
+        </View>
       )}
 
       {review.rendered ? (
@@ -330,6 +343,7 @@ const styles = StyleSheet.create({
   detector: { color: colors.danger, fontWeight: '700' },
   warning: { color: colors.muted, lineHeight: 19, marginTop: 4 },
   photoButton: { minHeight: 180, alignItems: 'center', justifyContent: 'center', borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, backgroundColor: colors.leafSoft },
+  photoChoices: { gap: 10 },
   photoButtonText: { color: colors.leaf, fontWeight: '800' },
   editor: { position: 'relative', alignSelf: 'stretch' },
   previewFrame: { position: 'absolute', top: 0, right: 0, left: 0, height: PREVIEW_HEIGHT, overflow: 'hidden', borderRadius: radii.large, backgroundColor: '#111111' },

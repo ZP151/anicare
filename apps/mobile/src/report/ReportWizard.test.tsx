@@ -24,7 +24,7 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
       occurredAt: '2026-08-31T00:00:00.000Z',
       coat: [],
       markings: [],
-      condition: null,
+      condition: 'appears_well',
       manualPublicCellId: null,
       updatedAt: '2026-08-31T00:00:00.000Z',
     },
@@ -35,6 +35,7 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
 function dependencies(overrides: Partial<ReportWizardDependencies> = {}): ReportWizardDependencies {
   return {
     loadDraft: jest.fn(async () => draft()),
+    getSessionSubject: jest.fn(async () => null),
     saveDraft: jest.fn(async () => undefined),
     removeReviewedMedia: jest.fn(async () => undefined),
     requestDeviceLocation: jest.fn(async () => ({ kind: 'denied' as const })),
@@ -57,6 +58,14 @@ function deferredLocation() {
 }
 
 describe('ReportWizard', () => {
+  it('never renders a draft owned by a different signed-in account', async () => {
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      getSessionSubject: async () => 'owner-bbbbbbbb',
+      loadDraft: async () => draft({ ownerSubject: 'owner-aaaaaaaa' }),
+    })} />);
+    await waitFor(() => expect(view.getByText('This saved report is unavailable. Return to Report and start again.')).toBeTruthy());
+    expect(view.queryByText('Private note')).toBeNull();
+  });
   it('exposes the active wizard stage as a five-step progress indicator', async () => {
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="safety" />);
 
@@ -86,6 +95,71 @@ describe('ReportWizard', () => {
     }));
     expect(saveDraft).not.toHaveBeenCalledWith(expect.objectContaining({ latitude: expect.anything() }));
     await view.unmount();
+  });
+
+  it('opens a map-origin draft at manual Area, then continues to Details without route flags', async () => {
+    const saveDraft = jest.fn(async () => undefined);
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      saveDraft,
+      loadDraft: async () => draft({ report: { ...draft().report!, step: 'area', condition: null } }),
+    })} AreaPicker={ManualAreaPicker as never} />);
+    await waitFor(() => expect(view.getByRole('header', { name: 'Area' })).toBeTruthy());
+    expect(view.getByRole('button', { name: 'Tap broad Singapore map' })).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(view.getByRole('header', { name: 'Details' })).toBeTruthy());
+    expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
+      report: expect.objectContaining({ step: 'details', manualPublicCellId: '89652636d87ffff' }),
+    }));
+  });
+
+  it('collects bounded coat and marking traits with accessible multi-select controls', async () => {
+    const saveDraft = jest.fn(async () => undefined);
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ saveDraft })} initialStage="details" />);
+    await waitFor(() => expect(view.getByRole('header', { name: 'Details' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Tabby coat' }));
+    await fireEvent.press(view.getByRole('button', { name: 'White paws marking' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Appears well' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue to safety' }));
+    await waitFor(() => expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
+      report: expect.objectContaining({ coat: ['tabby'], markings: ['white-paws'] }),
+    })));
+  });
+
+  it('offers photo retake as a first-class private-review action', async () => {
+    const navigate = jest.fn();
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      navigate,
+      loadDraft: async () => draft({ mediaId: 'media-12345678', encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm' }),
+    })} initialStage="photo" />);
+    await waitFor(() => expect(view.getByRole('button', { name: 'Retake private photo' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Retake private photo' }));
+    expect(navigate).toHaveBeenCalledWith(`/report/redaction-review?draftId=${draftId}`);
+  });
+
+  it('enforces the submission prerequisite validator in the real submit path', async () => {
+    const submit = jest.fn(async () => ({ sightingId, state: 'submitted_text_only' }));
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      submit,
+      loadDraft: async () => draft({ report: { ...draft().report!, condition: null } }),
+    })} initialStage="review" AreaPicker={ManualAreaPicker as never} />);
+    await fireEvent.press(view.getByRole('button', { name: 'Choose an area manually' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
+    expect(view.getByRole('button', { name: 'Submit report' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByText('Choose the cat’s condition before submitting.')).toBeTruthy();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('routes authentication expiry to Profile with only the opaque return draft ID', async () => {
+    const navigate = jest.fn();
+    const submit = jest.fn(async () => { throw new Error('authentication_required'); });
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({
+      navigate, submit,
+      loadDraft: async () => draft({ report: { ...draft().report!, step: 'review', condition: 'appears_well', manualPublicCellId: '89652636d87ffff' } }),
+    })} initialStage="review" />);
+    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/profile?returnDraftId=${draftId}`));
+    expect(JSON.stringify(navigate.mock.calls)).not.toMatch(/notes|latitude|longitude|media/);
   });
 
   it('opens the private redaction route with only the same opaque draft ID and removes reviewed media through the cleanup-aware operation', async () => {

@@ -11,12 +11,13 @@ import { getReportCopy } from './report-copy';
 import { isOpaqueReportId } from './ReportRouteShell';
 
 export type ReportReceiptDependencies = Readonly<{
+  getSessionSubject(): Promise<string | null>;
   listReports(input: Readonly<{ cursor?: MyReportsCursor | null }>): Promise<MyReportsPage>;
   loadDrafts(): Promise<readonly StoredDraft[]>;
   navigate(path: string): void;
 }>;
 
-type ReceiptState = Readonly<{ status: ReportReceiptStatus | null; source: 'remote' | 'unavailable' | 'local_recovery'; submittedAt: string | null }>;
+type ReceiptState = Readonly<{ status: ReportReceiptStatus | null; source: 'remote' | 'unavailable' | 'local_recovery' | 'local_commit'; submittedAt: string | null }>;
 type RemoteLookup = Readonly<{ kind: 'found'; report: MyReportSummary }> | Readonly<{ kind: 'not_found' }>;
 
 async function findRemoteReport(
@@ -38,8 +39,9 @@ async function findRemoteReport(
   throw new Error('my_reports_unavailable');
 }
 
-function localDraftForSighting(drafts: readonly StoredDraft[], sightingId: string): StoredDraft | null {
-  return drafts.find((draft) => draft.sightingId === sightingId) ?? null;
+function localDraftForSighting(drafts: readonly StoredDraft[], sightingId: string, ownerSubject: string | null): StoredDraft | null {
+  if (!ownerSubject) return null;
+  return drafts.find((draft) => draft.sightingId === sightingId && draft.ownerSubject === ownerSubject) ?? null;
 }
 
 export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
@@ -55,19 +57,28 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
     if (!validSightingId) return;
     let mounted = true;
     void (async () => {
+      const ownerSubject = await dependencies.getSessionSubject().catch(() => null);
       const drafts = await dependencies.loadDrafts().catch(() => [] as readonly StoredDraft[]);
+      const local = localDraftForSighting(drafts, sightingId, ownerSubject);
       try {
         const remote = await findRemoteReport(sightingId, dependencies.listReports);
-        const local = localDraftForSighting(drafts, sightingId);
+        if (await dependencies.getSessionSubject().catch(() => null) !== ownerSubject) {
+          if (mounted) setState({ status: null, source: 'unavailable', submittedAt: null });
+          return;
+        }
         if (!mounted) return;
         if (remote.kind === 'found') {
           setState({ status: mergeReceiptStatus(remote.report, local), source: 'remote', submittedAt: remote.report.createdAt });
           return;
         }
         const recovery = mergeReceiptStatus(null, local);
-        setState({ status: recovery?.mediaState === 'needs_user' ? recovery : null, source: 'local_recovery', submittedAt: null });
+        if (recovery?.reportState === 'submitted') {
+          setState({ status: recovery, source: 'local_commit', submittedAt: null });
+        } else {
+          setState({ status: recovery?.mediaState === 'needs_user' ? recovery : null, source: 'local_recovery', submittedAt: null });
+        }
       } catch {
-        if (mounted) setState({ status: mergeReceiptStatus(null, localDraftForSighting(drafts, sightingId)), source: 'unavailable', submittedAt: null });
+        if (mounted) setState({ status: mergeReceiptStatus(null, local), source: 'unavailable', submittedAt: null });
       }
     })();
     return () => { mounted = false; };

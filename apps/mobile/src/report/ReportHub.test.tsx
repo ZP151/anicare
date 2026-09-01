@@ -29,7 +29,8 @@ function dependencies(overrides: Partial<ReportHubDependencies> = {}): ReportHub
     loadDrafts: jest.fn(async () => []),
     saveDraft: jest.fn(async (input) => input as never),
     deleteDraft: jest.fn(async () => undefined),
-    getSession: jest.fn(async () => false),
+    getSessionSubject: jest.fn(async () => null),
+    claimDraftOwner: jest.fn(async () => true),
     createId: jest.fn(() => '00000000-0000-4000-8000-000000000113'),
     now: jest.fn(() => new Date('2026-09-01T10:00:00.000Z')),
     navigate: jest.fn(),
@@ -106,6 +107,32 @@ describe('ReportHub', () => {
       },
     });
     expect(run.navigate).toHaveBeenCalledWith('/report/new?draftId=00000000-0000-4000-8000-000000000113');
+  });
+
+  it('binds a new signed-in draft to the current subject', async () => {
+    const run = dependencies({ getSessionSubject: async () => 'owner-12345678' });
+    const view = await render(<ReportHub dependencies={run} locale="en" />);
+    await waitFor(() => expect(view.getByRole('button', { name: 'Start a report' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Start a report' }));
+    expect(run.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ ownerSubject: 'owner-12345678' }));
+  });
+
+  it('hides drafts owned by another subject and explicitly claims an anonymous draft before opening it', async () => {
+    const claimDraftOwner = jest.fn(async () => true);
+    const run = dependencies({
+      getSessionSubject: async () => 'owner-12345678',
+      claimDraftOwner,
+      loadDrafts: async () => [
+        { ...firstDraft, ownerSubject: 'owner-bbbbbbbb' },
+        laterDraft,
+      ],
+    });
+    const view = await render(<ReportHub dependencies={run} locale="en" />);
+    await waitFor(() => expect(view.getByRole('button', { name: 'Claim and continue report draft from safety' })).toBeTruthy());
+    expect(view.queryByRole('button', { name: /details/ })).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Claim and continue report draft from safety' }));
+    expect(claimDraftOwner).toHaveBeenCalledWith(laterDraft.id, 'owner-12345678');
+    expect(run.navigate).toHaveBeenCalledWith(`/report/new?draftId=${laterDraft.id}`);
   });
 
   it('continues a valid existing draft without writing another one', async () => {

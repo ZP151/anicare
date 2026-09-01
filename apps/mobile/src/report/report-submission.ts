@@ -35,10 +35,18 @@ export type ReportSubmissionProgress = Readonly<{
   state: ReportSubmissionOutcome['state'];
 }>;
 
+export type ReportSubmissionAuthContext = Readonly<{
+  accessToken: string;
+  ownerSubject: string;
+}>;
+
 export type ReportSubmissionDependencies = Readonly<{
   saveDraft(input: Readonly<{ id: string; notes: string; risk: SightingRisk }>): Promise<unknown>;
   getDraft(id: string): Promise<StoredDraft | null>;
-  recoverSighting(draftId: string): Promise<SightingRecoveryOutcome>;
+  acquireAuthContext(): Promise<ReportSubmissionAuthContext>;
+  verifyOwnerSubject(expectedOwnerSubject: string): Promise<boolean>;
+  claimDraftOwner(draftId: string, ownerSubject: string): Promise<boolean>;
+  recoverSighting(draftId: string, auth: ReportSubmissionAuthContext): Promise<SightingRecoveryOutcome>;
   createSighting(input: Readonly<{
     location: SightingLocationInput;
     occurredAt: Date;
@@ -46,10 +54,9 @@ export type ReportSubmissionDependencies = Readonly<{
     traits: Readonly<Record<string, unknown>>;
     notes: string | null;
     clientDedupeKey: string;
-  }>): Promise<SightingSubmissionResponse>;
-  currentOwnerSubject(): Promise<string>;
+  }>, auth: ReportSubmissionAuthContext): Promise<SightingSubmissionResponse>;
   attachSighting(draftId: string, sightingId: string, ownerSubject: string): Promise<boolean>;
-  uploadMedia(draftId: string): Promise<MediaSubmissionState>;
+  uploadMedia(draftId: string, expectedOwnerSubject: string): Promise<MediaSubmissionState>;
   deleteDraft(draftId: string): Promise<void>;
 }>;
 
@@ -128,13 +135,15 @@ function persistedMediaRecoveryState(
 async function recoverOrCreateSighting(
   input: SubmitReportWithMediaInput,
   draft: StoredDraft,
+  auth: ReportSubmissionAuthContext,
   dependencies: ReportSubmissionDependencies,
 ): Promise<Readonly<{ sighting: ResolvedSighting | null; recoveryMiss: boolean }>> {
   if (draft.sightingId) {
     return { sighting: { sightingId: draft.sightingId, visibility: null }, recoveryMiss: false };
   }
 
-  const recovered = await dependencies.recoverSighting(input.draftId);
+  const recovered = await dependencies.recoverSighting(input.draftId, auth);
+  if (!await dependencies.verifyOwnerSubject(auth.ownerSubject)) throw new Error('authentication_changed');
   if (!('kind' in recovered)) {
     return { sighting: { sightingId: recovered.sightingId, visibility: recovered.visibility }, recoveryMiss: false };
   }
@@ -146,7 +155,7 @@ async function recoverOrCreateSighting(
     traits: input.traits,
     notes: input.notes.trim() || null,
     clientDedupeKey: input.draftId,
-  });
+  }, auth);
   return {
     sighting: { sightingId: created.sightingId, visibility: created.visibility },
     recoveryMiss: false,
@@ -161,24 +170,35 @@ export async function submitReportWithMedia(
   input: SubmitReportWithMediaInput,
   dependencies: ReportSubmissionDependencies,
 ): Promise<ReportSubmissionOutcome> {
+  const existing = await dependencies.getDraft(input.draftId);
+  if (!existing) throw new Error('missing_durable_draft');
+  const auth = await dependencies.acquireAuthContext();
+  const ownerSubject = auth.ownerSubject;
+  if (existing.ownerSubject !== undefined && existing.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
+  if (!await dependencies.claimDraftOwner(input.draftId, ownerSubject)) throw new Error('auth_ownership');
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
   try {
     await persistReportDraftBeforeReview(input, dependencies);
   } catch {
     throw new ReportDraftPersistenceError();
   }
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
   const draft = await dependencies.getDraft(input.draftId);
   if (!draft) throw new Error('missing_durable_draft');
-  const ownerSubject = await dependencies.currentOwnerSubject();
-  if (draft.ownerSubject !== undefined && draft.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
+  if (draft.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
 
-  const resolved = await recoverOrCreateSighting(input, draft, dependencies);
+  const resolved = await recoverOrCreateSighting(input, draft, auth, dependencies);
   if (resolved.recoveryMiss || !resolved.sighting) {
     return { sightingId: null, visibility: null, state: 'recovery_miss', receipt: null };
   }
 
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
+
   if (!draft.sightingId && !await dependencies.attachSighting(input.draftId, resolved.sighting.sightingId, ownerSubject)) {
     throw new Error('sighting_attachment_conflict');
   }
+
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
 
   const durable = await dependencies.getDraft(input.draftId);
   if (!durable || durable.sightingId !== resolved.sighting.sightingId || durable.ownerSubject !== ownerSubject) {
@@ -186,16 +206,13 @@ export async function submitReportWithMedia(
   }
 
   if (!hasMediaBoundary(durable)) {
-    try {
-      await dependencies.deleteDraft(input.draftId);
-      return outcome(resolved.sighting, 'submitted_text_only');
-    } catch {
-      return outcome(resolved.sighting, 'cleanup_pending');
-    }
+    // Keep the encrypted, owner-bound row as a durable receipt anchor until a
+    // later authoritative My Reports reconciliation can safely remove it.
+    return outcome(resolved.sighting, 'submitted_text_only');
   }
 
   try {
-    const state = await dependencies.uploadMedia(input.draftId);
+    const state = await dependencies.uploadMedia(input.draftId, ownerSubject);
     return outcome(resolved.sighting, state);
   } catch {
     try {

@@ -66,8 +66,14 @@ function harness(overrides: Record<string, unknown> = {}) {
       return current;
     }),
     getDraft: jest.fn(async () => current),
+    acquireAuthContext: jest.fn(async () => ({ accessToken: 'token-a', ownerSubject: 'owner-12345678' })),
+    verifyOwnerSubject: jest.fn(async () => true),
+    claimDraftOwner: jest.fn(async (_draftId: string, ownerSubject: string) => {
+      if (current?.ownerSubject && current.ownerSubject !== ownerSubject) return false;
+      current = { ...current, ownerSubject };
+      return true;
+    }),
     recoverSighting: jest.fn(async () => ({ kind: 'not_found' as const })),
-    currentOwnerSubject: jest.fn(async () => 'owner-12345678'),
     createSighting: jest.fn(async () => response),
     attachSighting: jest.fn(async (_draftId: string, sightingId: string, ownerSubject: string) => {
       calls.push(`attach:${sightingId}`);
@@ -185,7 +191,7 @@ describe('report submission lifecycle', () => {
     await expect(submitReportWithMedia(submission(), run.dependencies))
       .resolves.toMatchObject({ state: 'quarantined', sightingId: response.sightingId });
 
-    expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678');
+    expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678', { accessToken: 'token-a', ownerSubject: 'owner-12345678' });
     expect(run.dependencies.createSighting).toHaveBeenCalledTimes(1);
     expect(run.calls).toEqual([
       'save:tabby:normal',
@@ -213,7 +219,7 @@ describe('report submission lifecycle', () => {
       .resolves.toMatchObject({ sightingId: response.sightingId, visibility: null });
   });
 
-  it('deletes a text-only draft only after a successful sighting submission', async () => {
+  it('retains a bound text-only receipt anchor after a successful sighting submission', async () => {
     const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
 
     await expect(submitReportWithMedia(submission({
@@ -223,32 +229,32 @@ describe('report submission lifecycle', () => {
     expect(run.calls).toEqual([
       'save:tabby:normal',
       `attach:${response.sightingId}`,
-      'delete',
     ]);
-  });
-
-  it('keeps a bound text draft and returns its committed receipt when cleanup rejects', async () => {
-    const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
-    jest.mocked(run.dependencies.deleteDraft).mockImplementation(async () => {
-      run.calls.push('delete_attempt');
-      throw new Error('cleanup_unavailable');
-    });
-
-    await expect(submitReportWithMedia(submission({
-      location: { kind: 'device_once', latitude: 1.3521, longitude: 103.8198 },
-    }), run.dependencies)).resolves.toEqual({
-      sightingId: response.sightingId,
-      visibility: 'hidden',
-      state: 'cleanup_pending',
-      receipt: {
-        sightingId: response.sightingId,
-        visibility: 'hidden',
-        mediaState: 'cleanup_pending',
-      },
-    });
-    expect(run.calls).toEqual(['save:tabby:normal', `attach:${response.sightingId}`, 'delete_attempt']);
     expect(run.current()).toMatchObject({ sightingId: response.sightingId, ownerSubject: 'owner-12345678' });
   });
+
+  it.each(['before_recovery', 'between_recovery_and_create', 'before_attachment', 'before_media_continuation'] as const)(
+    'fails closed when the authenticated principal changes %s',
+    async (switchPoint) => {
+      const run = harness({ current: { id: 'draft-12345678', notes: 'tabby', risk: 'normal' } });
+      let checks = 0;
+      jest.mocked(run.dependencies.verifyOwnerSubject).mockImplementation(async () => {
+        checks += 1;
+        if (switchPoint === 'before_recovery') return checks < 2;
+        if (switchPoint === 'between_recovery_and_create') return checks < 3;
+        if (switchPoint === 'before_attachment') return checks < 4;
+        return checks < 5;
+      });
+
+      await expect(submitReportWithMedia(submission({
+        location: { kind: 'device_once', latitude: 1.3521, longitude: 103.8198 },
+      }), run.dependencies)).rejects.toThrow('authentication_changed');
+
+      if (switchPoint === 'before_media_continuation') expect(run.dependencies.attachSighting).toHaveBeenCalledTimes(1);
+      else expect(run.dependencies.attachSighting).not.toHaveBeenCalled();
+      expect(run.dependencies.uploadMedia).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns the persisted pending state when upload rejects after attachment', async () => {
     const run = harness();
@@ -306,7 +312,7 @@ describe('report submission lifecycle', () => {
     let reads = 0;
     jest.mocked(run.dependencies.getDraft).mockImplementation(async () => {
       reads += 1;
-      return reads === 3 ? failedRead() : run.current();
+      return reads === 4 ? failedRead() : run.current();
     });
     jest.mocked(run.dependencies.uploadMedia).mockRejectedValue(new Error('media_runtime_failed'));
 
@@ -343,7 +349,7 @@ describe('report submission lifecycle', () => {
       notes: 'tabby',
       traits: { coat: ['tabby'], markings: ['white-paws'], condition: 'appears_well' },
       clientDedupeKey: 'draft-12345678',
-    });
+    }, { accessToken: 'token-a', ownerSubject: 'owner-12345678' });
     expect(run.dependencies.saveDraft).toHaveBeenCalledWith({ id: 'draft-12345678', notes: 'tabby', risk: 'normal' });
   });
 
@@ -357,7 +363,7 @@ describe('report submission lifecycle', () => {
       receipt: null,
     });
 
-    expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678');
+    expect(run.dependencies.recoverSighting).toHaveBeenCalledWith('draft-12345678', { accessToken: 'token-a', ownerSubject: 'owner-12345678' });
     expect(run.dependencies.createSighting).not.toHaveBeenCalled();
     expect(run.dependencies.deleteDraft).not.toHaveBeenCalled();
   });

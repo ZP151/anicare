@@ -11,9 +11,9 @@ export type NativeConfigPolicyCode =
   | 'scheme_mismatch'
   | 'ios_bundle_identifier_mismatch'
   | 'android_package_mismatch'
-  | 'android_camera_forbidden'
+  | 'android_camera_permission_missing'
   | 'android_microphone_forbidden'
-  | 'ios_camera_usage_forbidden'
+  | 'ios_camera_usage_missing'
   | 'ios_microphone_usage_forbidden'
   | 'ios_always_location_usage_forbidden'
   | 'photo_library_permission_missing'
@@ -21,7 +21,7 @@ export type NativeConfigPolicyCode =
   | 'sqlcipher_plugin_missing';
 
 const expectedImagePicker = {
-  cameraPermission: false,
+  cameraPermission: 'Take a cat photo for private review and redaction. Source media is never uploaded.',
   microphonePermission: false,
 };
 const expectedLocation = {
@@ -110,7 +110,7 @@ function hasAndroidPermission(
 function hasPluginOptions(
   plugins: readonly unknown[],
   name: string,
-  expected: Readonly<Record<string, boolean>>,
+  expected: Readonly<Record<string, unknown>>,
 ): boolean {
   return plugins.some((plugin) => {
     if (!Array.isArray(plugin) || plugin.length !== 2 || plugin[0] !== name) {
@@ -178,10 +178,10 @@ export function evaluateNativeConfigEvidence(
     codes.push('android_package_mismatch');
   }
   if (
-    evidence.androidPermissions.includes('android.permission.CAMERA') ||
+    !evidence.androidPermissions.includes('android.permission.CAMERA') ||
     !hasPluginOptions(evidence.plugins, 'expo-image-picker', expectedImagePicker)
   ) {
-    codes.push('android_camera_forbidden');
+    codes.push('android_camera_permission_missing');
   }
   if (
     evidence.androidPermissions.includes('android.permission.RECORD_AUDIO') ||
@@ -189,8 +189,8 @@ export function evaluateNativeConfigEvidence(
   ) {
     codes.push('android_microphone_forbidden');
   }
-  if (hasInfoPlistKey(evidence, 'NSCameraUsageDescription')) {
-    codes.push('ios_camera_usage_forbidden');
+  if (!hasInfoPlistKey(evidence, 'NSCameraUsageDescription')) {
+    codes.push('ios_camera_usage_missing');
   }
   if (hasInfoPlistKey(evidence, 'NSMicrophoneUsageDescription')) {
     codes.push('ios_microphone_usage_forbidden');

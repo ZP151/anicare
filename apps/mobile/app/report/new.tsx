@@ -8,6 +8,7 @@ import { getSupabaseClient } from '../../src/api/supabase';
 import { uploadDraftMediaNow } from '../../src/media/media-upload-runtime';
 import {
   attachSightingToDraft,
+  claimOfflineDraftOwner,
   deleteOfflineDraft,
   getOfflineDraft,
   removeReviewedMediaFromDraft,
@@ -37,6 +38,9 @@ export default function NewReportRoute() {
     };
     return {
       loadDraft: getOfflineDraft,
+      getSessionSubject: async () => {
+        try { return (await currentSession()).ownerSubject; } catch { return null; }
+      },
       saveDraft: saveOfflineDraft,
       removeReviewedMedia: removeReviewedMediaFromDraft,
       requestDeviceLocation: async () => {
@@ -49,8 +53,12 @@ export default function NewReportRoute() {
         const result = await submitReportWithMedia(input, {
           saveDraft: async (draft) => saveOfflineDraft(draft),
           getDraft: getOfflineDraft,
-          recoverSighting: async (stableDraftId) => {
-            const session = await currentSession();
+          acquireAuthContext: currentSession,
+          verifyOwnerSubject: async (expectedOwnerSubject) => {
+            try { return (await currentSession()).ownerSubject === expectedOwnerSubject; } catch { return false; }
+          },
+          claimDraftOwner: claimOfflineDraftOwner,
+          recoverSighting: async (stableDraftId, session) => {
             return recoverSightingSubmission({
               supabaseUrl: configuredUrl,
               accessToken: session.accessToken,
@@ -58,8 +66,7 @@ export default function NewReportRoute() {
               insecureOrigins,
             });
           },
-          createSighting: async (draft) => {
-            const session = await currentSession();
+          createSighting: async (draft, session) => {
             return submitSighting({
               supabaseUrl: configuredUrl,
               accessToken: session.accessToken,
@@ -67,9 +74,10 @@ export default function NewReportRoute() {
               insecureOrigins,
             });
           },
-          currentOwnerSubject: async () => (await currentSession()).ownerSubject,
           attachSighting: attachSightingToDraft,
-          uploadMedia: uploadDraftMediaNow,
+          uploadMedia: (stableDraftId, expectedOwnerSubject) => uploadDraftMediaNow(
+            stableDraftId, undefined, expectedOwnerSubject,
+          ),
           deleteDraft: deleteOfflineDraft,
         });
         return { sightingId: result.sightingId, state: result.state };

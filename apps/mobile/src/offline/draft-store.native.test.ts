@@ -817,14 +817,38 @@ describe('native draft storage privacy boundary', () => {
       'reviewed-media/media-87654321.commit-87654321.agcm',
     ]],
     ['file:///attacker/reviewed-media/media-12345678.commit-12345678.agcm', 'reviewed-media/symlink.agcm', []],
-  ] as const)('deletes only anchored active and outbox ciphertext after deleting its draft: %s', async (reference, pending, expectedDeleted) => {
+  ] as const)('deletes only anchored active and outbox ciphertext before deleting its draft row: %s', async (reference, pending, expectedDeleted) => {
     const events: string[] = [];
-    await deleteOfflineDraftWithDependencies('draft-12345678', {
-      loadReviewedReferences: async () => ({ active: reference, pending }),
-      deleteRow: async () => { events.push('row'); },
+    await deleteOfflineDraftWithDependencies('draft-12345678', null, {
+      loadReviewedReferences: async () => ({ active: reference, pending, ownerSubject: null }),
+      deleteRowIfReferencesMatch: async () => { events.push('row'); return true; },
       deleteOwnedReference: async (value) => { events.push(value); },
     });
-    expect(events).toEqual(['row', ...expectedDeleted]);
+    expect(events).toEqual([...expectedDeleted, 'row']);
+  });
+
+  it('retains the durable cleanup references when ciphertext deletion fails', async () => {
+    const deleteRowIfReferencesMatch = jest.fn(async () => true);
+    await expect(deleteOfflineDraftWithDependencies('draft-12345678', 'owner-12345678', {
+      loadReviewedReferences: async () => ({
+        active: 'reviewed-media/media-12345678.commit-12345678.agcm',
+        pending: null,
+        ownerSubject: 'owner-12345678',
+      }),
+      deleteRowIfReferencesMatch,
+      deleteOwnedReference: async () => { throw new Error('filesystem_busy'); },
+    })).rejects.toThrow('filesystem_busy');
+    expect(deleteRowIfReferencesMatch).not.toHaveBeenCalled();
+  });
+
+  it('refuses to delete a draft owned by another account before touching ciphertext', async () => {
+    const deleteOwnedReference = jest.fn(async () => undefined);
+    await expect(deleteOfflineDraftWithDependencies('draft-12345678', 'owner-bbbbbbbb', {
+      loadReviewedReferences: async () => ({ active: null, pending: null, ownerSubject: 'owner-aaaaaaaa' }),
+      deleteRowIfReferencesMatch: async () => true,
+      deleteOwnedReference,
+    })).rejects.toThrow('auth_ownership');
+    expect(deleteOwnedReference).not.toHaveBeenCalled();
   });
 
   it('claims exactly one concurrent runner and increments before returning the claim', async () => {

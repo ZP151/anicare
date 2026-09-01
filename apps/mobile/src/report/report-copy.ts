@@ -18,6 +18,7 @@ export type ReportCopy = Readonly<{
   startFailed: string;
   deleteFailed: string;
   continueDraftLabel: (step: string) => string;
+  claimContinueDraftLabel: (step: string) => string;
   deleteDraftLabel: (step: string) => string;
   stepLabel: (step: string) => string;
   deleteAction: string;
@@ -44,7 +45,7 @@ export type ReportCopy = Readonly<{
   receiptSubmittedAt: (time: string) => string;
   viewReportsAction: string;
   browseNearbyAction: string;
-  reportStateLabel: (state: 'draft' | 'private_review' | 'delayed' | 'published' | 'archived') => string;
+  reportStateLabel: (state: 'draft' | 'submitted' | 'private_review' | 'delayed' | 'published' | 'archived') => string;
   mediaStateLabel: (state: 'none' | 'pending' | 'quarantined' | 'cleanup_pending' | 'removed' | 'needs_user') => string;
   identityStateLabel: (state: 'not_requested' | 'pending_review' | 'linked' | 'closed') => string;
   historyTitle: string;
@@ -70,11 +71,16 @@ export type ReportCopy = Readonly<{
   wizardPhotoIntro: string;
   wizardPhotoAdd: string;
   wizardPhotoReplace: string;
+  wizardPhotoRetake: string;
   wizardPhotoRemove: string;
   wizardPhotoSkip: string;
   wizardPhotoRemoved: string;
   wizardPhotoRemoveFailed: string;
   wizardDetailsIntro: string;
+  wizardCoatTitle: string;
+  wizardMarkingsTitle: string;
+  wizardCoatLabel: (value: string) => string;
+  wizardMarkingLabel: (value: string) => string;
   wizardConditionWell: string;
   wizardConditionNeedsAttention: string;
   wizardConditionUrgent: string;
@@ -102,6 +108,9 @@ export type ReportCopy = Readonly<{
   wizardReviewIntro: string;
   wizardEdit: (step: string) => string;
   wizardSubmitDisabledReason: string;
+  wizardDetailsRequired: string;
+  wizardReviewRequired: string;
+  wizardSignInRequired: string;
   wizardSubmit: string;
   wizardAreaMapLabel: string;
   wizardAreaMapInstruction: string;
@@ -131,6 +140,7 @@ export function getReportCopy(locale: Locale): ReportCopy {
     startFailed: translate(locale, 'report.hub.startFailed'),
     deleteFailed: translate(locale, 'report.hub.deleteFailed'),
     continueDraftLabel: (step) => translate(locale, 'report.hub.continueDraftLabel' as never).replace('{step}', stepLabel(step).toLowerCase()),
+    claimContinueDraftLabel: (step) => translate(locale, 'report.hub.claimContinueDraftLabel' as never).replace('{step}', stepLabel(step).toLowerCase()),
     deleteDraftLabel: (step) => translate(locale, 'report.hub.deleteDraftLabel' as never).replace('{step}', stepLabel(step).toLowerCase()),
     stepLabel,
     deleteAction: translate(locale, 'report.hub.deleteAction'),
@@ -183,11 +193,16 @@ export function getReportCopy(locale: Locale): ReportCopy {
     wizardPhotoIntro: translate(locale, 'report.wizard.photoIntro'),
     wizardPhotoAdd: translate(locale, 'report.wizard.photoAdd'),
     wizardPhotoReplace: translate(locale, 'report.wizard.photoReplace'),
+    wizardPhotoRetake: translate(locale, 'report.wizard.photoRetake'),
     wizardPhotoRemove: translate(locale, 'report.wizard.photoRemove'),
     wizardPhotoSkip: translate(locale, 'report.wizard.photoSkip'),
     wizardPhotoRemoved: translate(locale, 'report.wizard.photoRemoved'),
     wizardPhotoRemoveFailed: translate(locale, 'report.wizard.photoRemoveFailed'),
     wizardDetailsIntro: translate(locale, 'report.wizard.detailsIntro'),
+    wizardCoatTitle: translate(locale, 'report.wizard.coatTitle'),
+    wizardMarkingsTitle: translate(locale, 'report.wizard.markingsTitle'),
+    wizardCoatLabel: (value) => translate(locale, `report.wizard.coat.${value}` as never),
+    wizardMarkingLabel: (value) => translate(locale, `report.wizard.marking.${value}` as never),
     wizardConditionWell: translate(locale, 'report.wizard.conditionWell'),
     wizardConditionNeedsAttention: translate(locale, 'report.wizard.conditionNeedsAttention'),
     wizardConditionUrgent: translate(locale, 'report.wizard.conditionUrgent'),
@@ -215,6 +230,9 @@ export function getReportCopy(locale: Locale): ReportCopy {
     wizardReviewIntro: translate(locale, 'report.wizard.reviewIntro'),
     wizardEdit: (step) => translate(locale, 'report.wizard.edit').replace('{step}', step),
     wizardSubmitDisabledReason: translate(locale, 'report.wizard.submitDisabledReason'),
+    wizardDetailsRequired: translate(locale, 'report.wizard.detailsRequired'),
+    wizardReviewRequired: translate(locale, 'report.wizard.reviewRequired'),
+    wizardSignInRequired: translate(locale, 'report.wizard.signInRequired'),
     wizardSubmit: translate(locale, 'report.wizard.submit'),
     wizardAreaMapLabel: translate(locale, 'report.wizard.areaMapLabel'),
     wizardAreaMapInstruction: translate(locale, 'report.wizard.areaMapInstruction'),

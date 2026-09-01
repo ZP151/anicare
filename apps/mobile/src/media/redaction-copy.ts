@@ -9,6 +9,8 @@ export type RedactionReviewCopy = Readonly<{
   detectorWarning: string;
   reviewedImageLabel: string;
   choosePhoto: string;
+  takePhoto: string;
+  cameraDenied: string;
   preparing: string;
   clearMasks: string;
   working: string;
@@ -40,6 +42,8 @@ const en: RedactionReviewCopy = {
   detectorWarning: 'No automatic detector has checked this image. You must inspect it manually.',
   reviewedImageLabel: 'Reviewed private image',
   choosePhoto: 'Choose photo for private review',
+  takePhoto: 'Take photo for private review',
+  cameraDenied: 'Camera permission was not granted. You can still choose a photo.',
   preparing: 'Preparing…',
   clearMasks: 'Clear all masks',
   working: 'Working…',
@@ -71,6 +75,8 @@ const zhCN: RedactionReviewCopy = {
   detectorWarning: '没有自动检测器检查过这张图片，你必须手动检查。',
   reviewedImageLabel: '已复核的私密图片',
   choosePhoto: '选择照片进行私密复核',
+  takePhoto: '拍摄照片进行私密复核',
+  cameraDenied: '未获得相机权限，你仍可从照片库选择照片。',
   preparing: '正在准备…',
   clearMasks: '清除全部遮挡',
   working: '处理中…',

@@ -30,6 +30,7 @@ describe('ReportWizard web capture boundary', () => {
     };
     const dependencies: ReportWizardDependencies = {
       loadDraft: async () => draft,
+      getSessionSubject: async () => null,
       saveDraft: async () => undefined,
       removeReviewedMedia: async () => undefined,
       requestDeviceLocation: async () => ({ kind: 'denied' }),
@@ -64,6 +65,7 @@ describe('ReportWizard web capture boundary', () => {
     };
     const dependencies: ReportWizardDependencies = {
       loadDraft: async () => draft,
+      getSessionSubject: async () => null,
       saveDraft: async () => undefined,
       removeReviewedMedia: async () => undefined,
       requestDeviceLocation: async () => ({ kind: 'denied' }),

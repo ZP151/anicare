@@ -17,7 +17,7 @@ const validPublicConfig = {
   plugins: [
     [
       'expo-image-picker',
-      { cameraPermission: false, microphonePermission: false },
+      { cameraPermission: 'Take a cat photo for private review and redaction. Source media is never uploaded.', microphonePermission: false },
     ],
     [
       'expo-location',
@@ -35,6 +35,7 @@ const validIntrospectedConfig = {
     permissions: [
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.CAMERA',
     ],
   },
   _internal: {
@@ -43,6 +44,7 @@ const validIntrospectedConfig = {
         infoPlist: {
           NSLocationWhenInUseUsageDescription: 'required',
           NSPhotoLibraryUsageDescription: 'required',
+          NSCameraUsageDescription: 'required',
         },
       },
     },

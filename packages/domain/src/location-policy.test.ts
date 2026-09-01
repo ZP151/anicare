@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canViewPreciseLocation,
   getPublicExposure,
+  isSingaporePublicCell,
   toPublicLocationCell,
 } from './location-policy.js';
 
@@ -14,6 +15,12 @@ describe('public location policy', () => {
     expect(cell.cellId).toMatch(/^[0-9a-f]+$/);
     expect(cell).not.toHaveProperty('latitude');
     expect(cell).not.toHaveProperty('longitude');
+  });
+
+  it('validates the coarsened cell center with the same Singapore boundary semantics as submission', () => {
+    expect(isSingaporePublicCell('89652636d87ffff')).toBe(true);
+    expect(isSingaporePublicCell(toPublicLocationCell({ latitude: 35.6762, longitude: 139.6503 }).cellId)).toBe(false);
+    expect(isSingaporePublicCell('not-a-cell')).toBe(false);
   });
 
   it('delays normal and sensitive events while keeping critical events hidden', () => {

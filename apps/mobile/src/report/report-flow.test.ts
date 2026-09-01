@@ -49,7 +49,7 @@ describe('report workflow controller', () => {
     expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'safety', condition: null } }))).toBe('details');
     expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'area', manualPublicCellId: null } }))).toBe('area');
     expect(earliestIncompleteStep(draft({ report: { ...payload, step: 'area', condition: null, manualPublicCellId: null } })))
-      .toBe('details');
+      .toBe('area');
   });
 
   it('requires details, a supplied location mode, and explicit review before submission', () => {
