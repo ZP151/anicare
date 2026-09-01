@@ -103,15 +103,15 @@ export default function RedactionReviewScreen() {
         exif: false,
         quality: 1,
       });
-      if (selected.canceled || !selected.assets[0]?.uri || !renderCoordinator.isCurrent(operation.token)) return;
-      if (!mountedRef.current) return;
+      if (selected.canceled || !selected.assets[0]?.uri) return;
+      const sourceUri = selected.assets[0].uri;
+      if (source === 'camera') ownedCameraSourceUri = sourceUri;
+      if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       setCanonical(null);
       setReview(EMPTY_REVIEW);
       renderedMasksRef.current = [];
       await cacheLifecycle.startSelection(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
-      const sourceUri = selected.assets[0].uri;
-      if (source === 'camera') ownedCameraSourceUri = sourceUri;
       const prepared = await prepareCanonical(sourceUri);
       await cacheLifecycle.adopt(operation.token, prepared.uri);
       if (!renderCoordinator.isCurrent(operation.token)) return;

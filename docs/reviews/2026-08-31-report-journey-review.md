@@ -75,7 +75,7 @@ confirmation UI was added.
 - Controller closeout tests for bilingual redaction/Cat Detail, localized draft
   titles and Singapore map bounds: PASS — 4 suites/35 tests; mobile typecheck
   and clean 18-route Web export also passed.
-- Final-review closeout: canonical mobile suite PASS — 63 suites/721 tests;
+- Final-review closeout: canonical mobile suite PASS — 63 suites/725 tests;
   domain suite PASS — 3 files/11 tests; mobile typecheck, native-config policy,
   pilot-build policy and the 18-route Web export PASS. This closeout covers
   account-switch fail-closed submission, subject-filtered drafts/history/receipt,
@@ -86,7 +86,7 @@ confirmation UI was added.
   `pnpm pilot-gate-2a` PASS through credentials, pgTAP, database lint,
   readiness and integration; 18-route Web export PASS. Focused auth/profile,
   owner-aware entry, auth-epoch, minimal receipt, map-origin/fallback and media
-  boundary tests are included in the canonical 721-test mobile suite.
+  boundary, bilingual secure-return, and camera-unmount cleanup tests are included in the canonical 725-test mobile suite.
 - `git diff --check`: PASS (Windows line-ending notices only).
 
 Hosted Gate 2B, true iOS/Android Google Maps/Hermes and media/recovery checks,

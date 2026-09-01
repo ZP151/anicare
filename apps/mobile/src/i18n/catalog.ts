@@ -181,6 +181,9 @@ export type MessageKey =
   | 'following.subtitle'
   | 'profile.title'
   | 'profile.subtitle'
+  | 'profile.reportReturnTitle'
+  | 'profile.reportReturnCopy'
+  | 'profile.reportReturnAction'
   | 'common.beta';
 
 const messages: Record<Locale, Record<MessageKey, string>> = {
@@ -363,6 +366,9 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
     'profile.title': 'Your profile',
     'profile.subtitle': 'Manage privacy, training consent and trusted roles.',
+    'profile.reportReturnTitle': 'Saved report waiting',
+    'profile.reportReturnCopy': 'Sign in, then resume the same private draft. No report content is placed in this link.',
+    'profile.reportReturnAction': 'Resume saved report',
     'common.beta': 'Closed beta',
   },
   'zh-CN': {
@@ -544,6 +550,9 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'following.subtitle': '获取你关注的猫和区域的去敏更新。',
     'profile.title': '我的',
     'profile.subtitle': '管理隐私、训练授权和可信角色。',
+    'profile.reportReturnTitle': '已保存的报告正在等待',
+    'profile.reportReturnCopy': '登录后可继续同一份私密草稿。此链接不包含任何报告内容。',
+    'profile.reportReturnAction': '继续已保存的报告',
     'common.beta': '封闭测试',
   },
 };

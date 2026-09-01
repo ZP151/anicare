@@ -139,10 +139,10 @@ export default function ProfileScreen() {
         </View>
       </View>
       {returnDraftId ? <View style={styles.card}>
-        <Text style={styles.label}>Saved report waiting</Text>
-        <Text style={styles.value}>Sign in, then resume the same private draft. No report content is placed in this link.</Text>
-        <Pressable accessibilityRole="button" onPress={() => { void resumeReport(); }} style={styles.primary}>
-          <Text style={styles.primaryText}>Resume saved report</Text>
+        <Text style={styles.label}>{t('profile.reportReturnTitle')}</Text>
+        <Text style={styles.value}>{t('profile.reportReturnCopy')}</Text>
+        <Pressable accessibilityLabel={t('profile.reportReturnAction')} accessibilityRole="button" onPress={() => { void resumeReport(); }} style={styles.primary}>
+          <Text style={styles.primaryText}>{t('profile.reportReturnAction')}</Text>
         </Pressable>
       </View> : null}
       <View style={styles.card}>

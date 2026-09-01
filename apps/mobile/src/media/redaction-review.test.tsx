@@ -34,6 +34,9 @@ jest.mock('../../src/media/draft-media', () => ({
   persistReviewedMedia: jest.fn(),
   verifyReviewedMedia: jest.fn(),
 }));
+jest.mock('../../src/media/camera-source-cleanup', () => ({
+  cleanupOwnedCameraSource: jest.fn(),
+}));
 jest.mock('../../src/offline/draft-store', () => ({
   saveReviewedMediaJournal: jest.fn(),
 }));
@@ -51,6 +54,7 @@ import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewe
 import { prepareCanonical, renderOpaqueMasks } from './processor';
 import { saveReviewedMediaJournal } from '../offline/draft-store';
 import { getSupabaseClient } from '../api/supabase';
+import { cleanupOwnedCameraSource } from './camera-source-cleanup';
 import type { MaskEditorOverlayProps } from './MaskEditorOverlay';
 import type { PrivacyMask, RenderedMedia } from './contracts';
 
@@ -108,6 +112,7 @@ beforeEach(() => {
   jest.mocked(renderOpaqueMasks).mockReset();
   jest.mocked(verifyReviewedMedia).mockReset();
   jest.mocked(cleanupProcessorCacheUris).mockResolvedValue(undefined);
+  jest.mocked(cleanupOwnedCameraSource).mockResolvedValue(true);
   jest.mocked(deleteReviewedMediaReference).mockResolvedValue(undefined);
   jest.mocked(persistReviewedMedia).mockResolvedValue({
     encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
@@ -130,6 +135,26 @@ describe('private redaction review screen', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' }));
     await waitFor(() => expect(prepareCanonical).toHaveBeenCalledWith('file:///camera/retake.jpg'));
     expect(launchCameraAsync).toHaveBeenCalledWith(expect.objectContaining({ exif: false }));
+  });
+
+  it('cleans an app-owned camera result that resolves immediately after unmount', async () => {
+    const cameraPicker = deferred<Awaited<ReturnType<typeof launchCameraAsync>>>();
+    jest.mocked(requestCameraPermissionsAsync).mockResolvedValue({ granted: true } as never);
+    jest.mocked(launchCameraAsync).mockImplementationOnce(() => cameraPicker.promise);
+    const view = await render(<RedactionReviewScreen />);
+
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' })); });
+    await waitFor(() => expect(launchCameraAsync).toHaveBeenCalledTimes(1));
+    await act(async () => { view.unmount(); });
+    await act(async () => {
+      cameraPicker.resolve({ canceled: false, assets: [{ uri: 'file:///app/cache/ImagePicker/unmounted.jpg' }] } as never);
+      await cameraPicker.promise;
+    });
+
+    await waitFor(() => expect(cleanupOwnedCameraSource).toHaveBeenCalledWith(
+      'file:///app/cache/ImagePicker/unmounted.jpg',
+    ));
+    expect(prepareCanonical).not.toHaveBeenCalled();
   });
   it('renders the complete Simplified Chinese review surface without English control copy', async () => {
     mockLocale.value = 'zh-CN';
