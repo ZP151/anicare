@@ -41,6 +41,7 @@ function statusOutput(overrides = {}) {
 function parentEnvironment() {
   return {
     PATH: '/synthetic/bin',
+    COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
     HOME: '/synthetic/home',
     CI: 'true',
     UNRELATED_SECRET,
@@ -72,8 +73,13 @@ function commandStage(command, args) {
     if (args[0] === 'db') return 'lint';
     if (args[0] === 'stop') return 'stop';
   }
-  if (command === 'pnpm') {
-    const integrationFiles = args.filter((value) => value.endsWith('.integration.test.ts'));
+  const pnpmArgs = command === 'pnpm'
+    ? args
+    : path.win32.basename(command).toLowerCase() === 'cmd.exe' && args[3] === 'pnpm'
+      ? args.slice(4)
+      : null;
+  if (pnpmArgs) {
+    const integrationFiles = pnpmArgs.filter((value) => value.endsWith('.integration.test.ts'));
     return integrationFiles.length === 1 && integrationFiles[0] === 'src/readiness.integration.test.ts'
       ? 'readiness'
       : integrationFiles.length === 1
@@ -286,11 +292,16 @@ test('captures startup/status, masks status values, writes only custom Edge env,
   for (let index = 1; index < integrationCalls.length; index += 1) {
     assert.ok(integrationCalls[index].options.timeoutMs < integrationCalls[index - 1].options.timeoutMs);
   }
+  const startCall = processes.calls.find(({ stage }) => stage === 'start');
+  assert.deepEqual(startCall.args, ['start', '--exclude', 'logflare,vector']);
   const statusCall = processes.calls.find(({ stage }) => stage === 'status');
   assert.deepEqual(statusCall.args, ['status', '-o', 'env']);
   const pgtapCall = processes.calls.find(({ stage }) => stage === 'pgtap');
   assert.deepEqual(pgtapCall.args, ['test', 'db']);
   assert.equal(pgtapCall.options.timeoutMs, 10 * 60_000);
+  const readinessCall = processes.calls.find(({ stage }) => stage === 'readiness');
+  assert.equal(readinessCall.command, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(readinessCall.args.slice(0, 4), ['/d', '/s', '/c', 'pnpm']);
   const stopCall = processes.calls.find(({ stage }) => stage === 'stop');
   assert.deepEqual(stopCall.args, ['stop', '--no-backup', '--project-id', 'animalhelper']);
   assert.equal(processes.calls.some(({ args = [] }) => args.includes('--all')), false);

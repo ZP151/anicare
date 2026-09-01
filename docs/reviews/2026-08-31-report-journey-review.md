@@ -48,8 +48,12 @@ confirmation UI was added.
   passed; 2 suites/3 stale-or-regression failures remain under controller
   investigation in `feed-screens.test.tsx` and `tab-style.test.ts`, outside
   this task's file scope.
-- `pnpm pilot-gate-2a`: unavailable on this host at `supabase-start`; the
-  Supabase CLI/Docker executable is absent. Gate 2A is not waived.
+- `pnpm pilot-gate-2a`: PASS on Windows Docker Desktop with the pinned Supabase
+  CLI 2.84.2 — local credential validation, pgTAP, warning-level database lint,
+  readiness and the serialized integration suite all passed. The guarded
+  runner excludes the out-of-scope `logflare`/`vector` observability services
+  and invokes `pnpm` through the Windows command processor without enabling the
+  insecure Docker TCP endpoint.
 - `pnpm verify`: stops at the same mobile-suite failures.
 - `.venv\\Scripts\\python.exe -m ruff check services/ai` and mypy: unavailable;
   the repository virtual environment is absent.
