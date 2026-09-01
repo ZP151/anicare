@@ -1,0 +1,179 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { ScreenScaffold } from '../components/ScreenScaffold';
+import { colors, radii } from '../design/theme';
+import type { Locale } from '../i18n/catalog';
+import type { StoredDraft } from '../offline/draft-policy';
+import { createReportDraftPayload, reportDraftSummary, type ReportDraftStep } from './report-draft';
+import { getReportCopy } from './report-copy';
+
+export type ReportHubDependencies = Readonly<{
+  loadDrafts(): Promise<readonly StoredDraft[]>;
+  saveDraft(input: Record<string, unknown>): Promise<StoredDraft>;
+  deleteDraft(id: string): Promise<void>;
+  getSession(): Promise<boolean>;
+  createId(): string;
+  now(): Date;
+  navigate(path: string): void;
+}>;
+
+type DraftSummary = NonNullable<ReturnType<typeof reportDraftSummary>>;
+type DraftStatus = 'loading' | 'ready' | 'storage_unavailable' | 'error';
+
+const stableDraftId = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/;
+
+function isStorageUnavailable(error: unknown): boolean {
+  return error instanceof Error && error.message === 'secure_offline_storage_unavailable';
+}
+
+function isDraftStep(value: string): value is ReportDraftStep {
+  return value === 'photo' || value === 'details' || value === 'safety' || value === 'area' || value === 'review';
+}
+
+function summarizeDrafts(drafts: readonly StoredDraft[]): readonly DraftSummary[] {
+  return drafts
+    .map(reportDraftSummary)
+    .filter((summary): summary is DraftSummary => summary !== null && stableDraftId.test(summary.id) && isDraftStep(summary.step))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: ReportHubDependencies; locale: Locale }>) {
+  const copy = getReportCopy(locale);
+  const [drafts, setDrafts] = useState<readonly DraftSummary[]>([]);
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>('loading');
+  const [signedIn, setSignedIn] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  const reload = useCallback(async () => {
+    setDraftStatus('loading');
+    setMessage(null);
+    try {
+      setDrafts(summarizeDrafts(await dependencies.loadDrafts()));
+      setDraftStatus('ready');
+    } catch (error) {
+      setDraftStatus(isStorageUnavailable(error) ? 'storage_unavailable' : 'error');
+    }
+  }, [dependencies]);
+
+  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    let mounted = true;
+    void dependencies.getSession().then((value) => { if (mounted) setSignedIn(value); }).catch(() => { if (mounted) setSignedIn(false); });
+    return () => { mounted = false; };
+  }, [dependencies]);
+
+  async function startReport() {
+    setStarting(true);
+    setMessage(null);
+    const id = dependencies.createId();
+    if (!stableDraftId.test(id)) {
+      setStarting(false);
+      setMessage(copy.startFailed);
+      return;
+    }
+    try {
+      await dependencies.saveDraft({ id, notes: '', risk: 'normal', report: createReportDraftPayload(dependencies.now()) });
+      dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
+    } catch {
+      setMessage(copy.startFailed);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  function continueDraft(id: string) {
+    if (stableDraftId.test(id)) dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
+  }
+
+  async function deleteDraft(id: string) {
+    setMessage(null);
+    try {
+      await dependencies.deleteDraft(id);
+      await reload();
+    } catch {
+      setMessage(copy.deleteFailed);
+    }
+  }
+
+  async function openMyReports() {
+    try {
+      if (await dependencies.getSession()) {
+        setSignedIn(true);
+        dependencies.navigate('/report/my-reports');
+        return;
+      }
+    } catch {
+      setSignedIn(false);
+    }
+    setSignedIn(false);
+    setMessage(copy.signedOutExplanation);
+  }
+
+  return (
+    <ScreenScaffold subtitle={copy.subtitle} title={copy.title}>
+      <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={startReport} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
+        <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
+        <Text style={styles.primaryActionText}>{starting ? copy.loading : copy.startAction}</Text>
+      </Pressable>
+
+      <View style={styles.section}>
+        <Text accessibilityRole="header" style={styles.sectionTitle}>{copy.draftsTitle}</Text>
+        {draftStatus === 'loading' ? <View accessibilityLiveRegion="polite" style={styles.loading}><ActivityIndicator color={colors.leaf} /><Text style={styles.muted}>{copy.loading}</Text></View> : null}
+        {draftStatus === 'storage_unavailable' ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.storageUnavailable}</Text> : null}
+        {draftStatus === 'error' ? <View style={styles.statusRow}><Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.loadFailed}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.textAction}><Text style={styles.textActionLabel}>{copy.retryAction}</Text></Pressable></View> : null}
+        {draftStatus === 'ready' && drafts.length === 0 ? <View style={styles.empty}><MaterialCommunityIcons color={colors.aquaDeep} name="file-document-outline" size={22} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>{copy.emptyTitle}</Text><Text style={styles.muted}>{copy.emptyCopy}</Text></View></View> : null}
+        {draftStatus === 'ready' ? drafts.map((draft) => (
+          <View key={draft.id} style={styles.draftRow}>
+            <Pressable accessibilityLabel={copy.continueDraftLabel(draft.step)} accessibilityRole="button" onPress={() => continueDraft(draft.id)} style={({ pressed }) => [styles.draftMain, pressed && styles.pressed]}>
+              <MaterialCommunityIcons color={colors.community} name={draft.hasReviewedMedia ? 'image-check-outline' : 'file-edit-outline'} size={21} />
+              <View style={styles.draftCopy}><Text style={styles.draftTitle}>{draft.title}</Text><Text style={styles.muted}>{copy.stepLabel(draft.step)}</Text></View>
+              <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
+            </Pressable>
+            <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><Text style={styles.deleteActionText}>{copy.deleteAction}</Text></Pressable>
+          </View>
+        )) : null}
+      </View>
+
+      <View style={styles.section}>
+        <Pressable accessibilityLabel={copy.myReports} accessibilityRole="button" onPress={() => { void openMyReports(); }} style={({ pressed }) => [styles.reportsAction, pressed && styles.pressed]}>
+          <View style={styles.reportsCopy}><Text style={styles.draftTitle}>{copy.myReports}</Text><Text style={styles.muted}>{signedIn ? '' : copy.signedOutExplanation}</Text></View>
+          <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
+        </Pressable>
+        {message === copy.signedOutExplanation ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/profile')} style={styles.profileAction}><Text style={styles.profileActionText}>{copy.profileAction}</Text></Pressable> : null}
+      </View>
+      {message && message !== copy.signedOutExplanation ? <Text accessibilityLiveRegion="polite" style={styles.error}>{message}</Text> : null}
+    </ScreenScaffold>
+  );
+}
+
+const styles = StyleSheet.create({
+  primaryAction: { minHeight: 52, paddingHorizontal: 18, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: colors.leaf },
+  primaryActionText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
+  section: { gap: 10 },
+  sectionTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  loading: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  notice: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  statusRow: { gap: 8 },
+  textAction: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  textActionLabel: { color: colors.actionPrimary, fontSize: 14, fontWeight: '800' },
+  empty: { minHeight: 64, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
+  emptyCopy: { flex: 1, gap: 2 },
+  emptyTitle: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '800' },
+  draftRow: { borderBottomWidth: 1, borderColor: colors.line },
+  draftMain: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  draftCopy: { flex: 1, gap: 1 },
+  draftTitle: { color: colors.ink, fontSize: 16, lineHeight: 21, fontWeight: '800' },
+  deleteAction: { alignSelf: 'flex-start', minHeight: 44, paddingRight: 12, justifyContent: 'center' },
+  deleteActionText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
+  reportsAction: { minHeight: 54, paddingHorizontal: 14, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.paper },
+  reportsCopy: { flex: 1, gap: 1 },
+  profileAction: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.small, borderWidth: 1, borderColor: colors.actionPrimary },
+  profileActionText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '800' },
+  error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
+  pressed: { opacity: 0.76 },
+  disabled: { opacity: 0.5 },
+});

@@ -1,6 +1,11 @@
 import { getCommunityMapCopy, getTabDefinitions, translate } from './catalog';
+import { getReportCopy } from '../report/report-copy';
 
 describe('localization catalog', () => {
+  it('supplies every report-hub message in both supported locales', () => {
+    expect(Object.keys(getReportCopy('en')).sort()).toEqual(Object.keys(getReportCopy('zh-CN')).sort());
+  });
+
   it('uses the WhiskerCommons display name in both locales', () => {
     expect(translate('en', 'app.name')).toBe('WhiskerCommons');
     expect(translate('zh-CN', 'app.name')).toBe('WhiskerCommons');

@@ -28,6 +28,29 @@ export type MessageKey =
   | 'report.title'
   | 'report.subtitle'
   | 'report.action'
+  | 'report.hub.title'
+  | 'report.hub.subtitle'
+  | 'report.hub.startAction'
+  | 'report.hub.draftsTitle'
+  | 'report.hub.loading'
+  | 'report.hub.emptyTitle'
+  | 'report.hub.emptyCopy'
+  | 'report.hub.storageUnavailable'
+  | 'report.hub.loadFailed'
+  | 'report.hub.retryAction'
+  | 'report.hub.myReports'
+  | 'report.hub.signedOutExplanation'
+  | 'report.hub.profileAction'
+  | 'report.hub.startFailed'
+  | 'report.hub.deleteFailed'
+  | 'report.hub.continueDraftLabel'
+  | 'report.hub.deleteDraftLabel'
+  | 'report.hub.deleteAction'
+  | 'report.hub.step.photo'
+  | 'report.hub.step.details'
+  | 'report.hub.step.safety'
+  | 'report.hub.step.area'
+  | 'report.hub.step.review'
   | 'following.title'
   | 'following.subtitle'
   | 'profile.title'
@@ -59,8 +82,31 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.detail.followAction': 'Follow area',
     'map.detail.followDisabledReason': 'Sign-in and hosted area-follow support are required.',
     'report.title': 'Report a sighting',
-    'report.subtitle': 'Add a photo and traits. AI will suggest candidates, never decide.',
+    'report.subtitle': 'Start a private draft and finish it when you are ready.',
     'report.action': 'Start a report',
+    'report.hub.title': 'Report a sighting',
+    'report.hub.subtitle': 'Start a private draft and finish it when you are ready.',
+    'report.hub.startAction': 'Start a report',
+    'report.hub.draftsTitle': 'Continue drafts',
+    'report.hub.loading': 'Loading saved reports…',
+    'report.hub.emptyTitle': 'No saved reports yet',
+    'report.hub.emptyCopy': 'Start a report and you can return to it on this device.',
+    'report.hub.storageUnavailable': 'Saved reports are available in native iOS and Android builds.',
+    'report.hub.loadFailed': 'Saved reports could not be loaded. Try again later.',
+    'report.hub.retryAction': 'Try again',
+    'report.hub.myReports': 'My Reports',
+    'report.hub.signedOutExplanation': 'Sign in to view reports you have submitted.',
+    'report.hub.profileAction': 'Go to Profile to sign in',
+    'report.hub.startFailed': 'A saved report could not be created. Try again on a native device.',
+    'report.hub.deleteFailed': 'This saved report could not be deleted. Try again.',
+    'report.hub.continueDraftLabel': 'Continue report draft from {step}',
+    'report.hub.deleteDraftLabel': 'Delete report draft from {step}',
+    'report.hub.deleteAction': 'Delete',
+    'report.hub.step.photo': 'Photo',
+    'report.hub.step.details': 'Details',
+    'report.hub.step.safety': 'Safety',
+    'report.hub.step.area': 'Area',
+    'report.hub.step.review': 'Review',
     'following.title': 'Following',
     'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
     'profile.title': 'Your profile',
@@ -91,8 +137,31 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.detail.followAction': '关注区域',
     'map.detail.followDisabledReason': '需要登录；区域关注服务上线后才能使用此功能。',
     'report.title': '报告目击',
-    'report.subtitle': '添加照片和特征；AI 只推荐候选，不替你做决定。',
+    'report.subtitle': '先建立私密草稿，准备好后再完成。',
     'report.action': '开始报告',
+    'report.hub.title': '报告目击',
+    'report.hub.subtitle': '先建立私密草稿，准备好后再完成。',
+    'report.hub.startAction': '开始报告',
+    'report.hub.draftsTitle': '继续草稿',
+    'report.hub.loading': '正在加载已保存的报告…',
+    'report.hub.emptyTitle': '还没有已保存的报告',
+    'report.hub.emptyCopy': '开始报告后，你可以在这台设备上继续完成。',
+    'report.hub.storageUnavailable': '已保存的报告仅在原生 iOS 和 Android 版本中可用。',
+    'report.hub.loadFailed': '无法加载已保存的报告，请稍后重试。',
+    'report.hub.retryAction': '重试',
+    'report.hub.myReports': '我的报告',
+    'report.hub.signedOutExplanation': '登录后即可查看你已提交的报告。',
+    'report.hub.profileAction': '前往“我的”登录',
+    'report.hub.startFailed': '无法创建已保存的报告，请在原生设备上重试。',
+    'report.hub.deleteFailed': '无法删除这份已保存的报告，请重试。',
+    'report.hub.continueDraftLabel': '从{step}继续报告草稿',
+    'report.hub.deleteDraftLabel': '删除{step}报告草稿',
+    'report.hub.deleteAction': '删除',
+    'report.hub.step.photo': '照片',
+    'report.hub.step.details': '详情',
+    'report.hub.step.safety': '安全',
+    'report.hub.step.area': '区域',
+    'report.hub.step.review': '确认',
     'following.title': '关注',
     'following.subtitle': '获取你关注的猫和区域的去敏更新。',
     'profile.title': '我的',

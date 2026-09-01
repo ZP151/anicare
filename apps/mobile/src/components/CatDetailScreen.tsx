@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
@@ -8,10 +9,25 @@ import type { SelectedCatSummary } from './AnchoredCatSheet';
 type CatDetailScreenProps = Readonly<{
   cat: SelectedCatSummary;
   fixture: boolean;
-  onReportSighting: () => void;
+  onReportSighting: (animalId: string) => void | Promise<void>;
 }>;
 
 export function CatDetailScreen({ cat, fixture, onReportSighting }: CatDetailScreenProps) {
+  const [startingReport, setStartingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  async function startReport() {
+    setStartingReport(true);
+    setReportError(null);
+    try {
+      await onReportSighting(cat.animalId);
+    } catch {
+      setReportError('A saved report could not be created. Try again on a native device.');
+    } finally {
+      setStartingReport(false);
+    }
+  }
+
   return (
     <ScreenScaffold
       eyebrow={fixture ? 'Preview data' : undefined}
@@ -56,13 +72,15 @@ export function CatDetailScreen({ cat, fixture, onReportSighting }: CatDetailScr
       <Pressable
         accessibilityLabel={`Report a sighting of ${cat.primaryAlias}`}
         accessibilityRole="button"
-        onPress={onReportSighting}
-        style={({ pressed }) => [styles.reportButton, pressed && styles.pressed]}
+        disabled={startingReport}
+        onPress={() => { void startReport(); }}
+        style={({ pressed }) => [styles.reportButton, (pressed || startingReport) && styles.pressed]}
       >
         <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
         <Text style={styles.reportButtonText}>Report a sighting</Text>
       </Pressable>
-      <Text style={styles.governanceNote}>Reports suggest identity candidates only. Community review makes the final decision.</Text>
+      {reportError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{reportError}</Text> : null}
+      <Text style={styles.governanceNote}>Community review is required before identity information changes.</Text>
     </ScreenScaffold>
   );
 }
@@ -82,5 +100,6 @@ const styles = StyleSheet.create({
   reportButton: { minHeight: 52, borderRadius: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: colors.community },
   reportButtonText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
   governanceNote: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   pressed: { opacity: 0.74 },
 });

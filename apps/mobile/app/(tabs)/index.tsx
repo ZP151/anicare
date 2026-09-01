@@ -1,7 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listPublicSightings, type NarrowRpcClient, type PublicSighting } from '../../src/api/feed';
@@ -12,6 +13,8 @@ import { colors, radii } from '../../src/design/theme';
 import { NearbyMap } from '../../src/maps/NearbyMap';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
 import { tabVisualContract } from '../../src/navigation/tab-style';
+import { saveOfflineDraft } from '../../src/offline/draft-store';
+import { createReportDraftPayload } from '../../src/report/report-draft';
 
 type FeedStatus = 'demo' | 'loading' | 'live' | 'unavailable';
 
@@ -22,6 +25,8 @@ const previewCat: SelectedCatSummary = {
   verificationLabel: 'Community confirmed',
   timeLabel: 'Seen this afternoon',
 };
+
+const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function pickPublicCat(sightings: readonly PublicSighting[]): SelectedCatSummary | null {
   const selected = sightings.find((item) => item.verification === 'partner_confirmed')
@@ -70,6 +75,18 @@ export default function NearbyScreen() {
     () => status === 'demo' ? previewCat : pickPublicCat(sightings),
     [sightings, status],
   );
+
+  async function startLinkedReport() {
+    if (!selectedCat) return;
+    const draftId = Crypto.randomUUID();
+    try {
+      await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });
+      const params = opaqueAnimalId.test(selectedCat.animalId) ? { draftId, animalId: selectedCat.animalId } : { draftId };
+      router.push({ pathname: '/report/new', params } as never);
+    } catch {
+      Alert.alert('Saved reports unavailable', 'A saved report could not be created. Try again on a native device.');
+    }
+  }
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -121,7 +138,7 @@ export default function NearbyScreen() {
         <AnchoredCatSheet
           cat={selectedCat}
           fixture={status === 'demo'}
-          onReportSighting={() => router.push({ pathname: '/report', params: { animalId: selectedCat.animalId } } as never)}
+          onReportSighting={() => { void startLinkedReport(); }}
           onViewCat={() => router.push(`/cat/${selectedCat.animalId}` as never)}
         />
       ) : (

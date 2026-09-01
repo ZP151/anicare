@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -7,6 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { listPublicSightings, type NarrowRpcClient } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
 import { CoarseAreaDetailSheet } from '../../src/components/CoarseAreaDetailSheet';
+import { saveOfflineDraft } from '../../src/offline/draft-store';
+import { createReportDraftPayload } from '../../src/report/report-draft';
 import { colors, radii } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { getCommunityMapCopy } from '../../src/i18n/catalog';
@@ -149,7 +152,11 @@ export default function MapScreen() {
           <CoarseAreaDetailSheet
             area={selectedArea}
             locale={locale}
-            onReportFromArea={() => router.push({ pathname: '/report', params: { source: 'community-map' } } as never)}
+            onReportFromArea={async ({ startAt }) => {
+              const draftId = Crypto.randomUUID();
+              await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });
+              router.push({ pathname: '/report/new', params: { draftId, step: startAt, manualArea: 'required' } } as never);
+            }}
             onViewCat={(animalId) => router.push(`/cat/${animalId}` as never)}
           />
         ) : null}

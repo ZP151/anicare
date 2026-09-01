@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
@@ -9,6 +10,8 @@ import type { SelectedCatSummary } from '../../src/components/AnchoredCatSheet';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors } from '../../src/design/theme';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
+import { saveOfflineDraft } from '../../src/offline/draft-store';
+import { createReportDraftPayload } from '../../src/report/report-draft';
 
 const previewCat: SelectedCatSummary = {
   animalId: 'demo-cat',
@@ -16,6 +19,8 @@ const previewCat: SelectedCatSummary = {
   verificationLabel: 'Community confirmed',
   timeLabel: 'Seen this afternoon',
 };
+
+const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function CatRoute() {
   const router = useRouter();
@@ -61,7 +66,12 @@ export default function CatRoute() {
       <CatDetailScreen
         cat={cat}
         fixture={fixture}
-        onReportSighting={() => router.push({ pathname: '/report', params: { animalId: cat.animalId } } as never)}
+        onReportSighting={async (selectedAnimalId) => {
+          const draftId = Crypto.randomUUID();
+          await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });
+          const params = opaqueAnimalId.test(selectedAnimalId) ? { draftId, animalId: selectedAnimalId } : { draftId };
+          router.push({ pathname: '/report/new', params } as never);
+        }}
       />
     );
   }

@@ -1,15 +1,17 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { PublicAreaSummary } from '../maps/public-map-policy';
 import { colors, radii } from '../design/theme';
 import { getCommunityMapCopy, type Locale } from '../i18n/catalog';
+import { getReportCopy } from '../report/report-copy';
 
 type CoarseAreaDetailSheetProps = Readonly<{
   area: PublicAreaSummary;
   locale: Locale;
   onViewCat: (animalId: string) => void;
-  onReportFromArea: () => void;
+  onReportFromArea: (context: Readonly<{ startAt: 'area' }>) => void | Promise<void>;
 }>;
 
 export function getAreaActionMinHeight(platform: string): number {
@@ -18,10 +20,21 @@ export function getAreaActionMinHeight(platform: string): number {
 
 export function CoarseAreaDetailSheet({ area, locale, onReportFromArea, onViewCat }: CoarseAreaDetailSheetProps) {
   const copy = getCommunityMapCopy(locale);
+  const reportCopy = getReportCopy(locale);
+  const [reportError, setReportError] = useState<string | null>(null);
   const visibleCats = area.cats.slice(0, 3);
   const catsCopy = copy.visibleCatsLabel(area.catCount);
   const confirmedCopy = copy.confirmedCatsLabel(area.confirmedCount);
   const reportLabel = copy.reportFromAreaLabel(area.label);
+
+  async function startAreaReport() {
+    setReportError(null);
+    try {
+      await onReportFromArea({ startAt: 'area' });
+    } catch {
+      setReportError(reportCopy.startFailed);
+    }
+  }
 
   return (
     <View accessibilityLabel={copy.areaDetailLabel(area.label)} style={styles.sheet}>
@@ -70,12 +83,13 @@ export function CoarseAreaDetailSheet({ area, locale, onReportFromArea, onViewCa
         <Pressable
           accessibilityLabel={reportLabel}
           accessibilityRole="button"
-          onPress={() => onReportFromArea()}
+          onPress={() => { void startAreaReport(); }}
           style={({ pressed }) => [styles.reportButton, pressed && styles.pressed]}
         >
           <MaterialCommunityIcons color={colors.actionSecondary} name="camera-outline" size={20} />
           <Text style={styles.reportButtonText}>{reportLabel}</Text>
         </Pressable>
+        {reportError ? <Text accessibilityLiveRegion="polite" style={styles.reportError}>{reportError}</Text> : null}
         <View style={styles.followRow}>
           <Pressable
             accessibilityLabel={copy.followAction}
@@ -124,6 +138,7 @@ const styles = StyleSheet.create({
   actions: { marginTop: 14, gap: 10 },
   reportButton: { minHeight: getAreaActionMinHeight(Platform.OS), paddingHorizontal: 14, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.paper },
   reportButtonText: { flex: 1, color: colors.actionSecondary, fontSize: 15, lineHeight: 20, fontWeight: '800' },
+  reportError: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   followRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   followButton: { minHeight: getAreaActionMinHeight(Platform.OS), minWidth: 126, paddingHorizontal: 12, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.line },
   followButtonText: { color: colors.muted, fontSize: 14, lineHeight: 18, fontWeight: '700' },
