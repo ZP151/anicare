@@ -128,7 +128,7 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
           <View key={draft.id} style={styles.draftRow}>
             <Pressable accessibilityLabel={copy.continueDraftLabel(draft.step)} accessibilityRole="button" onPress={() => continueDraft(draft.id)} style={({ pressed }) => [styles.draftMain, pressed && styles.pressed]}>
               <MaterialCommunityIcons color={colors.community} name={draft.hasReviewedMedia ? 'image-check-outline' : 'file-edit-outline'} size={21} />
-              <View style={styles.draftCopy}><Text style={styles.draftTitle}>{draft.title}</Text><Text style={styles.muted}>{copy.stepLabel(draft.step)}</Text></View>
+              <View style={styles.draftCopy}><Text style={styles.draftTitle}>{copy.draftShellTitle}</Text><Text style={styles.muted}>{copy.stepLabel(draft.step)}</Text></View>
               <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
             </Pressable>
             <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><Text style={styles.deleteActionText}>{copy.deleteAction}</Text></Pressable>

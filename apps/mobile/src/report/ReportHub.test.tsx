@@ -66,6 +66,13 @@ describe('ReportHub', () => {
     ]);
   });
 
+  it('localizes saved draft titles in Simplified Chinese', async () => {
+    const view = await render(<ReportHub dependencies={dependencies({ loadDrafts: async () => [firstDraft] })} locale="zh-CN" />);
+
+    await waitFor(() => expect(view.getByText('已保存的报告')).toBeTruthy());
+    expect(view.queryByText('Report draft')).toBeNull();
+  });
+
   it('renders the deliberate native-storage-unavailable state', async () => {
     const view = await render(<ReportHub dependencies={dependencies({ loadDrafts: async () => { throw new Error('secure_offline_storage_unavailable'); } })} locale="en" />);
 

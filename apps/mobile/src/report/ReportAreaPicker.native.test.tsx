@@ -15,6 +15,10 @@ function NativeMapBoundary({ onPress }: Readonly<{ onPress(event: { nativeEvent:
   return <Pressable accessibilityRole="button" accessibilityLabel="Google map" onPress={() => onPress({ nativeEvent: { coordinate: { latitude: 1.3521, longitude: 103.8198 } } })} />;
 }
 
+function OutsideSingaporeMapBoundary({ onPress }: Readonly<{ onPress(event: { nativeEvent: { coordinate: { latitude: number; longitude: number } } }): void }>) {
+  return <Pressable accessibilityRole="button" accessibilityLabel="Outside map" onPress={() => onPress({ nativeEvent: { coordinate: { latitude: 35.6762, longitude: 139.6503 } } })} />;
+}
+
 describe('ReportAreaPicker native privacy boundary', () => {
   it('coarsens a Google map tap before notifying its parent', async () => {
     const onSelect = jest.fn();
@@ -34,6 +38,16 @@ describe('ReportAreaPicker native privacy boundary', () => {
     expect(view.getByLabelText('在 Google 地图上选择宽泛区域')).toBeTruthy();
     expect(view.getByText('点按宽泛地图以选择粗略区域，精确点按位置会立即丢弃。')).toBeTruthy();
     await view.unmount();
+  });
+
+  it('rejects taps outside Singapore before H3 selection leaves the picker', async () => {
+    const onSelect = jest.fn();
+    const view = await render(<ReportAreaPicker locale="zh-CN" MapBoundary={OutsideSingaporeMapBoundary as never} onSelect={onSelect} />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Outside map' }));
+
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(view.getByText('请选择新加坡境内的宽泛区域。')).toBeTruthy();
   });
 
   it('exposes the manual-area map as an accessible selection control', async () => {

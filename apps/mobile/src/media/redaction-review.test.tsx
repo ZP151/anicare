@@ -1,6 +1,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockMaskEditorOverlay = jest.fn((_props: unknown) => null);
+const mockLocale = { value: 'en' as 'en' | 'zh-CN' };
 
 jest.mock('@shopify/react-native-skia', () => ({ ImageFormat: { JPEG: 3 }, Skia: {} }));
 jest.mock('../components/ScreenScaffold', () => {
@@ -36,6 +37,9 @@ jest.mock('../../src/offline/draft-store', () => ({
 }));
 jest.mock('../../src/api/supabase', () => ({
   getSupabaseClient: jest.fn(),
+}));
+jest.mock('../../src/i18n/LocaleContext', () => ({
+  useLocale: () => ({ locale: mockLocale.value, setLocale: jest.fn(), t: jest.fn() }),
 }));
 
 import RedactionReviewScreen from '../../app/report/redaction-review';
@@ -98,6 +102,7 @@ async function renderPreparedReview(output: RenderedMedia = rendered) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLocale.value = 'en';
   jest.mocked(renderOpaqueMasks).mockReset();
   jest.mocked(verifyReviewedMedia).mockReset();
   jest.mocked(cleanupProcessorCacheUris).mockResolvedValue(undefined);
@@ -114,6 +119,23 @@ beforeEach(() => {
 });
 
 describe('private redaction review screen', () => {
+  it('renders the complete Simplified Chinese review surface without English control copy', async () => {
+    mockLocale.value = 'zh-CN';
+    jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);
+    jest.mocked(prepareCanonical).mockResolvedValue(canonical);
+    jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
+    const view = await render(<RedactionReviewScreen />);
+
+    expect(view.getByText('私密照片复核')).toBeTruthy();
+    expect(view.getByText('人物检测：不可用')).toBeTruthy();
+    expect(view.getByText('车牌检测：不可用')).toBeTruthy();
+    expect(view.getByText('猫咪检测：不可用')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: '选择照片进行私密复核' }));
+    await waitFor(() => expect(view.getByText('添加、选择并调整不透明遮挡，然后在确认前检查每个像素。')).toBeTruthy());
+    expect(view.getByRole('button', { name: '确认精确像素并加密' })).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/Private photo review|People detection|Licence-plate detection|Cat detection|Choose photo|Clear all masks|Confirm exact pixels/i);
+  });
+
   it('states that every automatic detector is unavailable and offers no publication action', async () => {
     const view = await render(<RedactionReviewScreen />);
 

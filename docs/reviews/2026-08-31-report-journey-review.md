@@ -16,7 +16,8 @@ native-device signoff.
 | Android could render blur instead of opaque fallback | Fixed | Glass policy test requires `solid` on Android. |
 | Receipt omitted required stable ID/submission time; Review omitted chosen values | Fixed | Receipt and wizard regression tests. |
 | Generated atlas was reachable as a map fallback | Fixed by user-directed correction | Web/native map tests prove a truthful no-map/list fallback and no production atlas reference. |
-| Redaction-review and Cat Detail Chinese-copy findings | Open | Redaction route and Cat Detail require a separate bounded localization follow-up; Cat Detail is outside this Task 8 file scope. |
+| Redaction-review and Cat Detail Chinese-copy findings | Fixed in controller closeout | Bilingual screen tests reject English control/governance copy on the Simplified Chinese surfaces. |
+| Chinese draft title and out-of-Singapore map taps | Fixed in controller closeout | Report Hub localizes the saved-report title; the native picker rejects the same out-of-bounds coordinates that the server refuses. |
 
 The native Google Maps path remains `react-native-maps` with `PROVIDER_GOOGLE`.
 `GOOGLE_MAPS_IOS_API_KEY` and `GOOGLE_MAPS_ANDROID_API_KEY` are native build
@@ -44,7 +45,7 @@ confirmation UI was added.
 - Exact `pnpm --filter @animalhelper/mobile test -- --runInBand`: not runnable
   as written because the package script already supplies `--runInBand`; Jest
   interprets the forwarded flag as a test-name pattern and reports no tests.
-- Canonical `pnpm --filter @animalhelper/mobile test`: PASS — 60 suites/678
+- Canonical `pnpm --filter @animalhelper/mobile test`: PASS — 60 suites/681
   tests. The two stale feed-route assertions now cover the approved
   save-draft-then-`/report/new` behavior, and the tab assertion matches the
   approved 88-point visual contract; no production behavior was changed.
@@ -58,6 +59,9 @@ confirmation UI was added.
   package tests and all production builds.
 - `.venv\\Scripts\\python.exe -m ruff check services/ai`: PASS.
 - `.venv\\Scripts\\python.exe -m mypy services/ai/src`: PASS — 9 source files.
+- Controller closeout tests for bilingual redaction/Cat Detail, localized draft
+  titles and Singapore map bounds: PASS — 4 suites/35 tests; mobile typecheck
+  and clean 18-route Web export also passed.
 - `git diff --check`: PASS (Windows line-ending notices only).
 
 Hosted Gate 2B, true iOS/Android Google Maps/Hermes and media/recovery checks,

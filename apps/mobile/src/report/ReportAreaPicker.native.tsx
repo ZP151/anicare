@@ -1,5 +1,5 @@
 import { toPublicLocationCell } from '@animalhelper/domain';
-import type { ComponentType } from 'react';
+import { useState, type ComponentType } from 'react';
 import MapView, { PROVIDER_GOOGLE, type MapPressEvent } from 'react-native-maps';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -11,6 +11,19 @@ import { getReportCopy } from './report-copy';
 export type ReportAreaSelection = Readonly<{ publicCellId: string }>;
 
 type AreaMapBoundaryProps = Readonly<{ onPress(event: MapPressEvent): void }>;
+
+const SINGAPORE_BOUNDS = Object.freeze({
+  minLatitude: 1.1,
+  maxLatitude: 1.5,
+  minLongitude: 103.55,
+  maxLongitude: 104.15,
+});
+
+function isWithinSingapore(latitude: number, longitude: number): boolean {
+  return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    latitude >= SINGAPORE_BOUNDS.minLatitude && latitude <= SINGAPORE_BOUNDS.maxLatitude &&
+    longitude >= SINGAPORE_BOUNDS.minLongitude && longitude <= SINGAPORE_BOUNDS.maxLongitude;
+}
 
 function NativeAreaMap({ onPress, locale = 'en' }: AreaMapBoundaryProps & Readonly<{ locale?: Locale }>) {
   const copy = getReportCopy(locale);
@@ -53,15 +66,29 @@ export function ReportAreaPicker({
   MapBoundary?: ComponentType<AreaMapBoundaryProps & Readonly<{ locale?: Locale }>>;
   locale?: Locale;
 }>) {
-  return <MapBoundary locale={locale} onPress={(event) => {
-    const { latitude, longitude } = event.nativeEvent.coordinate;
-    const { cellId } = toPublicLocationCell({ latitude, longitude });
-    onSelect({ publicCellId: cellId });
-  }} />;
+  const [outsideSingapore, setOutsideSingapore] = useState(false);
+  return <>
+    <MapBoundary locale={locale} onPress={(event) => {
+      const { latitude, longitude } = event.nativeEvent.coordinate;
+      if (!isWithinSingapore(latitude, longitude)) {
+        setOutsideSingapore(true);
+        return;
+      }
+      setOutsideSingapore(false);
+      const { cellId } = toPublicLocationCell({ latitude, longitude });
+      onSelect({ publicCellId: cellId });
+    }} />
+    {outsideSingapore ? (
+      <Text accessibilityLiveRegion="polite" style={styles.error}>
+        {locale === 'zh-CN' ? '请选择新加坡境内的宽泛区域。' : 'Choose a broad area within Singapore.'}
+      </Text>
+    ) : null}
+  </>;
 }
 
 const styles = StyleSheet.create({
   frame: { gap: 10 },
   copy: { color: colors.muted, fontSize: 15, lineHeight: 21 },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   mapFrame: { height: 280, overflow: 'hidden', borderRadius: radii.medium, backgroundColor: colors.leafSoft },
 });

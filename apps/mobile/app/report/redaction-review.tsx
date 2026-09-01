@@ -14,6 +14,7 @@ import {
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { getSupabaseClient } from '../../src/api/supabase';
 import { colors, radii } from '../../src/design/theme';
+import { useLocale } from '../../src/i18n/LocaleContext';
 import type { MediaReviewState, PrivacyMask, RenderedMedia } from '../../src/media/contracts';
 import { cleanupProcessorCacheUris, persistReviewedMedia, verifyReviewedMedia } from '../../src/media/draft-media';
 import { MaskEditorOverlay } from '../../src/media/MaskEditorOverlay';
@@ -21,6 +22,7 @@ import { prepareCanonical, renderOpaqueMasks } from '../../src/media/processor';
 import { canStageMedia, reduceMediaReview } from '../../src/media/review-policy';
 import { createRenderCoordinator } from '../../src/media/render-coordinator';
 import { createProcessorCacheLifecycle } from '../../src/media/processor-cache-lifecycle';
+import { getRedactionReviewCopy } from '../../src/media/redaction-copy';
 import {
   commitReviewedDraft,
   resumeReviewedDraftCommit,
@@ -41,6 +43,8 @@ function sameMaskSnapshots(left: readonly PrivacyMask[], right: readonly Privacy
 }
 
 export default function RedactionReviewScreen() {
+  const { locale } = useLocale();
+  const copy = getRedactionReviewCopy(locale);
   const params = useLocalSearchParams<{ draftId?: string }>();
   const draftId = typeof params.draftId === 'string' ? params.draftId : '';
   const [mediaId] = useState(() => `media-${Crypto.randomUUID()}`);
@@ -81,7 +85,7 @@ export default function RedactionReviewScreen() {
     cacheLifecycle.beginAsyncWork();
     busyRef.current = true;
     setBusy(true);
-    setStatus('Preparing a private review copy…');
+    setStatus(copy.preparingPrivateCopy);
     try {
       const selected = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -108,13 +112,13 @@ export default function RedactionReviewScreen() {
       renderCurrentRef.current = true;
       setRenderCurrent(true);
       setReview(reduceMediaReview(EMPTY_REVIEW, { type: 'rendered_changed', rendered }));
-      setStatus('Add, select and adjust opaque masks, then review every pixel before confirming.');
+      setStatus(copy.adjustMasks);
     } catch (error) {
       await cacheLifecycle.release(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
       setStatus(error instanceof Error && error.message === 'secure_media_processing_unavailable'
-        ? 'Secure media processing is unavailable on this device.'
-        : 'The photo could not be prepared safely. Nothing was staged.');
+        ? copy.secureProcessingUnavailable
+        : copy.photoPreparationFailed);
     } finally {
       await cacheLifecycle.endAsyncWork();
       if (renderCoordinator.finish(operation.token)) {
@@ -136,7 +140,7 @@ export default function RedactionReviewScreen() {
     cacheLifecycle.beginAsyncWork();
     busyRef.current = true;
     setBusy(true);
-    setStatus('Rendering the updated opaque masks…');
+    setStatus(copy.renderingMasks);
     try {
       const rendered = await renderOpaqueMasks({ canonical, masks: operation.masks });
       await cacheLifecycle.adopt(operation.token, rendered.uri);
@@ -146,12 +150,12 @@ export default function RedactionReviewScreen() {
       setRenderCurrent(true);
       setReview((current) => reduceMediaReview(current, { type: 'rendered_changed', rendered }));
       setStatus(operation.masks.length === 0
-        ? 'Masks cleared. Review the newly rendered pixels before confirming.'
-        : 'Mask applied to final pixels. Review again before confirming.');
+        ? copy.masksCleared
+        : copy.maskApplied);
     } catch {
       await cacheLifecycle.release(operation.token);
       if (!mountedRef.current || !renderCoordinator.isCurrent(operation.token)) return;
-      setStatus('The mask could not be rendered safely. Confirmation remains disabled.');
+      setStatus(copy.maskRenderFailed);
     } finally {
       await cacheLifecycle.endAsyncWork();
       if (renderCoordinator.finish(operation.token)) {
@@ -188,13 +192,13 @@ export default function RedactionReviewScreen() {
     const confirmed = pending ? review : reduceMediaReview(review, { type: 'confirm' });
     if (!pending) setReview(confirmed);
     if (!pending && (!canStageMedia(confirmed) || !confirmed.receipt)) {
-      setStatus('The exact rendered pixels must be reviewed again.');
+      setStatus(copy.pixelsMustBeReviewed);
       return;
     }
 
     busyRef.current = true;
     setBusy(true);
-    setStatus('Encrypting the reviewed copy on this device…');
+    setStatus(copy.encrypting);
     cacheLifecycle.beginAsyncWork();
     try {
       const dependencies: ReviewedDraftCommitDependencies = {
@@ -220,27 +224,27 @@ export default function RedactionReviewScreen() {
       if (!mountedRef.current) return;
       if (result.status === 'local_persisting') {
         setPending(result.journal);
-        setStatus('Private persistence is pending. Retry safely with the same immutable encrypted reference.');
+        setStatus(copy.persistencePending);
         return;
       }
       if (result.status === 'needs_user') {
         await cacheLifecycle.abandonAll();
         setPending(null);
         setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
-        setStatus('The encrypted copy could not be authenticated. Select and review the photo again.');
+        setStatus(copy.encryptedCopyUnauthenticated);
         return;
       }
       await cacheLifecycle.abandonAll();
       setPending(null);
-      setStatus('Encrypted reviewed media saved privately. It has not been uploaded or published.');
+      setStatus(copy.savedPrivately);
       router.replace({ pathname: '/report/new', params: { draftId } } as never);
     } catch (error) {
       await cacheLifecycle.abandonAll();
       if (mountedRef.current) {
         if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
         setStatus(error instanceof Error && error.message === 'authentication_required'
-          ? 'Sign in again before saving reviewed media. No media was staged.'
-          : 'Private encrypted storage failed. The media was not staged.');
+          ? copy.signInAgain
+          : copy.privateStorageFailed);
       }
     } finally {
       await cacheLifecycle.endAsyncWork();
@@ -272,18 +276,18 @@ export default function RedactionReviewScreen() {
   const confirmationDisabled = busy || (!pending && (!renderCurrent || !renderedMasksAreCurrent));
 
   return (
-    <ScreenScaffold title="Private photo review" subtitle="Only a newly rendered, confirmed copy can be encrypted for this draft.">
+    <ScreenScaffold title={copy.title} subtitle={copy.subtitle}>
       <View style={styles.detectors}>
-        <Text style={styles.detector}>People detection: unavailable</Text>
-        <Text style={styles.detector}>Licence-plate detection: unavailable</Text>
-        <Text style={styles.detector}>Cat detection: unavailable</Text>
-        <Text style={styles.warning}>No automatic detector has checked this image. You must inspect it manually.</Text>
+        <Text style={styles.detector}>{copy.peopleUnavailable}</Text>
+        <Text style={styles.detector}>{copy.platesUnavailable}</Text>
+        <Text style={styles.detector}>{copy.catsUnavailable}</Text>
+        <Text style={styles.warning}>{copy.detectorWarning}</Text>
       </View>
 
       {review.rendered ? (
         <View onLayout={rememberPreviewSize} style={styles.editor}>
           <View pointerEvents="none" style={styles.previewFrame}>
-            <Image accessibilityLabel="Reviewed private image" resizeMode="contain" source={{ uri: review.rendered.uri }} style={styles.preview} />
+            <Image accessibilityLabel={copy.reviewedImageLabel} resizeMode="contain" source={{ uri: review.rendered.uri }} style={styles.preview} />
           </View>
           <MaskEditorOverlay
             imageWidth={review.rendered.width}
@@ -301,18 +305,18 @@ export default function RedactionReviewScreen() {
           />
         </View>
       ) : (
-        <Pressable accessibilityLabel="Choose photo for private review" accessibilityRole="button" disabled={busy} onPress={choosePhoto} style={styles.photoButton}>
-          <Text style={styles.photoButtonText}>{busy ? 'Preparing…' : 'Choose photo for private review'}</Text>
+        <Pressable accessibilityLabel={copy.choosePhoto} accessibilityRole="button" disabled={busy} onPress={choosePhoto} style={styles.photoButton}>
+          <Text style={styles.photoButtonText}>{busy ? copy.preparing : copy.choosePhoto}</Text>
         </Pressable>
       )}
 
       {review.rendered ? (
         <>
           <Pressable accessibilityRole="button" disabled={editorDisabled || review.masks.length === 0} onPress={() => { void commitMaskMutation([]); }} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Clear all masks</Text>
+            <Text style={styles.secondaryText}>{copy.clearMasks}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: confirmationDisabled }} disabled={confirmationDisabled} onPress={confirmPrivateCopy} style={styles.action}>
-            <Text style={styles.actionText}>{busy ? 'Working…' : pending ? 'Retry saving encrypted reference' : 'Confirm exact pixels and encrypt'}</Text>
+            <Text style={styles.actionText}>{busy ? copy.working : pending ? copy.retrySaving : copy.confirmPixels}</Text>
           </Pressable>
         </>
       ) : null}

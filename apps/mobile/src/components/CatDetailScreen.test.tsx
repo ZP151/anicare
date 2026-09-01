@@ -46,14 +46,20 @@ describe('CatDetailScreen', () => {
   it('uses Simplified Chinese copy when durable draft creation fails', async () => {
     const view = await render(
       <CatDetailScreen
-        cat={{ animalId: '00000000-0000-4000-8000-000000000102', primaryAlias: 'Pepper', verificationLabel: 'Community confirmed', timeLabel: 'Seen in a delayed weekly window' }}
+        cat={{ animalId: '00000000-0000-4000-8000-000000000102', primaryAlias: 'Pepper', verificationLabel: '社区已确认', timeLabel: '最近延迟周时段内有目击记录' }}
         fixture={false}
         locale="zh-CN"
         onReportSighting={async () => { throw new Error('secure_offline_storage_unavailable'); }}
       />,
     );
 
-    await fireEvent.press(view.getByRole('button', { name: 'Report a sighting of Pepper' }));
+    expect(view.getByText('公开身份摘要仅显示经过延迟和模糊化处理的社区活动。')).toBeTruthy();
+    expect(view.getByText('身份状态')).toBeTruthy();
+    expect(view.getByText('粗略社区活动')).toBeTruthy();
+    expect(view.getByText('这里绝不会显示精确位置、路线或时间戳。')).toBeTruthy();
+    expect(view.getByText('身份信息变更前必须经过社区审核。')).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/public identity summary|Identity status|Coarse neighbourhood activity|Exact locations|Report a sighting|Community review/i);
+    await fireEvent.press(view.getByRole('button', { name: '报告 Pepper 的目击记录' }));
     expect(await view.findByText('无法创建已保存的报告，请在原生设备上重试。')).toBeTruthy();
     await view.unmount();
   });
