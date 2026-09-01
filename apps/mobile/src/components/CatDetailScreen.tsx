@@ -3,16 +3,20 @@ import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
+import type { Locale } from '../i18n/catalog';
+import { getReportCopy } from '../report/report-copy';
 import { ScreenScaffold } from './ScreenScaffold';
 import type { SelectedCatSummary } from './AnchoredCatSheet';
 
 type CatDetailScreenProps = Readonly<{
   cat: SelectedCatSummary;
   fixture: boolean;
+  locale?: Locale;
   onReportSighting: (animalId: string) => void | Promise<void>;
 }>;
 
-export function CatDetailScreen({ cat, fixture, onReportSighting }: CatDetailScreenProps) {
+export function CatDetailScreen({ cat, fixture, locale = 'en', onReportSighting }: CatDetailScreenProps) {
+  const reportCopy = getReportCopy(locale);
   const [startingReport, setStartingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
@@ -22,7 +26,7 @@ export function CatDetailScreen({ cat, fixture, onReportSighting }: CatDetailScr
     try {
       await onReportSighting(cat.animalId);
     } catch {
-      setReportError('A saved report could not be created. Try again on a native device.');
+      setReportError(reportCopy.startFailed);
     } finally {
       setStartingReport(false);
     }

@@ -36,6 +36,7 @@ export type MessageKey =
   | 'report.hub.emptyTitle'
   | 'report.hub.emptyCopy'
   | 'report.hub.storageUnavailable'
+  | 'report.hub.storageUnavailableTitle'
   | 'report.hub.loadFailed'
   | 'report.hub.retryAction'
   | 'report.hub.myReports'
@@ -51,6 +52,17 @@ export type MessageKey =
   | 'report.hub.step.safety'
   | 'report.hub.step.area'
   | 'report.hub.step.review'
+  | 'report.shell.draftTitle'
+  | 'report.shell.draftReadyTitle'
+  | 'report.shell.draftReadyCopy'
+  | 'report.shell.receiptTitle'
+  | 'report.shell.receiptCopy'
+  | 'report.shell.historyTitle'
+  | 'report.shell.historyCopy'
+  | 'report.shell.unavailableTitle'
+  | 'report.shell.invalidDraftId'
+  | 'report.shell.invalidReceiptId'
+  | 'report.shell.backAction'
   | 'following.title'
   | 'following.subtitle'
   | 'profile.title'
@@ -92,6 +104,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.hub.emptyTitle': 'No saved reports yet',
     'report.hub.emptyCopy': 'Start a report and you can return to it on this device.',
     'report.hub.storageUnavailable': 'Saved reports are available in native iOS and Android builds.',
+    'report.hub.storageUnavailableTitle': 'Saved reports unavailable',
     'report.hub.loadFailed': 'Saved reports could not be loaded. Try again later.',
     'report.hub.retryAction': 'Try again',
     'report.hub.myReports': 'My Reports',
@@ -107,6 +120,17 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.hub.step.safety': 'Safety',
     'report.hub.step.area': 'Area',
     'report.hub.step.review': 'Review',
+    'report.shell.draftTitle': 'Saved report',
+    'report.shell.draftReadyTitle': 'Saved report ready',
+    'report.shell.draftReadyCopy': 'This route shell does not change your saved report.',
+    'report.shell.receiptTitle': 'Report receipt',
+    'report.shell.receiptCopy': 'A complete receipt will appear after a report is submitted.',
+    'report.shell.historyTitle': 'My Reports',
+    'report.shell.historyCopy': 'Your submitted report history will appear here.',
+    'report.shell.unavailableTitle': 'Report unavailable',
+    'report.shell.invalidDraftId': 'A valid saved-report ID is required to continue.',
+    'report.shell.invalidReceiptId': 'A valid report ID is required to view this receipt.',
+    'report.shell.backAction': 'Back to Report',
     'following.title': 'Following',
     'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
     'profile.title': 'Your profile',
@@ -147,6 +171,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.hub.emptyTitle': '还没有已保存的报告',
     'report.hub.emptyCopy': '开始报告后，你可以在这台设备上继续完成。',
     'report.hub.storageUnavailable': '已保存的报告仅在原生 iOS 和 Android 版本中可用。',
+    'report.hub.storageUnavailableTitle': '无法使用已保存的报告',
     'report.hub.loadFailed': '无法加载已保存的报告，请稍后重试。',
     'report.hub.retryAction': '重试',
     'report.hub.myReports': '我的报告',
@@ -162,6 +187,17 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.hub.step.safety': '安全',
     'report.hub.step.area': '区域',
     'report.hub.step.review': '确认',
+    'report.shell.draftTitle': '已保存的报告',
+    'report.shell.draftReadyTitle': '已保存的报告已就绪',
+    'report.shell.draftReadyCopy': '此路由壳不会更改你已保存的报告。',
+    'report.shell.receiptTitle': '报告回执',
+    'report.shell.receiptCopy': '完整回执将在报告提交后显示。',
+    'report.shell.historyTitle': '我的报告',
+    'report.shell.historyCopy': '已提交报告的历史记录将显示在这里。',
+    'report.shell.unavailableTitle': '报告不可用',
+    'report.shell.invalidDraftId': '需要有效的已保存报告 ID 才能继续。',
+    'report.shell.invalidReceiptId': '需要有效的报告 ID 才能查看此回执。',
+    'report.shell.backAction': '返回报告',
     'following.title': '关注',
     'following.subtitle': '获取你关注的猫和区域的去敏更新。',
     'profile.title': '我的',

@@ -9,6 +9,7 @@ import { CatDetailScreen } from '../../src/components/CatDetailScreen';
 import type { SelectedCatSummary } from '../../src/components/AnchoredCatSheet';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors } from '../../src/design/theme';
+import { useLocale } from '../../src/i18n/LocaleContext';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 import { createReportDraftPayload } from '../../src/report/report-draft';
@@ -23,6 +24,7 @@ const previewCat: SelectedCatSummary = {
 const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function CatRoute() {
+  const { locale } = useLocale();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const animalId = typeof id === 'string' ? id : null;
@@ -66,6 +68,7 @@ export default function CatRoute() {
       <CatDetailScreen
         cat={cat}
         fixture={fixture}
+        locale={locale}
         onReportSighting={async (selectedAnimalId) => {
           const draftId = Crypto.randomUUID();
           await saveOfflineDraft({ id: draftId, notes: '', risk: 'normal', report: createReportDraftPayload(new Date()) });

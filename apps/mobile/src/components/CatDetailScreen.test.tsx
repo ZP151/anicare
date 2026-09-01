@@ -42,4 +42,19 @@ describe('CatDetailScreen', () => {
     expect(await view.findByText('A saved report could not be created. Try again on a native device.')).toBeTruthy();
     await view.unmount();
   });
+
+  it('uses Simplified Chinese copy when durable draft creation fails', async () => {
+    const view = await render(
+      <CatDetailScreen
+        cat={{ animalId: '00000000-0000-4000-8000-000000000102', primaryAlias: 'Pepper', verificationLabel: 'Community confirmed', timeLabel: 'Seen in a delayed weekly window' }}
+        fixture={false}
+        locale="zh-CN"
+        onReportSighting={async () => { throw new Error('secure_offline_storage_unavailable'); }}
+      />,
+    );
+
+    await fireEvent.press(view.getByRole('button', { name: 'Report a sighting of Pepper' }));
+    expect(await view.findByText('无法创建已保存的报告，请在原生设备上重试。')).toBeTruthy();
+    await view.unmount();
+  });
 });

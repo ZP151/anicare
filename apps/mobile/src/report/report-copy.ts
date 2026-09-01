@@ -9,6 +9,7 @@ export type ReportCopy = Readonly<{
   emptyTitle: string;
   emptyCopy: string;
   storageUnavailable: string;
+  storageUnavailableTitle: string;
   loadFailed: string;
   retryAction: string;
   myReports: string;
@@ -20,6 +21,17 @@ export type ReportCopy = Readonly<{
   deleteDraftLabel: (step: string) => string;
   stepLabel: (step: string) => string;
   deleteAction: string;
+  draftShellTitle: string;
+  draftShellReadyTitle: string;
+  draftShellReadyCopy: string;
+  receiptShellTitle: string;
+  receiptShellCopy: string;
+  historyShellTitle: string;
+  historyShellCopy: string;
+  routeUnavailableTitle: string;
+  invalidDraftId: string;
+  invalidReceiptId: string;
+  backToReportAction: string;
 }>;
 
 export function getReportCopy(locale: Locale): ReportCopy {
@@ -33,6 +45,7 @@ export function getReportCopy(locale: Locale): ReportCopy {
     emptyTitle: translate(locale, 'report.hub.emptyTitle'),
     emptyCopy: translate(locale, 'report.hub.emptyCopy'),
     storageUnavailable: translate(locale, 'report.hub.storageUnavailable'),
+    storageUnavailableTitle: translate(locale, 'report.hub.storageUnavailableTitle'),
     loadFailed: translate(locale, 'report.hub.loadFailed'),
     retryAction: translate(locale, 'report.hub.retryAction'),
     myReports: translate(locale, 'report.hub.myReports'),
@@ -44,5 +57,16 @@ export function getReportCopy(locale: Locale): ReportCopy {
     deleteDraftLabel: (step) => translate(locale, 'report.hub.deleteDraftLabel' as never).replace('{step}', stepLabel(step).toLowerCase()),
     stepLabel,
     deleteAction: translate(locale, 'report.hub.deleteAction'),
+    draftShellTitle: translate(locale, 'report.shell.draftTitle'),
+    draftShellReadyTitle: translate(locale, 'report.shell.draftReadyTitle'),
+    draftShellReadyCopy: translate(locale, 'report.shell.draftReadyCopy'),
+    receiptShellTitle: translate(locale, 'report.shell.receiptTitle'),
+    receiptShellCopy: translate(locale, 'report.shell.receiptCopy'),
+    historyShellTitle: translate(locale, 'report.shell.historyTitle'),
+    historyShellCopy: translate(locale, 'report.shell.historyCopy'),
+    routeUnavailableTitle: translate(locale, 'report.shell.unavailableTitle'),
+    invalidDraftId: translate(locale, 'report.shell.invalidDraftId'),
+    invalidReceiptId: translate(locale, 'report.shell.invalidReceiptId'),
+    backToReportAction: translate(locale, 'report.shell.backAction'),
   };
 }

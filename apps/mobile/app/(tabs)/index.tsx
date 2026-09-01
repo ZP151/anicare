@@ -15,6 +15,8 @@ import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
 import { tabVisualContract } from '../../src/navigation/tab-style';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 import { createReportDraftPayload } from '../../src/report/report-draft';
+import { getReportCopy } from '../../src/report/report-copy';
+import { useLocale } from '../../src/i18n/LocaleContext';
 
 type FeedStatus = 'demo' | 'loading' | 'live' | 'unavailable';
 
@@ -43,6 +45,7 @@ function pickPublicCat(sightings: readonly PublicSighting[]): SelectedCatSummary
 }
 
 export default function NearbyScreen() {
+  const { locale } = useLocale();
   const router = useRouter();
   const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
   const [status, setStatus] = useState<FeedStatus>(client ? 'loading' : 'demo');
@@ -84,7 +87,8 @@ export default function NearbyScreen() {
       const params = opaqueAnimalId.test(selectedCat.animalId) ? { draftId, animalId: selectedCat.animalId } : { draftId };
       router.push({ pathname: '/report/new', params } as never);
     } catch {
-      Alert.alert('Saved reports unavailable', 'A saved report could not be created. Try again on a native device.');
+      const reportCopy = getReportCopy(locale);
+      Alert.alert(reportCopy.storageUnavailableTitle, reportCopy.startFailed);
     }
   }
 

@@ -8,6 +8,7 @@ import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
 import { createReportDraftPayload, reportDraftSummary, type ReportDraftStep } from './report-draft';
 import { getReportCopy } from './report-copy';
+import { isOpaqueReportId } from './ReportRouteShell';
 
 export type ReportHubDependencies = Readonly<{
   loadDrafts(): Promise<readonly StoredDraft[]>;
@@ -22,8 +23,6 @@ export type ReportHubDependencies = Readonly<{
 type DraftSummary = NonNullable<ReturnType<typeof reportDraftSummary>>;
 type DraftStatus = 'loading' | 'ready' | 'storage_unavailable' | 'error';
 
-const stableDraftId = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/;
-
 function isStorageUnavailable(error: unknown): boolean {
   return error instanceof Error && error.message === 'secure_offline_storage_unavailable';
 }
@@ -35,7 +34,7 @@ function isDraftStep(value: string): value is ReportDraftStep {
 function summarizeDrafts(drafts: readonly StoredDraft[]): readonly DraftSummary[] {
   return drafts
     .map(reportDraftSummary)
-    .filter((summary): summary is DraftSummary => summary !== null && stableDraftId.test(summary.id) && isDraftStep(summary.step))
+    .filter((summary): summary is DraftSummary => summary !== null && isOpaqueReportId(summary.id) && isDraftStep(summary.step))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
@@ -69,7 +68,7 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
     setStarting(true);
     setMessage(null);
     const id = dependencies.createId();
-    if (!stableDraftId.test(id)) {
+    if (!isOpaqueReportId(id)) {
       setStarting(false);
       setMessage(copy.startFailed);
       return;
@@ -85,7 +84,7 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
   }
 
   function continueDraft(id: string) {
-    if (stableDraftId.test(id)) dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
+    if (isOpaqueReportId(id)) dependencies.navigate(`/report/new?draftId=${encodeURIComponent(id)}`);
   }
 
   async function deleteDraft(id: string) {

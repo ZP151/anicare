@@ -3,7 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ReportHub, type ReportHubDependencies } from './ReportHub';
 
 const firstDraft = {
-  id: 'draft-11111111',
+  id: '00000000-0000-4000-8000-000000000111',
   notes: '',
   risk: 'normal' as const,
   report: {
@@ -20,7 +20,7 @@ const firstDraft = {
 
 const laterDraft = {
   ...firstDraft,
-  id: 'draft-22222222',
+  id: '00000000-0000-4000-8000-000000000112',
   report: { ...firstDraft.report, step: 'safety' as const, updatedAt: '2026-09-01T09:00:00.000Z' },
 };
 
@@ -30,7 +30,7 @@ function dependencies(overrides: Partial<ReportHubDependencies> = {}): ReportHub
     saveDraft: jest.fn(async (input) => input as never),
     deleteDraft: jest.fn(async () => undefined),
     getSession: jest.fn(async () => false),
-    createId: jest.fn(() => 'draft-33333333'),
+    createId: jest.fn(() => '00000000-0000-4000-8000-000000000113'),
     now: jest.fn(() => new Date('2026-09-01T10:00:00.000Z')),
     navigate: jest.fn(),
     ...overrides,
@@ -93,12 +93,12 @@ describe('ReportHub', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Start a report' }));
 
     expect(run.saveDraft).toHaveBeenCalledWith({
-      id: 'draft-33333333', notes: '', risk: 'normal', report: {
+      id: '00000000-0000-4000-8000-000000000113', notes: '', risk: 'normal', report: {
         version: 1, step: 'photo', occurredAt: '2026-09-01T10:00:00.000Z', coat: [], markings: [],
         condition: null, manualPublicCellId: null, updatedAt: '2026-09-01T10:00:00.000Z',
       },
     });
-    expect(run.navigate).toHaveBeenCalledWith('/report/new?draftId=draft-33333333');
+    expect(run.navigate).toHaveBeenCalledWith('/report/new?draftId=00000000-0000-4000-8000-000000000113');
   });
 
   it('continues a valid existing draft without writing another one', async () => {
@@ -109,7 +109,16 @@ describe('ReportHub', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Continue report draft from details' }));
 
     expect(run.saveDraft).not.toHaveBeenCalled();
-    expect(run.navigate).toHaveBeenCalledWith('/report/new?draftId=draft-11111111');
+    expect(run.navigate).toHaveBeenCalledWith('/report/new?draftId=00000000-0000-4000-8000-000000000111');
+  });
+
+  it('does not continue a presentation key that only resembles a stored draft ID', async () => {
+    const run = dependencies({ loadDrafts: async () => [{ ...firstDraft, id: 'public-area-1' }] });
+    const view = await render(<ReportHub dependencies={run} locale="en" />);
+
+    await waitFor(() => expect(view.getByText('No saved reports yet')).toBeTruthy());
+    expect(view.queryByRole('button', { name: /Continue report draft/i })).toBeNull();
+    await view.unmount();
   });
 
   it('retains the draft and explains the failure when cleanup-aware deletion rejects', async () => {
