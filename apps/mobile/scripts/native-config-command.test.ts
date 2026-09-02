@@ -2,8 +2,16 @@ jest.mock('node:child_process', () => ({
   spawnSync: jest.fn(),
 }));
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import {
   runExpoConfig,
@@ -21,11 +29,28 @@ function readAppConfig(): Readonly<Record<string, unknown>> {
 
 const mobileRoot = resolve(__dirname, '..');
 const appConfigPath = resolve(mobileRoot, 'app.json');
+const pilotBuildValidatorSourcePath = resolve(
+  mobileRoot,
+  'scripts',
+  'validate-pilot-build.ts',
+);
+const pilotBuildPolicySourcePath = resolve(
+  mobileRoot,
+  'src',
+  'config',
+  'pilot-build-policy.ts',
+);
 const actualSpawnSync = jest.requireActual<typeof import('node:child_process')>(
   'node:child_process',
 ).spawnSync;
 
-function runPilotBuildValidator() {
+function runPilotBuildValidator(appConfig: unknown) {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'animalhelper-pilot-build-'));
+  const fixtureValidatorPath = resolve(
+    fixtureRoot,
+    'scripts',
+    'validate-pilot-build.ts',
+  );
   const command = process.platform === 'win32' ? 'cmd.exe' : 'pnpm';
   const argumentsList =
     process.platform === 'win32'
@@ -36,18 +61,38 @@ function runPilotBuildValidator() {
           'pnpm.cmd',
           'exec',
           'tsx',
-          'scripts/validate-pilot-build.ts',
+          fixtureValidatorPath,
         ]
-      : ['exec', 'tsx', 'scripts/validate-pilot-build.ts'];
+      : ['exec', 'tsx', fixtureValidatorPath];
 
-  return actualSpawnSync(command, argumentsList, {
-    cwd: mobileRoot,
-    encoding: 'utf8',
-  });
-}
+  try {
+    mkdirSync(resolve(fixtureRoot, 'scripts'), { recursive: true });
+    mkdirSync(resolve(fixtureRoot, 'src', 'config'), { recursive: true });
+    copyFileSync(pilotBuildValidatorSourcePath, fixtureValidatorPath);
+    copyFileSync(
+      pilotBuildPolicySourcePath,
+      resolve(fixtureRoot, 'src', 'config', 'pilot-build-policy.ts'),
+    );
+    writeFileSync(
+      resolve(fixtureRoot, 'app.json'),
+      `${JSON.stringify(appConfig, null, 2)}\n`,
+      'utf8',
+    );
+    for (const fileName of ['eas.json', 'package.json']) {
+      writeFileSync(
+        resolve(fixtureRoot, fileName),
+        readFileSync(resolve(mobileRoot, fileName), 'utf8'),
+        'utf8',
+      );
+    }
 
-function writeAppConfig(appConfig: unknown): void {
-  writeFileSync(appConfigPath, `${JSON.stringify(appConfig, null, 2)}\n`, 'utf8');
+    return actualSpawnSync(command, argumentsList, {
+      cwd: mobileRoot,
+      encoding: 'utf8',
+    });
+  } finally {
+    rmSync(fixtureRoot, { force: true, recursive: true });
+  }
 }
 
 const validPublicConfig = {
@@ -93,7 +138,7 @@ const validIntrospectedConfig = {
 
 describe('native config command adapter', () => {
   it('runs the pilot validator successfully for the exact approved Expo identity', () => {
-    const result = runPilotBuildValidator();
+    const result = runPilotBuildValidator(readAppConfig());
 
     expect(result.status).toBe(0);
     expect(result.stdout).toBe('pilot_build_policy_ok\n');
@@ -120,22 +165,16 @@ describe('native config command adapter', () => {
   ] as const)(
     'fails closed when the Expo identity has %s',
     (_description, mutateExpoConfig) => {
-      const originalAppConfig = readFileSync(appConfigPath, 'utf8');
-      const appConfig = JSON.parse(originalAppConfig) as {
+      const appConfig = readAppConfig() as {
         expo: Record<string, unknown>;
       };
       mutateExpoConfig(appConfig.expo);
 
-      try {
-        writeAppConfig(appConfig);
-        const result = runPilotBuildValidator();
+      const result = runPilotBuildValidator(appConfig);
 
-        expect(result.status).toBe(1);
-        expect(result.stdout).toBe('');
-        expect(result.stderr).toBe('eas_forbidden_configuration\n');
-      } finally {
-        writeFileSync(appConfigPath, originalAppConfig, 'utf8');
-      }
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('eas_forbidden_configuration\n');
     },
   );
 
