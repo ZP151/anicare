@@ -9,17 +9,22 @@ export function getGoogleMapsBuildConfig(env: Readonly<{
   configured: boolean;
   plugin: 'react-native-maps' | readonly [
     'react-native-maps',
-    Readonly<{ iosGoogleMapsApiKey: string; androidGoogleMapsApiKey: string }>,
+    Readonly<{ iosGoogleMapsApiKey: string; androidGoogleMapsApiKey?: string }>,
   ];
 }> {
   const iosGoogleMapsApiKey = env.GOOGLE_MAPS_IOS_API_KEY?.trim();
   const androidGoogleMapsApiKey = env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
-  if (!iosGoogleMapsApiKey || !androidGoogleMapsApiKey) {
+  if (!iosGoogleMapsApiKey) {
     return { configured: false, plugin: 'react-native-maps' };
   }
   return {
     configured: true,
-    plugin: ['react-native-maps', { iosGoogleMapsApiKey, androidGoogleMapsApiKey }],
+    plugin: [
+      'react-native-maps',
+      androidGoogleMapsApiKey
+        ? { iosGoogleMapsApiKey, androidGoogleMapsApiKey }
+        : { iosGoogleMapsApiKey },
+    ],
   };
 }
 
