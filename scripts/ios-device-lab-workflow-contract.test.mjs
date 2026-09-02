@@ -374,4 +374,9 @@ test('physical-device handoff requires exact candidate provenance and non-identi
   assert.match(runbook, /--source-ref refs\/heads\/main/);
   assert.match(runbook, /--source-digest/);
   assert.match(runbook, /--deny-self-hosted-runners/);
+  assert.match(runbook, /if \(\$LASTEXITCODE -ne 0\) \{ throw 'candidate_attestation_invalid' \}/);
+  assert.match(runbook, /\.PSObject\.Properties\.Name/);
+  assert.match(runbook, /podfileLockSha256/);
+  assert.match(runbook, /ipaByteSize/);
+  assert.match(runbook, /Xcode 26\.4\.1/);
 });

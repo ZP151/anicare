@@ -245,18 +245,22 @@ xcode_build_line="$(printf '%s\n' "$xcode_version" | sed -n '2p')"
 [[ "$xcode_version_line" == 'Xcode 26.4.1' && "$xcode_build_line" == 'Build version 17E202' ]] || fail "xcode_version_invalid"
 
 [[ -f "$LOCKFILE_SOURCE" ]] || fail "reviewed_podfile_lock_missing"
+pnpm validate:reviewed-ios-device-lab-podfile-lock
 [[ ! -e "$IOS_DIR" && ! -e "$STAGING_DIR" && ! -e "$DERIVED_DATA_DIR" ]] || fail "generated_path_already_exists"
 [[ ! -e "$ARTIFACT_DIR" ]] || fail "artifact_directory_not_empty"
 ios_dir_owned=1
 staging_dir_owned=1
 derived_data_dir_owned=1
-artifact_dir_owned=1
 
 cd -- "$APP_DIR"
 pnpm exec expo prebuild --clean --platform ios --no-install
 pnpm exec tsx "$SCRIPT_DIR/prepare-ios-device-lab-podfile.ts"
+[[ ! -e "$IOS_DIR/Podfile.lock" && ! -L "$IOS_DIR/Podfile.lock" ]] || fail "generated_podfile_lock_invalid"
 cp -- "$LOCKFILE_SOURCE" "$IOS_DIR/Podfile.lock"
-pnpm validate:reviewed-ios-device-lab-podfile-lock
+pnpm validate:generated-ios-device-lab-podfile-lock
+source_lock_sha256="$(shasum -a 256 "$LOCKFILE_SOURCE" | awk '{print $1}')"
+generated_lock_sha256="$(shasum -a 256 "$IOS_DIR/Podfile.lock" | awk '{print $1}')"
+[[ "$source_lock_sha256" == "$generated_lock_sha256" ]] || fail "generated_podfile_lock_invalid"
 pod_version="$(pod _1.17.0_ --version)"
 [[ "$pod_version" == '1.17.0' ]] || fail "cocoapods_version_invalid"
 (
@@ -314,6 +318,7 @@ done < <(find "$app_bundle" -type f -print0)
 
 mkdir -p -- "$STAGING_DIR/pre-package/Payload" "$STAGING_DIR/extracted"
 mkdir -- "$ARTIFACT_DIR"
+artifact_dir_owned=1
 ditto "$app_bundle" "$STAGING_DIR/pre-package/Payload/$(basename -- "$app_bundle")"
 write_inventory "$STAGING_DIR/pre-package" "$STAGING_DIR/pre-package-inventory.json"
 pnpm exec tsx "$SCRIPT_DIR/inspect-ios-device-artifact.ts" "$STAGING_DIR/pre-package-inventory.json"
@@ -330,10 +335,11 @@ pnpm exec tsx "$SCRIPT_DIR/inspect-ios-device-artifact.ts" "$STAGING_DIR/post-pa
 
 ipa_sha256="$(shasum -a 256 "$ipa_path" | awk '{print $1}')"
 ipa_size="$(stat -f '%z' "$ipa_path")"
-podfile_lock_sha256="$(shasum -a 256 "$LOCKFILE_SOURCE" | awk '{print $1}')"
+podfile_lock_sha256="$(shasum -a 256 "$IOS_DIR/Podfile.lock" | awk '{print $1}')"
 export PNPM_LOCK_SHA256="$(shasum -a 256 "$APP_DIR/../../pnpm-lock.yaml" | awk '{print $1}')"
 write_manifest \
   "$manifest_path" "$ipa_sha256" "$ipa_size" "$podfile_lock_sha256" \
   "$xcode_version" "$(ruby --version)" "$pod_version" "$(node --version)" "$(pnpm --version)"
 printf '%s  %s\n' "$ipa_sha256" "$(basename -- "$ipa_path")" > "$checksum_path"
 assert_artifact_allowlist "$artifact_base"
+artifact_dir_owned=0

@@ -213,6 +213,47 @@ describe('unsigned iOS build shell contract', () => {
     expect(script).toContain('artifact_directory_not_empty');
     expect(script).toContain('artifact_allowlist_invalid');
     expect(script).toContain('pnpm validate:reviewed-ios-device-lab-podfile-lock');
+    expect(script).toContain('mkdir -- "$ARTIFACT_DIR"\nartifact_dir_owned=1');
+    expect(script).toContain('assert_artifact_allowlist "$artifact_base"\nartifact_dir_owned=0');
+  });
+
+  it('transfers artifact ownership after a successful allowlist assertion while failed builds still clean it', () => {
+    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const cleanup = script.slice(script.indexOf('cleanup_owned_path() {'), script.indexOf('\ntrap cleanup EXIT'));
+    const assertion = script.slice(script.indexOf('assert_artifact_allowlist() {'), script.indexOf('\nrequire_command codesign'));
+    const runner = [
+      'set -euo pipefail',
+      'APP_DIR="$(mktemp -d)"',
+      'IOS_DIR="$APP_DIR/ios"; STAGING_DIR="$APP_DIR/.ios-device-lab-staging"; DERIVED_DATA_DIR="$APP_DIR/.ios-device-lab-derived-data"; ARTIFACT_DIR="$APP_DIR/ios-device-lab-artifacts"',
+      'ios_dir_owned=0; staging_dir_owned=0; derived_data_dir_owned=0; artifact_dir_owned=0',
+      "fail() { exit 1; }",
+      cleanup,
+      assertion,
+      'mkdir "$ARTIFACT_DIR"; artifact_dir_owned=1',
+      "base='whiskercommons-unsigned-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      'touch "$ARTIFACT_DIR/${base}.ipa" "$ARTIFACT_DIR/${base}.manifest.json" "$ARTIFACT_DIR/${base}.sha256"',
+      'assert_artifact_allowlist "$base"; artifact_dir_owned=0; cleanup; test -f "$ARTIFACT_DIR/${base}.ipa"',
+      'artifact_dir_owned=1; cleanup; test ! -e "$ARTIFACT_DIR"',
+    ].join('\n');
+    const result = spawnSync(bashExecutable, ['-c', runner], { encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  });
+
+  it('validates the reviewed source before copying and the generated copy before CocoaPods deployment', () => {
+    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const reviewed = script.indexOf('pnpm validate:reviewed-ios-device-lab-podfile-lock');
+    const copy = script.indexOf('cp -- "$LOCKFILE_SOURCE" "$IOS_DIR/Podfile.lock"');
+    const generated = script.indexOf('pnpm validate:generated-ios-device-lab-podfile-lock');
+    const deployment = script.indexOf('pod _1.17.0_ install --deployment');
+
+    expect(reviewed).toBeGreaterThan(-1);
+    expect(copy).toBeGreaterThan(reviewed);
+    expect(generated).toBeGreaterThan(copy);
+    expect(deployment).toBeGreaterThan(generated);
+    expect(script).toContain('generated_podfile_lock_invalid');
+    expect(script).toContain('podfile_lock_sha256="$(shasum -a 256 "$IOS_DIR/Podfile.lock"');
   });
 
   it('accepts exactly the three regular SHA-derived artifact files and rejects additions or symlinks', () => {

@@ -160,6 +160,14 @@ describe('Gate 2B readiness policy', () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain('pilot-gate-2b-readiness.json');
   });
 
+  it('fails closed rather than following symlinked fixed readiness inputs', () => {
+    const script = readFileSync(resolve(__dirname, 'validate-gate-2b-readiness.ts'), 'utf8');
+
+    expect(script).toContain('lstatSync');
+    expect(script).toContain('isSymbolicLink()');
+    expect(script).toContain('realpathSync');
+  });
+
   it('accepts the exact creation boundary but rejects future-dated readiness evidence', () => {
     expect(evaluateGate2BReadiness({ ...readinessInput, nowIso: validEvidence.createdAt })).toEqual([]);
     expect(evaluateGate2BReadiness({ ...readinessInput, nowIso: '2026-09-02T23:59:59.999Z' }))

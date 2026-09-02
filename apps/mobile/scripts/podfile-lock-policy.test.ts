@@ -69,6 +69,15 @@ describe('reviewed Podfile.lock policy', () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain('untrusted.lock');
   });
 
+  it('rejects link-like fixed lock inputs before their content is read', () => {
+    for (const name of ['validate-reviewed-ios-device-lab-podfile-lock.ts', 'validate-generated-ios-device-lab-podfile-lock.ts']) {
+      const source = readFileSync(resolve(__dirname, name), 'utf8');
+      expect(source).toContain('lstatSync');
+      expect(source).toContain('isSymbolicLink()');
+      expect(source).toContain('realpathSync');
+    }
+  });
+
   it.each([
     ['a repeated root section', `${reviewedFixture}\nPODS:\n`, 'duplicate_section'],
     ['an unexpected spec repo', reviewedFixture.replace('  trunk:', '  evil:'), 'spec_repos_invalid'],

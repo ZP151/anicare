@@ -47,6 +47,9 @@ if ($candidateSha -notmatch '^[a-f0-9]{40}$') { throw 'candidate_sha_invalid' }
 if ($candidateRunId -notmatch '^[1-9][0-9]*$' -or $candidateRunAttempt -notmatch '^[1-9][0-9]*$') { throw 'candidate_run_invalid' }
 
 $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+$manifestKeys = @('schemaVersion','repository','commitSha','runId','runAttempt','workflowRef','imageOS','imageVersion','xcodeVersion','rubyVersion','cocoapodsVersion','nodeVersion','pnpmVersion','bundleIdentifier','ipaByteSize','ipaSha256','pnpmLockSha256','podfileLockSha256')
+$actualManifestKeys = @($manifest.PSObject.Properties.Name | Sort-Object)
+if (@(Compare-Object -ReferenceObject ($manifestKeys | Sort-Object) -DifferenceObject $actualManifestKeys).Count -ne 0) { throw 'candidate_manifest_invalid' }
 $expectedBase = "whiskercommons-unsigned-$candidateSha"
 $expectedIpaName = "$expectedBase.ipa"
 $expectedManifestName = "$expectedBase.manifest.json"
@@ -54,16 +57,25 @@ $expectedChecksumName = "$expectedBase.sha256"
 if ((Split-Path -Leaf $candidateIpa) -ne $expectedIpaName -or
     (Split-Path -Leaf $manifestFile) -ne $expectedManifestName -or
     (Split-Path -Leaf $checksumFile) -ne $expectedChecksumName) { throw 'candidate_filename_invalid' }
-if ($manifest.schemaVersion -ne 1 -or $manifest.repository -ne $repository -or
+if ($manifest.schemaVersion -ne 1 -or $manifest.repository -isnot [string] -or $manifest.repository -ne $repository -or
     $manifest.commitSha -ne $candidateSha -or $manifest.runId -ne [int64]$candidateRunId -or
     $manifest.runAttempt -ne [int64]$candidateRunAttempt -or
     $manifest.workflowRef -ne "$repository/.github/workflows/ios-device-lab.yml@refs/heads/main" -or
-    $manifest.bundleIdentifier -ne 'sg.animalhelper.app' -or $manifest.ipaSha256 -notmatch '^[a-f0-9]{64}$') { throw 'candidate_manifest_invalid' }
+    $manifest.bundleIdentifier -ne 'sg.animalhelper.app' -or $manifest.ipaSha256 -notmatch '^[a-f0-9]{64}$' -or
+    $manifest.pnpmLockSha256 -notmatch '^[a-f0-9]{64}$' -or $manifest.podfileLockSha256 -notmatch '^[a-f0-9]{64}$' -or
+    $manifest.imageOS -isnot [string] -or $manifest.imageOS -notmatch '^[-A-Za-z0-9_. ]+$' -or
+    $manifest.imageVersion -isnot [string] -or $manifest.imageVersion -notmatch '^[-A-Za-z0-9_. ]+$' -or
+    $manifest.xcodeVersion -ne "Xcode 26.4.1`nBuild version 17E202" -or
+    $manifest.rubyVersion -notmatch '^ruby 3\.3\.12 ' -or $manifest.cocoapodsVersion -ne '1.17.0' -or
+    $manifest.nodeVersion -ne 'v22.23.1' -or $manifest.pnpmVersion -ne '11.19.0' -or
+    $manifest.ipaByteSize -isnot [long] -or $manifest.ipaByteSize -lt 1) { throw 'candidate_manifest_invalid' }
 gh attestation verify $candidateIpa --repo $repository --signer-workflow "$repository/.github/workflows/ios-device-lab.yml" --source-ref refs/heads/main --source-digest $candidateSha --deny-self-hosted-runners
+if ($LASTEXITCODE -ne 0) { throw 'candidate_attestation_invalid' }
 $expected = $manifest.ipaSha256
 $actual = (Get-FileHash -LiteralPath $candidateIpa -Algorithm SHA256).Hash
+$actualByteSize = (Get-Item -LiteralPath $candidateIpa).Length
 $checksumContent = (Get-Content -LiteralPath $checksumFile -Raw) -replace "`r`n", "`n"
-if ($checksumContent -ne "$expected  $expectedIpaName`n" -or $actual -ne $expected.ToUpperInvariant()) { throw 'candidate_sha256_mismatch' }
+if ($manifest.ipaByteSize -ne $actualByteSize -or $checksumContent -ne "$expected  $expectedIpaName`n" -or $actual -ne $expected.ToUpperInvariant()) { throw 'candidate_sha256_mismatch' }
 ```
 
 Record only a pass/fail result, the reviewed unsigned-artifact SHA-256, and the

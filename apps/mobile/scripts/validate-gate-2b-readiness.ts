@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 import { evaluateGate2BReadiness } from './ios-device-lab-policy';
 
@@ -21,18 +21,21 @@ if (process.argv.length !== 2) {
 
 let evidence: unknown;
 try {
-  evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+  evidence = JSON.parse(readFixedRegularFile(evidencePath, repositoryRoot));
 } catch (error: unknown) {
   if (isMissingFileError(error)) fail('gate_2b_readiness_missing');
   fail('gate_2b_readiness_invalid');
 }
 
 try {
-  const migrationFilename = readdirSync(migrationsPath).filter((value) => value.endsWith('.sql')).sort().at(-1);
+  const realMigrationsPath = fixedDirectory(migrationsPath, repositoryRoot);
+  const migrationFilenames = readdirSync(realMigrationsPath).filter((value) => value.endsWith('.sql')).sort();
+  for (const filename of migrationFilenames) readFixedRegularFile(resolve(realMigrationsPath, filename), realMigrationsPath);
+  const migrationFilename = migrationFilenames.at(-1);
   if (migrationFilename === undefined) fail('gate_2b_readiness_invalid');
   const migrationHead = {
     filename: migrationFilename,
-    sha256: createHash('sha256').update(readFileSync(resolve(migrationsPath, migrationFilename))).digest('hex'),
+    sha256: createHash('sha256').update(readFixedRegularFile(resolve(realMigrationsPath, migrationFilename), realMigrationsPath)).digest('hex'),
   };
   const candidateCommit = git('rev-parse', 'HEAD').trim();
   const codes = evaluateGate2BReadiness({
@@ -69,4 +72,25 @@ function gitStatus(...args: string[]): boolean {
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+}
+
+function fixedDirectory(path: string, root: string): string {
+  const link = lstatSync(path);
+  if (!link.isDirectory() || link.isSymbolicLink()) throw new Error('invalid');
+  const realPath = realpathSync(path);
+  if (!isWithin(root, realPath) || !statSync(realPath).isDirectory()) throw new Error('invalid');
+  return realPath;
+}
+
+function readFixedRegularFile(path: string, root: string): string {
+  const link = lstatSync(path);
+  if (!link.isFile() || link.isSymbolicLink()) throw new Error('invalid');
+  const realPath = realpathSync(path);
+  if (!isWithin(root, realPath) || !statSync(realPath).isFile()) throw new Error('invalid');
+  return readFileSync(realPath, 'utf8');
+}
+
+function isWithin(root: string, path: string): boolean {
+  const child = relative(root, path);
+  return child.length > 0 && !/^\.\.(?:[\\/]|$)/.test(child) && !isAbsolute(child);
 }
