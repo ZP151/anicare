@@ -139,7 +139,7 @@ function assertWorkflowContract(workflow, source) {
   assert.equal(bootstrapGenerate.run, 'pnpm exec expo prebuild --clean --platform ios --no-install');
   const bootstrapPrepare = step(bootstrap, 'Prepare the generated Podfile for locked installation');
   assert.equal(bootstrapPrepare['working-directory'], 'apps/mobile');
-  assert.equal(bootstrapPrepare.run, 'pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts ios/Podfile ios/Podfile.properties.json');
+  assert.equal(bootstrapPrepare.run, 'pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts');
   const bootstrapResolve = step(bootstrap, 'Resolve the missing Pod lock only');
   assert.equal(bootstrapResolve['working-directory'], 'apps/mobile');
   assert.equal(bootstrapResolve.run, 'cd ios\npod _1.17.0_ install\n');

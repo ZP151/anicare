@@ -229,7 +229,7 @@ derived_data_dir_owned=1
 
 cd -- "$APP_DIR"
 pnpm exec expo prebuild --clean --platform ios --no-install
-pnpm exec tsx "$SCRIPT_DIR/prepare-ios-device-lab-podfile.ts" "$IOS_DIR/Podfile" "$IOS_DIR/Podfile.properties.json"
+pnpm exec tsx "$SCRIPT_DIR/prepare-ios-device-lab-podfile.ts"
 cp -- "$LOCKFILE_SOURCE" "$IOS_DIR/Podfile.lock"
 pod_version="$(pod _1.17.0_ --version)"
 [[ "$pod_version" == '1.17.0' ]] || fail "cocoapods_version_invalid"

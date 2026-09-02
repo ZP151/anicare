@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 
 const generatedMapsLine = '  rn_maps_path = File.dirname(`node --print "require.resolve(\'react-native-maps/package.json\')"`) ';
 const normalizedMapsLine = "  rn_maps_path = '../node_modules/react-native-maps'";
@@ -41,13 +42,63 @@ function assertSqlCipherEnabled(podfileProperties: string): void {
   }
 }
 
-function main(argv: readonly string[]): void {
-  if (argv.length !== 2) throw new Error('ios_device_lab_podfile_arguments_invalid');
-  const [podfilePath, podfilePropertiesPath] = argv;
-  const podfileProperties = readFileSync(podfilePropertiesPath, 'utf8');
-  const podfile = readFileSync(podfilePath, 'utf8');
-  const normalizedPodfile = prepareIosDeviceLabPodfile({ podfile, podfileProperties });
+export function prepareIosDeviceLabPodfileAtRoot(appRoot: string): void {
+  const realAppRoot = realpathSync(appRoot);
+  const iosRoot = resolve(realAppRoot, 'ios');
+  const realIosRoot = realDirectoryWithin(realAppRoot, iosRoot);
+  const podfilePath = regularFileWithin(realIosRoot, resolve(realIosRoot, 'Podfile'));
+  const podfilePropertiesPath = regularFileWithin(realIosRoot, resolve(realIosRoot, 'Podfile.properties.json'));
+  const normalizedPodfile = prepareIosDeviceLabPodfile({
+    podfile: readFileSync(podfilePath, 'utf8'),
+    podfileProperties: readFileSync(podfilePropertiesPath, 'utf8'),
+  });
+
+  regularFileWithin(realIosRoot, podfilePath);
   writeFileSync(podfilePath, normalizedPodfile);
 }
 
-if (require.main === module) main(process.argv.slice(2));
+function realDirectoryWithin(root: string, candidate: string): string {
+  try {
+    const stats = lstatSync(candidate);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error();
+    const realCandidate = realpathSync(candidate);
+    if (!isWithin(root, realCandidate)) throw new Error();
+    return realCandidate;
+  } catch {
+    throw new Error('ios_device_lab_podfile_file_invalid');
+  }
+}
+
+function regularFileWithin(root: string, candidate: string): string {
+  try {
+    const stats = lstatSync(candidate);
+    if (!stats.isFile() || stats.isSymbolicLink()) throw new Error();
+    const realCandidate = realpathSync(candidate);
+    if (!isWithin(root, realCandidate)) throw new Error();
+    return realCandidate;
+  } catch {
+    throw new Error('ios_device_lab_podfile_file_invalid');
+  }
+}
+
+function isWithin(root: string, candidate: string): boolean {
+  const path = relative(root, candidate);
+  return path.length > 0 && !path.startsWith('..');
+}
+
+function main(argv: readonly string[]): void {
+  if (argv.length !== 0) throw new Error('ios_device_lab_podfile_arguments_invalid');
+  prepareIosDeviceLabPodfileAtRoot(resolve(__dirname, '..'));
+}
+
+if (require.main === module) {
+  try {
+    main(process.argv.slice(2));
+  } catch (error) {
+    const code = error instanceof Error && /^[a-z0-9_]+$/.test(error.message)
+      ? error.message
+      : 'ios_device_lab_podfile_file_invalid';
+    process.stderr.write(`${code}\n`);
+    process.exitCode = 1;
+  }
+}

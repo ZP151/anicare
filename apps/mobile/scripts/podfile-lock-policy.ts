@@ -26,8 +26,6 @@ const requiredPods = [
   'GoogleMaps',
 ] as const;
 
-const allowedLocalPath = /^(?:\.\.\/node_modules\/|(?:\.\.\/){3}node_modules\/)/;
-const allowedGeneratedPath = /^build\/generated\/ios\//;
 const pinnedRevision = /^(?:= )?\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 export function evaluatePodfileLock(lock: string): readonly PodfileLockCode[] {
@@ -43,14 +41,10 @@ export function evaluatePodfileLock(lock: string): readonly PodfileLockCode[] {
   if (hasUnpinnedPodRevision(pods)) codes.push('pod_revision_unpinned');
   if (requiredPods.some((pod) => !hasPod(pods, pod))) codes.push('required_pod_missing');
 
-  const externalSources = sections.byName.get('EXTERNAL SOURCES') ?? [];
-  if (hasGitSource(lock, externalSources)) {
-    codes.push('git_source_not_allowed');
-  } else if (hasInvalidExternalSource(externalSources)) {
-    codes.push('external_source_invalid');
-  } else if (hasPathOutsideWorkspace(externalSources)) {
-    codes.push('local_path_outside_workspace');
-  }
+  const externalSources = evaluateExternalSources(lock, sections.byName.get('EXTERNAL SOURCES') ?? []);
+  if (externalSources.gitSource) codes.push('git_source_not_allowed');
+  if (externalSources.invalid) codes.push('external_source_invalid');
+  if (externalSources.pathOutsideWorkspace) codes.push('local_path_outside_workspace');
 
   const cocoapods = sections.byName.get('COCOAPODS') ?? [];
   if (cocoapods[0]?.trim() !== '1.17.0') {
@@ -93,21 +87,74 @@ function hasPod(lines: readonly string[], expectedPod: string): boolean {
   return lines.some((line) => new RegExp(`^\\s*- ${escapeRegExp(expectedPod)} \\(`).test(line));
 }
 
-function hasGitSource(lock: string, externalSources: readonly string[]): boolean {
-  return /^CHECKOUT OPTIONS:$/m.test(lock) || externalSources.some((line) => /^    :(?:git|branch):/.test(line));
+function evaluateExternalSources(lock: string, lines: readonly string[]): Readonly<{
+  gitSource: boolean;
+  invalid: boolean;
+  pathOutsideWorkspace: boolean;
+}> {
+  const entries = new Map<string, Map<string, string>>();
+  let current: Map<string, string> | undefined;
+  let invalid = false;
+  const gitSource = /^CHECKOUT OPTIONS:$/m.test(lock) || lines.some((line) => /^\s+:(?:git|branch|tag):/.test(line));
+
+  for (const line of lines) {
+    if (line.length === 0) continue;
+    const entry = /^  ([A-Za-z0-9][A-Za-z0-9_.+/-]*):$/.exec(line);
+    if (entry) {
+      if (entries.has(entry[1])) invalid = true;
+      current = new Map<string, string>();
+      entries.set(entry[1], current);
+      continue;
+    }
+
+    const field = /^    :(path|podspec):(?: (.*))?$/.exec(line);
+    if (!field || current === undefined || current.has(field[1])) {
+      invalid = true;
+      continue;
+    }
+    current.set(field[1], field[2] ?? '');
+  }
+
+  let pathOutsideWorkspace = false;
+  for (const fields of entries.values()) {
+    if (fields.size !== 1) {
+      invalid = true;
+      continue;
+    }
+    const [value] = fields.values();
+    if (value === undefined) {
+      invalid = true;
+      continue;
+    }
+    const path = parseLocalSourcePath(value);
+    if (path === null) {
+      invalid = true;
+    } else if (!isAllowedLocalPath(path)) {
+      pathOutsideWorkspace = true;
+    }
+  }
+
+  return { gitSource, invalid, pathOutsideWorkspace };
 }
 
-function hasInvalidExternalSource(lines: readonly string[]): boolean {
-  return lines.some((line) => /^    :(?!path:|podspec:|tag:)/.test(line));
+function parseLocalSourcePath(value: string): string | null {
+  if (value.length === 0) return null;
+  if (value.startsWith('"')) {
+    if (!value.endsWith('"') || value.length < 3) return null;
+    value = value.slice(1, -1);
+  }
+  return value.length === 0 || /[\\\u0000-\u001F\u007F]/.test(value) ? null : value;
 }
 
-function hasPathOutsideWorkspace(lines: readonly string[]): boolean {
-  return lines.some((line) => {
-    const match = /^    :(?:path|podspec): "?([^"\n]+)"?$/.exec(line);
-    if (!match) return false;
-    const value = match[1];
-    return !allowedLocalPath.test(value) && !allowedGeneratedPath.test(value);
-  });
+function isAllowedLocalPath(value: string): boolean {
+  const prefix = [
+    '../node_modules/',
+    '../../../node_modules/',
+    'build/generated/ios/',
+  ].find((candidate) => value.startsWith(candidate));
+  if (prefix === undefined) return false;
+  const tail = value.slice(prefix.length);
+  return tail.length > 0 && tail.split('/').every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
 }
 
 function escapeRegExp(value: string): string {

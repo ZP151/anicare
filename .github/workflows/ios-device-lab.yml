@@ -77,7 +77,7 @@ jobs:
         run: pnpm exec expo prebuild --clean --platform ios --no-install
       - name: Prepare the generated Podfile for locked installation
         working-directory: apps/mobile
-        run: pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts ios/Podfile ios/Podfile.properties.json
+        run: pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts
       - name: Resolve the missing Pod lock only
         working-directory: apps/mobile
         run: |
