@@ -38,6 +38,8 @@ test "$(pnpm --version)" = '11.19.0'
 test "$(ruby --version | awk '{print $2}')" = '3.3.12'
 pod _1.17.0_ --version
 `;
+const domainBuildCommand = 'pnpm --filter @animalhelper/domain build';
+const mobileUnsignedBuildCommand = 'pnpm --filter @animalhelper/mobile build:unsigned-ios';
 
 async function parsedWorkflow() {
   const source = await readFile(workflowUrl, 'utf8');
@@ -172,8 +174,13 @@ function assertWorkflowContract(workflow, source) {
   const compileBuild = step(compile, 'Validate and build the non-installable compile probe');
   assert.deepEqual(compileBuild.env, fixedInputs);
   assertOnlyStepEnvs(compile, new Map([['Validate and build the non-installable compile probe', fixedInputs]]), 'PR compile');
-  assert.match(compileBuild.run, /pnpm validate:ios-device-lab/);
-  assert.match(compileBuild.run, /pnpm --filter @animalhelper\/mobile build:unsigned-ios/);
+  assert.equal(compileBuild.run, [
+    'set -euo pipefail',
+    'pnpm validate:ios-device-lab',
+    domainBuildCommand,
+    mobileUnsignedBuildCommand,
+    '',
+  ].join('\n'));
   assert.equal(compile.steps.some((candidate) => candidate.env && JSON.stringify(candidate.env).includes('secrets.')), false);
   assertCleanup(compile, 'PR compile', 'Remove non-installable compile outputs', [
     'rm -rf -- apps/mobile/ios',
@@ -210,6 +217,12 @@ function assertWorkflowContract(workflow, source) {
   ]);
   assert.equal('env' in candidate, false);
   assertOnlyStepEnvs(candidate, allowedSecretSteps, 'device candidate');
+  assert.equal(step(candidate, 'Build the protected unsigned candidate').run, [
+    'set -euo pipefail',
+    domainBuildCommand,
+    mobileUnsignedBuildCommand,
+    '',
+  ].join('\n'));
   const candidateUpload = step(candidate, 'Upload the unsigned candidate allowlist');
   assert.deepEqual(candidateUpload.with, {
     name: 'whiskercommons-unsigned-${{ github.sha }}',
@@ -282,4 +295,25 @@ test('PR compile shell stops when validation fails before it can invoke the buil
 
   assert.equal(result.status, 23);
   assert.equal(result.stdout, '');
+});
+
+test('native build shells stop before mobile when the domain producer fails', async () => {
+  const { workflow } = await parsedWorkflow();
+  const runs = [
+    step(workflow.jobs.pr_compile, 'Validate and build the non-installable compile probe').run,
+    step(workflow.jobs.device_candidate, 'Build the protected unsigned candidate').run,
+  ];
+  const pnpmStub = [
+    'pnpm() {',
+    '  if [[ "${1-} ${2-} ${3-}" == \'--filter @animalhelper/domain build\' ]]; then return 31; fi',
+    '  if [[ "${1-} ${2-} ${3-}" == \'--filter @animalhelper/mobile build:unsigned-ios\' ]]; then printf \'mobile_invoked\\n\'; fi',
+    '}',
+  ].join('\n');
+
+  for (const run of runs) {
+    const result = spawnSync(bashExecutable, ['-c', `${pnpmStub}\n${run}`], { encoding: 'utf8' });
+
+    assert.equal(result.status, 31);
+    assert.equal(result.stdout, '');
+  }
 });
