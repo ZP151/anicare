@@ -219,15 +219,14 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           curl --fail --silent --show-error --max-time 15 -H "apikey: $EXPO_PUBLIC_SUPABASE_ANON_KEY" "$EXPO_PUBLIC_SUPABASE_URL/auth/v1/settings" -o /dev/null
+      - name: Build the domain dependency
+        run: pnpm --filter @animalhelper/domain build
       - name: Build the protected unsigned candidate
         env:
           GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-        run: |
-          set -euo pipefail
-          pnpm --filter @animalhelper/domain build
-          pnpm --filter @animalhelper/mobile build:unsigned-ios
+        run: pnpm --filter @animalhelper/mobile build:unsigned-ios
       - name: Attest the unsigned IPA provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:

@@ -200,7 +200,7 @@ function assertWorkflowContract(workflow, source) {
     'Install workspace dependencies', 'Verify the pinned native toolchain',
     'Validate repository policy contracts', 'Validate the protected runtime inputs',
     'Validate Gate 2B readiness evidence', 'Validate the public key at the approved hosted origin',
-    'Build the protected unsigned candidate', 'Attest the unsigned IPA provenance',
+    'Build the domain dependency', 'Build the protected unsigned candidate', 'Attest the unsigned IPA provenance',
     'Upload the unsigned candidate allowlist', 'Remove generated candidate files',
   ], 'device candidate');
   assert.deepEqual(candidate.steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 0 });
@@ -217,12 +217,10 @@ function assertWorkflowContract(workflow, source) {
   ]);
   assert.equal('env' in candidate, false);
   assertOnlyStepEnvs(candidate, allowedSecretSteps, 'device candidate');
-  assert.equal(step(candidate, 'Build the protected unsigned candidate').run, [
-    'set -euo pipefail',
-    domainBuildCommand,
-    mobileUnsignedBuildCommand,
-    '',
-  ].join('\n'));
+  const candidateDomainBuild = step(candidate, 'Build the domain dependency');
+  assert.equal(candidateDomainBuild.run, domainBuildCommand);
+  assert.equal('env' in candidateDomainBuild, false);
+  assert.equal(step(candidate, 'Build the protected unsigned candidate').run, mobileUnsignedBuildCommand);
   const candidateUpload = step(candidate, 'Upload the unsigned candidate allowlist');
   assert.deepEqual(candidateUpload.with, {
     name: 'whiskercommons-unsigned-${{ github.sha }}',
@@ -299,9 +297,11 @@ test('PR compile shell stops when validation fails before it can invoke the buil
 
 test('native build shells stop before mobile when the domain producer fails', async () => {
   const { workflow } = await parsedWorkflow();
+  const candidateDomainBuild = step(workflow.jobs.device_candidate, 'Build the domain dependency');
+  const candidateMobileBuild = step(workflow.jobs.device_candidate, 'Build the protected unsigned candidate');
   const runs = [
-    step(workflow.jobs.pr_compile, 'Validate and build the non-installable compile probe').run,
-    step(workflow.jobs.device_candidate, 'Build the protected unsigned candidate').run,
+    { args: ['-c'], run: step(workflow.jobs.pr_compile, 'Validate and build the non-installable compile probe').run },
+    { args: ['-e', '-c'], run: `${candidateDomainBuild.run}\n${candidateMobileBuild.run}` },
   ];
   const pnpmStub = [
     'pnpm() {',
@@ -310,8 +310,8 @@ test('native build shells stop before mobile when the domain producer fails', as
     '}',
   ].join('\n');
 
-  for (const run of runs) {
-    const result = spawnSync(bashExecutable, ['-c', `${pnpmStub}\n${run}`], { encoding: 'utf8' });
+  for (const { args, run } of runs) {
+    const result = spawnSync(bashExecutable, [...args, `${pnpmStub}\n${run}`], { encoding: 'utf8' });
 
     assert.equal(result.status, 31);
     assert.equal(result.stdout, '');
