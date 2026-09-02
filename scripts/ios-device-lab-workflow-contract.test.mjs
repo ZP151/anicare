@@ -1,131 +1,212 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { parseDocument } from 'yaml';
 
 const workflowUrl = new URL('../.github/workflows/ios-device-lab.yml', import.meta.url);
-
-const actionShas = {
-  'actions/checkout': '11d5960a326750d5838078e36cf38b85af677262',
-  'actions/setup-node': '49933ea5288caeca8642d1e84afbd3f7d6820020',
-  'pnpm/action-setup': 'b906affcce14559ad1aafd4ab0e942779e9f58b1',
-  'ruby/setup-ruby': '95ef2b042f9d7a56d8268cba8559e2842e2ad01b',
-  'actions/upload-artifact': 'ea165f8d65b6e75b540449e92b4886f43607fa02',
-  'actions/attest-build-provenance': '977bb373ede98d70efdf65b84cb5f73e068dcc2a',
+const sha = {
+  checkout: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+  node: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+  pnpm: 'pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1',
+  ruby: 'ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b',
+  upload: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+  attest: 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a',
 };
+const fixedInputs = {
+  GOOGLE_MAPS_IOS_API_KEY: 'compile-probe-google-maps-ios-key',
+  EXPO_PUBLIC_SUPABASE_URL: 'https://compile-probe.invalid',
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: 'compile-probe-supabase-public-key',
+};
+const candidateSecrets = {
+  GOOGLE_MAPS_IOS_API_KEY: '${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}',
+  EXPO_PUBLIC_SUPABASE_URL: '${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}',
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: '${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}',
+};
+const nativeUses = [sha.checkout, sha.pnpm, sha.node, sha.ruby];
+const toolCheck = `sudo xcode-select -s /Applications/Xcode_26.4.1.app/Contents/Developer
+test "$(xcodebuild -version | sed -n '1p')" = 'Xcode 26.4.1'
+test "$(xcodebuild -version | sed -n '2p')" = 'Build version 17E202'
+test "$(node --version)" = 'v22.23.1'
+test "$(pnpm --version)" = '11.19.0'
+test "$(ruby --version | awk '{print $2}')" = '3.3.12'
+pod _1.17.0_ --version
+`;
 
-async function workflowText() {
-  try {
-    return await readFile(workflowUrl, 'utf8');
-  } catch (error) {
-    if (error && error.code === 'ENOENT') return '';
-    throw error;
+async function parsedWorkflow() {
+  const source = await readFile(workflowUrl, 'utf8');
+  const document = parseDocument(source, { strict: true, uniqueKeys: true });
+  assert.deepEqual(document.errors, [], `workflow YAML must parse: ${document.errors.join('; ')}`);
+  return { source, workflow: document.toJS() };
+}
+
+function step(job, name) {
+  const found = job.steps.find((candidate) => candidate.name === name);
+  assert.ok(found, `missing ${name} step`);
+  return found;
+}
+
+function uses(job) {
+  return job.steps.filter((candidate) => candidate.uses).map((candidate) => candidate.uses);
+}
+
+function assertStepOrder(job, expected, name) {
+  assert.deepEqual(job.steps.map((candidate) => candidate.name ?? candidate.uses), expected, `${name} steps`);
+}
+
+function assertOnlyStepEnvs(job, allowed, name) {
+  for (const candidate of job.steps) {
+    assert.deepEqual(candidate.env, allowed.get(candidate.name), `${name} env on ${candidate.name ?? candidate.uses}`);
   }
 }
 
-function jobBlock(workflow, jobName) {
-  const start = workflow.indexOf(`  ${jobName}:\n`);
-  assert.notEqual(start, -1, `workflow must declare the ${jobName} job`);
-  const remaining = workflow.slice(start);
-  const nextJob = remaining.slice(1).search(/\n  [a-z_]+:\n/);
-  return nextJob === -1 ? remaining : remaining.slice(0, nextJob + 1);
+function assertNativeJob(job, name, expectedUses = nativeUses) {
+  assert.equal(job['runs-on'], 'macos-26', `${name} runner`);
+  assert.equal(job['timeout-minutes'], 45, `${name} timeout`);
+  assert.deepEqual(uses(job), expectedUses, `${name} action sites`);
+  assert.deepEqual(step(job, 'Verify the pinned native toolchain').run, toolCheck, `${name} tool verification`);
+  assert.deepEqual(step(job, 'Install workspace dependencies').run, 'pnpm install --frozen-lockfile');
+  assert.deepEqual(step(job, 'Validate repository policy contracts').run, [
+    'pnpm validate:pilot-policies',
+    'pnpm test:root-contracts',
+    'pnpm test:ios-device-lab-policy',
+    '',
+  ].join('\n'));
 }
 
-test('iOS Device Lab workflow has only the intended entry points and baseline token', async () => {
-  const workflow = await workflowText();
+function assertWorkflowContract(workflow, source) {
+  assert.deepEqual(Object.keys(workflow), ['name', 'on', 'permissions', 'jobs']);
+  assert.equal(workflow.name, 'iOS Device Lab');
+  assert.deepEqual(workflow.on, { pull_request: null, workflow_dispatch: null });
+  assert.deepEqual(workflow.permissions, { contents: 'read' });
+  assert.doesNotMatch(source, /hashFiles\s*\(/, 'hashFiles is not valid in job-level if expressions');
 
-  assert.match(workflow, /^name: iOS Device Lab$/m);
-  assert.match(workflow, /^on:\n  pull_request:\n  workflow_dispatch:$/m);
-  assert.match(workflow, /^permissions:\n  contents: read$/m);
-  const rootPermissions = /^permissions:\n([\s\S]*?)^jobs:/m.exec(workflow);
-  assert.ok(rootPermissions, 'workflow must have a root permission map before jobs');
-  assert.equal(rootPermissions[1].trim(), 'contents: read');
-  assert.match(workflow, /^jobs:\n/m);
+  const jobs = workflow.jobs;
+  assert.deepEqual(Object.keys(jobs), ['preflight', 'lock_bootstrap', 'pr_compile', 'device_candidate']);
+  const { preflight, lock_bootstrap: bootstrap, pr_compile: compile, device_candidate: candidate } = jobs;
+
+  assert.deepEqual(Object.keys(preflight), ['runs-on', 'timeout-minutes', 'permissions', 'outputs', 'steps']);
+  assert.equal(preflight['runs-on'], 'ubuntu-latest');
+  assert.equal(preflight['timeout-minutes'], 5);
+  assert.deepEqual(preflight.permissions, { contents: 'read' });
+  assert.deepEqual(preflight.outputs, {
+    lock_present: '${{ steps.state.outputs.lock_present }}',
+    readiness_present: '${{ steps.state.outputs.readiness_present }}',
+  });
+  assert.deepEqual(uses(preflight), [sha.checkout]);
+  assertStepOrder(preflight, [sha.checkout, 'Read reviewed prerequisite presence'], 'preflight');
+  assert.equal(step(preflight, 'Read reviewed prerequisite presence').id, 'state');
+  assertOnlyStepEnvs(preflight, new Map(), 'preflight');
+  assert.equal('environment' in preflight, false);
+
+  assert.deepEqual(bootstrap.permissions, { contents: 'read' });
+  assert.equal(bootstrap.if, "${{ github.event_name == 'pull_request' && needs.preflight.outputs.lock_present == 'false' }}");
+  assert.deepEqual(bootstrap.needs, ['preflight']);
+  assertNativeJob(bootstrap, 'lock bootstrap', [...nativeUses, sha.upload]);
+  assertStepOrder(bootstrap, [
+    sha.checkout, sha.pnpm, sha.node, sha.ruby,
+    'Install workspace dependencies', 'Verify the pinned native toolchain',
+    'Validate repository policy contracts', 'Resolve the missing Pod lock only',
+    'Upload the generated Pod lock for review', 'Remove generated native files',
+  ], 'lock bootstrap');
+  assert.equal('environment' in bootstrap, false);
+  const bootstrapResolve = step(bootstrap, 'Resolve the missing Pod lock only');
+  assert.deepEqual(bootstrapResolve.env, fixedInputs);
+  assertOnlyStepEnvs(bootstrap, new Map([['Resolve the missing Pod lock only', fixedInputs]]), 'lock bootstrap');
+  assert.equal(bootstrapResolve['working-directory'], 'apps/mobile');
+  assert.match(bootstrapResolve.run, /expo prebuild --clean --platform ios --no-install/);
+  assert.match(bootstrapResolve.run, /pod _1\.17\.0_ install/);
+  const bootstrapUpload = step(bootstrap, 'Upload the generated Pod lock for review');
+  assert.deepEqual(bootstrapUpload.with, {
+    name: 'ios-device-lab-podfile-lock',
+    path: 'apps/mobile/ios/Podfile.lock',
+    'if-no-files-found': 'error',
+    'retention-days': 3,
+  });
+  assert.equal(bootstrap.steps.filter((candidate) => candidate.uses === sha.upload).length, 1);
+  assert.doesNotMatch(JSON.stringify(bootstrap), /build:unsigned-ios|attest|device_candidate/);
+
+  assert.deepEqual(compile.permissions, { contents: 'read' });
+  assert.equal(compile.if, "${{ github.event_name == 'pull_request' && needs.preflight.outputs.lock_present == 'true' }}");
+  assert.deepEqual(compile.needs, ['preflight']);
+  assertNativeJob(compile, 'PR compile');
+  assertStepOrder(compile, [
+    sha.checkout, sha.pnpm, sha.node, sha.ruby,
+    'Install workspace dependencies', 'Verify the pinned native toolchain',
+    'Validate repository policy contracts', 'Validate and build the non-installable compile probe',
+    'Remove non-installable compile outputs',
+  ], 'PR compile');
+  assert.equal('environment' in compile, false);
+  assert.equal(compile.steps.some((candidate) => candidate.uses === sha.upload || candidate.uses === sha.attest), false);
+  const compileBuild = step(compile, 'Validate and build the non-installable compile probe');
+  assert.deepEqual(compileBuild.env, fixedInputs);
+  assertOnlyStepEnvs(compile, new Map([['Validate and build the non-installable compile probe', fixedInputs]]), 'PR compile');
+  assert.match(compileBuild.run, /pnpm validate:ios-device-lab/);
+  assert.match(compileBuild.run, /pnpm --filter @animalhelper\/mobile build:unsigned-ios/);
+  assert.equal(compile.steps.some((candidate) => candidate.env && JSON.stringify(candidate.env).includes('secrets.')), false);
+
+  assert.deepEqual(candidate.permissions, { contents: 'read', 'id-token': 'write', attestations: 'write' });
+  assert.equal(candidate.if, "${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.preflight.outputs.lock_present == 'true' && needs.preflight.outputs.readiness_present == 'true' }}");
+  assert.deepEqual(candidate.needs, ['preflight']);
+  assert.equal(candidate.environment, 'ios-device-lab');
+  assertNativeJob(candidate, 'device candidate', [...nativeUses, sha.attest, sha.upload]);
+  assertStepOrder(candidate, [
+    sha.checkout, 'Require the checked out immutable workflow commit', sha.pnpm, sha.node, sha.ruby,
+    'Install workspace dependencies', 'Verify the pinned native toolchain',
+    'Validate repository policy contracts', 'Validate the protected runtime inputs',
+    'Validate Gate 2B readiness evidence', 'Validate the public key at the approved hosted origin',
+    'Build the protected unsigned candidate', 'Attest the unsigned IPA provenance',
+    'Upload the unsigned candidate allowlist', 'Remove generated candidate files',
+  ], 'device candidate');
+  assert.deepEqual(candidate.steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 0 });
+  assert.equal(step(candidate, 'Require the checked out immutable workflow commit').run, 'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"');
+  assert.match(step(candidate, 'Validate Gate 2B readiness evidence').run, /evaluateGate2BReadiness/);
+  assert.match(step(candidate, 'Validate Gate 2B readiness evidence').run, /merge-base', '--is-ancestor/);
+  const allowedSecretSteps = new Map([
+    ['Validate the protected runtime inputs', candidateSecrets],
+    ['Validate the public key at the approved hosted origin', {
+      EXPO_PUBLIC_SUPABASE_URL: candidateSecrets.EXPO_PUBLIC_SUPABASE_URL,
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: candidateSecrets.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    }],
+    ['Build the protected unsigned candidate', candidateSecrets],
+  ]);
+  assert.equal('env' in candidate, false);
+  assertOnlyStepEnvs(candidate, allowedSecretSteps, 'device candidate');
+  const candidateUpload = step(candidate, 'Upload the unsigned candidate allowlist');
+  assert.deepEqual(candidateUpload.with, {
+    name: 'whiskercommons-unsigned-${{ github.sha }}',
+    path: [
+      'apps/mobile/ios-device-lab-artifacts/*.ipa',
+      'apps/mobile/ios-device-lab-artifacts/*.manifest.json',
+      'apps/mobile/ios-device-lab-artifacts/*.sha256',
+      '',
+    ].join('\n'),
+    'if-no-files-found': 'error',
+    'retention-days': 7,
+  });
+  assert.deepEqual(step(candidate, 'Attest the unsigned IPA provenance').with, {
+    'subject-path': 'apps/mobile/ios-device-lab-artifacts/*.ipa',
+  });
+  assert.equal(candidate.steps.filter((candidateStep) => candidateStep.uses === sha.upload).length, 1);
+}
+
+test('workflow parses structurally and enforces the complete least-privilege contract', async () => {
+  const { source, workflow } = await parsedWorkflow();
+  assertWorkflowContract(workflow, source);
 });
 
-test('iOS Device Lab pins every action and its macOS toolchain exactly', async () => {
-  const workflow = await workflowText();
-  const uses = [...workflow.matchAll(/^\s*(?:- )?uses: ([^\s]+)$/gm)].map((match) => match[1]);
+test('contract rejects job, permission, secret, upload-path, and shallow-history mutations', async () => {
+  const { source, workflow } = await parsedWorkflow();
+  const mutations = [
+    ['extra job', (candidate) => { candidate.jobs.unreviewed = {}; }],
+    ['workflow write permission', (candidate) => { candidate.permissions.contents = 'write'; }],
+    ['PR secret', (candidate) => { step(candidate.jobs.pr_compile, 'Install workspace dependencies').env = candidateSecrets; }],
+    ['extra candidate upload path', (candidate) => { step(candidate.jobs.device_candidate, 'Upload the unsigned candidate allowlist').with.path += '\napps/mobile/ios-device-lab-artifacts/*.zip'; }],
+    ['shallow candidate checkout', (candidate) => { candidate.jobs.device_candidate.steps[0].with['fetch-depth'] = 1; }],
+  ];
 
-  assert.ok(uses.length > 0, 'workflow must use only reviewed full-SHA actions');
-  for (const use of uses) {
-    assert.match(use, /^[^@]+@[a-f0-9]{40}$/, `${use} must be a full commit SHA`);
+  for (const [name, mutate] of mutations) {
+    const candidate = structuredClone(workflow);
+    mutate(candidate);
+    assert.throws(() => assertWorkflowContract(candidate, source), undefined, name);
   }
-  for (const [action, sha] of Object.entries(actionShas)) {
-    assert.ok(uses.includes(`${action}@${sha}`), `workflow must use the reviewed ${action} SHA`);
-  }
-  assert.match(workflow, /runs-on: macos-26/g);
-  assert.match(workflow, /timeout-minutes: 45/g);
-  assert.match(workflow, /version: 11\.19\.0/);
-  assert.match(workflow, /node-version: 22\.23\.1/);
-  assert.match(workflow, /ruby-version: 3\.3\.12/);
-  assert.match(workflow, /Xcode 26\.4\.1/);
-  assert.match(workflow, /Build version 17E202/);
-  assert.match(workflow, /pod _1\.17\.0_ --version/);
-});
-
-test('lock bootstrap is PR-only, lock-only, short-lived, and never a candidate', async () => {
-  const workflow = await workflowText();
-  const bootstrap = jobBlock(workflow, 'lock_bootstrap');
-
-  assert.match(bootstrap, /github\.event_name == 'pull_request'/);
-  assert.match(bootstrap, /hashFiles\('apps\/mobile\/ios-device-lab\/Podfile\.lock'\) == ''/);
-  assert.match(bootstrap, /permissions:\n      contents: read/);
-  assert.doesNotMatch(bootstrap, /environment:/);
-  assert.doesNotMatch(bootstrap, /secrets\./);
-  assert.doesNotMatch(bootstrap, /id-token:|attestations:|attest-build-provenance|build:unsigned-ios|device_candidate/);
-  assert.match(bootstrap, /expo prebuild --clean --platform ios --no-install/);
-  assert.match(bootstrap, /pod _1\.17\.0_ install/);
-  assert.match(bootstrap, /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
-  assert.match(bootstrap, /name: ios-device-lab-podfile-lock/);
-  assert.match(bootstrap, /path: apps\/mobile\/ios\/Podfile\.lock/);
-  assert.match(bootstrap, /retention-days: 3/);
-  assert.match(bootstrap, /if: always\(\)/);
-  assert.match(bootstrap, /rm -rf -- apps\/mobile\/ios/);
-});
-
-test('PR compile is placeholder-only and cannot upload, attest, or receive privileged context', async () => {
-  const workflow = await workflowText();
-  const compile = jobBlock(workflow, 'pr_compile');
-
-  assert.match(compile, /github\.event_name == 'pull_request'/);
-  assert.match(compile, /hashFiles\('apps\/mobile\/ios-device-lab\/Podfile\.lock'\) != ''/);
-  assert.match(compile, /permissions:\n      contents: read/);
-  assert.match(compile, /GOOGLE_MAPS_IOS_API_KEY: compile-probe-google-maps-ios-key/);
-  assert.match(compile, /EXPO_PUBLIC_SUPABASE_URL: https:\/\/compile-probe\.invalid/);
-  assert.match(compile, /EXPO_PUBLIC_SUPABASE_ANON_KEY: compile-probe-supabase-public-key/);
-  assert.match(compile, /pnpm validate:ios-device-lab/);
-  assert.match(compile, /pnpm --filter @animalhelper\/mobile build:unsigned-ios/);
-  assert.doesNotMatch(compile, /environment:|secrets\.|id-token:|attestations:|upload-artifact|attest-build-provenance/);
-  assert.match(compile, /if: always\(\)/);
-  assert.match(compile, /rm -rf -- apps\/mobile\/ios-device-lab-artifacts/);
-});
-
-test('manual candidate has the protected narrow permission map and step-scoped runtime inputs', async () => {
-  const workflow = await workflowText();
-  const candidate = jobBlock(workflow, 'device_candidate');
-
-  assert.match(candidate, /github\.event_name == 'workflow_dispatch'/);
-  assert.match(candidate, /github\.ref == 'refs\/heads\/main'/);
-  assert.match(candidate, /hashFiles\('apps\/mobile\/ios-device-lab\/Podfile\.lock'\) != ''/);
-  assert.match(candidate, /hashFiles\('docs\/evidence\/pilot-gate-2b-readiness\.json'\) != ''/);
-  assert.match(candidate, /evaluateGate2BReadiness/);
-  assert.match(candidate, /merge-base', '--is-ancestor/);
-  assert.match(candidate, /environment: ios-device-lab/);
-  assert.match(candidate, /permissions:\n      contents: read\n      id-token: write\n      attestations: write/);
-  assert.doesNotMatch(candidate, /^    env:/m);
-  assert.match(candidate, /GOOGLE_MAPS_IOS_API_KEY: \$\{\{ secrets\.GOOGLE_MAPS_IOS_API_KEY \}\}/);
-  assert.match(candidate, /EXPO_PUBLIC_SUPABASE_URL: \$\{\{ secrets\.EXPO_PUBLIC_SUPABASE_URL \}\}/);
-  assert.match(candidate, /EXPO_PUBLIC_SUPABASE_ANON_KEY: \$\{\{ secrets\.EXPO_PUBLIC_SUPABASE_ANON_KEY \}\}/);
-  assert.match(candidate, /pnpm validate:ios-device-lab/);
-  assert.match(candidate, /git rev-parse HEAD/);
-  assert.match(candidate, /\/auth\/v1\/settings/);
-  assert.match(candidate, /pnpm --filter @animalhelper\/mobile build:unsigned-ios/);
-  assert.match(candidate, /actions\/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a/);
-  assert.match(candidate, /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
-  assert.match(candidate, /retention-days: 7/);
-  assert.match(candidate, /\.ipa/);
-  assert.match(candidate, /\.manifest\.json/);
-  assert.match(candidate, /\.sha256/);
-  assert.match(candidate, /if: always\(\)/);
-  assert.match(candidate, /rm -rf -- apps\/mobile\/ios-device-lab-artifacts/);
 });

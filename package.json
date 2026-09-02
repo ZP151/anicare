@@ -24,6 +24,7 @@
     "cross-env": "10.1.0",
     "turbo": "2.10.11",
     "typescript": "7.0.2",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "yaml": "2.9.0"
   }
 }
