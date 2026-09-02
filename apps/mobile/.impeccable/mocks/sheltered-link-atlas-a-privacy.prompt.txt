@@ -1,0 +1,6 @@
+Use case: text-localization
+Asset type: approved portrait mobile UI composition for Whisker Commons, compliance-corrected design baseline
+Primary request: Edit Image 1 only by replacing the five atlas labels while preserving the complete UI mockup pixel-for-pixel as closely as possible.
+Input image: Image 1 is the edit target and authoritative composition, sheltered-link-atlas-a.png.
+Text replacements (verbatim, one-for-one in the same positions and typography): replace "BLK 132" with "North cluster"; replace "BLK 134" with "West court"; replace "BLK 136" with "East court"; replace "Neighbourhood Green" with "Community green"; replace the bus-stop icon plus "Bus Stop" label with plain text "Public edge" and no transit icon.
+Constraints: change only those five atlas labels; preserve canvas size and portrait aspect ratio; preserve every other word exactly, including Nearby, Coarse neighbourhood view., Exact locations are protected., Mochi · 麻糬, Community confirmed, Seen this afternoon, View cat, Report sighting, and all five bottom tabs; preserve the atlas art, cat portrait, layout, colors, typography hierarchy, glass surface, sheet, icons, spacing, crop, and material texture; no exact-looking block numbers, routes, station names, transit symbols, coordinates, pins, or additional labels; no watermark; do not redesign or restyle.

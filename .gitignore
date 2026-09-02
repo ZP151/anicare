@@ -16,3 +16,5 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+supabase/.branches/
+supabase/.temp/

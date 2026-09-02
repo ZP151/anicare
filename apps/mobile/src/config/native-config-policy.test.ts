@@ -11,15 +11,17 @@ const safeEvidence: NativeConfigEvidence = {
   androidPermissions: [
     'android.permission.ACCESS_FINE_LOCATION',
     'android.permission.READ_MEDIA_IMAGES',
+    'android.permission.CAMERA',
   ],
   iosUsageDescriptionKeys: [
     'NSLocationWhenInUseUsageDescription',
     'NSPhotoLibraryUsageDescription',
+    'NSCameraUsageDescription',
   ],
   plugins: [
     [
       'expo-image-picker',
-      { cameraPermission: false, microphonePermission: false },
+      { cameraPermission: 'Take a cat photo for private review and redaction. Source media is never uploaded.', microphonePermission: false },
     ],
     [
       'expo-location',
@@ -39,7 +41,6 @@ const unsafeEvidence: NativeConfigEvidence = {
     'android.permission.RECORD_AUDIO',
   ],
   iosUsageDescriptionKeys: [
-    'NSCameraUsageDescription',
     'NSMicrophoneUsageDescription',
     'NSLocationAlwaysAndWhenInUseUsageDescription',
     ...safeEvidence.iosUsageDescriptionKeys,
@@ -51,7 +52,6 @@ describe('native config policy', () => {
     expect(evaluateNativeConfigEvidence(unsafeEvidence)).toEqual(
       expect.arrayContaining([
         'android_microphone_forbidden',
-        'ios_camera_usage_forbidden',
         'ios_microphone_usage_forbidden',
         'ios_always_location_usage_forbidden',
       ]),
@@ -72,6 +72,7 @@ describe('native config policy', () => {
       expect.arrayContaining([
         'photo_library_permission_missing',
         'location_when_in_use_missing',
+        'android_camera_permission_missing',
       ]),
     );
   });
@@ -94,6 +95,7 @@ describe('native config policy', () => {
                 infoPlist: {
                   NSLocationWhenInUseUsageDescription: 'required',
                   NSPhotoLibraryUsageDescription: 'required',
+                  NSCameraUsageDescription: 'required',
                   CFBundleDisplayName: 'do-not-copy',
                 },
               },

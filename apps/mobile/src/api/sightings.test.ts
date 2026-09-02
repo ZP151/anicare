@@ -5,10 +5,9 @@ import {
 } from './sightings';
 
 describe('buildSightingPayload', () => {
-  it('includes precise input for the protected endpoint but never client-controlled exposure fields', () => {
+  it('emits the exact device-once location mode and never client-controlled exposure fields', () => {
     const payload = buildSightingPayload({
-      latitude: 1.3521,
-      longitude: 103.8198,
+      location: { kind: 'device_once', latitude: 1.3521, longitude: 103.8198 },
       occurredAt: new Date('2026-08-26T08:00:00.000Z'),
       risk: 'normal',
       traits: { coat: 'tortoiseshell', earTip: true },
@@ -26,8 +25,32 @@ describe('buildSightingPayload', () => {
       clientDedupeKey: 'draft-12345678',
     });
     expect(payload).not.toHaveProperty('publicCellId');
+    expect(payload).not.toHaveProperty('kind');
     expect(payload).not.toHaveProperty('visibility');
     expect(payload).not.toHaveProperty('visibleAt');
+  });
+
+  it('emits the exact manual-area location mode without coordinates', () => {
+    const payload = buildSightingPayload({
+      location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
+      occurredAt: new Date('2026-08-26T08:00:00.000Z'),
+      risk: 'sensitive',
+      traits: { coat: 'tortoiseshell' },
+      notes: null,
+      clientDedupeKey: 'draft-12345678',
+    });
+
+    expect(payload).toEqual({
+      manualPublicCellId: '89652636d87ffff',
+      occurredAt: '2026-08-26T08:00:00.000Z',
+      risk: 'sensitive',
+      traits: { coat: 'tortoiseshell' },
+      notes: null,
+      clientDedupeKey: 'draft-12345678',
+    });
+    expect(payload).not.toHaveProperty('latitude');
+    expect(payload).not.toHaveProperty('longitude');
+    expect(payload).not.toHaveProperty('visibility');
   });
 });
 
@@ -35,8 +58,7 @@ describe('sighting submission transport', () => {
   const supabaseUrl = 'https://example.invalid';
   const accessToken = 'access-token';
   const draft = {
-    latitude: 1.3521,
-    longitude: 103.8198,
+    location: { kind: 'device_once' as const, latitude: 1.3521, longitude: 103.8198 },
     occurredAt: new Date('2026-08-27T08:00:00.000Z'),
     risk: 'normal' as const,
     traits: {},

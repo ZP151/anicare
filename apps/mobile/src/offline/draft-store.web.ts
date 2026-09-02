@@ -51,11 +51,15 @@ export async function attachSightingToDraft(_id: string, _sightingId: string, _o
   return unavailable();
 }
 
+export async function claimOfflineDraftOwner(_id: string, _ownerSubject: string): Promise<boolean> {
+  return unavailable();
+}
+
 export async function cleanupQuarantinedMedia(_id: string, _revision: number): Promise<void> {
   return unavailable();
 }
 
-export async function deleteOfflineDraft(_id: string): Promise<void> {
+export async function deleteOfflineDraft(_id: string, _expectedOwnerSubject: string | null = null): Promise<void> {
   return unavailable();
 }
 
@@ -64,5 +68,9 @@ export async function cleanupPendingReviewedMediaReferences(): Promise<void> {
 }
 
 export async function cleanupPendingReviewedMediaForDraft(_draftId: string): Promise<void> {
+  return unavailable();
+}
+
+export async function removeReviewedMediaFromDraft(_draftId: string): Promise<void> {
   return unavailable();
 }

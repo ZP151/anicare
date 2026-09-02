@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const packageJsonUrl = new URL('../package.json', import.meta.url);
+const turboJsonUrl = new URL('../turbo.json', import.meta.url);
 const workflowUrl = new URL('../.github/workflows/ci.yml', import.meta.url);
 
 test('root verification blocks on both native pilot policy validators', async () => {
@@ -28,4 +29,13 @@ test('CI invokes the policy and contract gates independently before root verify'
   assert.ok(policyIndex >= 0, 'CI must invoke the native pilot policy gate directly');
   assert.ok(contractIndex > policyIndex, 'CI must invoke the root contract after policy validation');
   assert.ok(verifyIndex > contractIndex, 'both independent gates must run before root verification');
+});
+
+test('workspace type analysis builds dependency packages before clean-checkout resolution', async () => {
+  const turbo = JSON.parse(await readFile(turboJsonUrl, 'utf8'));
+
+  assert.ok(turbo.tasks.lint.dependsOn.includes('^build'));
+  assert.ok(turbo.tasks.lint.dependsOn.includes('^lint'));
+  assert.ok(turbo.tasks.typecheck.dependsOn.includes('^build'));
+  assert.ok(turbo.tasks.typecheck.dependsOn.includes('^typecheck'));
 });

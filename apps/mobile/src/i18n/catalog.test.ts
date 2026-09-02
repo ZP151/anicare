@@ -1,6 +1,11 @@
 import { getCommunityMapCopy, getTabDefinitions, translate } from './catalog';
+import { getReportCopy } from '../report/report-copy';
 
 describe('localization catalog', () => {
+  it('supplies every report-hub message in both supported locales', () => {
+    expect(Object.keys(getReportCopy('en')).sort()).toEqual(Object.keys(getReportCopy('zh-CN')).sort());
+  });
+
   it('uses the WhiskerCommons display name in both locales', () => {
     expect(translate('en', 'app.name')).toBe('WhiskerCommons');
     expect(translate('zh-CN', 'app.name')).toBe('WhiskerCommons');
@@ -27,6 +32,27 @@ describe('localization catalog', () => {
     expect(translate('zh-CN', 'nearby.privacyNote')).toBe('公开位置已模糊处理，并延迟显示。');
   });
 
+  it('localizes the secure saved-report return card in both supported locales', () => {
+    expect([
+      translate('en', 'profile.reportReturnTitle'),
+      translate('en', 'profile.reportReturnCopy'),
+      translate('en', 'profile.reportReturnAction'),
+    ]).toEqual([
+      'Saved report waiting',
+      'Sign in, then resume the same private draft. No report content is placed in this link.',
+      'Resume saved report',
+    ]);
+    expect([
+      translate('zh-CN', 'profile.reportReturnTitle'),
+      translate('zh-CN', 'profile.reportReturnCopy'),
+      translate('zh-CN', 'profile.reportReturnAction'),
+    ]).toEqual([
+      '已保存的报告正在等待',
+      '登录后可继续同一份私密草稿。此链接不包含任何报告内容。',
+      '继续已保存的报告',
+    ]);
+  });
+
   it('provides complete privacy-safe community map labels in English', () => {
     expect([
       'Community map',
@@ -43,6 +69,7 @@ describe('localization catalog', () => {
       'Loading delayed community activity…',
       'No delayed community activity yet',
       'Community feed unavailable · map remains privacy-safe',
+      'Google Maps is unavailable. Switch to the area list to browse delayed community activity.',
       'View',
       'Follow area',
       'Sign-in and hosted area-follow support are required.',
@@ -61,6 +88,7 @@ describe('localization catalog', () => {
       translate('en', 'map.loadingStatus'),
       translate('en', 'map.emptyStatus'),
       translate('en', 'map.unavailableStatus'),
+      translate('en', 'map.mapUnavailable'),
       translate('en', 'map.detail.viewAction'),
       translate('en', 'map.detail.followAction'),
       translate('en', 'map.detail.followDisabledReason'),
@@ -83,6 +111,7 @@ describe('localization catalog', () => {
       '正在加载延迟显示的社区活动…',
       '暂时没有延迟显示的社区活动',
       '社区动态暂不可用 · 地图仍保持隐私安全',
+      'Google 地图暂不可用。请切换到区域列表浏览延迟显示的社区活动。',
       '查看',
       '关注区域',
       '需要登录；区域关注服务上线后才能使用此功能。',
@@ -101,6 +130,7 @@ describe('localization catalog', () => {
       translate('zh-CN', 'map.loadingStatus'),
       translate('zh-CN', 'map.emptyStatus'),
       translate('zh-CN', 'map.unavailableStatus'),
+      translate('zh-CN', 'map.mapUnavailable'),
       translate('zh-CN', 'map.detail.viewAction'),
       translate('zh-CN', 'map.detail.followAction'),
       translate('zh-CN', 'map.detail.followDisabledReason'),

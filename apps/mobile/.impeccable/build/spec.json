@@ -1,8 +1,8 @@
 {
   "tool": "comp-spec",
   "version": 1,
-  "createdAt": "2026-08-30T10:07:29.124Z",
-  "comp": ".impeccable\\mocks\\sheltered-link-atlas-a.png",
+  "createdAt": "2026-08-31T16:50:10.138Z",
+  "comp": ".impeccable\\mocks\\sheltered-link-atlas-a-privacy.png",
   "warnings": [
     "region coarse-atlas: \"bleed\": true set in the regions file (the clipped-artwork refusal is overridden: the page crops it there)",
     "region cat-sheet: \"container\": true set in the regions file (the region-size refusal is overridden: one undivided element)",
@@ -17,82 +17,82 @@
   "orientation": "portrait",
   "palette": [
     {
-      "hex": "#edede4",
-      "coverage": 0.7081
+      "hex": "#eae7e0",
+      "coverage": 0.8115
     },
     {
-      "hex": "#d1d0ba",
-      "coverage": 0.1786
+      "hex": "#d0d5b6",
+      "coverage": 0.0751
     },
     {
-      "hex": "#b9bfbe",
-      "coverage": 0.0569
+      "hex": "#b0bfb9",
+      "coverage": 0.0611
     },
     {
-      "hex": "#49452d",
-      "coverage": 0.0292
+      "hex": "#49462b",
+      "coverage": 0.0268
     },
     {
-      "hex": "#185957",
-      "coverage": 0.0272
+      "hex": "#1b6158",
+      "coverage": 0.0254
     }
   ],
   "bands": [
     {
       "y": 0.0794,
-      "strength": 0.4112
+      "strength": 0.4193
     },
     {
       "y": 0.4982,
-      "strength": 0.3242
+      "strength": 0.2672
     },
     {
-      "y": 0.5307,
-      "strength": 0.3032
+      "y": 0.5451,
+      "strength": 0.31
     },
     {
       "y": 0.574,
-      "strength": 0.3036
+      "strength": 0.292
     },
     {
       "y": 0.5993,
-      "strength": 0.5367
+      "strength": 0.364
     },
     {
       "y": 0.6354,
-      "strength": 0.7175
+      "strength": 0.6072
     },
     {
       "y": 0.6715,
-      "strength": 0.3424
+      "strength": 0.3799
     },
     {
       "y": 0.6968,
-      "strength": 0.2368
+      "strength": 0.2509
     },
     {
       "y": 0.7256,
-      "strength": 0.2583
+      "strength": 0.2748
     },
     {
-      "y": 0.7581,
-      "strength": 0.694
+      "y": 0.7545,
+      "strength": 0.6294
     },
     {
       "y": 0.8087,
-      "strength": 0.7721
+      "strength": 0.6655
     },
     {
       "y": 0.87,
-      "strength": 0.5531
+      "strength": 0.613
     },
     {
       "y": 0.9025,
-      "strength": 0.2831
+      "strength": 0.2901
     },
     {
       "y": 0.9567,
-      "strength": 0.3208
+      "strength": 0.3455
     }
   ],
   "regions": [
@@ -116,12 +116,12 @@
       "aspect": 1.3913,
       "palette": [
         {
-          "hex": "#f8f3e8",
+          "hex": "#f8e9e8",
           "coverage": 1
         }
       ],
       "detail": {
-        "energy": 0.3902
+        "energy": 0.44
       },
       "medium": "raster",
       "plate": "assets\\plates\\paper-ground.png",
@@ -147,28 +147,28 @@
       "aspect": 4.2857,
       "palette": [
         {
-          "hex": "#f6f3e9",
-          "coverage": 0.7509
+          "hex": "#f5ece9",
+          "coverage": 0.7607
         },
         {
-          "hex": "#135149",
-          "coverage": 0.1931
+          "hex": "#185f56",
+          "coverage": 0.1619
         },
         {
-          "hex": "#61867d",
-          "coverage": 0.0358
+          "hex": "#b0c5be",
+          "coverage": 0.0393
         },
         {
-          "hex": "#bdcac9",
-          "coverage": 0.0155
+          "hex": "#669188",
+          "coverage": 0.0357
         },
         {
-          "hex": "#98b4ac",
-          "coverage": 0.0048
+          "hex": "#104040",
+          "coverage": 0.0024
         }
       ],
       "detail": {
-        "energy": 28.3587
+        "energy": 27.4124
       },
       "medium": "semantic",
       "plate": null,
@@ -177,31 +177,23 @@
         "comp": {
           "lines": 1,
           "glyphs": 6,
-          "capHeightPx": 28,
+          "capHeightPx": 28.5,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.7139,
-          "advTall": 0.7853,
-          "advX": 0.6425,
-          "gap": 0.1071,
-          "xRatio": 0.7254,
-          "stemW": 0.1949,
-          "contrast": 1.1964,
-          "serif": 0.3523,
-          "densTall": 0.576,
-          "densX": 0.6079,
-          "weight": 0.576
+          "advance": 0.7018,
+          "advTall": 0.7719,
+          "advX": 0.6316,
+          "gap": 0.1053,
+          "xRatio": 0.7117,
+          "stemW": 0.1873,
+          "contrast": 1.2037,
+          "serif": null,
+          "densTall": 0.5675,
+          "densX": 0.5798,
+          "weight": 0.5675
         },
         "widthClass": "normal",
-        "weightClass": "bold",
-        "chosen": {
-          "family": "Noto Sans HK",
-          "weight": 700,
-          "fontSizePx": 40,
-          "source": "catalog",
-          "estimatedSize": true,
-          "stamp": "98e512b3b889"
-        }
+        "weightClass": "bold"
       }
     },
     {
@@ -224,28 +216,28 @@
       "aspect": 0.9875,
       "palette": [
         {
-          "hex": "#f7f6f3",
-          "coverage": 0.9249
+          "hex": "#f7f4f3",
+          "coverage": 0.9218
         },
         {
-          "hex": "#172a2a",
-          "coverage": 0.0209
+          "hex": "#18272c",
+          "coverage": 0.0508
         },
         {
-          "hex": "#525f61",
-          "coverage": 0.0209
+          "hex": "#b3b8b8",
+          "coverage": 0.0123
         },
         {
-          "hex": "#aeb6b7",
-          "coverage": 0.0181
+          "hex": "#435050",
+          "coverage": 0.0082
         },
         {
-          "hex": "#0f1f2f",
-          "coverage": 0.0153
+          "hex": "#727e82",
+          "coverage": 0.0069
         }
       ],
       "detail": {
-        "energy": 8.5621
+        "energy": 8.7592
       },
       "medium": "semantic",
       "plate": null,
@@ -272,24 +264,28 @@
       "aspect": 0.8895,
       "palette": [
         {
-          "hex": "#dbdccd",
-          "coverage": 0.8655
+          "hex": "#dcdcce",
+          "coverage": 0.8802
         },
         {
-          "hex": "#b5bfbb",
-          "coverage": 0.1241
+          "hex": "#afbfb9",
+          "coverage": 0.1057
         },
         {
-          "hex": "#85a199",
-          "coverage": 0.0097
+          "hex": "#b8c8a8",
+          "coverage": 0.0113
         },
         {
-          "hex": "#586868",
+          "hex": "#809898",
+          "coverage": 0.0021
+        },
+        {
+          "hex": "#283838",
           "coverage": 0.0007
         }
       ],
       "detail": {
-        "energy": 12.0469
+        "energy": 11.8073
       },
       "medium": "raster",
       "plate": "assets\\plates\\coarse-atlas.png",
@@ -302,63 +298,59 @@
       "grid": null,
       "box": {
         "x": 0.48,
-        "y": 0.145,
+        "y": 0.14,
         "w": 0.18,
-        "h": 0.024
+        "h": 0.05
       },
       "px": {
         "x": 409,
-        "y": 267,
+        "y": 258,
         "w": 154,
-        "h": 44
+        "h": 92
       },
-      "aspect": 3.5,
+      "aspect": 1.6739,
       "palette": [
         {
-          "hex": "#e4dac9",
-          "coverage": 0.896
+          "hex": "#e5dac9",
+          "coverage": 0.9318
         },
         {
-          "hex": "#555858",
-          "coverage": 0.0488
+          "hex": "#373c3e",
+          "coverage": 0.0385
         },
         {
-          "hex": "#838680",
-          "coverage": 0.027
+          "hex": "#b1afad",
+          "coverage": 0.0149
         },
         {
-          "hex": "#adaba0",
-          "coverage": 0.027
-        },
-        {
-          "hex": "#283838",
-          "coverage": 0.0013
+          "hex": "#80827e",
+          "coverage": 0.0149
         }
       ],
       "detail": {
-        "energy": 16.3481
+        "energy": 14.0408
       },
       "medium": "semantic",
       "plate": null,
       "text": null,
       "type": {
         "comp": {
-          "lines": 1,
-          "glyphs": 6,
-          "capHeightPx": 18.2,
+          "lines": 2,
+          "glyphs": 13,
+          "capHeightPx": 18.1,
           "inkIsDark": true,
-          "allCaps": true,
-          "advance": 0.6467,
-          "advTall": 0.6467,
-          "advX": null,
-          "gap": 0.1513,
-          "xRatio": null,
-          "stemW": 0.1739,
-          "contrast": 1.1584,
-          "serif": 1.933,
-          "densTall": 0.4704,
-          "densX": null,
-          "weight": 0.4704
+          "allCaps": false,
+          "advance": 0.5739,
+          "advTall": 0.4417,
+          "advX": 0.6012,
+          "gap": 0.1394,
+          "xRatio": 0.7249,
+          "stemW": 0.1479,
+          "contrast": 1.1394,
+          "serif": 0.4325,
+          "densTall": 0.4388,
+          "densX": 0.4837,
+          "weight": 0.4388
         },
         "widthClass": "normal",
         "weightClass": "regular"
@@ -373,64 +365,64 @@
         "x": 0.1,
         "y": 0.337,
         "w": 0.17,
-        "h": 0.024
+        "h": 0.037
       },
       "px": {
         "x": 85,
         "y": 621,
         "w": 145,
-        "h": 44
+        "h": 68
       },
-      "aspect": 3.2955,
+      "aspect": 2.1324,
       "palette": [
         {
-          "hex": "#e6e0d3",
-          "coverage": 0.7102
+          "hex": "#e5e1d3",
+          "coverage": 0.7236
         },
         {
-          "hex": "#a3b5ae",
-          "coverage": 0.2122
+          "hex": "#aabdb5",
+          "coverage": 0.1986
         },
         {
-          "hex": "#5b605d",
-          "coverage": 0.0707
+          "hex": "#3a4042",
+          "coverage": 0.0483
         },
         {
-          "hex": "#98908c",
-          "coverage": 0.0054
+          "hex": "#929491",
+          "coverage": 0.0197
         },
         {
-          "hex": "#688888",
-          "coverage": 0.0014
+          "hex": "#6e6e6f",
+          "coverage": 0.0098
         }
       ],
       "detail": {
-        "energy": 17.0061
+        "energy": 17.7268
       },
       "medium": "semantic",
       "plate": null,
       "text": null,
       "type": {
         "comp": {
-          "lines": 1,
-          "glyphs": 7,
-          "capHeightPx": 23.7,
+          "lines": 2,
+          "glyphs": 10,
+          "capHeightPx": 17.6,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.5168,
-          "advTall": null,
-          "advX": 0.5168,
-          "gap": 0.1266,
-          "xRatio": 0.7571,
-          "stemW": 0.1283,
-          "contrast": 1.0506,
+          "advance": 0.5587,
+          "advTall": 0.4956,
+          "advX": 0.6331,
+          "gap": 0.1397,
+          "xRatio": 0.7486,
+          "stemW": 0.1505,
+          "contrast": 1.1162,
           "serif": null,
-          "densTall": null,
-          "densX": 0.4819,
-          "weight": 0.4819
+          "densTall": 0.4554,
+          "densX": 0.5159,
+          "weight": 0.4554
         },
-        "widthClass": "condensed",
-        "weightClass": "medium"
+        "widthClass": "normal",
+        "weightClass": "regular"
       }
     },
     {
@@ -453,24 +445,24 @@
       "aspect": 3.5,
       "palette": [
         {
-          "hex": "#deddcc",
-          "coverage": 0.8923
+          "hex": "#e0ddcd",
+          "coverage": 0.9103
         },
         {
-          "hex": "#606261",
-          "coverage": 0.059
+          "hex": "#5e6461",
+          "coverage": 0.0423
         },
         {
-          "hex": "#a2a29a",
-          "coverage": 0.0474
+          "hex": "#373e3e",
+          "coverage": 0.0295
         },
         {
-          "hex": "#484858",
-          "coverage": 0.0013
+          "hex": "#999e96",
+          "coverage": 0.0179
         }
       ],
       "detail": {
-        "energy": 15.0666
+        "energy": 18.6796
       },
       "medium": "semantic",
       "plate": null,
@@ -478,24 +470,24 @@
       "type": {
         "comp": {
           "lines": 1,
-          "glyphs": 6,
-          "capHeightPx": 18.5,
+          "glyphs": 9,
+          "capHeightPx": 16.1,
           "inkIsDark": true,
-          "allCaps": true,
-          "advance": 0.6477,
-          "advTall": 0.6477,
-          "advX": null,
-          "gap": 0.1484,
-          "xRatio": null,
-          "stemW": 0.1688,
-          "contrast": 1.0801,
-          "serif": null,
-          "densTall": 0.4886,
-          "densX": null,
-          "weight": 0.4886
+          "allCaps": false,
+          "advance": 0.6197,
+          "advTall": 0.4338,
+          "advX": 0.6197,
+          "gap": 0.1239,
+          "xRatio": 0.7105,
+          "stemW": 0.1512,
+          "contrast": 1.0961,
+          "serif": 1.2366,
+          "densTall": 0.448,
+          "densX": 0.5322,
+          "weight": 0.448
         },
         "widthClass": "normal",
-        "weightClass": "medium"
+        "weightClass": "regular"
       }
     },
     {
@@ -505,62 +497,66 @@
       "grid": null,
       "box": {
         "x": 0.36,
-        "y": 0.36,
+        "y": 0.34,
         "w": 0.24,
-        "h": 0.037
+        "h": 0.045
       },
       "px": {
         "x": 307,
-        "y": 664,
+        "y": 627,
         "w": 205,
-        "h": 68
+        "h": 83
       },
-      "aspect": 3.0147,
+      "aspect": 2.4699,
       "palette": [
         {
-          "hex": "#ced5b8",
-          "coverage": 0.9767
+          "hex": "#d2d7ba",
+          "coverage": 0.9341
         },
         {
-          "hex": "#56724d",
-          "coverage": 0.0139
+          "hex": "#93a387",
+          "coverage": 0.0213
         },
         {
-          "hex": "#94a488",
-          "coverage": 0.005
+          "hex": "#355433",
+          "coverage": 0.0207
         },
         {
-          "hex": "#f3e6e3",
-          "coverage": 0.0044
+          "hex": "#677c5f",
+          "coverage": 0.015
+        },
+        {
+          "hex": "#e9e1de",
+          "coverage": 0.0088
         }
       ],
       "detail": {
-        "energy": 6.2252
+        "energy": 14.2672
       },
       "medium": "semantic",
       "plate": null,
       "text": null,
       "type": {
         "comp": {
-          "lines": 1,
-          "glyphs": 5,
-          "capHeightPx": 14.1,
+          "lines": 2,
+          "glyphs": 15,
+          "capHeightPx": 14,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.6373,
-          "advTall": 0.8498,
-          "advX": 0.6373,
-          "gap": 0.1239,
-          "xRatio": 0.7254,
-          "stemW": 0.1649,
-          "contrast": 1.0969,
-          "serif": 0.4772,
-          "densTall": 0.4617,
-          "densX": 0.5551,
-          "weight": 0.4617
+          "advance": 0.6343,
+          "advTall": 0.4332,
+          "advX": 0.6497,
+          "gap": 0.1697,
+          "xRatio": 0.7761,
+          "stemW": 0.1463,
+          "contrast": 0.913,
+          "serif": 0.6612,
+          "densTall": 0.5499,
+          "densX": 0.5299,
+          "weight": 0.5499
         },
         "widthClass": "normal",
-        "weightClass": "regular"
+        "weightClass": "medium"
       }
     },
     {
@@ -583,24 +579,28 @@
       "aspect": 3.2083,
       "palette": [
         {
-          "hex": "#dcd8ca",
-          "coverage": 0.8089
+          "hex": "#dcd9ca",
+          "coverage": 0.9079
         },
         {
-          "hex": "#517169",
-          "coverage": 0.1298
+          "hex": "#4e5757",
+          "coverage": 0.0339
         },
         {
-          "hex": "#8f9f94",
-          "coverage": 0.0409
+          "hex": "#7b867e",
+          "coverage": 0.0242
         },
         {
-          "hex": "#2b4e45",
-          "coverage": 0.0204
+          "hex": "#203030",
+          "coverage": 0.0206
+        },
+        {
+          "hex": "#b2b8b1",
+          "coverage": 0.0133
         }
       ],
       "detail": {
-        "energy": 20.2393
+        "energy": 21.1563
       },
       "medium": "semantic",
       "plate": null,
@@ -608,21 +608,21 @@
       "type": {
         "comp": {
           "lines": 1,
-          "glyphs": 9,
-          "capHeightPx": 15.6,
+          "glyphs": 10,
+          "capHeightPx": 16.1,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.69,
-          "advTall": 0.7381,
-          "advX": 0.6739,
-          "gap": 0.1284,
-          "xRatio": 0.6931,
-          "stemW": 0.1701,
-          "contrast": 1.0781,
-          "serif": 1.9226,
-          "densTall": 0.4815,
-          "densX": 0.5951,
-          "weight": 0.4815
+          "advance": 0.6534,
+          "advTall": 0.6534,
+          "advX": 0.6378,
+          "gap": 0.1556,
+          "xRatio": 0.7308,
+          "stemW": 0.1516,
+          "contrast": 1.1607,
+          "serif": 0.5218,
+          "densTall": 0.5049,
+          "densX": 0.5347,
+          "weight": 0.5049
         },
         "widthClass": "normal",
         "weightClass": "medium"
@@ -648,28 +648,28 @@
       "aspect": 5.4225,
       "palette": [
         {
-          "hex": "#d9e8e5",
-          "coverage": 0.951
+          "hex": "#dae8e7",
+          "coverage": 0.956
         },
         {
-          "hex": "#c1cab3",
-          "coverage": 0.0208
+          "hex": "#c4c9af",
+          "coverage": 0.0161
         },
         {
-          "hex": "#15574d",
-          "coverage": 0.012
+          "hex": "#196156",
+          "coverage": 0.0106
         },
         {
-          "hex": "#547a75",
-          "coverage": 0.0102
+          "hex": "#2a4242",
+          "coverage": 0.0103
         },
         {
-          "hex": "#97b1ab",
-          "coverage": 0.0059
+          "hex": "#8daaa9",
+          "coverage": 0.007
         }
       ],
       "detail": {
-        "energy": 15.5884
+        "energy": 16.0666
       },
       "medium": "semantic",
       "plate": null,
@@ -695,28 +695,28 @@
       "aspect": 13.3333,
       "palette": [
         {
-          "hex": "#dbe8e5",
-          "coverage": 0.8658
+          "hex": "#dce9e6",
+          "coverage": 0.8635
         },
         {
-          "hex": "#1c5c53",
-          "coverage": 0.086
+          "hex": "#135550",
+          "coverage": 0.0854
         },
         {
-          "hex": "#68918b",
-          "coverage": 0.0323
+          "hex": "#5b8986",
+          "coverage": 0.0187
         },
         {
-          "hex": "#9cbbb2",
-          "coverage": 0.0133
+          "hex": "#96b8b1",
+          "coverage": 0.0178
         },
         {
-          "hex": "#083830",
-          "coverage": 0.0027
+          "hex": "#287464",
+          "coverage": 0.0147
         }
       ],
       "detail": {
-        "energy": 42.9763
+        "energy": 42.9727
       },
       "medium": "semantic",
       "plate": null,
@@ -728,17 +728,17 @@
           "capHeightPx": 19.4,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.6974,
-          "advTall": 0.6457,
-          "advX": 0.6974,
-          "gap": 0.1291,
-          "xRatio": 0.7137,
-          "stemW": 0.1703,
-          "contrast": 1.1276,
-          "serif": 0.9614,
-          "densTall": 0.4877,
-          "densX": 0.5415,
-          "weight": 0.4877
+          "advance": 0.67,
+          "advTall": 0.6442,
+          "advX": 0.67,
+          "gap": 0.1288,
+          "xRatio": 0.7103,
+          "stemW": 0.167,
+          "contrast": 1.1592,
+          "serif": 0.9996,
+          "densTall": 0.4934,
+          "densX": 0.5309,
+          "weight": 0.4934
         },
         "widthClass": "normal",
         "weightClass": "medium"
@@ -764,28 +764,28 @@
       "aspect": 12.0256,
       "palette": [
         {
-          "hex": "#dbe8e5",
-          "coverage": 0.9049
+          "hex": "#dde9e7",
+          "coverage": 0.8751
         },
         {
-          "hex": "#354446",
-          "coverage": 0.0468
+          "hex": "#515f5e",
+          "coverage": 0.0491
         },
         {
-          "hex": "#687676",
-          "coverage": 0.0241
+          "hex": "#1e2d2d",
+          "coverage": 0.0441
         },
         {
-          "hex": "#9eaba6",
-          "coverage": 0.0232
+          "hex": "#929e9d",
+          "coverage": 0.0253
         },
         {
-          "hex": "#282838",
-          "coverage": 0.001
+          "hex": "#1a2131",
+          "coverage": 0.0064
         }
       ],
       "detail": {
-        "energy": 45.5694
+        "energy": 47.736
       },
       "medium": "semantic",
       "plate": null,
@@ -794,20 +794,20 @@
         "comp": {
           "lines": 1,
           "glyphs": 26,
-          "capHeightPx": 19.6,
+          "capHeightPx": 19.4,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.6134,
-          "advTall": 0.4345,
-          "advX": 0.6134,
-          "gap": 0.1022,
-          "xRatio": 0.7144,
-          "stemW": 0.1345,
-          "contrast": 1.1217,
-          "serif": 0.9519,
-          "densTall": 0.4411,
-          "densX": 0.4847,
-          "weight": 0.4411
+          "advance": 0.5933,
+          "advTall": 0.4385,
+          "advX": 0.6191,
+          "gap": 0.1032,
+          "xRatio": 0.7255,
+          "stemW": 0.1312,
+          "contrast": 1.1464,
+          "serif": 0.9946,
+          "densTall": 0.4161,
+          "densX": 0.4676,
+          "weight": 0.4161
         },
         "widthClass": "normal",
         "weightClass": "regular"
@@ -834,28 +834,28 @@
       "aspect": 1.5097,
       "palette": [
         {
-          "hex": "#f8f8f6",
-          "coverage": 0.7076
+          "hex": "#f7f7f6",
+          "coverage": 0.7109
         },
         {
-          "hex": "#49452d",
-          "coverage": 0.1021
+          "hex": "#49462b",
+          "coverage": 0.0925
         },
         {
-          "hex": "#185957",
-          "coverage": 0.0868
+          "hex": "#1b6058",
+          "coverage": 0.0852
         },
         {
-          "hex": "#b39261",
-          "coverage": 0.072
+          "hex": "#b49261",
+          "coverage": 0.0761
         },
         {
-          "hex": "#ccb58e",
-          "coverage": 0.0315
+          "hex": "#766d56",
+          "coverage": 0.0354
         }
       ],
       "detail": {
-        "energy": 23.7133
+        "energy": 23.5987
       },
       "medium": "semantic",
       "plate": null,
@@ -881,12 +881,12 @@
       "aspect": 8.8889,
       "palette": [
         {
-          "hex": "#e8e8dd",
+          "hex": "#e1ddda",
           "coverage": 1
         }
       ],
       "detail": {
-        "energy": 2.334
+        "energy": 3.1678
       },
       "medium": "semantic",
       "plate": null,
@@ -913,28 +913,28 @@
       "aspect": 0.6782,
       "palette": [
         {
-          "hex": "#49452d",
-          "coverage": 0.3996
+          "hex": "#4a462c",
+          "coverage": 0.3679
         },
         {
-          "hex": "#b29260",
-          "coverage": 0.2989
+          "hex": "#b49260",
+          "coverage": 0.2935
         },
         {
-          "hex": "#ccb48e",
-          "coverage": 0.1246
+          "hex": "#ceb58d",
+          "coverage": 0.1343
         },
         {
-          "hex": "#787159",
-          "coverage": 0.0999
+          "hex": "#786e58",
+          "coverage": 0.132
         },
         {
-          "hex": "#856938",
-          "coverage": 0.077
+          "hex": "#836837",
+          "coverage": 0.0723
         }
       ],
       "detail": {
-        "energy": 18.1499
+        "energy": 18.514
       },
       "medium": "raster",
       "plate": "assets\\plates\\cat-portrait.png",
@@ -960,28 +960,28 @@
       "aspect": 6.3333,
       "palette": [
         {
-          "hex": "#f7f8f8",
-          "coverage": 0.8298
+          "hex": "#f8f8f8",
+          "coverage": 0.8371
         },
         {
-          "hex": "#1a292e",
-          "coverage": 0.1199
+          "hex": "#202e31",
+          "coverage": 0.1201
         },
         {
-          "hex": "#899092",
-          "coverage": 0.0265
+          "hex": "#b0b4b4",
+          "coverage": 0.0165
         },
         {
-          "hex": "#4b585b",
-          "coverage": 0.0127
+          "hex": "#101320",
+          "coverage": 0.0139
         },
         {
-          "hex": "#bfc4c8",
-          "coverage": 0.0111
+          "hex": "#868a8d",
+          "coverage": 0.0125
         }
       ],
       "detail": {
-        "energy": 41.7974
+        "energy": 41.6315
       },
       "medium": "semantic",
       "plate": null,
@@ -990,30 +990,30 @@
         "comp": {
           "lines": 1,
           "glyphs": 8,
-          "capHeightPx": 36.8,
+          "capHeightPx": 37.1,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.7344,
-          "advTall": 1.0336,
-          "advX": 0.6936,
-          "gap": 0.1088,
-          "xRatio": 0.6889,
-          "stemW": 0.1995,
-          "contrast": 1.3908,
-          "serif": null,
-          "densTall": 0.647,
-          "densX": 0.5783,
-          "weight": 0.647
+          "advance": 0.7015,
+          "advTall": 1.0253,
+          "advX": 0.6881,
+          "gap": 0.1349,
+          "xRatio": 0.6788,
+          "stemW": 0.1949,
+          "contrast": 1.3925,
+          "serif": 0.1733,
+          "densTall": 0.6531,
+          "densX": 0.5578,
+          "weight": 0.6531
         },
         "widthClass": "normal",
         "weightClass": "bold",
         "chosen": {
-          "family": "Rosario",
+          "family": "Bitter",
           "weight": 700,
           "fontSizePx": 53,
           "source": "catalog",
           "estimatedSize": true,
-          "stamp": "910cd5342f00"
+          "stamp": "bcc2957187b3"
         }
       }
     },
@@ -1037,28 +1037,28 @@
       "aspect": 8.5217,
       "palette": [
         {
-          "hex": "#f7f8f7",
-          "coverage": 0.8997
+          "hex": "#f7f8f8",
+          "coverage": 0.8929
         },
         {
-          "hex": "#10554c",
-          "coverage": 0.0552
+          "hex": "#105349",
+          "coverage": 0.0403
         },
         {
-          "hex": "#477c73",
+          "hex": "#2c6e64",
+          "coverage": 0.0283
+        },
+        {
+          "hex": "#9bbdb5",
           "coverage": 0.0245
         },
         {
-          "hex": "#98b5b4",
-          "coverage": 0.0173
-        },
-        {
-          "hex": "#0d3d3d",
-          "coverage": 0.0034
+          "hex": "#60908b",
+          "coverage": 0.0139
         }
       ],
       "detail": {
-        "energy": 43.1068
+        "energy": 42.4533
       },
       "medium": "semantic",
       "plate": null,
@@ -1067,20 +1067,20 @@
         "comp": {
           "lines": 1,
           "glyphs": 21,
-          "capHeightPx": 20.1,
+          "capHeightPx": 20.3,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.5967,
-          "advTall": 0.4227,
-          "advX": 0.5967,
-          "gap": 0.0995,
-          "xRatio": 0.6439,
-          "stemW": 0.1566,
-          "contrast": 1.0617,
-          "serif": 0.9491,
-          "densTall": 0.5422,
-          "densX": 0.5829,
-          "weight": 0.5422
+          "advance": 0.5907,
+          "advTall": 0.3938,
+          "advX": 0.5907,
+          "gap": 0.0984,
+          "xRatio": 0.6311,
+          "stemW": 0.1507,
+          "contrast": 1.0702,
+          "serif": 0.9474,
+          "densTall": 0.5189,
+          "densX": 0.5625,
+          "weight": 0.5189
         },
         "widthClass": "normal",
         "weightClass": "medium"
@@ -1107,27 +1107,27 @@
       "palette": [
         {
           "hex": "#f7f7f7",
-          "coverage": 0.9117
+          "coverage": 0.9033
         },
         {
-          "hex": "#acb3b4",
-          "coverage": 0.0323
+          "hex": "#556064",
+          "coverage": 0.028
         },
         {
-          "hex": "#192131",
-          "coverage": 0.0217
+          "hex": "#bcc2c3",
+          "coverage": 0.0275
         },
         {
-          "hex": "#192929",
-          "coverage": 0.0196
+          "hex": "#1b282b",
+          "coverage": 0.027
         },
         {
-          "hex": "#81868d",
-          "coverage": 0.0148
+          "hex": "#0d0e19",
+          "coverage": 0.0143
         }
       ],
       "detail": {
-        "energy": 45.2932
+        "energy": 45.264
       },
       "medium": "semantic",
       "plate": null,
@@ -1135,21 +1135,21 @@
       "type": {
         "comp": {
           "lines": 1,
-          "glyphs": 19,
-          "capHeightPx": 17.8,
+          "glyphs": 20,
+          "capHeightPx": 17,
           "inkIsDark": true,
           "allCaps": false,
-          "advance": 0.6584,
-          "advTall": 0.6444,
-          "advX": 0.6724,
-          "gap": 0.1401,
-          "xRatio": 0.7975,
-          "stemW": 0.1531,
-          "contrast": 1.0813,
-          "serif": null,
-          "densTall": 0.4614,
-          "densX": 0.5066,
-          "weight": 0.4614
+          "advance": 0.6766,
+          "advTall": 0.4854,
+          "advX": 0.706,
+          "gap": 0.1471,
+          "xRatio": 0.8174,
+          "stemW": 0.1649,
+          "contrast": 1.1142,
+          "serif": 0.6078,
+          "densTall": 0.4462,
+          "densX": 0.5163,
+          "weight": 0.4462
         },
         "widthClass": "normal",
         "weightClass": "regular"
@@ -1175,28 +1175,24 @@
       "aspect": 4.3438,
       "palette": [
         {
-          "hex": "#1a5a58",
-          "coverage": 0.9177
+          "hex": "#1a6058",
+          "coverage": 0.9119
         },
         {
-          "hex": "#f7f7f7",
-          "coverage": 0.0692
+          "hex": "#f5f7f7",
+          "coverage": 0.0759
         },
         {
-          "hex": "#b1c9c4",
-          "coverage": 0.0061
+          "hex": "#5e8d87",
+          "coverage": 0.007
         },
         {
-          "hex": "#6c988e",
-          "coverage": 0.0057
-        },
-        {
-          "hex": "#387868",
-          "coverage": 0.0014
+          "hex": "#9fb7b7",
+          "coverage": 0.0052
         }
       ],
       "detail": {
-        "energy": 19.8741
+        "energy": 20.1618
       },
       "medium": "semantic",
       "plate": null,
@@ -1222,28 +1218,28 @@
       "aspect": 4.3438,
       "palette": [
         {
-          "hex": "#f8f8ea",
-          "coverage": 0.9057
+          "hex": "#f8f6ea",
+          "coverage": 0.9389
         },
         {
-          "hex": "#f0b898",
-          "coverage": 0.0386
+          "hex": "#e74d10",
+          "coverage": 0.0248
         },
         {
-          "hex": "#e24f11",
-          "coverage": 0.0222
+          "hex": "#ea966c",
+          "coverage": 0.0155
         },
         {
-          "hex": "#f6d3bf",
-          "coverage": 0.0194
+          "hex": "#f1b69b",
+          "coverage": 0.013
         },
         {
-          "hex": "#e9976e",
-          "coverage": 0.0142
+          "hex": "#f7d4be",
+          "coverage": 0.0077
         }
       ],
       "detail": {
-        "energy": 18.7972
+        "energy": 19.7519
       },
       "medium": "semantic",
       "plate": null,
@@ -1269,28 +1265,28 @@
       "aspect": 4.8466,
       "palette": [
         {
-          "hex": "#f8f6e8",
-          "coverage": 0.9676
+          "hex": "#f8ede8",
+          "coverage": 0.9694
         },
         {
-          "hex": "#27393e",
-          "coverage": 0.0132
+          "hex": "#1a2b30",
+          "coverage": 0.0119
         },
         {
-          "hex": "#185b53",
-          "coverage": 0.0073
+          "hex": "#195f54",
+          "coverage": 0.0066
         },
         {
-          "hex": "#acb0b0",
-          "coverage": 0.0071
+          "hex": "#485555",
+          "coverage": 0.0061
         },
         {
-          "hex": "#5e6e6e",
-          "coverage": 0.0047
+          "hex": "#c1c3c3",
+          "coverage": 0.0059
         }
       ],
       "detail": {
-        "energy": 14.7128
+        "energy": 15.0932
       },
       "medium": "semantic",
       "plate": null,
@@ -1316,28 +1312,28 @@
       "aspect": 0.952,
       "palette": [
         {
-          "hex": "#f8f6e8",
-          "coverage": 0.8795
+          "hex": "#f7eee9",
+          "coverage": 0.8835
         },
         {
-          "hex": "#175a51",
-          "coverage": 0.0829
+          "hex": "#1a5e54",
+          "coverage": 0.086
         },
         {
-          "hex": "#497974",
-          "coverage": 0.0173
+          "hex": "#527b77",
+          "coverage": 0.0131
         },
         {
-          "hex": "#bdcfc6",
-          "coverage": 0.0143
+          "hex": "#80a49d",
+          "coverage": 0.0102
         },
         {
-          "hex": "#90aea8",
-          "coverage": 0.006
+          "hex": "#bbcdc8",
+          "coverage": 0.0072
         }
       ],
       "detail": {
-        "energy": 8.0914
+        "energy": 8.3925
       },
       "medium": "semantic",
       "plate": null,
@@ -1363,28 +1359,28 @@
       "aspect": 0.952,
       "palette": [
         {
-          "hex": "#f8f6e8",
-          "coverage": 0.9218
+          "hex": "#f7ebe9",
+          "coverage": 0.9258
         },
         {
-          "hex": "#23353a",
+          "hex": "#1b2b2c",
           "coverage": 0.0251
         },
         {
-          "hex": "#5f6d6d",
-          "coverage": 0.0221
+          "hex": "#576363",
+          "coverage": 0.0227
         },
         {
-          "hex": "#899393",
-          "coverage": 0.0209
+          "hex": "#919898",
+          "coverage": 0.0192
         },
         {
-          "hex": "#cccdc8",
-          "coverage": 0.0101
+          "hex": "#c1c4c3",
+          "coverage": 0.0072
         }
       ],
       "detail": {
-        "energy": 9.0572
+        "energy": 9.7598
       },
       "medium": "semantic",
       "plate": null,
@@ -1410,28 +1406,28 @@
       "aspect": 0.952,
       "palette": [
         {
-          "hex": "#f7f5e9",
-          "coverage": 0.9208
+          "hex": "#f7ede9",
+          "coverage": 0.9263
         },
         {
-          "hex": "#25373b",
-          "coverage": 0.0393
+          "hex": "#1f3032",
+          "coverage": 0.0342
         },
         {
-          "hex": "#959b9a",
-          "coverage": 0.0214
+          "hex": "#abb1b0",
+          "coverage": 0.0192
         },
         {
-          "hex": "#bcc5c3",
-          "coverage": 0.0095
+          "hex": "#666e70",
+          "coverage": 0.015
         },
         {
-          "hex": "#5b6664",
-          "coverage": 0.0089
+          "hex": "#414451",
+          "coverage": 0.0054
         }
       ],
       "detail": {
-        "energy": 10.904
+        "energy": 11.6968
       },
       "medium": "semantic",
       "plate": null,
@@ -1457,28 +1453,28 @@
       "aspect": 1.088,
       "palette": [
         {
-          "hex": "#f7f5e8",
-          "coverage": 0.9337
+          "hex": "#f7ede9",
+          "coverage": 0.9412
         },
         {
-          "hex": "#273b40",
-          "coverage": 0.0295
+          "hex": "#223232",
+          "coverage": 0.0239
         },
         {
-          "hex": "#adb2b1",
-          "coverage": 0.0197
+          "hex": "#a8acab",
+          "coverage": 0.0208
         },
         {
-          "hex": "#5f6d70",
-          "coverage": 0.0155
+          "hex": "#1c2332",
+          "coverage": 0.0078
         },
         {
-          "hex": "#889888",
-          "coverage": 0.0016
+          "hex": "#4b5357",
+          "coverage": 0.0062
         }
       ],
       "detail": {
-        "energy": 10.9263
+        "energy": 11.9415
       },
       "medium": "semantic",
       "plate": null,
@@ -1504,28 +1500,28 @@
       "aspect": 1.024,
       "palette": [
         {
-          "hex": "#f8f6e9",
-          "coverage": 0.9307
+          "hex": "#f7eee9",
+          "coverage": 0.9336
         },
         {
-          "hex": "#2b3b40",
-          "coverage": 0.0283
+          "hex": "#1a2a30",
+          "coverage": 0.0255
         },
         {
-          "hex": "#c4c7c3",
-          "coverage": 0.0233
+          "hex": "#b3b7b7",
+          "coverage": 0.0166
         },
         {
-          "hex": "#5b676b",
-          "coverage": 0.0116
+          "hex": "#4a5354",
+          "coverage": 0.015
         },
         {
-          "hex": "#8c9595",
-          "coverage": 0.0061
+          "hex": "#858d8d",
+          "coverage": 0.0094
         }
       ],
       "detail": {
-        "energy": 9.0098
+        "energy": 9.8641
       },
       "medium": "semantic",
       "plate": null,

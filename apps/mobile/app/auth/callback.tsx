@@ -1,17 +1,21 @@
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../../src/design/theme';
+import { validatedReturnDraftId } from '../../src/auth/profile-report-return';
 
 export const AUTH_CALLBACK_MESSAGE = 'WhiskerCommons is completing the secure session. You can return to your profile.';
 
 export default function AuthCallbackScreen() {
+  const params = useLocalSearchParams<{ returnDraftId?: string | string[] }>();
+  const returnDraftId = validatedReturnDraftId(params.returnDraftId);
+  const profileHref = returnDraftId ? `/profile?returnDraftId=${encodeURIComponent(returnDraftId)}` : '/profile';
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
         <Text accessibilityRole="header" style={styles.title}>Sign-in link received</Text>
         <Text style={styles.copy}>{AUTH_CALLBACK_MESSAGE}</Text>
-        <Link href="/profile" style={styles.link}>Return to profile</Link>
+        <Link href={profileHref as never} style={styles.link}>Return to profile</Link>
       </View>
     </View>
   );

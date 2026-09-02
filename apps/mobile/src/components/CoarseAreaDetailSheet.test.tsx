@@ -45,7 +45,7 @@ describe('CoarseAreaDetailSheet', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Report from Community area 1' }));
     expect(onViewCat).toHaveBeenNthCalledWith(1, 'animal-1');
     expect(onViewCat).toHaveBeenNthCalledWith(2, 'animal-2');
-    expect(onReportFromArea).toHaveBeenCalledWith();
+    expect(onReportFromArea).toHaveBeenCalledWith({ startAt: 'area' });
 
     const follow = view.getByRole('button', { name: 'Follow area' });
     expect(follow.props.accessibilityState).toEqual({ disabled: true });
@@ -78,6 +78,16 @@ describe('CoarseAreaDetailSheet', () => {
     expect(view.getByRole('button', { name: 'View Luna' })).toBeTruthy();
     expect(view.queryByRole('button', { name: 'View Cleo' })).toBeNull();
     expect(view.queryByRole('button', { name: 'View Simba' })).toBeNull();
+    await view.unmount();
+  });
+
+  it('keeps the area sheet safe when a durable area-stage draft cannot be created', async () => {
+    const view = await render(
+      <CoarseAreaDetailSheet area={area} locale="en" onReportFromArea={async () => { throw new Error('secure_offline_storage_unavailable'); }} onViewCat={jest.fn()} />,
+    );
+
+    await fireEvent.press(view.getByRole('button', { name: 'Report from Community area 1' }));
+    expect(await view.findByText('A saved report could not be created. Try again on a native device.')).toBeTruthy();
     await view.unmount();
   });
 

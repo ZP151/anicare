@@ -1,17 +1,23 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listPublicSightings, type NarrowRpcClient, type PublicSighting } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
+import { readSessionSubjectStrict } from '../../src/auth/session-subject';
 import { AnchoredCatSheet, type SelectedCatSummary } from '../../src/components/AnchoredCatSheet';
 import { GlassSurface } from '../../src/design/GlassSurface';
 import { colors, radii } from '../../src/design/theme';
 import { NearbyMap } from '../../src/maps/NearbyMap';
 import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
 import { tabVisualContract } from '../../src/navigation/tab-style';
+import { saveOfflineDraft } from '../../src/offline/draft-store';
+import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
+import { getReportCopy } from '../../src/report/report-copy';
+import { useLocale } from '../../src/i18n/LocaleContext';
 
 type FeedStatus = 'demo' | 'loading' | 'live' | 'unavailable';
 
@@ -22,6 +28,8 @@ const previewCat: SelectedCatSummary = {
   verificationLabel: 'Community confirmed',
   timeLabel: 'Seen this afternoon',
 };
+
+const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function pickPublicCat(sightings: readonly PublicSighting[]): SelectedCatSummary | null {
   const selected = sightings.find((item) => item.verification === 'partner_confirmed')
@@ -38,6 +46,7 @@ function pickPublicCat(sightings: readonly PublicSighting[]): SelectedCatSummary
 }
 
 export default function NearbyScreen() {
+  const { locale, t } = useLocale();
   const router = useRouter();
   const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
   const [status, setStatus] = useState<FeedStatus>(client ? 'loading' : 'demo');
@@ -71,6 +80,23 @@ export default function NearbyScreen() {
     [sightings, status],
   );
 
+  async function startLinkedReport() {
+    if (!selectedCat) return;
+    try {
+      const draftId = await createOwnerAwareReportDraft({
+        readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
+        saveDraft: saveOfflineDraft,
+        createId: Crypto.randomUUID,
+        now: () => new Date(),
+      });
+      const params = opaqueAnimalId.test(selectedCat.animalId) ? { draftId, animalId: selectedCat.animalId } : { draftId };
+      router.push({ pathname: '/report/new', params } as never);
+    } catch {
+      const reportCopy = getReportCopy(locale);
+      Alert.alert(reportCopy.storageUnavailableTitle, reportCopy.startFailed);
+    }
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
       <Image
@@ -80,8 +106,8 @@ export default function NearbyScreen() {
         style={styles.paperGround}
       />
       <View style={styles.mapStage}>
-        <View style={styles.atlasFrame}>
-          <NearbyMap />
+        <View style={styles.mapFrame}>
+          <NearbyMap fallbackLabel={t('map.mapUnavailable')} />
         </View>
 
         <View style={styles.topBar}>
@@ -121,7 +147,7 @@ export default function NearbyScreen() {
         <AnchoredCatSheet
           cat={selectedCat}
           fixture={status === 'demo'}
-          onReportSighting={() => router.push({ pathname: '/report', params: { animalId: selectedCat.animalId } } as never)}
+          onReportSighting={() => { void startLinkedReport(); }}
           onViewCat={() => router.push(`/cat/${selectedCat.animalId}` as never)}
         />
       ) : (
@@ -147,7 +173,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, paddingBottom: tabVisualContract.barHeight, backgroundColor: colors.paper },
   paperGround: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', opacity: 0.22 },
   mapStage: { flex: 1, minHeight: 330, overflow: 'hidden', backgroundColor: colors.paper },
-  atlasFrame: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
+  mapFrame: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
   topBar: {
     position: 'absolute',
     top: 0,

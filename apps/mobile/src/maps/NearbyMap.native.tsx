@@ -3,13 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 
-import { NearbyMap as AtlasFallback } from './NearbyMap.web';
+import { NearbyMap as UnavailableMap } from './NearbyMap.web';
 import type { NearbyMapProps } from './NearbyMap.types';
 import { PUBLIC_GOOGLE_MAP_STYLE, PUBLIC_MAP_PADDING, PUBLIC_MAP_REGION } from './public-map-policy';
 
 const MAP_READINESS_TIMEOUT_MS = 8_000;
 
 export function NearbyMap({
+  fallbackLabel,
   googleMapsConfigured = Constants.expoConfig?.extra?.googleMapsConfigured === true,
 }: NearbyMapProps) {
   const [providerUnavailable, setProviderUnavailable] = useState(false);
@@ -48,7 +49,7 @@ export function NearbyMap({
     };
   }, [clearReadinessTimer, googleMapsConfigured]);
 
-  if (!googleMapsConfigured || providerUnavailable) return <AtlasFallback />;
+  if (!googleMapsConfigured || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;
 
   return (
     <View accessibilityLabel="Privacy-safe Google neighbourhood map" style={styles.frame}>

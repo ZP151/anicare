@@ -14,6 +14,9 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cat/[id]" />
+        <Stack.Screen name="report/new" />
+        <Stack.Screen name="report/receipt" />
+        <Stack.Screen name="report/my-reports" />
         <Stack.Screen name="report/redaction-review" options={{ presentation: 'modal' }} />
       </Stack>
     </LocaleProvider>

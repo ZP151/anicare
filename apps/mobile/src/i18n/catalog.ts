@@ -22,16 +22,168 @@ export type MessageKey =
   | 'map.loadingStatus'
   | 'map.emptyStatus'
   | 'map.unavailableStatus'
+  | 'map.mapUnavailable'
   | 'map.detail.viewAction'
   | 'map.detail.followAction'
   | 'map.detail.followDisabledReason'
   | 'report.title'
   | 'report.subtitle'
   | 'report.action'
+  | 'report.hub.title'
+  | 'report.hub.subtitle'
+  | 'report.hub.startAction'
+  | 'report.hub.draftsTitle'
+  | 'report.hub.loading'
+  | 'report.hub.emptyTitle'
+  | 'report.hub.emptyCopy'
+  | 'report.hub.storageUnavailable'
+  | 'report.hub.storageUnavailableTitle'
+  | 'report.hub.loadFailed'
+  | 'report.hub.retryAction'
+  | 'report.hub.myReports'
+  | 'report.hub.signedOutExplanation'
+  | 'report.hub.profileAction'
+  | 'report.hub.startFailed'
+  | 'report.hub.deleteFailed'
+  | 'report.hub.continueDraftLabel'
+  | 'report.hub.claimContinueDraftLabel'
+  | 'report.hub.deleteDraftLabel'
+  | 'report.hub.deleteAction'
+  | 'report.hub.step.photo'
+  | 'report.hub.step.details'
+  | 'report.hub.step.safety'
+  | 'report.hub.step.area'
+  | 'report.hub.step.review'
+  | 'report.shell.draftTitle'
+  | 'report.shell.draftReadyTitle'
+  | 'report.shell.draftReadyCopy'
+  | 'report.shell.receiptTitle'
+  | 'report.shell.receiptCopy'
+  | 'report.shell.historyTitle'
+  | 'report.shell.historyCopy'
+  | 'report.shell.unavailableTitle'
+  | 'report.shell.invalidDraftId'
+  | 'report.shell.invalidReceiptId'
+  | 'report.shell.backAction'
+  | 'report.receipt.title'
+  | 'report.receipt.subtitle'
+  | 'report.receipt.loading'
+  | 'report.receipt.received'
+  | 'report.receipt.unavailable'
+  | 'report.receipt.remoteUnavailable'
+  | 'report.receipt.localRecoveryTitle'
+  | 'report.receipt.localRecovery'
+  | 'report.receipt.reference'
+  | 'report.receipt.submittedAt'
+  | 'report.receipt.viewReports'
+  | 'report.receipt.nearby'
+  | 'report.receipt.reportState.draft'
+  | 'report.receipt.reportState.submitted'
+  | 'report.receipt.reportState.privateReview'
+  | 'report.receipt.reportState.delayed'
+  | 'report.receipt.reportState.published'
+  | 'report.receipt.reportState.archived'
+  | 'report.receipt.mediaState.none'
+  | 'report.receipt.mediaState.pending'
+  | 'report.receipt.mediaState.quarantined'
+  | 'report.receipt.mediaState.cleanupPending'
+  | 'report.receipt.mediaState.removed'
+  | 'report.receipt.mediaState.needsUser'
+  | 'report.receipt.identityState.notRequested'
+  | 'report.receipt.identityState.pendingReview'
+  | 'report.receipt.identityState.linked'
+  | 'report.receipt.identityState.closed'
+  | 'report.history.title'
+  | 'report.history.subtitle'
+  | 'report.history.loading'
+  | 'report.history.emptyTitle'
+  | 'report.history.emptyCopy'
+  | 'report.history.loadMore'
+  | 'report.history.refresh'
+  | 'report.history.offlineSnapshot'
+  | 'report.history.offlineEmpty'
+  | 'report.history.invalid'
+  | 'report.history.signIn'
+  | 'report.wizard.title'
+  | 'report.wizard.loading'
+  | 'report.wizard.unavailableTitle'
+  | 'report.wizard.unavailableCopy'
+  | 'report.wizard.saveAndExit'
+  | 'report.wizard.progress'
+  | 'report.wizard.stagesLabel'
+  | 'report.wizard.saveFailed'
+  | 'report.wizard.photoReady'
+  | 'report.wizard.photoIntro'
+  | 'report.wizard.photoAdd'
+  | 'report.wizard.photoReplace'
+  | 'report.wizard.photoRetake'
+  | 'report.wizard.photoRemove'
+  | 'report.wizard.photoSkip'
+  | 'report.wizard.photoRemoved'
+  | 'report.wizard.photoRemoveFailed'
+  | 'report.wizard.detailsIntro'
+  | 'report.wizard.coatTitle'
+  | 'report.wizard.markingsTitle'
+  | 'report.wizard.coat.tabby'
+  | 'report.wizard.coat.black'
+  | 'report.wizard.coat.white'
+  | 'report.wizard.coat.ginger'
+  | 'report.wizard.coat.grey'
+  | 'report.wizard.coat.calico'
+  | 'report.wizard.coat.tortoiseshell'
+  | 'report.wizard.coat.brown'
+  | 'report.wizard.marking.white-paws'
+  | 'report.wizard.marking.white-chest'
+  | 'report.wizard.marking.white-tail-tip'
+  | 'report.wizard.marking.ear-tip'
+  | 'report.wizard.marking.collar'
+  | 'report.wizard.marking.scar'
+  | 'report.wizard.marking.striped'
+  | 'report.wizard.marking.spotted'
+  | 'report.wizard.conditionWell'
+  | 'report.wizard.conditionNeedsAttention'
+  | 'report.wizard.conditionUrgent'
+  | 'report.wizard.notesLabel'
+  | 'report.wizard.notesPlaceholder'
+  | 'report.wizard.continue'
+  | 'report.wizard.continueToSafety'
+  | 'report.wizard.safetyIntro'
+  | 'report.wizard.riskNormal'
+  | 'report.wizard.riskSensitive'
+  | 'report.wizard.riskCritical'
+  | 'report.wizard.riskNormalConsequence'
+  | 'report.wizard.riskSensitiveConsequence'
+  | 'report.wizard.riskCriticalConsequence'
+  | 'report.wizard.continueToArea'
+  | 'report.wizard.areaIntro'
+  | 'report.wizard.deviceLocation'
+  | 'report.wizard.manualArea'
+  | 'report.wizard.continueToReview'
+  | 'report.wizard.devicePending'
+  | 'report.wizard.manualSelected'
+  | 'report.wizard.locationDenied'
+  | 'report.wizard.areaRequired'
+  | 'report.wizard.recovery'
+  | 'report.wizard.reviewIntro'
+  | 'report.wizard.edit'
+  | 'report.wizard.submitDisabledReason'
+  | 'report.wizard.detailsRequired'
+  | 'report.wizard.reviewRequired'
+  | 'report.wizard.signInRequired'
+  | 'report.wizard.submit'
+  | 'report.wizard.areaMapLabel'
+  | 'report.wizard.areaMapInstruction'
+  | 'report.wizard.webAreaLabel'
+  | 'report.wizard.webAreaUnavailable'
+  | 'report.wizard.webDeviceLocation'
+  | 'report.wizard.webManualArea'
   | 'following.title'
   | 'following.subtitle'
   | 'profile.title'
   | 'profile.subtitle'
+  | 'profile.reportReturnTitle'
+  | 'profile.reportReturnCopy'
+  | 'profile.reportReturnAction'
   | 'common.beta';
 
 const messages: Record<Locale, Record<MessageKey, string>> = {
@@ -55,16 +207,168 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.loadingStatus': 'Loading delayed community activity…',
     'map.emptyStatus': 'No delayed community activity yet',
     'map.unavailableStatus': 'Community feed unavailable · map remains privacy-safe',
+    'map.mapUnavailable': 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.',
     'map.detail.viewAction': 'View',
     'map.detail.followAction': 'Follow area',
     'map.detail.followDisabledReason': 'Sign-in and hosted area-follow support are required.',
     'report.title': 'Report a sighting',
-    'report.subtitle': 'Add a photo and traits. AI will suggest candidates, never decide.',
+    'report.subtitle': 'Start a private draft and finish it when you are ready.',
     'report.action': 'Start a report',
+    'report.hub.title': 'Report a sighting',
+    'report.hub.subtitle': 'Start a private draft and finish it when you are ready.',
+    'report.hub.startAction': 'Start a report',
+    'report.hub.draftsTitle': 'Continue drafts',
+    'report.hub.loading': 'Loading saved reports…',
+    'report.hub.emptyTitle': 'No saved reports yet',
+    'report.hub.emptyCopy': 'Start a report and you can return to it on this device.',
+    'report.hub.storageUnavailable': 'Saved reports are available in native iOS and Android builds.',
+    'report.hub.storageUnavailableTitle': 'Saved reports unavailable',
+    'report.hub.loadFailed': 'Saved reports could not be loaded. Try again later.',
+    'report.hub.retryAction': 'Try again',
+    'report.hub.myReports': 'My Reports',
+    'report.hub.signedOutExplanation': 'Sign in to view reports you have submitted.',
+    'report.hub.profileAction': 'Go to Profile to sign in',
+    'report.hub.startFailed': 'A saved report could not be created. Try again on a native device.',
+    'report.hub.deleteFailed': 'This saved report could not be deleted. Try again.',
+    'report.hub.continueDraftLabel': 'Continue report draft from {step}',
+    'report.hub.claimContinueDraftLabel': 'Claim and continue report draft from {step}',
+    'report.hub.deleteDraftLabel': 'Delete report draft from {step}',
+    'report.hub.deleteAction': 'Delete',
+    'report.hub.step.photo': 'Photo',
+    'report.hub.step.details': 'Details',
+    'report.hub.step.safety': 'Safety',
+    'report.hub.step.area': 'Area',
+    'report.hub.step.review': 'Review',
+    'report.shell.draftTitle': 'Saved report',
+    'report.shell.draftReadyTitle': 'Saved report ready',
+    'report.shell.draftReadyCopy': 'This route shell does not change your saved report.',
+    'report.shell.receiptTitle': 'Report receipt',
+    'report.shell.receiptCopy': 'A complete receipt will appear after a report is submitted.',
+    'report.shell.historyTitle': 'My Reports',
+    'report.shell.historyCopy': 'Your submitted report history will appear here.',
+    'report.shell.unavailableTitle': 'Report unavailable',
+    'report.shell.invalidDraftId': 'A valid saved-report ID is required to continue.',
+    'report.shell.invalidReceiptId': 'A valid report ID is required to view this receipt.',
+    'report.shell.backAction': 'Back to Report',
+    'report.receipt.title': 'Report receipt',
+    'report.receipt.subtitle': 'Private status for your submitted report.',
+    'report.receipt.loading': 'Loading report status…',
+    'report.receipt.received': 'Report received',
+    'report.receipt.unavailable': 'This report is unavailable.',
+    'report.receipt.remoteUnavailable': 'Remote status is unavailable. Showing status saved on this device.',
+    'report.receipt.localRecoveryTitle': 'Local media recovery',
+    'report.receipt.localRecovery': 'Local media recovery needs your attention.',
+    'report.receipt.reference': 'Report ID: {id}',
+    'report.receipt.submittedAt': 'Submitted at {time}',
+    'report.receipt.viewReports': 'View My Reports',
+    'report.receipt.nearby': 'Browse Nearby',
+    'report.receipt.reportState.draft': 'Report saved on this device',
+    'report.receipt.reportState.submitted': 'Submission committed on this device',
+    'report.receipt.reportState.privateReview': 'Private review',
+    'report.receipt.reportState.delayed': 'Delayed after review',
+    'report.receipt.reportState.published': 'Published after review',
+    'report.receipt.reportState.archived': 'Archived',
+    'report.receipt.mediaState.none': 'Text-only report',
+    'report.receipt.mediaState.pending': 'Media upload pending',
+    'report.receipt.mediaState.quarantined': 'Private media awaiting validation',
+    'report.receipt.mediaState.cleanupPending': 'Private media cleanup pending',
+    'report.receipt.mediaState.removed': 'Private media removed',
+    'report.receipt.mediaState.needsUser': 'Media needs your attention',
+    'report.receipt.identityState.notRequested': 'Identity assistance not requested',
+    'report.receipt.identityState.pendingReview': 'Identity review pending',
+    'report.receipt.identityState.linked': 'Identity linked',
+    'report.receipt.identityState.closed': 'Identity review closed',
+    'report.history.title': 'My Reports',
+    'report.history.subtitle': 'Private status for reports you submitted.',
+    'report.history.loading': 'Loading your reports…',
+    'report.history.emptyTitle': 'No submitted reports yet',
+    'report.history.emptyCopy': 'Submitted reports will appear here with their current private status.',
+    'report.history.loadMore': 'Load more reports',
+    'report.history.refresh': 'Refresh reports',
+    'report.history.offlineSnapshot': 'Offline — showing the last loaded reports from this session.',
+    'report.history.offlineEmpty': 'Reports are unavailable offline. Connect and try again.',
+    'report.history.invalid': 'Your report history could not be verified. Try again.',
+    'report.history.signIn': 'Sign in to view your submitted reports.',
+    'report.wizard.title': 'Report a sighting',
+    'report.wizard.loading': 'Loading saved report…',
+    'report.wizard.unavailableTitle': 'Report unavailable',
+    'report.wizard.unavailableCopy': 'This saved report is unavailable. Return to Report and start again.',
+    'report.wizard.saveAndExit': 'Save and exit',
+    'report.wizard.progress': 'Step {current} of {total} · {step}',
+    'report.wizard.stagesLabel': 'Report stages',
+    'report.wizard.saveFailed': 'Your changes could not be saved. Please try again.',
+    'report.wizard.photoReady': 'Private photo ready',
+    'report.wizard.photoIntro': 'A photo is optional. If you add one, review and redact it before it is saved privately.',
+    'report.wizard.photoAdd': 'Add private photo',
+    'report.wizard.photoReplace': 'Replace private photo',
+    'report.wizard.photoRetake': 'Retake private photo',
+    'report.wizard.photoRemove': 'Remove private photo',
+    'report.wizard.photoSkip': 'Skip photo for now',
+    'report.wizard.photoRemoved': 'The private photo was removed from this saved report.',
+    'report.wizard.photoRemoveFailed': 'The private photo could not be removed safely. Please try again.',
+    'report.wizard.detailsIntro': 'How did the cat appear?',
+    'report.wizard.coatTitle': 'Coat',
+    'report.wizard.markingsTitle': 'Markings',
+    'report.wizard.coat.tabby': 'Tabby coat',
+    'report.wizard.coat.black': 'Black coat',
+    'report.wizard.coat.white': 'White coat',
+    'report.wizard.coat.ginger': 'Ginger coat',
+    'report.wizard.coat.grey': 'Grey coat',
+    'report.wizard.coat.calico': 'Calico coat',
+    'report.wizard.coat.tortoiseshell': 'Tortoiseshell coat',
+    'report.wizard.coat.brown': 'Brown coat',
+    'report.wizard.marking.white-paws': 'White paws marking',
+    'report.wizard.marking.white-chest': 'White chest marking',
+    'report.wizard.marking.white-tail-tip': 'White tail tip marking',
+    'report.wizard.marking.ear-tip': 'Ear tip marking',
+    'report.wizard.marking.collar': 'Collar marking',
+    'report.wizard.marking.scar': 'Scar marking',
+    'report.wizard.marking.striped': 'Striped marking',
+    'report.wizard.marking.spotted': 'Spotted marking',
+    'report.wizard.conditionWell': 'Appears well',
+    'report.wizard.conditionNeedsAttention': 'Needs attention',
+    'report.wizard.conditionUrgent': 'Urgent',
+    'report.wizard.notesLabel': 'Optional notes',
+    'report.wizard.notesPlaceholder': 'Optional notes',
+    'report.wizard.continue': 'Continue',
+    'report.wizard.continueToSafety': 'Continue to safety',
+    'report.wizard.safetyIntro': 'Choose the level of care needed. Critical reports are not publicly visible.',
+    'report.wizard.riskNormal': 'normal',
+    'report.wizard.riskSensitive': 'sensitive',
+    'report.wizard.riskCritical': 'critical',
+    'report.wizard.riskNormalConsequence': 'Normal reports use the standard community visibility.',
+    'report.wizard.riskSensitiveConsequence': 'Sensitive reports reduce public visibility.',
+    'report.wizard.riskCriticalConsequence': 'Critical reports are not publicly visible.',
+    'report.wizard.continueToArea': 'Continue to area',
+    'report.wizard.areaIntro': 'Choose a broad area. Exact device coordinates are used only for this active submission and are never saved in the draft.',
+    'report.wizard.deviceLocation': 'Use device location',
+    'report.wizard.manualArea': 'Choose an area manually',
+    'report.wizard.continueToReview': 'Continue to review',
+    'report.wizard.devicePending': 'Your device location will be requested only when you submit this report.',
+    'report.wizard.manualSelected': 'A broad area was selected. Your exact map tap was discarded.',
+    'report.wizard.locationDenied': 'Location permission was not granted. Choose an area manually instead.',
+    'report.wizard.areaRequired': 'Choose an area before submitting.',
+    'report.wizard.recovery': 'Your saved draft remains available. Try again when ready.',
+    'report.wizard.reviewIntro': 'Check your details, safety choice and broad area before submitting. You can use the stages above to edit any section.',
+    'report.wizard.edit': 'Edit {step}',
+    'report.wizard.submitDisabledReason': 'Choose a device or broad manual area before submitting.',
+    'report.wizard.detailsRequired': 'Choose the cat’s condition before submitting.',
+    'report.wizard.reviewRequired': 'Review the report before submitting.',
+    'report.wizard.signInRequired': 'Sign in from Profile, then return to this saved report.',
+    'report.wizard.submit': 'Submit report',
+    'report.wizard.areaMapLabel': 'Choose a coarse area on a Google map',
+    'report.wizard.areaMapInstruction': 'Tap the broad map to choose a coarse area. Your exact tap is discarded immediately.',
+    'report.wizard.webAreaLabel': 'Area capture unavailable on web',
+    'report.wizard.webAreaUnavailable': 'Area capture is available only in native iOS and Android builds.',
+    'report.wizard.webDeviceLocation': 'Use device location',
+    'report.wizard.webManualArea': 'Choose an area on the map',
     'following.title': 'Following',
     'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
     'profile.title': 'Your profile',
     'profile.subtitle': 'Manage privacy, training consent and trusted roles.',
+    'profile.reportReturnTitle': 'Saved report waiting',
+    'profile.reportReturnCopy': 'Sign in, then resume the same private draft. No report content is placed in this link.',
+    'profile.reportReturnAction': 'Resume saved report',
     'common.beta': 'Closed beta',
   },
   'zh-CN': {
@@ -87,16 +391,168 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'map.loadingStatus': '正在加载延迟显示的社区活动…',
     'map.emptyStatus': '暂时没有延迟显示的社区活动',
     'map.unavailableStatus': '社区动态暂不可用 · 地图仍保持隐私安全',
+    'map.mapUnavailable': 'Google 地图暂不可用。请切换到区域列表浏览延迟显示的社区活动。',
     'map.detail.viewAction': '查看',
     'map.detail.followAction': '关注区域',
     'map.detail.followDisabledReason': '需要登录；区域关注服务上线后才能使用此功能。',
     'report.title': '报告目击',
-    'report.subtitle': '添加照片和特征；AI 只推荐候选，不替你做决定。',
+    'report.subtitle': '先建立私密草稿，准备好后再完成。',
     'report.action': '开始报告',
+    'report.hub.title': '报告目击',
+    'report.hub.subtitle': '先建立私密草稿，准备好后再完成。',
+    'report.hub.startAction': '开始报告',
+    'report.hub.draftsTitle': '继续草稿',
+    'report.hub.loading': '正在加载已保存的报告…',
+    'report.hub.emptyTitle': '还没有已保存的报告',
+    'report.hub.emptyCopy': '开始报告后，你可以在这台设备上继续完成。',
+    'report.hub.storageUnavailable': '已保存的报告仅在原生 iOS 和 Android 版本中可用。',
+    'report.hub.storageUnavailableTitle': '无法使用已保存的报告',
+    'report.hub.loadFailed': '无法加载已保存的报告，请稍后重试。',
+    'report.hub.retryAction': '重试',
+    'report.hub.myReports': '我的报告',
+    'report.hub.signedOutExplanation': '登录后即可查看你已提交的报告。',
+    'report.hub.profileAction': '前往“我的”登录',
+    'report.hub.startFailed': '无法创建已保存的报告，请在原生设备上重试。',
+    'report.hub.deleteFailed': '无法删除这份已保存的报告，请重试。',
+    'report.hub.continueDraftLabel': '从{step}继续报告草稿',
+    'report.hub.claimContinueDraftLabel': '认领并从{step}继续报告草稿',
+    'report.hub.deleteDraftLabel': '删除{step}报告草稿',
+    'report.hub.deleteAction': '删除',
+    'report.hub.step.photo': '照片',
+    'report.hub.step.details': '详情',
+    'report.hub.step.safety': '安全',
+    'report.hub.step.area': '区域',
+    'report.hub.step.review': '确认',
+    'report.shell.draftTitle': '已保存的报告',
+    'report.shell.draftReadyTitle': '已保存的报告已就绪',
+    'report.shell.draftReadyCopy': '此路由壳不会更改你已保存的报告。',
+    'report.shell.receiptTitle': '报告回执',
+    'report.shell.receiptCopy': '完整回执将在报告提交后显示。',
+    'report.shell.historyTitle': '我的报告',
+    'report.shell.historyCopy': '已提交报告的历史记录将显示在这里。',
+    'report.shell.unavailableTitle': '报告不可用',
+    'report.shell.invalidDraftId': '需要有效的已保存报告 ID 才能继续。',
+    'report.shell.invalidReceiptId': '需要有效的报告 ID 才能查看此回执。',
+    'report.shell.backAction': '返回报告',
+    'report.receipt.title': '报告回执',
+    'report.receipt.subtitle': '你已提交报告的私密状态。',
+    'report.receipt.loading': '正在加载报告状态…',
+    'report.receipt.received': '已收到报告',
+    'report.receipt.unavailable': '这份报告无法使用。',
+    'report.receipt.remoteUnavailable': '远程状态暂不可用。正在显示此设备上保存的状态。',
+    'report.receipt.localRecoveryTitle': '本地媒体恢复',
+    'report.receipt.localRecovery': '本地媒体恢复需要你处理。',
+    'report.receipt.reference': '报告 ID：{id}',
+    'report.receipt.submittedAt': '提交时间：{time}',
+    'report.receipt.viewReports': '查看我的报告',
+    'report.receipt.nearby': '浏览附近',
+    'report.receipt.reportState.draft': '报告已保存在此设备上',
+    'report.receipt.reportState.submitted': '提交已在此设备上确认',
+    'report.receipt.reportState.privateReview': '私密审核中',
+    'report.receipt.reportState.delayed': '审核后延迟显示',
+    'report.receipt.reportState.published': '审核后已发布',
+    'report.receipt.reportState.archived': '已归档',
+    'report.receipt.mediaState.none': '纯文本报告',
+    'report.receipt.mediaState.pending': '媒体上传等待中',
+    'report.receipt.mediaState.quarantined': '私密媒体等待验证',
+    'report.receipt.mediaState.cleanupPending': '私密媒体等待清理',
+    'report.receipt.mediaState.removed': '私密媒体已移除',
+    'report.receipt.mediaState.needsUser': '媒体需要你处理',
+    'report.receipt.identityState.notRequested': '未请求身份协助',
+    'report.receipt.identityState.pendingReview': '身份审核等待中',
+    'report.receipt.identityState.linked': '身份已关联',
+    'report.receipt.identityState.closed': '身份审核已关闭',
+    'report.history.title': '我的报告',
+    'report.history.subtitle': '你所提交报告的私密状态。',
+    'report.history.loading': '正在加载你的报告…',
+    'report.history.emptyTitle': '还没有已提交的报告',
+    'report.history.emptyCopy': '已提交的报告及其当前私密状态将显示在这里。',
+    'report.history.loadMore': '加载更多报告',
+    'report.history.refresh': '刷新报告',
+    'report.history.offlineSnapshot': '当前离线 — 正在显示本次会话中最后加载的报告。',
+    'report.history.offlineEmpty': '离线时无法查看报告。请连接网络后重试。',
+    'report.history.invalid': '无法验证你的报告历史。请重试。',
+    'report.history.signIn': '登录后即可查看你已提交的报告。',
+    'report.wizard.title': '报告目击',
+    'report.wizard.loading': '正在加载已保存的报告…',
+    'report.wizard.unavailableTitle': '报告不可用',
+    'report.wizard.unavailableCopy': '这份已保存的报告无法使用。请返回“报告”后重新开始。',
+    'report.wizard.saveAndExit': '保存并退出',
+    'report.wizard.progress': '第{current}步，共{total}步 · {step}',
+    'report.wizard.stagesLabel': '报告步骤',
+    'report.wizard.saveFailed': '无法保存你的更改，请重试。',
+    'report.wizard.photoReady': '私密照片已准备好',
+    'report.wizard.photoIntro': '照片为可选项。添加照片后，请先检查并遮挡，再私密保存。',
+    'report.wizard.photoAdd': '添加私密照片',
+    'report.wizard.photoReplace': '更换私密照片',
+    'report.wizard.photoRetake': '重新拍摄私密照片',
+    'report.wizard.photoRemove': '移除私密照片',
+    'report.wizard.photoSkip': '暂时跳过照片',
+    'report.wizard.photoRemoved': '已从这份保存的报告中移除私密照片。',
+    'report.wizard.photoRemoveFailed': '无法安全移除私密照片，请重试。',
+    'report.wizard.detailsIntro': '这只猫看起来如何？',
+    'report.wizard.coatTitle': '毛色',
+    'report.wizard.markingsTitle': '特征',
+    'report.wizard.coat.tabby': '虎斑毛色',
+    'report.wizard.coat.black': '黑色毛色',
+    'report.wizard.coat.white': '白色毛色',
+    'report.wizard.coat.ginger': '橘色毛色',
+    'report.wizard.coat.grey': '灰色毛色',
+    'report.wizard.coat.calico': '三花毛色',
+    'report.wizard.coat.tortoiseshell': '玳瑁毛色',
+    'report.wizard.coat.brown': '棕色毛色',
+    'report.wizard.marking.white-paws': '白爪特征',
+    'report.wizard.marking.white-chest': '白胸特征',
+    'report.wizard.marking.white-tail-tip': '白色尾尖特征',
+    'report.wizard.marking.ear-tip': '剪耳特征',
+    'report.wizard.marking.collar': '项圈特征',
+    'report.wizard.marking.scar': '疤痕特征',
+    'report.wizard.marking.striped': '条纹特征',
+    'report.wizard.marking.spotted': '斑点特征',
+    'report.wizard.conditionWell': '状况良好',
+    'report.wizard.conditionNeedsAttention': '需要关注',
+    'report.wizard.conditionUrgent': '紧急',
+    'report.wizard.notesLabel': '可选备注',
+    'report.wizard.notesPlaceholder': '可选备注',
+    'report.wizard.continue': '继续',
+    'report.wizard.continueToSafety': '继续到安全设置',
+    'report.wizard.safetyIntro': '请选择所需的照护程度。紧急报告不会公开显示。',
+    'report.wizard.riskNormal': '一般',
+    'report.wizard.riskSensitive': '敏感',
+    'report.wizard.riskCritical': '紧急',
+    'report.wizard.riskNormalConsequence': '一般报告采用标准的社区可见性。',
+    'report.wizard.riskSensitiveConsequence': '敏感报告会降低公开可见性。',
+    'report.wizard.riskCriticalConsequence': '紧急报告不会公开显示。',
+    'report.wizard.continueToArea': '继续到区域',
+    'report.wizard.areaIntro': '请选择一个宽泛区域。精确设备坐标仅用于这一次提交，绝不会保存在草稿中。',
+    'report.wizard.deviceLocation': '使用设备位置',
+    'report.wizard.manualArea': '手动选择区域',
+    'report.wizard.continueToReview': '继续到确认',
+    'report.wizard.devicePending': '仅会在你提交这份报告时请求设备位置。',
+    'report.wizard.manualSelected': '已选择宽泛区域，精确地图点按位置已立即丢弃。',
+    'report.wizard.locationDenied': '未获得位置权限，请改为手动选择区域。',
+    'report.wizard.areaRequired': '请先选择区域再提交。',
+    'report.wizard.recovery': '已保存的草稿仍可使用，准备好后请重试。',
+    'report.wizard.reviewIntro': '提交前请检查详情、安全选择和宽泛区域。可使用上方步骤编辑任一部分。',
+    'report.wizard.edit': '编辑{step}',
+    'report.wizard.submitDisabledReason': '提交前请选择设备位置或宽泛手动区域。',
+    'report.wizard.detailsRequired': '提交前请选择猫的状态。',
+    'report.wizard.reviewRequired': '提交前请先检查报告。',
+    'report.wizard.signInRequired': '请先前往个人页登录，然后返回这份已保存的报告。',
+    'report.wizard.submit': '提交报告',
+    'report.wizard.areaMapLabel': '在 Google 地图上选择宽泛区域',
+    'report.wizard.areaMapInstruction': '点按宽泛地图以选择粗略区域，精确点按位置会立即丢弃。',
+    'report.wizard.webAreaLabel': '网页端无法采集区域',
+    'report.wizard.webAreaUnavailable': '区域采集仅可在原生 iOS 和 Android 版本中使用。',
+    'report.wizard.webDeviceLocation': '使用设备位置',
+    'report.wizard.webManualArea': '在地图上选择区域',
     'following.title': '关注',
     'following.subtitle': '获取你关注的猫和区域的去敏更新。',
     'profile.title': '我的',
     'profile.subtitle': '管理隐私、训练授权和可信角色。',
+    'profile.reportReturnTitle': '已保存的报告正在等待',
+    'profile.reportReturnCopy': '登录后可继续同一份私密草稿。此链接不包含任何报告内容。',
+    'profile.reportReturnAction': '继续已保存的报告',
     'common.beta': '封闭测试',
   },
 };

@@ -60,6 +60,17 @@ type MutableAttempt = {
   job: UploadJob & Readonly<{ state: 'uploading' | 'finalizing' }>;
 };
 
+async function assertLiveAttemptOwner(
+  attempt: MutableAttempt,
+  dependencies: MediaUploadCoordinatorDependencies,
+): Promise<void> {
+  if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
+  const liveOwner = await dependencies.getOwnerSubject();
+  if (dependencies.cancellationSignal?.aborted || liveOwner !== attempt.claim.ownerSubject) {
+    throw new Error('media_upload_cancelled');
+  }
+}
+
 const inFlight = new Map<string, Promise<MediaUploadRunResult>>();
 
 function sameReceipt(left: MediaUploadClaim['receipt'], right: MediaUploadClaim['receipt']): boolean {
@@ -287,7 +298,7 @@ async function finalize(
   accessToken: string,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<void> {
-  if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
+  await assertLiveAttemptOwner(attempt, dependencies);
   await dependencies.finalizeMediaUpload({
     sightingId: attempt.claim.sightingId,
     mediaId: attempt.claim.mediaId,
@@ -303,7 +314,7 @@ async function reserve(
   dependencies: MediaUploadCoordinatorDependencies,
   signal?: AbortSignal,
 ): Promise<ValidatedUploadCapability> {
-  if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
+  await assertLiveAttemptOwner(attempt, dependencies);
   return dependencies.reserveMediaUpload({
     sightingId: attempt.claim.sightingId,
     mediaId: attempt.claim.mediaId,
@@ -319,7 +330,9 @@ async function readAndPut(
   accessToken: string | null,
   dependencies: MediaUploadCoordinatorDependencies,
 ): Promise<{ putConflict: boolean; accessToken: string }> {
+  await assertLiveAttemptOwner(attempt, dependencies);
   return dependencies.withDecryptedReviewedJpeg(mediaInput(attempt.claim), async (artifact) => {
+    await assertLiveAttemptOwner(attempt, dependencies);
     if (artifact.sha256.toLowerCase() !== attempt.claim.receipt.sanitizedSha256.toLowerCase()) {
       throw new Error('hash_mismatch');
     }
@@ -329,9 +342,10 @@ async function readAndPut(
     return withAttemptDeadline(dependencies, async (signal) => {
       if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
       const activeToken = accessToken ?? await untilAbort(dependencies.getAccessToken(signal), signal);
+      await assertLiveAttemptOwner(attempt, dependencies);
       const activeCapability = capability ?? await untilAbort(reserve(attempt, activeToken, dependencies, signal), signal);
       try {
-        if (dependencies.cancellationSignal?.aborted) throw new Error('media_upload_cancelled');
+        await assertLiveAttemptOwner(attempt, dependencies);
         let putSucceeded = false;
         const putOperation = dependencies.putReservedMedia({ capability: activeCapability, artifact, signal }).then(() => {
           putSucceeded = true;

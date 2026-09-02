@@ -13,6 +13,6 @@ export function getGlassMode(input: {
 }): GlassMode {
   if (input.reduceTransparency) return 'solid';
   if (input.platform === 'ios' && input.liquidGlassAvailable) return 'liquid';
-  if (input.platform === 'ios' || input.platform === 'android') return 'blur';
+  if (input.platform === 'ios') return 'blur';
   return 'solid';
 }

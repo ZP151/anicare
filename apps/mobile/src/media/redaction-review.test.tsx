@@ -1,6 +1,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockMaskEditorOverlay = jest.fn((_props: unknown) => null);
+const mockLocale = { value: 'en' as 'en' | 'zh-CN' };
 
 jest.mock('@shopify/react-native-skia', () => ({ ImageFormat: { JPEG: 3 }, Skia: {} }));
 jest.mock('../components/ScreenScaffold', () => {
@@ -12,11 +13,13 @@ jest.mock('../components/ScreenScaffold', () => {
   };
 });
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn() },
-  useLocalSearchParams: () => ({ draftId: 'draft-12345678' }),
+  router: { back: jest.fn(), replace: jest.fn() },
+  useLocalSearchParams: () => ({ draftId: '00000000-0000-4000-8000-000000000606' }),
 }));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
 }));
 jest.mock('../../src/media/processor', () => ({
   prepareCanonical: jest.fn(),
@@ -31,19 +34,27 @@ jest.mock('../../src/media/draft-media', () => ({
   persistReviewedMedia: jest.fn(),
   verifyReviewedMedia: jest.fn(),
 }));
+jest.mock('../../src/media/camera-source-cleanup', () => ({
+  cleanupOwnedCameraSource: jest.fn(),
+}));
 jest.mock('../../src/offline/draft-store', () => ({
   saveReviewedMediaJournal: jest.fn(),
 }));
 jest.mock('../../src/api/supabase', () => ({
   getSupabaseClient: jest.fn(),
 }));
+jest.mock('../../src/i18n/LocaleContext', () => ({
+  useLocale: () => ({ locale: mockLocale.value, setLocale: jest.fn(), t: jest.fn() }),
+}));
 
 import RedactionReviewScreen from '../../app/report/redaction-review';
-import { launchImageLibraryAsync } from 'expo-image-picker';
+import { router } from 'expo-router';
+import { launchCameraAsync, launchImageLibraryAsync, requestCameraPermissionsAsync } from 'expo-image-picker';
 import { cleanupProcessorCacheUris, deleteReviewedMediaReference, persistReviewedMedia, verifyReviewedMedia } from './draft-media';
 import { prepareCanonical, renderOpaqueMasks } from './processor';
 import { saveReviewedMediaJournal } from '../offline/draft-store';
 import { getSupabaseClient } from '../api/supabase';
+import { cleanupOwnedCameraSource } from './camera-source-cleanup';
 import type { MaskEditorOverlayProps } from './MaskEditorOverlay';
 import type { PrivacyMask, RenderedMedia } from './contracts';
 
@@ -97,9 +108,11 @@ async function renderPreparedReview(output: RenderedMedia = rendered) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLocale.value = 'en';
   jest.mocked(renderOpaqueMasks).mockReset();
   jest.mocked(verifyReviewedMedia).mockReset();
   jest.mocked(cleanupProcessorCacheUris).mockResolvedValue(undefined);
+  jest.mocked(cleanupOwnedCameraSource).mockResolvedValue(true);
   jest.mocked(deleteReviewedMediaReference).mockResolvedValue(undefined);
   jest.mocked(persistReviewedMedia).mockResolvedValue({
     encryptedReviewedRef: 'reviewed-media/media-12345678.commit-12345678.agcm',
@@ -113,6 +126,53 @@ beforeEach(() => {
 });
 
 describe('private redaction review screen', () => {
+  it('supports an explicit camera retake through the same private canonicalization flow', async () => {
+    jest.mocked(requestCameraPermissionsAsync).mockResolvedValue({ granted: true } as never);
+    jest.mocked(launchCameraAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///camera/retake.jpg' }] } as never);
+    jest.mocked(prepareCanonical).mockResolvedValue(canonical);
+    jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(rendered);
+    const view = await render(<RedactionReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' }));
+    await waitFor(() => expect(prepareCanonical).toHaveBeenCalledWith('file:///camera/retake.jpg'));
+    expect(launchCameraAsync).toHaveBeenCalledWith(expect.objectContaining({ exif: false }));
+  });
+
+  it('cleans an app-owned camera result that resolves immediately after unmount', async () => {
+    const cameraPicker = deferred<Awaited<ReturnType<typeof launchCameraAsync>>>();
+    jest.mocked(requestCameraPermissionsAsync).mockResolvedValue({ granted: true } as never);
+    jest.mocked(launchCameraAsync).mockImplementationOnce(() => cameraPicker.promise);
+    const view = await render(<RedactionReviewScreen />);
+
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' })); });
+    await waitFor(() => expect(launchCameraAsync).toHaveBeenCalledTimes(1));
+    await act(async () => { view.unmount(); });
+    await act(async () => {
+      cameraPicker.resolve({ canceled: false, assets: [{ uri: 'file:///app/cache/ImagePicker/unmounted.jpg' }] } as never);
+      await cameraPicker.promise;
+    });
+
+    await waitFor(() => expect(cleanupOwnedCameraSource).toHaveBeenCalledWith(
+      'file:///app/cache/ImagePicker/unmounted.jpg',
+    ));
+    expect(prepareCanonical).not.toHaveBeenCalled();
+  });
+  it('renders the complete Simplified Chinese review surface without English control copy', async () => {
+    mockLocale.value = 'zh-CN';
+    jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'content://gallery/source.jpg' }] } as never);
+    jest.mocked(prepareCanonical).mockResolvedValue(canonical);
+    jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
+    const view = await render(<RedactionReviewScreen />);
+
+    expect(view.getByText('私密照片复核')).toBeTruthy();
+    expect(view.getByText('人物检测：不可用')).toBeTruthy();
+    expect(view.getByText('车牌检测：不可用')).toBeTruthy();
+    expect(view.getByText('猫咪检测：不可用')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: '选择照片进行私密复核' }));
+    await waitFor(() => expect(view.getByText('添加、选择并调整不透明遮挡，然后在确认前检查每个像素。')).toBeTruthy());
+    expect(view.getByRole('button', { name: '确认精确像素并加密' })).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/Private photo review|People detection|Licence-plate detection|Cat detection|Choose photo|Clear all masks|Confirm exact pixels/i);
+  });
+
   it('states that every automatic detector is unavailable and offers no publication action', async () => {
     const view = await render(<RedactionReviewScreen />);
 
@@ -121,6 +181,20 @@ describe('private redaction review screen', () => {
     expect(view.getByText('Cat detection: unavailable')).toBeTruthy();
     expect(view.getByRole('button', { name: 'Choose photo for private review' })).toBeTruthy();
     expect(view.queryByText(/public upload|publish/i)).toBeNull();
+  });
+
+  it('returns to a freshly loaded wizard using only the same draft ID after private media commits', async () => {
+    jest.mocked(verifyReviewedMedia).mockResolvedValueOnce('absent').mockResolvedValueOnce('valid');
+    const view = await renderPreparedReview();
+
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/report/new',
+      params: { draftId: '00000000-0000-4000-8000-000000000606' },
+    }));
+    expect(router.back).not.toHaveBeenCalled();
+    expect(JSON.stringify(jest.mocked(router.replace).mock.calls)).not.toMatch(/file:|media-|status|uri/);
   });
 
   it('cleans every owned plaintext output when the review screen unmounts', async () => {

@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  h3-js@4.5.0: 3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8
+
 importers:
 
   .:
@@ -189,7 +192,7 @@ importers:
     dependencies:
       h3-js:
         specifier: latest
-        version: 4.5.0
+        version: 4.5.0(patch_hash=3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8)
       zod:
         specifier: latest
         version: 4.5.2
@@ -207,7 +210,7 @@ importers:
     dependencies:
       h3-js:
         specifier: latest
-        version: 4.5.0
+        version: 4.5.0(patch_hash=3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8)
       zod:
         specifier: latest
         version: 4.5.2
@@ -8110,7 +8113,7 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  h3-js@4.5.0: {}
+  h3-js@4.5.0(patch_hash=3bf5d76a863798ce6706fd138894f1ed7f5fed26e761fc9a46e02167d7ba07b8): {}
 
   has-flag@3.0.0: {}
 

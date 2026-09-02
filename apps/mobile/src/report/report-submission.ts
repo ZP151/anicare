@@ -1,15 +1,20 @@
-import type { SightingRecoveryOutcome, SightingRisk, SightingSubmissionResponse } from '../api/sightings';
+import type {
+  SightingLocationInput,
+  SightingRecoveryOutcome,
+  SightingRisk,
+  SightingSubmissionResponse,
+} from '../api/sightings';
 import type { StoredDraft } from '../offline/draft-policy';
 import type { UploadJobState } from '../offline/upload-job';
 
-export type ReportCoordinates = Readonly<{ latitude: number; longitude: number }>;
-export type MediaSubmissionState = UploadJobState | 'not_ready' | 'unavailable' | 'stale';
+export type MediaSubmissionState = UploadJobState | 'cleanup_pending' | 'not_ready' | 'unavailable' | 'stale';
 
 export type SubmitReportWithMediaInput = Readonly<{
   draftId: string;
   notes: string;
   risk: SightingRisk;
-  coordinates: ReportCoordinates | null;
+  traits: Readonly<Record<string, unknown>>;
+  location: SightingLocationInput | null;
   occurredAt: Date;
 }>;
 
@@ -17,29 +22,47 @@ export type ReportSubmissionOutcome = Readonly<{
   sightingId: string | null;
   visibility: SightingSubmissionResponse['visibility'] | null;
   state: 'submitted_text_only' | 'recovery_miss' | MediaSubmissionState;
+  receipt: Readonly<{
+    sightingId: string;
+    visibility: SightingSubmissionResponse['visibility'] | null;
+    mediaState: Exclude<ReportSubmissionOutcome['state'], 'recovery_miss'>;
+  }> | null;
+}>;
+
+export type ReportSubmissionProgress = Readonly<{
+  sightingId: string | null;
+  visibility: SightingSubmissionResponse['visibility'] | null;
+  state: ReportSubmissionOutcome['state'];
+}>;
+
+export type ReportSubmissionAuthContext = Readonly<{
+  accessToken: string;
+  ownerSubject: string;
 }>;
 
 export type ReportSubmissionDependencies = Readonly<{
   saveDraft(input: Readonly<{ id: string; notes: string; risk: SightingRisk }>): Promise<unknown>;
   getDraft(id: string): Promise<StoredDraft | null>;
-  recoverSighting(draftId: string): Promise<SightingRecoveryOutcome>;
+  acquireAuthContext(): Promise<ReportSubmissionAuthContext>;
+  verifyOwnerSubject(expectedOwnerSubject: string): Promise<boolean>;
+  claimDraftOwner(draftId: string, ownerSubject: string): Promise<boolean>;
+  recoverSighting(draftId: string, auth: ReportSubmissionAuthContext): Promise<SightingRecoveryOutcome>;
   createSighting(input: Readonly<{
-    latitude: number;
-    longitude: number;
+    location: SightingLocationInput;
     occurredAt: Date;
     risk: SightingRisk;
+    traits: Readonly<Record<string, unknown>>;
     notes: string | null;
     clientDedupeKey: string;
-  }>): Promise<SightingSubmissionResponse>;
-  currentOwnerSubject(): Promise<string>;
+  }>, auth: ReportSubmissionAuthContext): Promise<SightingSubmissionResponse>;
   attachSighting(draftId: string, sightingId: string, ownerSubject: string): Promise<boolean>;
-  uploadMedia(draftId: string): Promise<MediaSubmissionState>;
+  uploadMedia(draftId: string, expectedOwnerSubject: string): Promise<MediaSubmissionState>;
   deleteDraft(draftId: string): Promise<void>;
 }>;
 
 export function nextReportDraftIdAfterSubmission(
   currentDraftId: string,
-  result: ReportSubmissionOutcome,
+  result: ReportSubmissionProgress,
   nextDraftId: string,
 ): string {
   return result.state === 'submitted_text_only' || result.state === 'quarantined'
@@ -49,7 +72,7 @@ export function nextReportDraftIdAfterSubmission(
 
 export function nextReportFormAfterSubmission(
   currentDraftId: string,
-  result: ReportSubmissionOutcome,
+  result: ReportSubmissionProgress,
   nextDraftId: string,
 ): Readonly<{ draftId: string; resetForm: boolean; keepConfirmation: boolean }> {
   const resetForm = nextReportDraftIdAfterSubmission(currentDraftId, result, nextDraftId) !== currentDraftId;
@@ -81,28 +104,58 @@ type ResolvedSighting = Readonly<{
   visibility: SightingSubmissionResponse['visibility'] | null;
 }>;
 
+function outcome(
+  sighting: ResolvedSighting,
+  state: Exclude<ReportSubmissionOutcome['state'], 'recovery_miss'>,
+): ReportSubmissionOutcome {
+  return {
+    sightingId: sighting.sightingId,
+    visibility: sighting.visibility,
+    state,
+    receipt: {
+      sightingId: sighting.sightingId,
+      visibility: sighting.visibility,
+      mediaState: state,
+    },
+  };
+}
+
+function persistedMediaRecoveryState(
+  draft: StoredDraft | null,
+  sighting: ResolvedSighting,
+  ownerSubject: string,
+): MediaSubmissionState {
+  if (!draft || draft.sightingId !== sighting.sightingId || draft.ownerSubject !== ownerSubject || !hasMediaBoundary(draft)) {
+    return 'unavailable';
+  }
+  if (draft.mediaFailure !== undefined || draft.uploadJob?.state === 'needs_user') return 'needs_user';
+  return draft.uploadJob?.state ?? 'unavailable';
+}
+
 async function recoverOrCreateSighting(
   input: SubmitReportWithMediaInput,
   draft: StoredDraft,
+  auth: ReportSubmissionAuthContext,
   dependencies: ReportSubmissionDependencies,
 ): Promise<Readonly<{ sighting: ResolvedSighting | null; recoveryMiss: boolean }>> {
   if (draft.sightingId) {
     return { sighting: { sightingId: draft.sightingId, visibility: null }, recoveryMiss: false };
   }
 
-  const recovered = await dependencies.recoverSighting(input.draftId);
+  const recovered = await dependencies.recoverSighting(input.draftId, auth);
+  if (!await dependencies.verifyOwnerSubject(auth.ownerSubject)) throw new Error('authentication_changed');
   if (!('kind' in recovered)) {
     return { sighting: { sightingId: recovered.sightingId, visibility: recovered.visibility }, recoveryMiss: false };
   }
-  if (!input.coordinates) return { sighting: null, recoveryMiss: true };
+  if (!input.location) return { sighting: null, recoveryMiss: true };
   const created = await dependencies.createSighting({
-    latitude: input.coordinates.latitude,
-    longitude: input.coordinates.longitude,
+    location: input.location,
     occurredAt: input.occurredAt,
     risk: input.risk,
+    traits: input.traits,
     notes: input.notes.trim() || null,
     clientDedupeKey: input.draftId,
-  });
+  }, auth);
   return {
     sighting: { sightingId: created.sightingId, visibility: created.visibility },
     recoveryMiss: false,
@@ -110,31 +163,42 @@ async function recoverOrCreateSighting(
 }
 
 /**
- * Coordinates remain in this invocation only. The durable draft first anchors
- * the dedupe key; a sighting ID is appended before Task 4 may claim media.
+ * A device-once location remains in this invocation only. The durable draft
+ * first anchors the dedupe key; a sighting ID is appended before media claims.
  */
 export async function submitReportWithMedia(
   input: SubmitReportWithMediaInput,
   dependencies: ReportSubmissionDependencies,
 ): Promise<ReportSubmissionOutcome> {
+  const existing = await dependencies.getDraft(input.draftId);
+  if (!existing) throw new Error('missing_durable_draft');
+  const auth = await dependencies.acquireAuthContext();
+  const ownerSubject = auth.ownerSubject;
+  if (existing.ownerSubject !== undefined && existing.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
+  if (!await dependencies.claimDraftOwner(input.draftId, ownerSubject)) throw new Error('auth_ownership');
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
   try {
     await persistReportDraftBeforeReview(input, dependencies);
   } catch {
     throw new ReportDraftPersistenceError();
   }
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
   const draft = await dependencies.getDraft(input.draftId);
   if (!draft) throw new Error('missing_durable_draft');
-  const ownerSubject = await dependencies.currentOwnerSubject();
-  if (draft.ownerSubject !== undefined && draft.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
+  if (draft.ownerSubject !== ownerSubject) throw new Error('auth_ownership');
 
-  const resolved = await recoverOrCreateSighting(input, draft, dependencies);
+  const resolved = await recoverOrCreateSighting(input, draft, auth, dependencies);
   if (resolved.recoveryMiss || !resolved.sighting) {
-    return { sightingId: null, visibility: null, state: 'recovery_miss' };
+    return { sightingId: null, visibility: null, state: 'recovery_miss', receipt: null };
   }
+
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
 
   if (!draft.sightingId && !await dependencies.attachSighting(input.draftId, resolved.sighting.sightingId, ownerSubject)) {
     throw new Error('sighting_attachment_conflict');
   }
+
+  if (!await dependencies.verifyOwnerSubject(ownerSubject)) throw new Error('authentication_changed');
 
   const durable = await dependencies.getDraft(input.draftId);
   if (!durable || durable.sightingId !== resolved.sighting.sightingId || durable.ownerSubject !== ownerSubject) {
@@ -142,23 +206,27 @@ export async function submitReportWithMedia(
   }
 
   if (!hasMediaBoundary(durable)) {
-    await dependencies.deleteDraft(input.draftId);
-    return {
-      sightingId: resolved.sighting.sightingId,
-      visibility: resolved.sighting.visibility,
-      state: 'submitted_text_only',
-    };
+    // Keep the encrypted, owner-bound row as a durable receipt anchor until a
+    // later authoritative My Reports reconciliation can safely remove it.
+    return outcome(resolved.sighting, 'submitted_text_only');
   }
 
-  const state = await dependencies.uploadMedia(input.draftId);
-  return {
-    sightingId: resolved.sighting.sightingId,
-    visibility: resolved.sighting.visibility,
-    state,
-  };
+  try {
+    const state = await dependencies.uploadMedia(input.draftId, ownerSubject);
+    return outcome(resolved.sighting, state);
+  } catch {
+    try {
+      return outcome(
+        resolved.sighting,
+        persistedMediaRecoveryState(await dependencies.getDraft(input.draftId), resolved.sighting, ownerSubject),
+      );
+    } catch {
+      return outcome(resolved.sighting, 'unavailable');
+    }
+  }
 }
 
-export function reportSubmissionStatus(result: ReportSubmissionOutcome): string {
+export function reportSubmissionStatus(result: ReportSubmissionProgress): string {
   switch (result.state) {
     case 'submitted_text_only':
       if (result.visibility === 'hidden') return 'Submitted for private safety review.';
@@ -176,6 +244,8 @@ export function reportSubmissionStatus(result: ReportSubmissionOutcome): string 
       return 'Private media upload retry is scheduled. It is not publicly available.';
     case 'needs_user':
       return 'The encrypted media needs review or recapture before it can be retried.';
+    case 'cleanup_pending':
+      return 'Text submission is committed. Local draft cleanup is pending and no media is publicly available.';
     case 'recovery_miss':
       return 'No prior submission was found. Choose a location to submit this draft again, or recapture and re-review if its media cannot be recovered.';
     case 'not_ready':

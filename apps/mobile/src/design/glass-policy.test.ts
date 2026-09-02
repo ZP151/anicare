@@ -13,7 +13,7 @@ describe('adaptive glass policy', () => {
     ).toBe('solid');
     expect(
       getGlassMode({ platform: 'android', liquidGlassAvailable: false, reduceTransparency: false }),
-    ).toBe('blur');
+    ).toBe('solid');
     expect(
       getGlassMode({ platform: 'web', liquidGlassAvailable: false, reduceTransparency: false }),
     ).toBe('solid');

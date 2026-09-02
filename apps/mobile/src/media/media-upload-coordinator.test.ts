@@ -52,6 +52,42 @@ describe('crash-safe media upload coordinator', () => {
     ]);
   });
 
+  it.each(['decrypt', 'reserve', 'put', 'finalize'] as const)(
+    'stops an A upload when auth changes to B before %s',
+    async (boundary) => {
+      const run = uploadHarness();
+      let owner = 'owner-12345678';
+      const base = run.dependencies;
+      let ownerReads = 0;
+      run.dependencies = {
+        ...base,
+        getOwnerSubject: async () => {
+          ownerReads += 1;
+          if (boundary === 'decrypt' && ownerReads >= 2) owner = 'owner-bbbbbbbb';
+          return owner;
+        },
+        withDecryptedReviewedJpeg: async (input, consume) => base.withDecryptedReviewedJpeg(input, async (artifact) => {
+          if (boundary === 'reserve') owner = 'owner-bbbbbbbb';
+          return consume(artifact);
+        }),
+        reserveMediaUpload: async (input) => {
+          const capability = await base.reserveMediaUpload(input);
+          if (boundary === 'put') owner = 'owner-bbbbbbbb';
+          return capability;
+        },
+        putReservedMedia: async (input) => {
+          await base.putReservedMedia(input);
+          if (boundary === 'finalize') owner = 'owner-bbbbbbbb';
+        },
+      };
+      await expect(run.claimAndRun()).resolves.toBe('waiting');
+      const index = run.events.indexOf(boundary);
+      expect(index === -1 || run.events.slice(index + 1)).not.toContain(
+        boundary === 'decrypt' ? 'reserve' : boundary === 'reserve' ? 'put' : boundary === 'put' ? 'finalize' : 'delete_ciphertext',
+      );
+    },
+  );
+
   it('records finalizing before settling a cancellation that arrives after PUT succeeds', async () => {
     const run = uploadHarness();
     const cancellation = new AbortController();

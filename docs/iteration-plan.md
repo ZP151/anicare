@@ -85,8 +85,10 @@ page map so every main tab supports a useful task, a next action and a way back.
   time, keep Google attribution visible, and never commit the keys. Google map
   content is context only: do not plot exact cat pins, center the camera on a
   sighting or user coordinate, expose routes, or persist Google content. The
-  art-directed atlas remains a visibly labelled fallback for web, offline,
-  missing-key and provider-unavailable states.
+  Google Maps keys are only for the native Maps SDK/tile service. Web,
+  missing-key and provider-unavailable states show an honest no-map state with
+  the existing area-list path; they never render a generated or synthetic atlas.
+  OpenAI keys are not a Report-map or MVP dependency.
 - Implement a coarse-cell map/list switch, legend, visible time-window label,
   recenter action and the same safety filters as Nearby.
 - Make a cell selection open an area-detail surface with delayed aggregate
@@ -108,6 +110,21 @@ page map so every main tab supports a useful task, a next action and a way back.
   must remain first-class paths and separate from AI-training consent.
 - Add a completion screen and My reports entry so users can see moderation,
   identity-review and deletion status instead of submitting into a dead end.
+- **Completed — Report completion/recovery/My Reports:** a contributor can
+  create, save, exit, resume, clean up and submit a privacy-safe report; valid
+  text-first submissions reach a durable receipt and the owner-only My Reports
+  projection. Media recovery is explicit and remote authority remains primary.
+  A submission pins one authenticated subject across recovery, creation,
+  attachment and media continuation; shared-device drafts, history and receipt
+  anchors are subject-isolated. Missing native Google Maps configuration or
+  readiness falls back to truthful community-labelled H3-9 cells, while camera retake uses
+  the same local redaction/encryption path and never enables microphone access.
+  Nearby, Map, Cat Detail and Report creation bind verified signed-in owners or
+  persist explicit anonymous provenance; auth-epoch changes clear owner-only
+  local views and abort in-flight media boundaries. Text-only completion keeps
+  only a minimal, owner-bound receipt anchor until remote reconciliation.
+  Public AI controls, candidate lists, live inference, training consent and
+  automatic identity confirmation remain disabled.
 
 ### Following and privacy-safe updates
 

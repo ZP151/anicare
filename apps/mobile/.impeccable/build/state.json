@@ -1,302 +1,65 @@
 {
   "tool": "build-phase",
   "version": 2,
-  "startedAt": "2026-08-29T06:29:53.451Z",
-  "comp": ".impeccable\\mocks\\sheltered-link-atlas-a.png",
-  "direction": "6f2aa683",
+  "startedAt": "2026-08-31T16:50:09.882Z",
+  "comp": ".impeccable\\mocks\\sheltered-link-atlas-a-privacy.png",
+  "direction": null,
   "breakpoint": "853x1844",
   "artifact": null,
-  "phase": "hero",
+  "phase": "plates",
   "phases": {
     "comps": {
-      "status": "closed",
-      "openedAt": "2026-08-29T06:29:53.450Z",
-      "closedAt": "2026-08-30T09:54:37.760Z",
-      "attempts": 1,
-      "notes": [],
-      "gate": {
-        "ok": true,
-        "reasons": [],
-        "summary": "3 comps, 1 approved",
-        "approved": ".impeccable\\mocks\\sheltered-link-atlas-a.png",
-        "at": "2026-08-30T09:54:37.759Z"
-      },
+      "status": "skipped",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [
+        {
+          "at": "2026-08-31T16:50:09.882Z",
+          "text": "started with an approved comp; the comp round happened before this state (surface round or manual)"
+        }
+      ],
+      "gate": null,
       "forced": null
     },
     "spec": {
       "status": "closed",
-      "openedAt": "2026-08-30T09:54:37.827Z",
-      "closedAt": "2026-08-30T09:57:14.558Z",
+      "openedAt": "2026-08-31T16:50:09.882Z",
+      "closedAt": "2026-08-31T16:50:21.671Z",
       "attempts": 3,
       "notes": [],
       "gate": {
         "ok": true,
         "reasons": [],
-        "summary": "21 regions, 3 plates, 6 text regions measured",
-        "at": "2026-08-30T09:57:14.557Z"
+        "summary": "26 regions, 3 plates, 11 text regions measured",
+        "at": "2026-08-31T16:50:21.670Z"
       },
       "forced": null
     },
     "plates": {
-      "status": "closed",
-      "openedAt": "2026-08-30T09:57:14.558Z",
-      "closedAt": "2026-08-30T10:10:01.110Z",
-      "attempts": 5,
-      "notes": [],
-      "gate": {
-        "ok": true,
-        "reasons": [],
-        "summary": "3/3 plates",
-        "at": "2026-08-30T10:10:01.109Z"
-      },
-      "forced": null
-    },
-    "hero": {
       "status": "open",
-      "openedAt": "2026-08-30T10:10:01.110Z",
+      "openedAt": "2026-08-31T16:50:21.671Z",
       "closedAt": null,
-      "attempts": 2,
+      "attempts": 1,
       "notes": [],
       "gate": {
         "ok": false,
         "reasons": [
-          "region atlas-zone-north is missing (detail 0%, structure 52%): the comp shows material the build does not",
-          "region tab-nearby (control) is contradicted (structure 79%, detail added 8%): this control does not read as the comp's: rebuild its chrome from the crop (border, fill, radius, chevron or arrow, label size) rather than from a component default",
-          "control tab-map drifts to 62% (structure 83%, color 44%): its chrome differs from the comp's; open .impeccable\\review\\diff\\hero\\regions\\tab-map.png and match the border, fill, radius, chevron or arrow, and label size",
-          "control tab-report drifts to 63% (structure 82%, color 46%): its chrome differs from the comp's; open .impeccable\\review\\diff\\hero\\regions\\tab-report.png and match the border, fill, radius, chevron or arrow, and label size",
-          "control tab-following drifts to 63% (structure 84%, color 44%): its chrome differs from the comp's; open .impeccable\\review\\diff\\hero\\regions\\tab-following.png and match the border, fill, radius, chevron or arrow, and label size",
-          "control tab-profile drifts to 61% (structure 82%, color 44%): its chrome differs from the comp's; open .impeccable\\review\\diff\\hero\\regions\\tab-profile.png and match the border, fill, radius, chevron or arrow, and label size",
-          "plate coarse-atlas is clipped at the bottom: the comp's artwork keeps a margin there (ink box 853x848 at 0,32 in the region) and the build's runs to the edge (851x948 at 2,11); size the box to the artwork's aspect and use object-fit: contain, or place the <img> at the artwork's own size, never cover on a narrower box"
+          "plate assets\\plates\\coarse-atlas.png: carries detail the comp region coarse-atlas does not have (added-detail 50% of cells): noise, grain, or a busier subject where the comp is calm; regenerate from the crop reference without adding texture"
         ],
-        "summary": "hero 79% (drift)",
-        "score": 0.7857,
-        "verdict": "drift",
-        "report": ".impeccable\\review\\diff\\hero\\report.json",
-        "sideBySide": ".impeccable\\review\\diff\\hero\\side-by-side.png",
-        "worst": [
-          "atlas-zone-north missing 43%",
-          "atlas-edge-label drift 51%",
-          "atlas-zone-east drift 56%"
-        ],
-        "worstIds": [
-          "atlas-zone-north",
-          "atlas-edge-label",
-          "atlas-zone-east"
-        ],
-        "worstCrops": [
-          {
-            "id": "atlas-zone-north",
-            "verdict": "missing",
-            "score": {
-              "overall": 0.4319,
-              "structure": 0.5172,
-              "color": 0.5171,
-              "colorIntersection": 0.1158,
-              "paletteMatch": 0.7331,
-              "detail": 0,
-              "detailRaw": 0.1419,
-              "detailAdded": 0.3021,
-              "bands": 0.44
-            },
-            "file": ".impeccable\\review\\diff\\hero\\regions\\atlas-zone-north.png"
-          },
-          {
-            "id": "atlas-edge-label",
-            "verdict": "drift",
-            "score": {
-              "overall": 0.5058,
-              "structure": 0.5168,
-              "color": 0.6597,
-              "colorIntersection": 0.3014,
-              "paletteMatch": 0.8526,
-              "detail": 0.2768,
-              "detailRaw": 0.381,
-              "detailAdded": 0.2083,
-              "bands": 0.4091
-            },
-            "file": ".impeccable\\review\\diff\\hero\\regions\\atlas-edge-label.png"
-          },
-          {
-            "id": "atlas-zone-east",
-            "verdict": "drift",
-            "score": {
-              "overall": 0.5619,
-              "structure": 0.6915,
-              "color": 0.5815,
-              "colorIntersection": 0.2884,
-              "paletteMatch": 0.7393,
-              "detail": 0.4719,
-              "detailRaw": 0.498,
-              "detailAdded": 0.0521,
-              "bands": 0
-            },
-            "file": ".impeccable\\review\\diff\\hero\\regions\\atlas-zone-east.png"
-          }
-        ],
-        "advisories": [
-          "(advisory, above the 72% bar; fix in the polish pass before responsive) 4 readings:",
-          "  text atlas-zone-west: cap height 16px in the build, 23.7px in the comp (-32%); set font-size so the cap height renders at 23.7px",
-          "  text atlas-edge-label: cap height 20.8px in the build, 15.6px in the comp (+33%); set font-size so the cap height renders at 15.6px",
-          "  text atlas-zone-north: the face renders 41% heavier than the comp's (ink density 0.66 vs 0.47); drop a weight step or use the ranked face",
-          "  text atlas-zone-north: its first line starts 15px higher than in the comp (5px vs 20px into the region box); the spacing above it is too small",
-          "(advisory, unchanged for 3+ attempts) text cat-name: cap height 23.2px in the build, 36.8px in the comp (-37%); set font-size so the cap height renders at 36.8px (font-match ranked Rosario 700 at 53px)",
-          "(advisory, unchanged for 3+ attempts) text confirmed-status: cap height 8px in the build, 20.1px in the comp (-60%); set font-size so the cap height renders at 20.1px",
-          "(advisory, unchanged for 3+ attempts) text seen-status: cap height 6px in the build, 17.8px in the comp (-66%); set font-size so the cap height renders at 17.8px",
-          "(advisory, unchanged for 3+ attempts) text seen-status: ink is #1a384a in the build, #acb3b4 in the comp; use the comp's colour"
-        ],
-        "regionVerdicts": {
-          "paper-ground": "match",
-          "nearby-title": "match",
-          "safety-button": "drift",
-          "coarse-atlas": "drift",
-          "atlas-zone-north": "missing",
-          "atlas-zone-west": "drift",
-          "atlas-zone-east": "drift",
-          "atlas-green-label": "drift",
-          "atlas-edge-label": "drift",
-          "privacy-banner": "drift",
-          "privacy-title": "drift",
-          "privacy-copy": "drift",
-          "cat-sheet": "drift",
-          "sheet-handle": "match",
-          "cat-portrait": "drift",
-          "cat-name": "drift",
-          "confirmed-status": "drift",
-          "seen-status": "drift",
-          "view-cat": "drift",
-          "report-sighting": "drift",
-          "tab-bar": "drift",
-          "tab-nearby": "contradicted",
-          "tab-map": "drift",
-          "tab-report": "drift",
-          "tab-following": "drift",
-          "tab-profile": "drift"
-        },
-        "at": "2026-08-30T17:09:49.764Z"
+        "summary": "3/3 plates",
+        "at": "2026-08-31T16:50:22.584Z"
       },
-      "forced": null,
-      "records": 10,
-      "readingsSeen": {
-        "text atlas-zone-north: cap height 8.6px in the build, 18.2px in the comp (-53%); set font-size so the cap height renders at 18.2px": 2,
-        "text privacy-title: cap height 9.5px in the build, 19.4px in the comp (-51%); set font-size so the cap height renders at 19.4px": 1,
-        "text privacy-copy: letter-spacing is tighter than the comp's (gap 0.050 vs 0.102 of the cap height); set letter-spacing to open it by about 1px": 1,
-        "text confirmed-status: cap height 8.7px in the build, 20.1px in the comp (-57%); set font-size so the cap height renders at 20.1px": 1,
-        "text privacy-copy: the face renders 30% heavier than the comp's (ink density 0.58 vs 0.44); drop a weight step or use the ranked face": 1,
-        "text atlas-zone-north: ink is #b2b0a1 in the build, #555858 in the comp; use the comp's colour": 1,
-        "text privacy-copy: ink is #758c85 in the build, #354446 in the comp; use the comp's colour": 1,
-        "text confirmed-status: ink is #688582 in the build, #10554c in the comp; use the comp's colour": 1,
-        "text atlas-zone-north: its first line starts 20px higher than in the comp (0px vs 20px into the region box); the spacing above it is too small": 2,
-        "text privacy-title: its first line starts 16px lower than in the comp (22px vs 6px into the region box); the spacing above it is too large": 1,
-        "control view-cat: its rule sits 90px into the box in the comp and 37px in the build (-53px), so the strip is shorter than the comp's; match the height, not only the position": 1,
-        "control report-sighting: its rule sits 82px into the box in the comp and 8px in the build (-74px), so the strip is shorter than the comp's; match the height, not only the position": 1,
-        "text confirmed-status: cap height 7px in the build, 20.1px in the comp (-65%); set font-size so the cap height renders at 20.1px": 3,
-        "text privacy-copy: ink is #9ab0a9 in the build, #354446 in the comp; use the comp's colour": 1,
-        "text confirmed-status: ink is #aabebd in the build, #10554c in the comp; use the comp's colour": 1,
-        "text privacy-title: its first line starts 14px lower than in the comp (20px vs 6px into the region box); the spacing above it is too large": 3,
-        "control view-cat: its rule sits 90px into the box in the comp and 35px in the build (-55px), so the strip is shorter than the comp's; match the height, not only the position": 3,
-        "control report-sighting: its rule sits 82px into the box in the comp and 6px in the build (-76px), so the strip is shorter than the comp's; match the height, not only the position": 3,
-        "chrome tab-bar: its ink is 56px tall in the build and 86px in the comp (-30px); match the height, not only the position": 3,
-        "text privacy-copy: ink is #90a2a0 in the build, #354446 in the comp; use the comp's colour": 2,
-        "text confirmed-status: ink is #a5bcb8 in the build, #10554c in the comp; use the comp's colour": 2,
-        "text atlas-edge-label: the face renders 43% heavier than the comp's (ink density 0.69 vs 0.48); drop a weight step or use the ranked face": 1,
-        "text atlas-green-label: ink is #7f7c73 in the build, #56724d in the comp; use the comp's colour": 1,
-        "text cat-name: cap height 26.8px in the build, 36.8px in the comp (-27%); set font-size so the cap height renders at 36.8px (font-match ranked Rosario 700 at 53px)": 1,
-        "text confirmed-status: cap height 11.6px in the build, 20.1px in the comp (-42%); set font-size so the cap height renders at 20.1px": 1,
-        "text seen-status: cap height 11.3px in the build, 17.8px in the comp (-37%); set font-size so the cap height renders at 17.8px": 1,
-        "text atlas-green-label: ink is #6d6863 in the build, #56724d in the comp; use the comp's colour": 1,
-        "text privacy-copy: ink is #92a5a3 in the build, #354446 in the comp; use the comp's colour": 1,
-        "control report-sighting: its rule sits 82px into the box in the comp and 88px in the build (+6px), so the strip is taller than the comp's; match the height, not only the position": 1,
-        "text atlas-zone-west: cap height 18px in the build, 23.7px in the comp (-24%); set font-size so the cap height renders at 23.7px": 2,
-        "text cat-name: cap height 23.2px in the build, 36.8px in the comp (-37%); set font-size so the cap height renders at 36.8px (font-match ranked Rosario 700 at 53px)": 4,
-        "text confirmed-status: cap height 8px in the build, 20.1px in the comp (-60%); set font-size so the cap height renders at 20.1px": 4,
-        "text seen-status: cap height 6px in the build, 17.8px in the comp (-66%); set font-size so the cap height renders at 17.8px": 4,
-        "text privacy-title: the face renders 37% heavier than the comp's (ink density 0.67 vs 0.49); drop a weight step or use the ranked face": 2,
-        "text privacy-title: ink is #1b3848 in the build, #1c5c53 in the comp; use the comp's colour": 2,
-        "text seen-status: ink is #1a384a in the build, #acb3b4 in the comp; use the comp's colour": 4,
-        "control report-sighting: its rule sits 82px into the box in the comp and 76px in the build (-6px), so the strip is shorter than the comp's; match the height, not only the position": 2,
-        "text atlas-zone-west: cap height 16px in the build, 23.7px in the comp (-32%); set font-size so the cap height renders at 23.7px": 2,
-        "text atlas-edge-label: cap height 20.8px in the build, 15.6px in the comp (+33%); set font-size so the cap height renders at 15.6px": 2,
-        "text atlas-zone-north: the face renders 41% heavier than the comp's (ink density 0.66 vs 0.47); drop a weight step or use the ranked face": 2,
-        "text atlas-zone-north: its first line starts 15px higher than in the comp (5px vs 20px into the region box); the spacing above it is too small": 2
-      },
-      "history": [
-        {
-          "at": "2026-08-30T17:06:19.490Z",
-          "score": 0.7651,
-          "worstIds": [
-            "atlas-zone-north",
-            "atlas-zone-west",
-            "report-sighting"
-          ],
-          "regionVerdicts": {
-            "paper-ground": "match",
-            "nearby-title": "drift",
-            "safety-button": "drift",
-            "coarse-atlas": "drift",
-            "atlas-zone-north": "contradicted",
-            "atlas-zone-west": "drift",
-            "atlas-zone-east": "drift",
-            "atlas-green-label": "contradicted",
-            "atlas-edge-label": "drift",
-            "privacy-banner": "drift",
-            "privacy-title": "drift",
-            "privacy-copy": "drift",
-            "cat-sheet": "drift",
-            "sheet-handle": "match",
-            "cat-portrait": "drift",
-            "cat-name": "drift",
-            "confirmed-status": "drift",
-            "seen-status": "drift",
-            "view-cat": "drift",
-            "report-sighting": "drift",
-            "tab-bar": "drift",
-            "tab-nearby": "drift",
-            "tab-map": "drift",
-            "tab-report": "drift",
-            "tab-following": "drift",
-            "tab-profile": "drift"
-          },
-          "artifactHash": null
-        },
-        {
-          "at": "2026-08-30T17:09:49.765Z",
-          "score": 0.7857,
-          "worstIds": [
-            "atlas-zone-north",
-            "atlas-edge-label",
-            "atlas-zone-east"
-          ],
-          "regionVerdicts": {
-            "paper-ground": "match",
-            "nearby-title": "match",
-            "safety-button": "drift",
-            "coarse-atlas": "drift",
-            "atlas-zone-north": "missing",
-            "atlas-zone-west": "drift",
-            "atlas-zone-east": "drift",
-            "atlas-green-label": "drift",
-            "atlas-edge-label": "drift",
-            "privacy-banner": "drift",
-            "privacy-title": "drift",
-            "privacy-copy": "drift",
-            "cat-sheet": "drift",
-            "sheet-handle": "match",
-            "cat-portrait": "drift",
-            "cat-name": "drift",
-            "confirmed-status": "drift",
-            "seen-status": "drift",
-            "view-cat": "drift",
-            "report-sighting": "drift",
-            "tab-bar": "drift",
-            "tab-nearby": "contradicted",
-            "tab-map": "drift",
-            "tab-report": "drift",
-            "tab-following": "drift",
-            "tab-profile": "drift"
-          },
-          "artifactHash": null
-        }
-      ]
+      "forced": null
+    },
+    "hero": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
     },
     "sections": {
       "status": "pending",
@@ -339,12 +102,12 @@
   "plates": {
     "paper-ground": {
       "status": "ok",
-      "score": 0.8448,
+      "score": 0.984,
       "size": "1254x1254"
     },
     "coarse-atlas": {
       "status": "ok",
-      "score": 0.6048,
+      "score": 0.5299,
       "size": "1280x1384"
     },
     "cat-portrait": {

@@ -68,4 +68,3 @@ Final verification includes the fresh Supabase migration/pgTAP gate, all existin
 - Hosted Singapore-region Supabase project and true post-expiry replay
 - Physical iOS/Android security, lifecycle, accessibility and glass-effect evidence
 - DPO/DPIA, retention, transfer, subprocessor and legal sign-off
-

@@ -1,4 +1,4 @@
-import { latLngToCell } from 'h3-js';
+import { cellToLatLng, getResolution, isValidCell, latLngToCell } from 'h3-js';
 
 import type {
   PreciseLocationGrant,
@@ -9,6 +9,7 @@ import type {
 } from './types.js';
 
 const SINGAPORE_UTC_OFFSET_HOURS = 8;
+const SINGAPORE_BOUNDS = Object.freeze({ minLatitude: 1.1, maxLatitude: 1.5, minLongitude: 103.55, maxLongitude: 104.15 });
 
 function getSingaporeTimeBucket(date: Date): PublicTimeBucket {
   const localHour = (date.getUTCHours() + SINGAPORE_UTC_OFFSET_HOURS) % 24;
@@ -26,6 +27,13 @@ export function toPublicLocationCell(coordinates: {
     cellId: latLngToCell(coordinates.latitude, coordinates.longitude, 9),
     resolution: 9,
   };
+}
+
+export function isSingaporePublicCell(cellId: string): boolean {
+  if (!/^[0-9a-f]{15}$/i.test(cellId) || !isValidCell(cellId) || getResolution(cellId) !== 9) return false;
+  const [latitude, longitude] = cellToLatLng(cellId);
+  return latitude >= SINGAPORE_BOUNDS.minLatitude && latitude <= SINGAPORE_BOUNDS.maxLatitude &&
+    longitude >= SINGAPORE_BOUNDS.minLongitude && longitude <= SINGAPORE_BOUNDS.maxLongitude;
 }
 
 export function getPublicExposure(

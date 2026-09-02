@@ -93,6 +93,15 @@ function minimumChildEnvironment(parentEnvironment, additions = {}) {
   return environment;
 }
 
+function pnpmInvocation(args, environment, platform = process.platform) {
+  if (platform !== 'win32') return { command: 'pnpm', args };
+  const command = environment.COMSPEC ?? environment.ComSpec;
+  if (typeof command !== 'string' || command.length === 0 || /[\r\n\0]/.test(command)) {
+    throw new Error('Windows command processor is unavailable.');
+  }
+  return { command, args: ['/d', '/s', '/c', 'pnpm', ...args] };
+}
+
 function createBoundedCollector(stream) {
   const chunks = [];
   let byteLength = 0;
@@ -789,7 +798,7 @@ export async function runPilotGate2A({
       processAdapter,
       stage,
       'supabase',
-      ['start'],
+      ['start', '--exclude', 'logflare,vector'],
       { cwd: repoRoot, env: baseEnvironment, signal, timeoutMs: STAGE_TIMEOUTS.start },
       false,
     );
@@ -863,11 +872,15 @@ export async function runPilotGate2A({
     });
 
     stage = 'readiness';
+    const readinessInvocation = pnpmInvocation(
+      buildPilotGate2ATestArgs(inputs.integrationTests, { readinessOnly: true }),
+      baseEnvironment,
+    );
     await capturedStage(
       processAdapter,
       stage,
-      'pnpm',
-      buildPilotGate2ATestArgs(inputs.integrationTests, { readinessOnly: true }),
+      readinessInvocation.command,
+      readinessInvocation.args,
       { cwd: repoRoot, env: integrationEnvironment, signal, timeoutMs: STAGE_TIMEOUTS.readiness },
     );
     assertEdgeProcessRunning(edgeProcess);
@@ -879,11 +892,15 @@ export async function runPilotGate2A({
       stage = integrationStageForFile(integrationFile);
       const remaining = integrationDeadline - monotonicNow();
       if (remaining <= 0) throw new StageFailure(stage);
+      const integrationInvocation = pnpmInvocation(
+        buildPilotGate2ATestArgs(inputs.integrationTests, { integrationFile }),
+        baseEnvironment,
+      );
       await capturedStage(
         processAdapter,
         stage,
-        'pnpm',
-        buildPilotGate2ATestArgs(inputs.integrationTests, { integrationFile }),
+        integrationInvocation.command,
+        integrationInvocation.args,
         { cwd: repoRoot, env: integrationEnvironment, signal, timeoutMs: remaining },
       );
       assertEdgeProcessRunning(edgeProcess);

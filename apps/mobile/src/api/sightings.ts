@@ -2,15 +2,18 @@ import { parseTrustedSupabaseOrigin } from './media';
 
 export type SightingRisk = 'normal' | 'sensitive' | 'critical';
 
-export interface SightingDraftInput {
-  latitude: number;
-  longitude: number;
+export type SightingLocationInput =
+  | Readonly<{ kind: 'device_once'; latitude: number; longitude: number }>
+  | Readonly<{ kind: 'manual_area'; publicCellId: string }>;
+
+export type SightingDraftInput = Readonly<{
+  location: SightingLocationInput;
   occurredAt: Date;
   risk: SightingRisk;
   traits: Record<string, unknown>;
   notes: string | null;
   clientDedupeKey: string;
-}
+}>;
 
 export type SightingSubmissionResponse = Readonly<{
   sightingId: string;
@@ -142,9 +145,11 @@ async function sendSightingSubmission(
 }
 
 export function buildSightingPayload(input: SightingDraftInput) {
+  const location = input.location.kind === 'device_once'
+    ? { latitude: input.location.latitude, longitude: input.location.longitude }
+    : { manualPublicCellId: input.location.publicCellId };
   return {
-    latitude: input.latitude,
-    longitude: input.longitude,
+    ...location,
     occurredAt: input.occurredAt.toISOString(),
     risk: input.risk,
     traits: input.traits,

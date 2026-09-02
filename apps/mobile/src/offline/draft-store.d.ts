@@ -28,10 +28,12 @@ export function transitionClaimedMediaUpload(
   next: UploadJob,
 ): Promise<boolean>;
 export function attachSightingToDraft(id: string, sightingId: string, ownerSubject: string): Promise<boolean>;
+export function claimOfflineDraftOwner(id: string, ownerSubject: string): Promise<boolean>;
 export function cleanupQuarantinedMedia(id: string, revision: number): Promise<void>;
-export function deleteOfflineDraft(id: string): Promise<void>;
+export function deleteOfflineDraft(id: string, expectedOwnerSubject?: string | null): Promise<void>;
 export function cleanupPendingReviewedMediaReferences(): Promise<void>;
 export function cleanupPendingReviewedMediaForDraft(draftId: string): Promise<void>;
+export function removeReviewedMediaFromDraft(draftId: string): Promise<void>;
 export function getPendingReviewedMediaVersionMismatch(draft: StoredDraft): Readonly<{
   expectedRevision: number;
   expectedState: UploadJobState;

@@ -59,6 +59,10 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "moduleNameMapper": {
+      "^@animalhelper/domain$": "<rootDir>/../../packages/domain/src/index.ts",
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/.expo/"
