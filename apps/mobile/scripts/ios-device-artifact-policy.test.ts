@@ -118,6 +118,50 @@ describe('unsigned iOS build shell contract', () => {
     expect(result.stderr).toBe('');
   });
 
+  it('sanitizes control characters from runner image metadata before writing the manifest', () => {
+    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const definitions = [
+      'set -euo pipefail',
+      "APP_DIR='/tmp'",
+      script.slice(script.indexOf('write_manifest() {'), script.indexOf('\nrequire_command codesign')),
+    ].join('\n');
+    const runner = [
+      definitions,
+      "git() { printf '%s\\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; }",
+      "node() { printf '%s\\n%s\\n' \"$8\" \"$9\"; }",
+      "ImageOS=$'runner\\timage'",
+      "ImageVersion=$'version\\nimage'",
+      "write_manifest destination sha 1 lock 'Xcode 26' ruby pod node pnpm",
+    ].join('\n');
+    const result = spawnSync(bashExecutable, ['-c', runner], { encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trimEnd().split(/\r?\n/)).toEqual(['unavailable', 'unavailable']);
+    expect(result.stderr).toBe('');
+  });
+
+  it('keeps ASCII spaces in runner image metadata', () => {
+    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const definitions = [
+      'set -euo pipefail',
+      "APP_DIR='/tmp'",
+      script.slice(script.indexOf('write_manifest() {'), script.indexOf('\nrequire_command codesign')),
+    ].join('\n');
+    const runner = [
+      definitions,
+      "git() { printf '%s\\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; }",
+      "node() { printf '%s\\n%s\\n' \"$8\" \"$9\"; }",
+      "ImageOS='runner image'",
+      "ImageVersion='version image'",
+      "write_manifest destination sha 1 lock 'Xcode 26' ruby pod node pnpm",
+    ].join('\n');
+    const result = spawnSync(bashExecutable, ['-c', runner], { encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trimEnd().split(/\r?\n/)).toEqual(['runner image', 'version image']);
+    expect(result.stderr).toBe('');
+  });
+
   it('selects the pinned toolchain and invokes the inventory policy before and after packaging', () => {
     const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
 
