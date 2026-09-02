@@ -126,17 +126,23 @@ function assertWorkflowContract(workflow, source) {
   assertStepOrder(bootstrap, [
     sha.checkout, sha.pnpm, sha.node, sha.ruby,
     'Install workspace dependencies', 'Verify the pinned native toolchain',
-    'Validate repository policy contracts', 'Resolve the missing Pod lock only',
+    'Validate repository policy contracts', 'Generate the missing Pod lock inputs',
+    'Prepare the generated Podfile for locked installation', 'Resolve the missing Pod lock only',
     'Upload the generated Pod lock for review', 'Remove generated native files',
   ], 'lock bootstrap');
   assert.equal('environment' in bootstrap, false);
   assert.equal('env' in bootstrap, false);
+  const bootstrapGenerate = step(bootstrap, 'Generate the missing Pod lock inputs');
+  assert.deepEqual(bootstrapGenerate.env, fixedInputs);
+  assertOnlyStepEnvs(bootstrap, new Map([['Generate the missing Pod lock inputs', fixedInputs]]), 'lock bootstrap');
+  assert.equal(bootstrapGenerate['working-directory'], 'apps/mobile');
+  assert.equal(bootstrapGenerate.run, 'pnpm exec expo prebuild --clean --platform ios --no-install');
+  const bootstrapPrepare = step(bootstrap, 'Prepare the generated Podfile for locked installation');
+  assert.equal(bootstrapPrepare['working-directory'], 'apps/mobile');
+  assert.equal(bootstrapPrepare.run, 'pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts ios/Podfile ios/Podfile.properties.json');
   const bootstrapResolve = step(bootstrap, 'Resolve the missing Pod lock only');
-  assert.deepEqual(bootstrapResolve.env, fixedInputs);
-  assertOnlyStepEnvs(bootstrap, new Map([['Resolve the missing Pod lock only', fixedInputs]]), 'lock bootstrap');
   assert.equal(bootstrapResolve['working-directory'], 'apps/mobile');
-  assert.match(bootstrapResolve.run, /expo prebuild --clean --platform ios --no-install/);
-  assert.match(bootstrapResolve.run, /pod _1\.17\.0_ install/);
+  assert.equal(bootstrapResolve.run, 'cd ios\npod _1.17.0_ install\n');
   const bootstrapUpload = step(bootstrap, 'Upload the generated Pod lock for review');
   assert.deepEqual(bootstrapUpload.with, {
     name: 'ios-device-lab-podfile-lock',

@@ -2,8 +2,7 @@ import { evaluatePodfileLock } from './podfile-lock-policy';
 
 const reviewedFixture = `PODS:
   - Expo (57.0.17)
-  - ExpoSQLite (57.0.2):
-    - SQLCipher (= 4.6.1)
+  - ExpoSQLite (57.0.2)
   - GoogleMaps (9.4.0)
   - React-Core (0.86.3)
   - react-native-maps/Google (1.27.2):
@@ -28,7 +27,6 @@ SPEC CHECKSUMS:
   Expo: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   GoogleMaps: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   React-Core: cccccccccccccccccccccccccccccccccccccccc
-  SQLCipher: dddddddddddddddddddddddddddddddddddddddd
   react-native-maps: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 
 PODFILE CHECKSUM: ffffffffffffffffffffffffffffffffffffffff
@@ -37,7 +35,7 @@ COCOAPODS: 1.17.0
 `;
 
 describe('reviewed Podfile.lock policy', () => {
-  it('accepts a bounded workspace-native lock with the required SQLCipher, Expo, React Native, and Maps pods', () => {
+  it('accepts a bounded workspace-native lock with the required Expo, React Native, and Maps pods', () => {
     expect(evaluatePodfileLock(reviewedFixture)).toEqual([]);
   });
 
@@ -48,11 +46,15 @@ describe('reviewed Podfile.lock policy', () => {
       '  react-native-maps:\n    :path: "../../../node_modules/react-native-maps"',
       '  react-native-maps:\n    :path: "/Users/runner/work/other/node_modules/react-native-maps"',
     ), 'local_path_outside_workspace'],
+    ['an arbitrary parent traversal pod path', reviewedFixture.replace(
+      '  react-native-maps:\n    :path: "../../../node_modules/react-native-maps"',
+      '  react-native-maps:\n    :path: "../../../../node_modules/react-native-maps"',
+    ), 'local_path_outside_workspace'],
     ['a Git branch source', reviewedFixture.replace(
       '    :path: "../../../node_modules/react-native-maps"',
       '    :git: "https://example.invalid/react-native-maps.git"\n    :branch: main',
     ), 'git_source_not_allowed'],
-    ['a missing SQLCipher pod', reviewedFixture.replace('  - SQLCipher (= 4.6.1)\n', ''), 'required_pod_missing'],
+    ['a missing ExpoSQLite pod', reviewedFixture.replace('  - ExpoSQLite (57.0.2)\n', ''), 'required_pod_missing'],
     ['the wrong CocoaPods version', reviewedFixture.replace('COCOAPODS: 1.17.0', 'COCOAPODS: 1.16.2'), 'cocoapods_version_invalid'],
   ] as const)('rejects %s with a bounded code', (_description, lock, code) => {
     const codes = evaluatePodfileLock(lock);

@@ -21,13 +21,12 @@ const requiredSections = [
 const requiredPods = [
   'Expo',
   'ExpoSQLite',
-  'SQLCipher',
   'React-Core',
   'react-native-maps/Google',
   'GoogleMaps',
 ] as const;
 
-const allowedLocalPath = /^(?:\.\.\/){2,}node_modules\//;
+const allowedLocalPath = /^(?:\.\.\/node_modules\/|(?:\.\.\/){3}node_modules\/)/;
 const allowedGeneratedPath = /^build\/generated\/ios\//;
 const pinnedRevision = /^(?:= )?\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?$/;
 

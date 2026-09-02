@@ -68,14 +68,19 @@ jobs:
           pnpm validate:pilot-policies
           pnpm test:root-contracts
           pnpm test:ios-device-lab-policy
-      - name: Resolve the missing Pod lock only
+      - name: Generate the missing Pod lock inputs
         working-directory: apps/mobile
         env:
           GOOGLE_MAPS_IOS_API_KEY: compile-probe-google-maps-ios-key
           EXPO_PUBLIC_SUPABASE_URL: https://compile-probe.invalid
           EXPO_PUBLIC_SUPABASE_ANON_KEY: compile-probe-supabase-public-key
+        run: pnpm exec expo prebuild --clean --platform ios --no-install
+      - name: Prepare the generated Podfile for locked installation
+        working-directory: apps/mobile
+        run: pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts ios/Podfile ios/Podfile.properties.json
+      - name: Resolve the missing Pod lock only
+        working-directory: apps/mobile
         run: |
-          pnpm exec expo prebuild --clean --platform ios --no-install
           cd ios
           pod _1.17.0_ install
       - name: Upload the generated Pod lock for review
