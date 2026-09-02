@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WhiskerCommons Pilot Gate 2B readiness evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "projectRef",
+    "projectOrigin",
+    "sourceCommit",
+    "migrationHead",
+    "edgeFunctionsTreeSha256",
+    "workflowRunId",
+    "workflowRunAttempt",
+    "createdAt",
+    "expiresAt",
+    "authRedirectCheck",
+    "mediaStagingCheck",
+    "publicKeyOriginCheck",
+    "syntheticOwnerHappyPath",
+    "crossOwnerIsolation"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "projectRef": { "const": "fhugdtpjbgiatqhvjioy" },
+    "projectOrigin": { "const": "https://fhugdtpjbgiatqhvjioy.supabase.co" },
+    "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "migrationHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "sha256"],
+      "properties": {
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "edgeFunctionsTreeSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "workflowRunId": { "type": "integer", "minimum": 1 },
+    "workflowRunAttempt": { "type": "integer", "minimum": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "authRedirectCheck": { "enum": ["passed", "failed"] },
+    "mediaStagingCheck": { "enum": ["passed", "failed"] },
+    "publicKeyOriginCheck": { "enum": ["passed", "failed"] },
+    "syntheticOwnerHappyPath": { "enum": ["passed", "failed"] },
+    "crossOwnerIsolation": { "enum": ["passed", "failed"] }
+  }
+}
