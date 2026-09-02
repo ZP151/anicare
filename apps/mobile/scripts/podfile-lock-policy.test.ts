@@ -19,6 +19,11 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   ExpoSQLite:
     :path: "../../../node_modules/expo-sqlite/ios"
+  React:
+    :path: "../../../node_modules/react-native/"
+  hermes-engine:
+    :podspec: "../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
+    :tag: hermes-v250829098.0.17
   react-native-maps:
     :path: "../../../node_modules/react-native-maps"
 
@@ -69,7 +74,19 @@ describe('reviewed Podfile.lock policy', () => {
     ['a tag-only external source', reviewedFixture.replace(
       '    :path: "../../../node_modules/react-native-maps"',
       '    :tag: v1.27.2',
-    ), 'git_source_not_allowed'],
+    ), 'external_source_invalid'],
+    ['a tag paired with a path source', reviewedFixture.replace(
+      '    :path: "../../../node_modules/react-native-maps"',
+      '    :path: "../../../node_modules/react-native-maps"\n    :tag: v1.27.2',
+    ), 'external_source_invalid'],
+    ['an unsafe source tag', reviewedFixture.replace(
+      '    :tag: hermes-v250829098.0.17',
+      '    :tag: hermes/v250829098.0.17',
+    ), 'external_source_invalid'],
+    ['a duplicate source tag', reviewedFixture.replace(
+      '    :tag: hermes-v250829098.0.17',
+      '    :tag: hermes-v250829098.0.17\n    :tag: hermes-v250829098.0.17',
+    ), 'external_source_invalid'],
     ['an empty external source path', reviewedFixture.replace(
       '    :path: "../../../node_modules/react-native-maps"',
       '    :path: ""',
@@ -82,6 +99,18 @@ describe('reviewed Podfile.lock policy', () => {
       '    :path: "../../../node_modules/react-native-maps"',
       '   :path: "../../../node_modules/react-native-maps"',
     ), 'external_source_invalid'],
+    ['an internal empty source path segment', reviewedFixture.replace(
+      '    :path: "../../../node_modules/react-native-maps"',
+      '    :path: "../../../node_modules/react-native-maps//outside"',
+    ), 'local_path_outside_workspace'],
+    ['multiple trailing source path slashes', reviewedFixture.replace(
+      '    :path: "../../../node_modules/react-native-maps"',
+      '    :path: "../../../node_modules/react-native-maps//"',
+    ), 'local_path_outside_workspace'],
+    ['a dot source path tail segment', reviewedFixture.replace(
+      '    :path: "../../../node_modules/react-native-maps"',
+      '    :path: "../../../node_modules/react-native-maps/."',
+    ), 'local_path_outside_workspace'],
     ['a missing ExpoSQLite pod', reviewedFixture.replace('  - ExpoSQLite (57.0.2)\n', ''), 'required_pod_missing'],
     ['the wrong CocoaPods version', reviewedFixture.replace('COCOAPODS: 1.17.0', 'COCOAPODS: 1.16.2'), 'cocoapods_version_invalid'],
   ] as const)('rejects %s with a bounded code', (_description, lock, code) => {

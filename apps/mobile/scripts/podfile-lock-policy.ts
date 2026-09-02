@@ -95,7 +95,7 @@ function evaluateExternalSources(lock: string, lines: readonly string[]): Readon
   const entries = new Map<string, Map<string, string>>();
   let current: Map<string, string> | undefined;
   let invalid = false;
-  const gitSource = /^CHECKOUT OPTIONS:$/m.test(lock) || lines.some((line) => /^\s+:(?:git|branch|tag):/.test(line));
+  const gitSource = /^CHECKOUT OPTIONS:$/m.test(lock) || lines.some((line) => /^\s+:(?:git|branch):/.test(line));
 
   for (const line of lines) {
     if (line.length === 0) continue;
@@ -107,7 +107,7 @@ function evaluateExternalSources(lock: string, lines: readonly string[]): Readon
       continue;
     }
 
-    const field = /^    :(path|podspec):(?: (.*))?$/.exec(line);
+    const field = /^    :(path|podspec|tag):(?: (.*))?$/.exec(line);
     if (!field || current === undefined || current.has(field[1])) {
       invalid = true;
       continue;
@@ -117,11 +117,17 @@ function evaluateExternalSources(lock: string, lines: readonly string[]): Readon
 
   let pathOutsideWorkspace = false;
   for (const fields of entries.values()) {
-    if (fields.size !== 1) {
+    const localSourceField = fields.has('path') ? 'path' : fields.has('podspec') ? 'podspec' : undefined;
+    if (
+      localSourceField === undefined ||
+      fields.has('path') === fields.has('podspec') ||
+      fields.size !== (fields.has('tag') ? 2 : 1) ||
+      (fields.has('tag') && (localSourceField !== 'podspec' || !isBoundedTag(fields.get('tag'))))
+    ) {
       invalid = true;
       continue;
     }
-    const [value] = fields.values();
+    const value = fields.get(localSourceField);
     if (value === undefined) {
       invalid = true;
       continue;
@@ -154,7 +160,12 @@ function isAllowedLocalPath(value: string): boolean {
   ].find((candidate) => value.startsWith(candidate));
   if (prefix === undefined) return false;
   const tail = value.slice(prefix.length);
-  return tail.length > 0 && tail.split('/').every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
+  const normalizedTail = tail.endsWith('/') ? tail.slice(0, -1) : tail;
+  return normalizedTail.length > 0 && normalizedTail.split('/').every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
+}
+
+function isBoundedTag(value: string | undefined): boolean {
+  return value !== undefined && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value);
 }
 
 function escapeRegExp(value: string): string {
