@@ -379,4 +379,7 @@ test('physical-device handoff requires exact candidate provenance and non-identi
   assert.match(runbook, /podfileLockSha256/);
   assert.match(runbook, /ipaByteSize/);
   assert.match(runbook, /Xcode 26\.4\.1/);
+  assert.match(runbook, /\$manifestIntegerFields = @\(\$manifest\.schemaVersion, \$manifest\.runId, \$manifest\.runAttempt, \$manifest\.ipaByteSize\)/);
+  assert.match(runbook, /-isnot \[int\] -and \$_ -isnot \[long\]/);
+  assert.match(runbook, /\$manifestStringFields = @\(\$manifest\.repository, \$manifest\.commitSha/);
 });
