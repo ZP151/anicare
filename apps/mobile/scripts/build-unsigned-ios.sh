@@ -13,6 +13,7 @@ ARTIFACT_DIR="$APP_DIR/ios-device-lab-artifacts"
 ios_dir_owned=0
 staging_dir_owned=0
 derived_data_dir_owned=0
+artifact_dir_owned=0
 
 cleanup_owned_path() {
   local path="$1"
@@ -22,13 +23,14 @@ cleanup_owned_path() {
 }
 
 cleanup() {
-  case "$IOS_DIR:$STAGING_DIR:$DERIVED_DATA_DIR" in
-    "$APP_DIR/ios:$APP_DIR/.ios-device-lab-staging:$APP_DIR/.ios-device-lab-derived-data") ;;
+  case "$IOS_DIR:$STAGING_DIR:$DERIVED_DATA_DIR:$ARTIFACT_DIR" in
+    "$APP_DIR/ios:$APP_DIR/.ios-device-lab-staging:$APP_DIR/.ios-device-lab-derived-data:$APP_DIR/ios-device-lab-artifacts") ;;
     *) exit 1 ;;
   esac
   cleanup_owned_path "$IOS_DIR" "$ios_dir_owned"
   cleanup_owned_path "$STAGING_DIR" "$staging_dir_owned"
   cleanup_owned_path "$DERIVED_DATA_DIR" "$derived_data_dir_owned"
+  cleanup_owned_path "$ARTIFACT_DIR" "$artifact_dir_owned"
 }
 trap cleanup EXIT
 
@@ -198,6 +200,27 @@ fs.writeFileSync(destination, `${JSON.stringify({
 NODE
 }
 
+assert_artifact_allowlist() {
+  local artifact_base="$1"
+  local expected_ipa="$ARTIFACT_DIR/${artifact_base}.ipa"
+  local expected_manifest="$ARTIFACT_DIR/${artifact_base}.manifest.json"
+  local expected_checksum="$ARTIFACT_DIR/${artifact_base}.sha256"
+  local entries=()
+  local candidate
+
+  [[ -d "$ARTIFACT_DIR" && ! -L "$ARTIFACT_DIR" ]] || fail "artifact_allowlist_invalid"
+  while IFS= read -r -d '' candidate; do
+    entries+=("$candidate")
+  done < <(find "$ARTIFACT_DIR" -mindepth 1 -maxdepth 1 -print0)
+  [[ "${#entries[@]}" -eq 3 ]] || fail "artifact_allowlist_invalid"
+  for candidate in "${entries[@]}"; do
+    [[ -f "$candidate" && ! -L "$candidate" ]] || fail "artifact_allowlist_invalid"
+  done
+  [[ -f "$expected_ipa" && ! -L "$expected_ipa" ]] || fail "artifact_allowlist_invalid"
+  [[ -f "$expected_manifest" && ! -L "$expected_manifest" ]] || fail "artifact_allowlist_invalid"
+  [[ -f "$expected_checksum" && ! -L "$expected_checksum" ]] || fail "artifact_allowlist_invalid"
+}
+
 require_command codesign
 require_command ditto
 require_command file
@@ -223,14 +246,17 @@ xcode_build_line="$(printf '%s\n' "$xcode_version" | sed -n '2p')"
 
 [[ -f "$LOCKFILE_SOURCE" ]] || fail "reviewed_podfile_lock_missing"
 [[ ! -e "$IOS_DIR" && ! -e "$STAGING_DIR" && ! -e "$DERIVED_DATA_DIR" ]] || fail "generated_path_already_exists"
+[[ ! -e "$ARTIFACT_DIR" ]] || fail "artifact_directory_not_empty"
 ios_dir_owned=1
 staging_dir_owned=1
 derived_data_dir_owned=1
+artifact_dir_owned=1
 
 cd -- "$APP_DIR"
 pnpm exec expo prebuild --clean --platform ios --no-install
 pnpm exec tsx "$SCRIPT_DIR/prepare-ios-device-lab-podfile.ts"
 cp -- "$LOCKFILE_SOURCE" "$IOS_DIR/Podfile.lock"
+pnpm validate:reviewed-ios-device-lab-podfile-lock
 pod_version="$(pod _1.17.0_ --version)"
 [[ "$pod_version" == '1.17.0' ]] || fail "cocoapods_version_invalid"
 (
@@ -286,7 +312,8 @@ while IFS= read -r -d '' candidate; do
   fi
 done < <(find "$app_bundle" -type f -print0)
 
-mkdir -p -- "$STAGING_DIR/pre-package/Payload" "$STAGING_DIR/extracted" "$ARTIFACT_DIR"
+mkdir -p -- "$STAGING_DIR/pre-package/Payload" "$STAGING_DIR/extracted"
+mkdir -- "$ARTIFACT_DIR"
 ditto "$app_bundle" "$STAGING_DIR/pre-package/Payload/$(basename -- "$app_bundle")"
 write_inventory "$STAGING_DIR/pre-package" "$STAGING_DIR/pre-package-inventory.json"
 pnpm exec tsx "$SCRIPT_DIR/inspect-ios-device-artifact.ts" "$STAGING_DIR/pre-package-inventory.json"
@@ -309,3 +336,4 @@ write_manifest \
   "$manifest_path" "$ipa_sha256" "$ipa_size" "$podfile_lock_sha256" \
   "$xcode_version" "$(ruby --version)" "$pod_version" "$(node --version)" "$(pnpm --version)"
 printf '%s  %s\n' "$ipa_sha256" "$(basename -- "$ipa_path")" > "$checksum_path"
+assert_artifact_allowlist "$artifact_base"

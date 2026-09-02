@@ -11,6 +11,7 @@ test has happened. Do not replace required placeholders with guessed values.
 - Candidate run ID / attempt: `[[REQUIRED: actual value]]`
 - Immutable source commit: `[[REQUIRED: actual 40-hex SHA]]`
 - Unsigned IPA SHA-256: `[[REQUIRED: actual 64-hex SHA-256]]`
+- Candidate manifest: `[[REQUIRED: matching exact candidate manifest JSON]]`
 - GitHub provenance attestation: `[[REQUIRED: PASS or FAIL after local verification]]`
 - Checksum comparison: `[[REQUIRED: PASS or FAIL]]`
 - Gate 2B readiness: `[[EXTERNAL PREREQUISITE: not asserted by this template]]`
@@ -26,7 +27,11 @@ run.
 - Actual AltServer version: `[[REQUIRED: observed locally]]`
 - SideStore fallback used: `[[NOT RUN / YES / NO — separate from AltStore result]]`
 - Device detected over paired unlocked USB: `[[NOT RUN / YES / NO]]`
-- iOS version/build (optional, non-identifying): `[[NOT RECORDED]]`
+- Exact non-identifying device model: `[[REQUIRED after test]]`
+- iOS version/build (non-identifying): `[[REQUIRED after test]]`
+- Developer Mode state: `[[REQUIRED after test]]`
+- USB trust state: `[[REQUIRED after test]]`
+- Free storage: `[[REQUIRED after test]]`
 - Effective `CFBundleIdentifier`: `[[REQUIRED after installation]]`
 - Google Maps restriction action: `[[NOT RUN / unchanged / exact effective ID added to same restricted key]]`
 - AltStore App IDs/permissions summary: `[[REQUIRED: redacted bounded summary]]`

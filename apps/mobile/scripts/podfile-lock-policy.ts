@@ -5,6 +5,7 @@ export type PodfileLockCode =
   | 'local_path_outside_workspace'
   | 'external_source_invalid'
   | 'git_source_not_allowed'
+  | 'spec_repos_invalid'
   | 'required_pod_missing'
   | 'cocoapods_version_invalid';
 
@@ -40,6 +41,7 @@ export function evaluatePodfileLock(lock: string): readonly PodfileLockCode[] {
   const pods = sections.byName.get('PODS') ?? [];
   if (hasUnpinnedPodRevision(pods)) codes.push('pod_revision_unpinned');
   if (requiredPods.some((pod) => !hasPod(pods, pod))) codes.push('required_pod_missing');
+  if (!hasApprovedSpecRepos(sections.byName.get('SPEC REPOS') ?? [])) codes.push('spec_repos_invalid');
 
   const externalSources = evaluateExternalSources(lock, sections.byName.get('EXTERNAL SOURCES') ?? []);
   if (externalSources.gitSource) codes.push('git_source_not_allowed');
@@ -52,6 +54,14 @@ export function evaluatePodfileLock(lock: string): readonly PodfileLockCode[] {
   }
 
   return codes;
+}
+
+function hasApprovedSpecRepos(lines: readonly string[]): boolean {
+  return lines.filter((line) => line.length > 0).join('\n') === [
+    '  trunk:',
+    '    - Google-Maps-iOS-Utils',
+    '    - GoogleMaps',
+  ].join('\n');
 }
 
 function parseSections(lock: string): Readonly<{

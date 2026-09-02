@@ -25,6 +25,7 @@ export type Gate2BReadinessCode =
   | 'evidence_expired'
   | 'candidate_commit_invalid'
   | 'evidence_source_not_ancestor'
+  | 'evidence_migration_history_changed'
   | 'evidence_migration_head_mismatch'
   | 'evidence_edge_functions_tree_mismatch';
 
@@ -230,6 +231,7 @@ export function evaluateGate2BReadiness(input: Readonly<{
   nowIso: string;
   candidateCommit: string;
   isAncestor: (source: string, candidate: string) => boolean;
+  hasMigrationChanges: (source: string, candidate: string) => boolean;
   migrationHead: Readonly<{ filename: string; sha256: string }>;
   edgeFunctionsTreeSha256: string;
 }>): readonly Gate2BReadinessCode[] {
@@ -269,6 +271,13 @@ export function evaluateGate2BReadiness(input: Readonly<{
     }
   } catch {
     codes.push('evidence_source_not_ancestor');
+  }
+  try {
+    if (input.hasMigrationChanges(evidence.sourceCommit, input.candidateCommit)) {
+      codes.push('evidence_migration_history_changed');
+    }
+  } catch {
+    codes.push('evidence_migration_history_changed');
   }
   if (
     evidence.migrationHead.filename !== input.migrationHead.filename ||

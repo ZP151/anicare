@@ -119,6 +119,20 @@ function assertWorkflowContract(workflow, source) {
   assert.deepEqual(uses(preflight), [sha.checkout]);
   assertStepOrder(preflight, [sha.checkout, 'Read reviewed prerequisite presence'], 'preflight');
   assert.equal(step(preflight, 'Read reviewed prerequisite presence').id, 'state');
+  assert.equal(step(preflight, 'Read reviewed prerequisite presence').run, [
+    'if test -f apps/mobile/ios-device-lab/Podfile.lock; then',
+    "  echo 'lock_present=true' >> \"$GITHUB_OUTPUT\"",
+    'else',
+    "  echo 'lock_present=false' >> \"$GITHUB_OUTPUT\"",
+    'fi',
+    'if test -f docs/evidence/pilot-gate-2b-readiness.json; then',
+    "  echo 'readiness_present=true' >> \"$GITHUB_OUTPUT\"",
+    'else',
+    "  printf '%s\\n' gate_2b_readiness_missing",
+    "  echo 'readiness_present=false' >> \"$GITHUB_OUTPUT\"",
+    'fi',
+    '',
+  ].join('\n'));
   assertOnlyStepEnvs(preflight, new Map(), 'preflight');
   assert.equal('env' in preflight, false);
   assert.equal('environment' in preflight, false);
@@ -131,7 +145,7 @@ function assertWorkflowContract(workflow, source) {
     sha.checkout, sha.pnpm, sha.node, sha.ruby,
     'Install workspace dependencies', 'Verify the pinned native toolchain',
     'Validate repository policy contracts', 'Generate the missing Pod lock inputs',
-    'Prepare the generated Podfile for locked installation', 'Resolve the missing Pod lock only',
+    'Prepare the generated Podfile for locked installation', 'Resolve the missing Pod lock only', 'Validate the generated Pod lock',
     'Upload the generated Pod lock for review', 'Remove generated native files',
   ], 'lock bootstrap');
   assert.equal('environment' in bootstrap, false);
@@ -147,6 +161,7 @@ function assertWorkflowContract(workflow, source) {
   const bootstrapResolve = step(bootstrap, 'Resolve the missing Pod lock only');
   assert.equal(bootstrapResolve['working-directory'], 'apps/mobile');
   assert.equal(bootstrapResolve.run, 'cd ios\npod _1.17.0_ install\n');
+  assert.equal(step(bootstrap, 'Validate the generated Pod lock').run, 'pnpm --filter @animalhelper/mobile validate:generated-ios-device-lab-podfile-lock');
   const bootstrapUpload = step(bootstrap, 'Upload the generated Pod lock for review');
   assert.deepEqual(bootstrapUpload.with, {
     name: 'ios-device-lab-podfile-lock',
@@ -200,13 +215,14 @@ function assertWorkflowContract(workflow, source) {
     'Install workspace dependencies', 'Verify the pinned native toolchain',
     'Validate repository policy contracts', 'Validate the protected runtime inputs',
     'Validate Gate 2B readiness evidence', 'Validate the public key at the approved hosted origin',
-    'Build the domain dependency', 'Build the protected unsigned candidate', 'Attest the unsigned IPA provenance',
+    'Build the domain dependency', 'Build the protected unsigned candidate', 'Revalidate Gate 2B readiness evidence before release', 'Attest the unsigned IPA provenance',
     'Upload the unsigned candidate allowlist', 'Remove generated candidate files',
   ], 'device candidate');
   assert.deepEqual(candidate.steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 0 });
   assert.equal(step(candidate, 'Require the checked out immutable workflow commit').run, 'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"');
-  assert.match(step(candidate, 'Validate Gate 2B readiness evidence').run, /evaluateGate2BReadiness/);
-  assert.match(step(candidate, 'Validate Gate 2B readiness evidence').run, /merge-base', '--is-ancestor/);
+  assert.equal(step(candidate, 'Validate Gate 2B readiness evidence').run, 'pnpm --filter @animalhelper/mobile validate:gate-2b-readiness');
+  assert.equal(step(candidate, 'Revalidate Gate 2B readiness evidence before release').run, 'pnpm --filter @animalhelper/mobile validate:gate-2b-readiness');
+  assert.doesNotMatch(step(candidate, 'Validate Gate 2B readiness evidence').run, /tsx|--eval/);
   const allowedSecretSteps = new Map([
     ['Validate the protected runtime inputs', candidateSecrets],
     ['Validate the public key at the approved hosted origin', {
@@ -221,20 +237,21 @@ function assertWorkflowContract(workflow, source) {
   assert.equal(candidateDomainBuild.run, domainBuildCommand);
   assert.equal('env' in candidateDomainBuild, false);
   assert.equal(step(candidate, 'Build the protected unsigned candidate').run, mobileUnsignedBuildCommand);
+  assert.equal('env' in step(candidate, 'Revalidate Gate 2B readiness evidence before release'), false);
   const candidateUpload = step(candidate, 'Upload the unsigned candidate allowlist');
   assert.deepEqual(candidateUpload.with, {
     name: 'whiskercommons-unsigned-${{ github.sha }}',
     path: [
-      'apps/mobile/ios-device-lab-artifacts/*.ipa',
-      'apps/mobile/ios-device-lab-artifacts/*.manifest.json',
-      'apps/mobile/ios-device-lab-artifacts/*.sha256',
+      'apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.ipa',
+      'apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.manifest.json',
+      'apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.sha256',
       '',
     ].join('\n'),
     'if-no-files-found': 'error',
     'retention-days': 7,
   });
   assert.deepEqual(step(candidate, 'Attest the unsigned IPA provenance').with, {
-    'subject-path': 'apps/mobile/ios-device-lab-artifacts/*.ipa',
+    'subject-path': 'apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.ipa',
   });
   assert.equal(candidate.steps.filter((candidateStep) => candidateStep.uses === sha.upload).length, 1);
   assertCleanup(candidate, 'device candidate', 'Remove generated candidate files', [
@@ -267,6 +284,8 @@ test('contract rejects job, permission, environment, cleanup, setup, upload-path
     ['Node cache drift', (candidate) => { actionStep(candidate.jobs.pr_compile, sha.node).with.cache = 'npm'; }],
     ['Ruby bundler drift', (candidate) => { actionStep(candidate.jobs.device_candidate, sha.ruby).with.bundler = 'default'; }],
     ['extra candidate upload path', (candidate) => { step(candidate.jobs.device_candidate, 'Upload the unsigned candidate allowlist').with.path += '\napps/mobile/ios-device-lab-artifacts/*.zip'; }],
+    ['candidate upload wildcard', (candidate) => { step(candidate.jobs.device_candidate, 'Upload the unsigned candidate allowlist').with.path = 'apps/mobile/ios-device-lab-artifacts/*.ipa'; }],
+    ['candidate attestation wildcard', (candidate) => { step(candidate.jobs.device_candidate, 'Attest the unsigned IPA provenance').with['subject-path'] = 'apps/mobile/ios-device-lab-artifacts/*.ipa'; }],
     ['shallow candidate checkout', (candidate) => { candidate.jobs.device_candidate.steps[0].with['fetch-depth'] = 1; }],
   ];
 
@@ -316,4 +335,43 @@ test('native build shells stop before mobile when the domain producer fails', as
     assert.equal(result.status, 31);
     assert.equal(result.stdout, '');
   }
+});
+
+test('candidate stops at the second readiness validation before attestation can follow an expired build', async () => {
+  const { workflow } = await parsedWorkflow();
+  const candidate = workflow.jobs.device_candidate;
+  const runs = [
+    step(candidate, 'Validate Gate 2B readiness evidence').run,
+    step(candidate, 'Build the domain dependency').run,
+    step(candidate, 'Build the protected unsigned candidate').run,
+    step(candidate, 'Revalidate Gate 2B readiness evidence before release').run,
+  ].join('\n');
+  const pnpmStub = [
+    'readiness_calls=0',
+    'pnpm() {',
+    '  if [[ "${1-} ${2-} ${3-}" == \'--filter @animalhelper/mobile validate:gate-2b-readiness\' ]]; then readiness_calls=$((readiness_calls + 1)); [[ "$readiness_calls" -eq 1 ]] || return 37; fi',
+    '  if [[ "${1-} ${2-} ${3-}" == \'--filter @animalhelper/mobile build:unsigned-ios\' ]]; then printf \'mobile_built\\n\'; fi',
+    '}',
+  ].join('\n');
+  const result = spawnSync(bashExecutable, ['-e', '-c', `${pnpmStub}\n${runs}`], { encoding: 'utf8' });
+
+  assert.equal(result.status, 37);
+  assert.equal(result.stdout, 'mobile_built\n');
+});
+
+test('physical-device handoff requires exact candidate provenance and non-identifying device facts', async () => {
+  const runbook = await readFile(new URL('../docs/runbooks/ios-free-account-device-test.md', import.meta.url), 'utf8');
+  const template = await readFile(new URL('../docs/evidence/ios-device-physical-test-template.md', import.meta.url), 'utf8');
+  for (const source of [runbook, template]) {
+    assert.match(source, /candidate manifest/i);
+    assert.match(source, /Developer Mode/);
+    assert.match(source, /trust state/i);
+    assert.match(source, /free storage/i);
+    assert.match(source, /iOS version\/build/i);
+    assert.doesNotMatch(source, /UDID:\s*`\[\[REQUIRED/);
+  }
+  assert.match(runbook, /--signer-workflow/);
+  assert.match(runbook, /--source-ref refs\/heads\/main/);
+  assert.match(runbook, /--source-digest/);
+  assert.match(runbook, /--deny-self-hosted-runners/);
 });

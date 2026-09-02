@@ -29,6 +29,7 @@ jobs:
           if test -f docs/evidence/pilot-gate-2b-readiness.json; then
             echo 'readiness_present=true' >> "$GITHUB_OUTPUT"
           else
+            printf '%s\n' gate_2b_readiness_missing
             echo 'readiness_present=false' >> "$GITHUB_OUTPUT"
           fi
 
@@ -83,6 +84,8 @@ jobs:
         run: |
           cd ios
           pod _1.17.0_ install
+      - name: Validate the generated Pod lock
+        run: pnpm --filter @animalhelper/mobile validate:generated-ios-device-lab-podfile-lock
       - name: Upload the generated Pod lock for review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -199,20 +202,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm validate:ios-device-lab
       - name: Validate Gate 2B readiness evidence
-        run: |
-          pnpm exec tsx --eval "
-            import { createHash } from 'node:crypto';
-            import { execFileSync } from 'node:child_process';
-            import { readdirSync, readFileSync } from 'node:fs';
-            import { evaluateGate2BReadiness } from './apps/mobile/scripts/ios-device-lab-policy.ts';
-            const migrationFilename = readdirSync('supabase/migrations').filter((value) => value.endsWith('.sql')).sort().at(-1);
-            if (!migrationFilename) process.exit(1);
-            const migrationHead = { filename: migrationFilename, sha256: createHash('sha256').update(readFileSync('supabase/migrations/' + migrationFilename)).digest('hex') };
-            const edgeFunctionsTreeSha256 = createHash('sha256').update(execFileSync('git', ['ls-tree', '-r', 'HEAD', 'supabase/functions'])).digest('hex');
-            const candidateCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-            const codes = evaluateGate2BReadiness({ evidence: JSON.parse(readFileSync('docs/evidence/pilot-gate-2b-readiness.json', 'utf8')), nowIso: new Date().toISOString(), candidateCommit, isAncestor: (source, candidate) => { try { execFileSync('git', ['merge-base', '--is-ancestor', source, candidate], { stdio: 'ignore' }); return true; } catch { return false; } }, migrationHead, edgeFunctionsTreeSha256 });
-            if (codes.length > 0) { process.stderr.write(codes.join('\\n') + '\\n'); process.exit(1); }
-          "
+        run: pnpm --filter @animalhelper/mobile validate:gate-2b-readiness
       - name: Validate the public key at the approved hosted origin
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
@@ -227,18 +217,20 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm --filter @animalhelper/mobile build:unsigned-ios
+      - name: Revalidate Gate 2B readiness evidence before release
+        run: pnpm --filter @animalhelper/mobile validate:gate-2b-readiness
       - name: Attest the unsigned IPA provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
-          subject-path: apps/mobile/ios-device-lab-artifacts/*.ipa
+          subject-path: apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.ipa
       - name: Upload the unsigned candidate allowlist
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: whiskercommons-unsigned-${{ github.sha }}
           path: |
-            apps/mobile/ios-device-lab-artifacts/*.ipa
-            apps/mobile/ios-device-lab-artifacts/*.manifest.json
-            apps/mobile/ios-device-lab-artifacts/*.sha256
+            apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.ipa
+            apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.manifest.json
+            apps/mobile/ios-device-lab-artifacts/whiskercommons-unsigned-${{ github.sha }}.sha256
           if-no-files-found: error
           retention-days: 7
       - name: Remove generated candidate files

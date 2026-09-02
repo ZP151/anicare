@@ -15,6 +15,7 @@ three-file artifact allowlist before opening AltStore:
 - `[[REQUIRED: candidate run ID and attempt]]`
 - `[[REQUIRED: downloaded unsigned IPA]]`
 - `[[REQUIRED: matching SHA-256 checksum file]]`
+- `[[REQUIRED: matching candidate manifest JSON]]`
 - `[[REQUIRED: successful GitHub provenance-attestation verification]]`
 
 The input must identify an unsigned candidate, not App Store, TestFlight, EAS,
@@ -32,16 +33,37 @@ reviewed checksum file. Do not use an attestation result from another artifact.
 ```powershell
 $candidateIpa = Read-Host 'Full path to the downloaded unsigned IPA'
 $checksumFile = Read-Host 'Full path to its downloaded checksum file'
+$manifestFile = Read-Host 'Full path to its downloaded candidate manifest JSON'
 $repository = Read-Host 'Verified repository in owner/name form'
+$candidateSha = Read-Host 'Verified immutable candidate 40-hex SHA'
+$candidateRunId = Read-Host 'Verified candidate run ID'
+$candidateRunAttempt = Read-Host 'Verified candidate run attempt'
 
 if (-not (Test-Path -LiteralPath $candidateIpa -PathType Leaf)) { throw 'candidate_ipa_missing' }
 if (-not (Test-Path -LiteralPath $checksumFile -PathType Leaf)) { throw 'candidate_checksum_missing' }
+if (-not (Test-Path -LiteralPath $manifestFile -PathType Leaf)) { throw 'candidate_manifest_missing' }
 if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'repository_invalid' }
+if ($candidateSha -notmatch '^[a-f0-9]{40}$') { throw 'candidate_sha_invalid' }
+if ($candidateRunId -notmatch '^[1-9][0-9]*$' -or $candidateRunAttempt -notmatch '^[1-9][0-9]*$') { throw 'candidate_run_invalid' }
 
-gh attestation verify $candidateIpa --repo $repository
-$expected = (Get-Content -LiteralPath $checksumFile -Raw).Trim().Split()[0]
+$manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+$expectedBase = "whiskercommons-unsigned-$candidateSha"
+$expectedIpaName = "$expectedBase.ipa"
+$expectedManifestName = "$expectedBase.manifest.json"
+$expectedChecksumName = "$expectedBase.sha256"
+if ((Split-Path -Leaf $candidateIpa) -ne $expectedIpaName -or
+    (Split-Path -Leaf $manifestFile) -ne $expectedManifestName -or
+    (Split-Path -Leaf $checksumFile) -ne $expectedChecksumName) { throw 'candidate_filename_invalid' }
+if ($manifest.schemaVersion -ne 1 -or $manifest.repository -ne $repository -or
+    $manifest.commitSha -ne $candidateSha -or $manifest.runId -ne [int64]$candidateRunId -or
+    $manifest.runAttempt -ne [int64]$candidateRunAttempt -or
+    $manifest.workflowRef -ne "$repository/.github/workflows/ios-device-lab.yml@refs/heads/main" -or
+    $manifest.bundleIdentifier -ne 'sg.animalhelper.app' -or $manifest.ipaSha256 -notmatch '^[a-f0-9]{64}$') { throw 'candidate_manifest_invalid' }
+gh attestation verify $candidateIpa --repo $repository --signer-workflow "$repository/.github/workflows/ios-device-lab.yml" --source-ref refs/heads/main --source-digest $candidateSha --deny-self-hosted-runners
+$expected = $manifest.ipaSha256
 $actual = (Get-FileHash -LiteralPath $candidateIpa -Algorithm SHA256).Hash
-if ($expected -notmatch '^[A-Fa-f0-9]{64}$' -or $actual -ne $expected.ToUpperInvariant()) { throw 'candidate_sha256_mismatch' }
+$checksumContent = (Get-Content -LiteralPath $checksumFile -Raw) -replace "`r`n", "`n"
+if ($checksumContent -ne "$expected  $expectedIpaName`n" -or $actual -ne $expected.ToUpperInvariant()) { throw 'candidate_sha256_mismatch' }
 ```
 
 Record only a pass/fail result, the reviewed unsigned-artifact SHA-256, and the
@@ -84,8 +106,10 @@ pymobiledevice3 usbmux list
 pymobiledevice3 apps list
 ```
 
-Record only: `device detected: yes/no`, an iOS version/build if voluntarily
-provided, `app entry present: yes/no`, and the effective `CFBundleIdentifier`.
+Record only: `device detected: yes/no`, exact non-identifying device model, exact
+iOS version/build, Developer Mode state, trust state, free storage, `app entry
+present: yes/no`, and the effective `CFBundleIdentifier`. These device facts are
+required observations, not optional fields.
 Remove or do not copy UDID, serial number, ECID, Wi-Fi pairing data, account
 data, full device listings, raw logs, and exact locations.
 

@@ -62,6 +62,7 @@ const readinessInput = {
     source === validEvidence.sourceCommit && candidate === 'd'.repeat(40),
   migrationHead: validEvidence.migrationHead,
   edgeFunctionsTreeSha256: validEvidence.edgeFunctionsTreeSha256,
+  hasMigrationChanges: () => false,
 } as const;
 
 describe('iOS Device Lab input policy', () => {
@@ -140,6 +141,23 @@ describe('iOS Device Lab input policy', () => {
 describe('Gate 2B readiness policy', () => {
   it('accepts current, fully-passed readiness evidence from an ancestor source', () => {
     expect(evaluateGate2BReadiness(readinessInput)).toEqual([]);
+  });
+
+  it('fails closed when any migration changed after the evidence source, including a callback failure', () => {
+    expect(evaluateGate2BReadiness({ ...readinessInput, hasMigrationChanges: () => true }))
+      .toContain('evidence_migration_history_changed');
+    expect(evaluateGate2BReadiness({ ...readinessInput, hasMigrationChanges: () => { throw new Error('git failed'); } }))
+      .toContain('evidence_migration_history_changed');
+  });
+
+  it('uses the fixed-path readiness CLI and reports a missing evidence file with one bounded code', () => {
+    const script = resolve(__dirname, 'validate-gate-2b-readiness.ts');
+    const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), script], { encoding: 'utf8' });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('gate_2b_readiness_missing\n');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('pilot-gate-2b-readiness.json');
   });
 
   it('accepts the exact creation boundary but rejects future-dated readiness evidence', () => {

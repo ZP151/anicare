@@ -208,5 +208,34 @@ describe('unsigned iOS build shell contract', () => {
     expect(script).toContain('ios_dir_owned=1');
     expect(script).toContain('staging_dir_owned=1');
     expect(script).toContain('derived_data_dir_owned=1');
+    expect(script).toContain('artifact_dir_owned=0');
+    expect(script).toContain('artifact_dir_owned=1');
+    expect(script).toContain('artifact_directory_not_empty');
+    expect(script).toContain('artifact_allowlist_invalid');
+    expect(script).toContain('pnpm validate:reviewed-ios-device-lab-podfile-lock');
+  });
+
+  it('accepts exactly the three regular SHA-derived artifact files and rejects additions or symlinks', () => {
+    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const assertion = script.slice(script.indexOf('assert_artifact_allowlist() {'), script.indexOf('\nrequire_command codesign'));
+    const runner = [
+      'set -euo pipefail',
+      "fail() { exit 1; }",
+      assertion,
+      'ARTIFACT_DIR="$(mktemp -d)"',
+      "base='whiskercommons-unsigned-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      'touch "$ARTIFACT_DIR/${base}.ipa" "$ARTIFACT_DIR/${base}.manifest.json" "$ARTIFACT_DIR/${base}.sha256"',
+      'assert_artifact_allowlist "$base"',
+      'touch "$ARTIFACT_DIR/unreviewed.zip"',
+      'if (assert_artifact_allowlist "$base"); then exit 41; fi',
+      'rm "$ARTIFACT_DIR/unreviewed.zip" "$ARTIFACT_DIR/${base}.manifest.json"',
+      'ln -s "$ARTIFACT_DIR/${base}.ipa" "$ARTIFACT_DIR/${base}.manifest.json"',
+      'if [[ -L "$ARTIFACT_DIR/${base}.manifest.json" ]] && (assert_artifact_allowlist "$base"); then exit 42; fi',
+    ].join('\n');
+    const result = spawnSync(bashExecutable, ['-c', runner], { encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
   });
 });

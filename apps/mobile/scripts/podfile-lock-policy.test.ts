@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { evaluatePodfileLock } from './podfile-lock-policy';
 
 const reviewedFixture = `PODS:
@@ -14,6 +18,7 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - Google-Maps-iOS-Utils
     - GoogleMaps
 
 EXTERNAL SOURCES:
@@ -44,8 +49,32 @@ describe('reviewed Podfile.lock policy', () => {
     expect(evaluatePodfileLock(reviewedFixture)).toEqual([]);
   });
 
+  it('accepts the actual reviewed lock only through its fixed zero-argument CLI', () => {
+    const script = resolve(__dirname, 'validate-reviewed-ios-device-lab-podfile-lock.ts');
+    const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), script], { encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('podfile_lock_valid\n');
+    expect(result.stderr).toBe('');
+    expect(evaluatePodfileLock(readFileSync(resolve(__dirname, '../ios-device-lab/Podfile.lock'), 'utf8'))).toEqual([]);
+  });
+
+  it('keeps the generated-lock CLI fixed to the generated path and bounded when absent', () => {
+    const script = resolve(__dirname, 'validate-generated-ios-device-lab-podfile-lock.ts');
+    const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), script, 'untrusted.lock'], { encoding: 'utf8' });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('podfile_lock_invalid\n');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('untrusted.lock');
+  });
+
   it.each([
     ['a repeated root section', `${reviewedFixture}\nPODS:\n`, 'duplicate_section'],
+    ['an unexpected spec repo', reviewedFixture.replace('  trunk:', '  evil:'), 'spec_repos_invalid'],
+    ['an unexpected spec repo pod', reviewedFixture.replace('    - GoogleMaps\n\nEXTERNAL SOURCES:', '    - GoogleMaps\n    - EvilPod\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
+    ['a duplicate spec repo pod', reviewedFixture.replace('    - GoogleMaps\n\nEXTERNAL SOURCES:', '    - GoogleMaps\n    - GoogleMaps\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
+    ['a malformed spec repo field', reviewedFixture.replace('    - GoogleMaps\n\nEXTERNAL SOURCES:', '    :url: https://evil.invalid\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
     ['an unpinned pod revision', reviewedFixture.replace('GoogleMaps (9.4.0)', 'GoogleMaps'), 'pod_revision_unpinned'],
     ['a non-workspace absolute pod path', reviewedFixture.replace(
       '  react-native-maps:\n    :path: "../../../node_modules/react-native-maps"',
