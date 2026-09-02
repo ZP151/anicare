@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { parseDocument } from 'yaml';
 
@@ -17,6 +18,7 @@ const fixedInputs = {
   EXPO_PUBLIC_SUPABASE_URL: 'https://compile-probe.invalid',
   EXPO_PUBLIC_SUPABASE_ANON_KEY: 'compile-probe-supabase-public-key',
 };
+const bashExecutable = process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
 const candidateSecrets = {
   GOOGLE_MAPS_IOS_API_KEY: '${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}',
   EXPO_PUBLIC_SUPABASE_URL: '${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}',
@@ -262,4 +264,22 @@ test('contract rejects job, permission, environment, cleanup, setup, upload-path
     mutate(candidate);
     assert.throws(() => assertWorkflowContract(candidate, source), undefined, name);
   }
+});
+
+test('PR compile shell stops when validation fails before it can invoke the build', async () => {
+  const { workflow } = await parsedWorkflow();
+  const run = step(workflow.jobs.pr_compile, 'Validate and build the non-installable compile probe').run;
+  const pnpmStub = [
+    'pnpm() {',
+    '  if [[ "$1" == "validate:ios-device-lab" ]]; then return 23; fi',
+    "  printf 'build_invoked\\n'",
+    '}',
+  ].join('\n');
+
+  const result = spawnSync(bashExecutable, ['-c', `${pnpmStub}\n${run}`], {
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 23);
+  assert.equal(result.stdout, '');
 });

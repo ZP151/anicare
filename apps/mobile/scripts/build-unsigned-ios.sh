@@ -167,8 +167,8 @@ write_manifest() {
   [[ "$run_id" =~ ^[0-9]+$ ]] || run_id=0
   [[ "$run_attempt" =~ ^[0-9]+$ ]] || run_attempt=0
   [[ "$workflow_ref" =~ ^[A-Za-z0-9_./@-]+$ ]] || workflow_ref='unavailable'
-  [[ "$image_os" =~ ^[A-Za-z0-9_. -]+$ ]] || image_os='unavailable'
-  [[ "$image_version" =~ ^[A-Za-z0-9_. -]+$ ]] || image_version='unavailable'
+  [[ "$image_os" =~ ^[A-Za-z0-9_.[:space:]-]+$ ]] || image_os='unavailable'
+  [[ "$image_version" =~ ^[A-Za-z0-9_.[:space:]-]+$ ]] || image_version='unavailable'
 
   node - "$destination" "$repository" "$commit_sha" "$run_id" "$run_attempt" "$workflow_ref" "$image_os" "$image_version" "$xcode_version" "$ruby_version" "$pod_version" "$node_version" "$pnpm_version" "$ipa_sha256" "$ipa_size" "$lock_sha256" <<'NODE'
 const fs = require('node:fs');

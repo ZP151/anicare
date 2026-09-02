@@ -8,6 +8,8 @@ import {
   type IosArtifactCode,
 } from './ios-device-artifact-policy';
 
+const bashExecutable = process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
+
 const safeInventory = {
   topLevelEntries: ['Payload'],
   appPaths: ['Payload/WhiskerCommons.app'],
@@ -108,6 +110,14 @@ describe('iOS artifact inspection CLI', () => {
 });
 
 describe('unsigned iOS build shell contract', () => {
+  it('parses with Bash before a compile probe can report success', () => {
+    const script = resolve(__dirname, 'build-unsigned-ios.sh');
+    const result = spawnSync(bashExecutable, ['-n', script], { encoding: 'utf8' });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  });
+
   it('selects the pinned toolchain and invokes the inventory policy before and after packaging', () => {
     const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
 

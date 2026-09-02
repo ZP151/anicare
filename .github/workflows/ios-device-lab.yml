@@ -136,6 +136,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: https://compile-probe.invalid
           EXPO_PUBLIC_SUPABASE_ANON_KEY: compile-probe-supabase-public-key
         run: |
+          set -euo pipefail
           pnpm validate:ios-device-lab
           pnpm --filter @animalhelper/mobile build:unsigned-ios
       - name: Remove non-installable compile outputs
