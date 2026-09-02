@@ -10,13 +10,25 @@ LOCKFILE_SOURCE="$APP_DIR/ios-device-lab/Podfile.lock"
 STAGING_DIR="$APP_DIR/.ios-device-lab-staging"
 DERIVED_DATA_DIR="$APP_DIR/.ios-device-lab-derived-data"
 ARTIFACT_DIR="$APP_DIR/ios-device-lab-artifacts"
+ios_dir_owned=0
+staging_dir_owned=0
+derived_data_dir_owned=0
+
+cleanup_owned_path() {
+  local path="$1"
+  local owned="$2"
+  [[ "$owned" == '1' ]] || return 0
+  rm -rf -- "$path"
+}
 
 cleanup() {
   case "$IOS_DIR:$STAGING_DIR:$DERIVED_DATA_DIR" in
     "$APP_DIR/ios:$APP_DIR/.ios-device-lab-staging:$APP_DIR/.ios-device-lab-derived-data") ;;
     *) exit 1 ;;
   esac
-  rm -rf -- "$IOS_DIR" "$STAGING_DIR" "$DERIVED_DATA_DIR"
+  cleanup_owned_path "$IOS_DIR" "$ios_dir_owned"
+  cleanup_owned_path "$STAGING_DIR" "$staging_dir_owned"
+  cleanup_owned_path "$DERIVED_DATA_DIR" "$derived_data_dir_owned"
 }
 trap cleanup EXIT
 
@@ -205,10 +217,15 @@ require_command xcodebuild
 sudo xcode-select -s "$XCODE_APP/Contents/Developer"
 export DEVELOPER_DIR="$XCODE_APP/Contents/Developer"
 xcode_version="$(xcodebuild -version)"
-[[ "$xcode_version" == *'Xcode 26.4.1'* && "$xcode_version" == *'Build version 17E202'* ]] || fail "xcode_version_invalid"
+xcode_version_line="$(printf '%s\n' "$xcode_version" | sed -n '1p')"
+xcode_build_line="$(printf '%s\n' "$xcode_version" | sed -n '2p')"
+[[ "$xcode_version_line" == 'Xcode 26.4.1' && "$xcode_build_line" == 'Build version 17E202' ]] || fail "xcode_version_invalid"
 
 [[ -f "$LOCKFILE_SOURCE" ]] || fail "reviewed_podfile_lock_missing"
 [[ ! -e "$IOS_DIR" && ! -e "$STAGING_DIR" && ! -e "$DERIVED_DATA_DIR" ]] || fail "generated_path_already_exists"
+ios_dir_owned=1
+staging_dir_owned=1
+derived_data_dir_owned=1
 
 cd -- "$APP_DIR"
 pnpm exec expo prebuild --clean --platform ios --no-install

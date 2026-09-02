@@ -114,6 +114,8 @@ describe('unsigned iOS build shell contract', () => {
     expect(script).toContain('/Applications/Xcode_26.4.1.app');
     expect(script).toContain('26.4.1');
     expect(script).toContain('17E202');
+    expect(script).toMatch(/xcode_version_line.*== 'Xcode 26\.4\.1'/);
+    expect(script).toMatch(/xcode_build_line.*== 'Build version 17E202'/);
     expect(script).toContain('expo prebuild --clean --platform ios --no-install');
     expect(script).toContain('pod _1.17.0_ install --deployment');
     expect(script).toContain('-destination generic/platform=iOS');
@@ -124,5 +126,17 @@ describe('unsigned iOS build shell contract', () => {
     expect(script).toContain('ditto');
     expect(script).toContain('trap cleanup EXIT');
     expect(script).toContain('payload_directory_missing');
+  });
+
+  it('only cleans generated paths owned by the current invocation', () => {
+    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+
+    expect(script).toContain('ios_dir_owned=0');
+    expect(script).toContain('staging_dir_owned=0');
+    expect(script).toContain('derived_data_dir_owned=0');
+    expect(script).toContain('cleanup_owned_path');
+    expect(script).toContain('ios_dir_owned=1');
+    expect(script).toContain('staging_dir_owned=1');
+    expect(script).toContain('derived_data_dir_owned=1');
   });
 });
