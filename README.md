@@ -93,6 +93,13 @@ Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable th
 Gate 2A evidence and the remaining gates that still block pilot-ready status
 are:
 
+- The experimental Windows [iOS free-account device-test runbook](docs/runbooks/ios-free-account-device-test.md)
+  and its [empty physical evidence template](docs/evidence/ios-device-physical-test-template.md)
+  are handoff material only. They fail closed until a protected unsigned
+  candidate's provenance and checksum are verified, retain Apple Account and
+  device identifiers locally, and do not claim Gate 2B, candidate, installation,
+  or physical-device completion.
+
 - Gate 2A media proof is complete for local-stack HTTP/Auth/Storage composition
   with two synthetic sessions, evidenced on the fresh GitHub Actions run
   [33208195906](https://github.com/ZP151/anicare/actions/runs/33208195906) with both

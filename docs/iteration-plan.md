@@ -58,6 +58,18 @@ adversarial redaction, residual-detector/public-promotion, public-projection and
 the non-media two-session concurrency checks. Do not label the branch
 pilot-ready before those checks.
 
+## Experimental iOS Device Lab handoff (prepared documentation, not completion)
+
+The fail-closed Windows local handoff is documented in the
+[iOS free-account physical-device runbook](runbooks/ios-free-account-device-test.md)
+and its [empty physical evidence template](evidence/ios-device-physical-test-template.md).
+They require a separately verified protected unsigned candidate, provenance and
+checksum before any AltStore action, retain Apple Account/device identifiers
+only locally, and use synthetic-only test data. They do not claim a candidate,
+Gate 2B, installation, or physical-device completion. Missing candidate or
+current hosted-readiness evidence remains an external blocker, not an
+authorization to dispatch or refresh anything.
+
 ## Sprint 3A — complete mobile product surfaces (planned, required)
 
 The five-tab shell is not an application-completeness claim. Current visual
@@ -291,7 +303,9 @@ and real post-token-expiry media cleanup/replay are outside Gate 2A.
    true post-token-expiry cleanup/replay, then finish non-media two-session
    concurrency verification.
 4. Complete supported native-device review/recovery testing and automatic
-   detector/residual-validation release work.
+   detector/residual-validation release work using the fail-closed Device Lab
+   handoff only when an owner has authorized a verified candidate and supplies
+   the completed sanitized physical evidence.
 5. Provision a real development environment and exercise the audited
    admin/report/block contracts against it.
 6. Approve the dataset source/licence/consent/withdrawal rules, curate a

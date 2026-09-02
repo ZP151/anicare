@@ -18,6 +18,15 @@ test('root verification blocks on both native pilot policy validators', async ()
     /^pnpm validate:pilot-policies && /,
     'pilot policy validation must run before the general verification graph',
   );
+  assert.equal(
+    packageJson.scripts['test:ios-device-lab-workflow'],
+    'node --test scripts/ios-device-lab-workflow-contract.test.mjs',
+  );
+  assert.match(
+    packageJson.scripts.verify,
+    /pnpm test:ios-device-lab-workflow/,
+    'root verification must include the iOS Device Lab workflow contract',
+  );
 });
 
 test('CI invokes the policy and contract gates independently before root verify', async () => {
