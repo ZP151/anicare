@@ -73,7 +73,9 @@ if ($manifest.schemaVersion -ne 1 -or $manifest.repository -ne $repository -or
     $manifest.rubyVersion -notmatch '^ruby 3\.3\.12 ' -or $manifest.cocoapodsVersion -ne '1.17.0' -or
     $manifest.nodeVersion -ne 'v22.23.1' -or $manifest.pnpmVersion -ne '11.19.0' -or
     $manifest.ipaByteSize -lt 1) { throw 'candidate_manifest_invalid' }
-gh attestation verify $candidateIpa --repo $repository --signer-workflow "$repository/.github/workflows/ios-device-lab.yml" --source-ref refs/heads/main --source-digest $candidateSha --deny-self-hosted-runners
+$githubCli = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+if ($null -eq $githubCli) { throw 'github_cli_missing' }
+& $githubCli.Source attestation verify $candidateIpa --repo $repository --signer-workflow "$repository/.github/workflows/ios-device-lab.yml" --source-ref refs/heads/main --source-digest $candidateSha --deny-self-hosted-runners
 if ($LASTEXITCODE -ne 0) { throw 'candidate_attestation_invalid' }
 $expected = $manifest.ipaSha256
 $actual = (Get-FileHash -LiteralPath $candidateIpa -Algorithm SHA256).Hash

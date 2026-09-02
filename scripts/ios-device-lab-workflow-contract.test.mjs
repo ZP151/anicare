@@ -375,6 +375,9 @@ test('physical-device handoff requires exact candidate provenance and non-identi
   assert.match(runbook, /--source-digest/);
   assert.match(runbook, /--deny-self-hosted-runners/);
   assert.match(runbook, /if \(\$LASTEXITCODE -ne 0\) \{ throw 'candidate_attestation_invalid' \}/);
+  assert.match(runbook, /Get-Command gh -CommandType Application -ErrorAction SilentlyContinue/);
+  assert.match(runbook, /if \(\$null -eq \$githubCli\) \{ throw 'github_cli_missing' \}/);
+  assert.match(runbook, /& \$githubCli\.Source attestation verify/);
   assert.match(runbook, /\.PSObject\.Properties\.Name/);
   assert.match(runbook, /podfileLockSha256/);
   assert.match(runbook, /ipaByteSize/);
