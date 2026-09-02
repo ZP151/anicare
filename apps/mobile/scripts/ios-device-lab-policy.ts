@@ -253,12 +253,13 @@ export function evaluateGate2BReadiness(input: Readonly<{
   }
 
   const nowIsValid = isTimestamp(input.nowIso);
+  const now = new Date(input.nowIso).getTime();
   const createdAt = new Date(evidence.createdAt).getTime();
   const expiresAt = new Date(evidence.expiresAt).getTime();
   const windowMs = expiresAt - createdAt;
-  if (!nowIsValid || windowMs <= 0 || windowMs > 72 * 60 * 60 * 1000) {
+  if (!nowIsValid || now < createdAt || windowMs <= 0 || windowMs > 72 * 60 * 60 * 1000) {
     codes.push('evidence_timestamps_invalid');
-  } else if (new Date(input.nowIso).getTime() >= expiresAt) {
+  } else if (now >= expiresAt) {
     codes.push('evidence_expired');
   }
 

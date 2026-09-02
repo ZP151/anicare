@@ -12,7 +12,7 @@ const generatedMapsLine = '  rn_maps_path = File.dirname(`node --print "require.
 const normalizedMapsLine = "  rn_maps_path = '../node_modules/react-native-maps'";
 const podfile = `platform :ios, '15.1'
 ${generatedMapsLine}
-  pod 'react-native-maps/Google', :path => rn_maps_path 
+  pod 'react-native-maps/Google', :path => rn_maps_path
 `;
 
 const enabledProperties = JSON.stringify({

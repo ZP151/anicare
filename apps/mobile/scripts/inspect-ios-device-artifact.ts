@@ -91,23 +91,26 @@ const inputPath = process.argv[2];
 if (process.argv.length !== 3 || inputPath === undefined) {
   reportCodes(['inventory_shape_invalid']);
 } else {
-  let parsed: unknown;
+  let parsed: unknown | null;
   try {
     parsed = JSON.parse(readFileSync(inputPath, 'utf8'));
   } catch {
-    reportCodes(['inventory_shape_invalid']);
-    parsed = undefined;
+    parsed = null;
   }
 
-  const inventory = parseInventory(parsed);
-  if (inventory === null) {
+  if (parsed === null) {
     reportCodes(['inventory_shape_invalid']);
   } else {
-    const codes = evaluateIosArtifactInventory(inventory);
-    if (codes.length === 0) {
-      process.stdout.write('ios_artifact_candidate\n');
+    const inventory = parseInventory(parsed);
+    if (inventory === null) {
+      reportCodes(['inventory_shape_invalid']);
     } else {
-      reportCodes(codes);
+      const codes = evaluateIosArtifactInventory(inventory);
+      if (codes.length === 0) {
+        process.stdout.write('ios_artifact_candidate\n');
+      } else {
+        reportCodes(codes);
+      }
     }
   }
 }

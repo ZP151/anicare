@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
@@ -139,6 +140,27 @@ describe('iOS Device Lab input policy', () => {
 describe('Gate 2B readiness policy', () => {
   it('accepts current, fully-passed readiness evidence from an ancestor source', () => {
     expect(evaluateGate2BReadiness(readinessInput)).toEqual([]);
+  });
+
+  it('accepts the exact creation boundary but rejects future-dated readiness evidence', () => {
+    expect(evaluateGate2BReadiness({ ...readinessInput, nowIso: validEvidence.createdAt })).toEqual([]);
+    expect(evaluateGate2BReadiness({ ...readinessInput, nowIso: '2026-09-02T23:59:59.999Z' }))
+      .toContain('evidence_timestamps_invalid');
+  });
+
+  it('keeps the readiness schema timestamps no wider than the canonical millisecond UTC form', () => {
+    const schemaPath = resolve(__dirname, '../../../docs/evidence/pilot-gate-2b-readiness.schema.json');
+    const schema = JSON.parse(readFileSync(schemaPath, 'utf8')) as {
+      properties: Record<string, { type: string; format: string; pattern?: string }>;
+    };
+    const canonicalPattern = '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$';
+
+    for (const name of ['createdAt', 'expiresAt']) {
+      expect(schema.properties[name]).toEqual({ type: 'string', format: 'date-time', pattern: canonicalPattern });
+      const pattern = new RegExp(schema.properties[name].pattern ?? '');
+      expect(pattern.test('2026-09-03T00:00:00.000Z')).toBe(true);
+      expect(pattern.test('2026-09-03T00:00:00Z')).toBe(false);
+    }
   });
 
   it.each([

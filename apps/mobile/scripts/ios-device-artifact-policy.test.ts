@@ -91,6 +91,22 @@ describe('iOS artifact inspection CLI', () => {
     expect(result.stderr).toBe('');
   });
 
+  it('emits one bounded shape code for malformed inventory JSON', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ios-artifact-policy-'));
+    const inventoryPath = join(directory, 'inventory.json');
+    writeFileSync(inventoryPath, '{');
+    const script = resolve(__dirname, 'inspect-ios-device-artifact.ts');
+
+    const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), script, inventoryPath], {
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('inventory_shape_invalid\n');
+    expect(`${result.stdout}${result.stderr}`).not.toContain(inventoryPath);
+  });
+
   it('rejects a control character in an otherwise relative inventory entry', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ios-artifact-policy-'));
     const inventoryPath = join(directory, 'inventory.json');
