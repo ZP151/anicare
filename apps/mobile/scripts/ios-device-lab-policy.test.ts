@@ -168,11 +168,30 @@ describe('Gate 2B readiness policy', () => {
 
   it.each([
     ['an invalid current time', { ...readinessInput, nowIso: 'not-a-time' }, 'evidence_timestamps_invalid'],
+    ['a short candidate commit', { ...readinessInput, candidateCommit: 'abc123' }, 'candidate_commit_invalid'],
+    ['a branch-like candidate commit', { ...readinessInput, candidateCommit: 'refs/heads/main' }, 'candidate_commit_invalid'],
+    ['an uppercase candidate commit', { ...readinessInput, candidateCommit: 'D'.repeat(40) }, 'candidate_commit_invalid'],
+    ['a non-hex candidate commit', { ...readinessInput, candidateCommit: `${'d'.repeat(39)}g` }, 'candidate_commit_invalid'],
     ['an unrelated source commit', { ...readinessInput, isAncestor: () => false }, 'evidence_source_not_ancestor'],
     ['a changed migration filename', { ...readinessInput, migrationHead: { ...validEvidence.migrationHead, filename: '20260904000000_changed.sql' } }, 'evidence_migration_head_mismatch'],
     ['a changed migration hash', { ...readinessInput, migrationHead: { ...validEvidence.migrationHead, sha256: 'd'.repeat(64) } }, 'evidence_migration_head_mismatch'],
     ['a changed Edge Functions hash', { ...readinessInput, edgeFunctionsTreeSha256: 'd'.repeat(64) }, 'evidence_edge_functions_tree_mismatch'],
   ] as const)('rejects %s with a bounded code', (_description, input, code) => {
     expect(evaluateGate2BReadiness(input)).toContain(code as Gate2BReadinessCode);
+  });
+
+  it('does not authorize an invalid candidate commit through the ancestry callback', () => {
+    let ancestryWasCalled = false;
+    const codes = evaluateGate2BReadiness({
+      ...readinessInput,
+      candidateCommit: 'not-an-immutable-commit',
+      isAncestor: () => {
+        ancestryWasCalled = true;
+        return true;
+      },
+    });
+
+    expect(codes).toContain('candidate_commit_invalid');
+    expect(ancestryWasCalled).toBe(false);
   });
 });

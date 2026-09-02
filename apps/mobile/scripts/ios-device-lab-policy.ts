@@ -23,6 +23,7 @@ export type Gate2BReadinessCode =
   | 'evidence_checks_failed'
   | 'evidence_timestamps_invalid'
   | 'evidence_expired'
+  | 'candidate_commit_invalid'
   | 'evidence_source_not_ancestor'
   | 'evidence_migration_head_mismatch'
   | 'evidence_edge_functions_tree_mismatch';
@@ -234,6 +235,9 @@ export function evaluateGate2BReadiness(input: Readonly<{
 }>): readonly Gate2BReadinessCode[] {
   if (!hasExactEvidenceShape(input.evidence)) {
     return ['evidence_shape_invalid'];
+  }
+  if (!commitPattern.test(input.candidateCommit)) {
+    return ['candidate_commit_invalid'];
   }
 
   const evidence = input.evidence;
