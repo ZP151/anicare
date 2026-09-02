@@ -51,6 +51,7 @@ jobs:
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
           ruby-version: 3.3.12
+          bundler: none
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify the pinned native toolchain
@@ -107,6 +108,7 @@ jobs:
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
           ruby-version: 3.3.12
+          bundler: none
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify the pinned native toolchain
@@ -166,6 +168,7 @@ jobs:
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
           ruby-version: 3.3.12
+          bundler: none
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify the pinned native toolchain

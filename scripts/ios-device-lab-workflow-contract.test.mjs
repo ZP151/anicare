@@ -22,6 +22,11 @@ const candidateSecrets = {
   EXPO_PUBLIC_SUPABASE_URL: '${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}',
   EXPO_PUBLIC_SUPABASE_ANON_KEY: '${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}',
 };
+const actionWith = {
+  pnpm: { version: '11.19.0' },
+  node: { 'node-version': '22.23.1', cache: 'pnpm' },
+  ruby: { 'ruby-version': '3.3.12', bundler: 'none' },
+};
 const nativeUses = [sha.checkout, sha.pnpm, sha.node, sha.ruby];
 const toolCheck = `sudo xcode-select -s /Applications/Xcode_26.4.1.app/Contents/Developer
 test "$(xcodebuild -version | sed -n '1p')" = 'Xcode 26.4.1'
@@ -49,6 +54,12 @@ function uses(job) {
   return job.steps.filter((candidate) => candidate.uses).map((candidate) => candidate.uses);
 }
 
+function actionStep(job, action) {
+  const found = job.steps.find((candidate) => candidate.uses === action);
+  assert.ok(found, `missing ${action} action`);
+  return found;
+}
+
 function assertStepOrder(job, expected, name) {
   assert.deepEqual(job.steps.map((candidate) => candidate.name ?? candidate.uses), expected, `${name} steps`);
 }
@@ -63,6 +74,9 @@ function assertNativeJob(job, name, expectedUses = nativeUses) {
   assert.equal(job['runs-on'], 'macos-26', `${name} runner`);
   assert.equal(job['timeout-minutes'], 45, `${name} timeout`);
   assert.deepEqual(uses(job), expectedUses, `${name} action sites`);
+  assert.deepEqual(actionStep(job, sha.pnpm).with, actionWith.pnpm, `${name} pnpm setup inputs`);
+  assert.deepEqual(actionStep(job, sha.node).with, actionWith.node, `${name} Node setup inputs`);
+  assert.deepEqual(actionStep(job, sha.ruby).with, actionWith.ruby, `${name} Ruby setup inputs`);
   assert.deepEqual(step(job, 'Verify the pinned native toolchain').run, toolCheck, `${name} tool verification`);
   assert.deepEqual(step(job, 'Install workspace dependencies').run, 'pnpm install --frozen-lockfile');
   assert.deepEqual(step(job, 'Validate repository policy contracts').run, [
@@ -71,6 +85,12 @@ function assertNativeJob(job, name, expectedUses = nativeUses) {
     'pnpm test:ios-device-lab-policy',
     '',
   ].join('\n'));
+}
+
+function assertCleanup(job, name, cleanupName, run) {
+  const cleanup = step(job, cleanupName);
+  assert.equal(cleanup.if, 'always()', `${name} cleanup must always run`);
+  assert.equal(cleanup.run, run, `${name} cleanup paths`);
 }
 
 function assertWorkflowContract(workflow, source) {
@@ -96,6 +116,7 @@ function assertWorkflowContract(workflow, source) {
   assertStepOrder(preflight, [sha.checkout, 'Read reviewed prerequisite presence'], 'preflight');
   assert.equal(step(preflight, 'Read reviewed prerequisite presence').id, 'state');
   assertOnlyStepEnvs(preflight, new Map(), 'preflight');
+  assert.equal('env' in preflight, false);
   assert.equal('environment' in preflight, false);
 
   assert.deepEqual(bootstrap.permissions, { contents: 'read' });
@@ -109,6 +130,7 @@ function assertWorkflowContract(workflow, source) {
     'Upload the generated Pod lock for review', 'Remove generated native files',
   ], 'lock bootstrap');
   assert.equal('environment' in bootstrap, false);
+  assert.equal('env' in bootstrap, false);
   const bootstrapResolve = step(bootstrap, 'Resolve the missing Pod lock only');
   assert.deepEqual(bootstrapResolve.env, fixedInputs);
   assertOnlyStepEnvs(bootstrap, new Map([['Resolve the missing Pod lock only', fixedInputs]]), 'lock bootstrap');
@@ -123,6 +145,7 @@ function assertWorkflowContract(workflow, source) {
     'retention-days': 3,
   });
   assert.equal(bootstrap.steps.filter((candidate) => candidate.uses === sha.upload).length, 1);
+  assertCleanup(bootstrap, 'lock bootstrap', 'Remove generated native files', 'rm -rf -- apps/mobile/ios');
   assert.doesNotMatch(JSON.stringify(bootstrap), /build:unsigned-ios|attest|device_candidate/);
 
   assert.deepEqual(compile.permissions, { contents: 'read' });
@@ -136,6 +159,7 @@ function assertWorkflowContract(workflow, source) {
     'Remove non-installable compile outputs',
   ], 'PR compile');
   assert.equal('environment' in compile, false);
+  assert.equal('env' in compile, false);
   assert.equal(compile.steps.some((candidate) => candidate.uses === sha.upload || candidate.uses === sha.attest), false);
   const compileBuild = step(compile, 'Validate and build the non-installable compile probe');
   assert.deepEqual(compileBuild.env, fixedInputs);
@@ -143,6 +167,13 @@ function assertWorkflowContract(workflow, source) {
   assert.match(compileBuild.run, /pnpm validate:ios-device-lab/);
   assert.match(compileBuild.run, /pnpm --filter @animalhelper\/mobile build:unsigned-ios/);
   assert.equal(compile.steps.some((candidate) => candidate.env && JSON.stringify(candidate.env).includes('secrets.')), false);
+  assertCleanup(compile, 'PR compile', 'Remove non-installable compile outputs', [
+    'rm -rf -- apps/mobile/ios',
+    'rm -rf -- apps/mobile/.ios-device-lab-staging',
+    'rm -rf -- apps/mobile/.ios-device-lab-derived-data',
+    'rm -rf -- apps/mobile/ios-device-lab-artifacts',
+    '',
+  ].join('\n'));
 
   assert.deepEqual(candidate.permissions, { contents: 'read', 'id-token': 'write', attestations: 'write' });
   assert.equal(candidate.if, "${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.preflight.outputs.lock_present == 'true' && needs.preflight.outputs.readiness_present == 'true' }}");
@@ -187,6 +218,13 @@ function assertWorkflowContract(workflow, source) {
     'subject-path': 'apps/mobile/ios-device-lab-artifacts/*.ipa',
   });
   assert.equal(candidate.steps.filter((candidateStep) => candidateStep.uses === sha.upload).length, 1);
+  assertCleanup(candidate, 'device candidate', 'Remove generated candidate files', [
+    'rm -rf -- apps/mobile/ios',
+    'rm -rf -- apps/mobile/.ios-device-lab-staging',
+    'rm -rf -- apps/mobile/.ios-device-lab-derived-data',
+    'rm -rf -- apps/mobile/ios-device-lab-artifacts',
+    '',
+  ].join('\n'));
 }
 
 test('workflow parses structurally and enforces the complete least-privilege contract', async () => {
@@ -194,12 +232,21 @@ test('workflow parses structurally and enforces the complete least-privilege con
   assertWorkflowContract(workflow, source);
 });
 
-test('contract rejects job, permission, secret, upload-path, and shallow-history mutations', async () => {
+test('contract rejects job, permission, environment, cleanup, setup, upload-path, and checkout mutations', async () => {
   const { source, workflow } = await parsedWorkflow();
   const mutations = [
     ['extra job', (candidate) => { candidate.jobs.unreviewed = {}; }],
     ['workflow write permission', (candidate) => { candidate.permissions.contents = 'write'; }],
+    ['preflight job env', (candidate) => { candidate.jobs.preflight.env = candidateSecrets; }],
+    ['bootstrap job secret env', (candidate) => { candidate.jobs.lock_bootstrap.env = candidateSecrets; }],
+    ['PR job secret env', (candidate) => { candidate.jobs.pr_compile.env = candidateSecrets; }],
+    ['candidate job env', (candidate) => { candidate.jobs.device_candidate.env = candidateSecrets; }],
     ['PR secret', (candidate) => { step(candidate.jobs.pr_compile, 'Install workspace dependencies').env = candidateSecrets; }],
+    ['cleanup skipped after failure', (candidate) => { step(candidate.jobs.pr_compile, 'Remove non-installable compile outputs').if = 'success()'; }],
+    ['cleanup outside the allowlist', (candidate) => { step(candidate.jobs.device_candidate, 'Remove generated candidate files').run += '\nrm -rf -- /tmp/unsafe'; }],
+    ['pnpm version drift', (candidate) => { actionStep(candidate.jobs.lock_bootstrap, sha.pnpm).with.version = '11.20.0'; }],
+    ['Node cache drift', (candidate) => { actionStep(candidate.jobs.pr_compile, sha.node).with.cache = 'npm'; }],
+    ['Ruby bundler drift', (candidate) => { actionStep(candidate.jobs.device_candidate, sha.ruby).with.bundler = 'default'; }],
     ['extra candidate upload path', (candidate) => { step(candidate.jobs.device_candidate, 'Upload the unsigned candidate allowlist').with.path += '\napps/mobile/ios-device-lab-artifacts/*.zip'; }],
     ['shallow candidate checkout', (candidate) => { candidate.jobs.device_candidate.steps[0].with['fetch-depth'] = 1; }],
   ];
