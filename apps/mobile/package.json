@@ -13,6 +13,9 @@
     "validate:pilot-build": "tsx scripts/validate-pilot-build.ts",
     "validate:ios-device-lab": "tsx scripts/validate-ios-device-lab.ts",
     "test:ios-device-lab-policy": "jest --runInBand scripts/ios-device-lab-policy.test.ts",
+    "test:ios-device-artifact-policy": "jest --runInBand scripts/ios-device-artifact-policy.test.ts",
+    "inspect:ios-device-artifact": "tsx scripts/inspect-ios-device-artifact.ts",
+    "build:unsigned-ios": "bash scripts/build-unsigned-ios.sh",
     "build:pilot:android": "pnpm dlx eas-cli@22.6.0 build --profile pilot --platform android",
     "build:pilot:ios": "pnpm dlx eas-cli@22.6.0 build --profile pilot --platform ios"
   },
