@@ -127,3 +127,45 @@ pnpm verify                                           # passed
 ```
 
 Round 2 implementation commit: `b246a06 fix(pilot): prevent timeout marker replay`.
+
+## Round 3: actor-invocation timeout binding
+
+Final security review found that a direct `fetchWithTimeout` caller could
+receive a still-live Round 2 marker without consuming it. Throwing that error
+from a later actor fetch allowed one unwanted timeout classification. The
+global predicate also used `instanceof`, which a hostile proxy can disrupt via
+`getPrototypeOf`.
+
+RED first timed out a direct helper call, retained its returned error, and
+threw it from a later `finalizeMedia` fetch. The actor incorrectly produced
+`request_timeout`. A second RED rejection used a proxy whose
+`getPrototypeOf` and `ownKeys` traps throw; the actor escaped with the raw
+proxy error instead of its fixed `network_error` result.
+
+Round 3 removes the process-global marker and exported predicate entirely.
+`actorPost` creates a fresh private `Symbol` sentinel for each request and
+passes it through the narrow optional timeout-result argument of
+`fetchWithTimeout`. The helper never supplies that sentinel to fetch or to an
+`AbortSignal`; it throws it only when that invocation's own timer won. The
+actor maps only strict identity equality with its own sentinel. General helper
+callers continue to receive an ordinary unbranded `request_timeout` error.
+
+The regression set proves a direct timeout replay, captured signal reason,
+external same-message error, caller cancellation, and hostile proxy rejection
+all remain `network_error` at the actor boundary. The genuine 5,000 ms actor
+timer remains `request_timeout` with one fetch call. No budget or retry
+behavior changed.
+
+Round 3 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2a test:unit  # 14 files, 104 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit  # 15 files, 176 passed
+pnpm test:pilot-gate-2b-ci                           # 30 passed, 1 Windows symlink capability skip
+pnpm --filter @animalhelper/pilot-gate-2a typecheck
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify                                           # passed
+```
+
+Round 3 implementation commit: `5253ab6 fix(pilot): bind timeout to actor invocation`.
