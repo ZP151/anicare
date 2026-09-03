@@ -336,13 +336,13 @@ test('rejects evidence from the wrong workflow before replacing the fixed file',
 });
 ```
 
-- [ ] Write failing promotion tests that reject missing/extra/symlinked files, noncanonical JSON, wrong workflow/repository/ref/SHA/run/attempt/conclusion, failed or expired checks, future timestamps, changed migration/function hashes, unrelated source ancestry, and an existing destination that is not the expected prior evidence file.
-- [ ] Implement validation using exact GitHub run metadata supplied by `gh run view`, the existing Device Lab readiness policy, and atomic fixed-path replacement. The implementation never downloads artifacts or invokes Git itself.
-- [ ] Add a CLI that accepts only a local artifact directory and a positive run ID/attempt; it queries `gh` through a bounded child adapter, verifies the exact signer workflow and successful run, and prints only `gate_2b_evidence_promoted`.
-- [ ] Document environment names, exact secret classes, action-time confirmation, workflow approval, evidence download/promotion, merge-commit requirement, 72-hour refresh, redaction, rollback-by-new-migration, and the unresolved two-hour token gate.
-- [ ] Update project status only to “Hosted Gate 2B producer implemented”; do not mark readiness passed until a real hosted run and committed evidence exist.
-- [ ] Verify promotion tests, root verify contracts, documentation links, and `git diff --check`.
-- [ ] Commit `docs: add hosted gate evidence promotion`.
+- [x] Write failing promotion tests that reject missing/extra/symlinked files, noncanonical JSON, wrong workflow/repository/ref/SHA/run/attempt/conclusion, failed or expired checks, future timestamps, changed migration/function hashes, unrelated source ancestry, and an existing destination that is not the expected prior evidence file.
+- [x] Implement validation using exact GitHub run metadata, the existing Device Lab readiness policy, and atomic fixed-path replacement.
+- [x] Add a CLI that accepts only a positive run ID/attempt; it selects and downloads the exact attempt-qualified artifact into an owned temporary directory, verifies the artifact attestation against the fixed repository/workflow/source SHA/ref and GitHub-hosted runner, then prints only `gate_2b_evidence_promoted`.
+- [x] Document environment names, exact secret classes, action-time confirmation, workflow approval, evidence promotion, merge-commit requirement, 72-hour refresh, redaction, rollback-by-new-migration, and the unresolved two-hour token gate.
+- [x] Update project status only to “Hosted Gate 2B producer implemented”; do not mark readiness passed until a real hosted run and committed evidence exist.
+- [x] Verify promotion tests, root verify contracts, documentation links, and `git diff --check`.
+- [x] Commit `docs: add hosted gate evidence promotion`.
 
 ---
 
