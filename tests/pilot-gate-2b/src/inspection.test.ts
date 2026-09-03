@@ -49,6 +49,41 @@ function scenario(): PartialHostedScenario {
 }
 
 describe('hosted inspection and cleanup', () => {
+  it('closes a correctness inspection session without mutating hosted state', async () => {
+    const close = vi.fn(async () => undefined);
+    const adapter = {
+      inspect: vi.fn(), inspectIsolation: vi.fn(),
+      recoverAuthUserIds: vi.fn(), recoverSightingIds: vi.fn(), removeObjects: vi.fn(),
+      deleteRows: vi.fn(), deleteAuthUsers: vi.fn(), assertAbsent: vi.fn(), close,
+    };
+    const session = createHostedInspectionSession(env(), adapter);
+
+    await expect(session.close()).resolves.toBeUndefined();
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(adapter.removeObjects).not.toHaveBeenCalled();
+    expect(adapter.deleteRows).not.toHaveBeenCalled();
+    expect(adapter.deleteAuthUsers).not.toHaveBeenCalled();
+  });
+
+  it('closes and rejects an inspection when the correctness phase is cancelled', async () => {
+    const close = vi.fn(async () => undefined);
+    const adapter = {
+      inspect: vi.fn(async () => await new Promise<unknown>(() => undefined)),
+      inspectIsolation: vi.fn(), recoverAuthUserIds: vi.fn(), recoverSightingIds: vi.fn(),
+      removeObjects: vi.fn(), deleteRows: vi.fn(), deleteAuthUsers: vi.fn(),
+      assertAbsent: vi.fn(), close,
+    };
+    const session = createHostedInspectionSession(env(), adapter);
+    const controller = new AbortController();
+
+    const inspection = session.inspectMedia(input(), controller.signal);
+    controller.abort();
+
+    await expect(inspection).rejects.toThrow('hosted_inspection_failed');
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('reuses one inspection adapter through checks and closes it exactly once during cleanup', async () => {
     const close = vi.fn(async () => undefined);
     const inspection = {

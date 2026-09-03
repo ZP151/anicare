@@ -1,9 +1,14 @@
 import type { ReadinessChecks } from './evidence.js';
 import {
-  hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerFinalizeOutcomeFromError, hostedOwnerStepFromError,
-  type HostedCheckId, type HostedMediaStagingStep, type HostedOwnerFinalizeOutcome, type HostedOwnerHappyPathStep,
+  hostedCheckIdFromError,
+  hostedMediaStepFromError,
+  hostedOwnerFinalizeOutcomeFromError,
+  hostedOwnerStepFromError,
+  type HostedCheckId,
+  type HostedMediaStagingStep,
+  type HostedOwnerFinalizeOutcome,
+  type HostedOwnerHappyPathStep,
 } from './checks.js';
-import { cleanupOperationIdsFromError, type CleanupOperationId } from './inspection.js';
 
 export type MutableHostedScenario = Record<string, unknown>;
 
@@ -12,16 +17,11 @@ export type ExecuteHostedGateOptions = Readonly<{
   cancellationGraceMs?: number;
   createScenario(partial: MutableHostedScenario, signal: AbortSignal): Promise<unknown>;
   runChecks(scenario: unknown, signal: AbortSignal): Promise<ReadinessChecks>;
-  cleanup(scenario: unknown, signal: AbortSignal): Promise<void>;
-  emitEvidence(checks: ReadinessChecks, signal: AbortSignal): Promise<void>;
 }>;
 
-export type HostedGateResult = Readonly<{
-  checks: ReadinessChecks;
-  cleanupPassed: true;
-}>;
+export type HostedGateResult = Readonly<{ checks: ReadinessChecks }>;
 
-export const GATE_STAGES = ['create', 'checks', 'cleanup', 'evidence'] as const;
+export const GATE_STAGES = ['create', 'checks', 'checks_timeout', 'checks_unsettled'] as const;
 export type GateStage = typeof GATE_STAGES[number];
 export type HostedGateControl = Readonly<{
   gateStage: GateStage;
@@ -29,9 +29,9 @@ export type HostedGateControl = Readonly<{
   mediaStep?: HostedMediaStagingStep;
   ownerStep?: HostedOwnerHappyPathStep;
   ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome;
-  cleanup?: readonly CleanupOperationId[];
 }>;
 
+class OperationTimeoutError extends Error {}
 class UnsettledOperationError extends Error {}
 
 async function bounded<T>(
@@ -56,6 +56,7 @@ async function bounded<T>(
     const result = await Promise.race([settled, timeout]);
     if (result.kind === 'value') return result.value;
     if (result.kind === 'error') throw result.error;
+
     let graceTimer: ReturnType<typeof setTimeout> | undefined;
     const grace = new Promise<{ kind: 'unsettled' }>((resolve) => {
       graceTimer = setTimeout(() => resolve({ kind: 'unsettled' }), cancellationGraceMs);
@@ -63,7 +64,7 @@ async function bounded<T>(
     const afterAbort = await Promise.race([settled, grace]);
     if (graceTimer !== undefined) clearTimeout(graceTimer);
     if (afterAbort.kind === 'unsettled') throw new UnsettledOperationError('operation_unsettled');
-    throw new Error('timeout');
+    throw new OperationTimeoutError('operation_timeout');
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
@@ -77,16 +78,18 @@ class HostedGateFailure extends Error {
 
 function failure(
   gateStage: GateStage,
-  check?: HostedCheckId,
-  cleanup?: readonly CleanupOperationId[],
-  mediaStep?: HostedMediaStagingStep,
-  ownerStep?: HostedOwnerHappyPathStep,
-  ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome,
+  error?: unknown,
 ): HostedGateFailure {
+  const check = hostedCheckIdFromError(error);
+  const mediaStep = hostedMediaStepFromError(error);
+  const ownerStep = hostedOwnerStepFromError(error);
+  const ownerFinalizeOutcome = hostedOwnerFinalizeOutcomeFromError(error);
   const control: {
-    gateStage: GateStage; check?: HostedCheckId; mediaStep?: HostedMediaStagingStep;
-    ownerStep?: HostedOwnerHappyPathStep; ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome;
-    cleanup?: readonly CleanupOperationId[];
+    gateStage: GateStage;
+    check?: HostedCheckId;
+    mediaStep?: HostedMediaStagingStep;
+    ownerStep?: HostedOwnerHappyPathStep;
+    ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome;
   } = { gateStage };
   if (check !== undefined) control.check = check;
   if (check === 'media_staging' && mediaStep !== undefined) control.mediaStep = mediaStep;
@@ -94,7 +97,6 @@ function failure(
   if (check === 'owner_happy_path' && ownerStep === 'finalize' && ownerFinalizeOutcome !== undefined) {
     control.ownerFinalizeOutcome = ownerFinalizeOutcome;
   }
-  if (cleanup !== undefined && cleanup.length > 0) control.cleanup = cleanup;
   return new HostedGateFailure(control);
 }
 
@@ -110,70 +112,35 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
   if (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300_000) {
     throw failure('create');
   }
-  const cancellationGraceMs = options.cancellationGraceMs ?? Math.min(5_000, Math.max(1, Math.floor(options.timeoutMs / 4)));
+  const cancellationGraceMs = options.cancellationGraceMs ??
+    Math.min(5_000, Math.max(1, Math.floor(options.timeoutMs / 4)));
   if (!Number.isInteger(cancellationGraceMs) || cancellationGraceMs < 1 || cancellationGraceMs > 10_000) {
     throw failure('create');
   }
+
   const deadline = Date.now() + options.timeoutMs;
-  const cleanupReserveMs = Math.min(
-    Math.max(1, options.timeoutMs - 1),
-    Math.max(cancellationGraceMs + 1, Math.floor(options.timeoutMs / 4)),
-  );
-  const workDeadline = deadline - cleanupReserveMs;
-  const runBefore = <T>(stageDeadline: number, operation: (signal: AbortSignal) => Promise<T>) => {
-    const remaining = stageDeadline - Date.now();
-    if (remaining < 1) throw new Error('timeout');
+  const runBeforeDeadline = <T>(operation: (signal: AbortSignal) => Promise<T>) => {
+    const remaining = deadline - Date.now();
+    if (remaining < 1) throw new OperationTimeoutError('operation_timeout');
     return bounded(remaining, cancellationGraceMs, operation);
   };
+
   const partial: MutableHostedScenario = {};
-  let scenario: unknown = partial;
-  let checks: ReadinessChecks | undefined;
-  let failedStage: 'create' | 'checks' | undefined;
-  let failedCheckId: HostedCheckId | undefined;
-  let failedMediaStep: HostedMediaStagingStep | undefined;
-  let failedOwnerStep: HostedOwnerHappyPathStep | undefined;
-  let failedOwnerFinalizeOutcome: HostedOwnerFinalizeOutcome | undefined;
-  let unsettled = false;
+  let scenario: unknown;
   try {
-    scenario = await runBefore(workDeadline, (signal) => options.createScenario(partial, signal));
-    checks = await runBefore(workDeadline, (signal) => options.runChecks(scenario, signal));
+    scenario = await runBeforeDeadline((signal) => options.createScenario(partial, signal));
   } catch (error) {
-    unsettled = error instanceof UnsettledOperationError;
-    failedStage = checks === undefined && scenario === partial ? 'create' : 'checks';
-    if (failedStage === 'checks') {
-      failedCheckId = hostedCheckIdFromError(error);
-      failedMediaStep = hostedMediaStepFromError(error);
-      failedOwnerStep = hostedOwnerStepFromError(error);
-      failedOwnerFinalizeOutcome = hostedOwnerFinalizeOutcomeFromError(error);
-    }
+    if (error instanceof UnsettledOperationError) throw failure('checks_unsettled');
+    if (error instanceof OperationTimeoutError) throw failure('checks_timeout');
+    throw failure('create');
   }
 
-  // An uncooperative operation may still be mutating hosted state. The parent
-  // process must terminate this harness before the workflow's independent
-  // durable-ledger cleanup process runs.
-  if (unsettled) throw failure(
-    'cleanup', failedCheckId, undefined, failedMediaStep, failedOwnerStep, failedOwnerFinalizeOutcome,
-  );
-
   try {
-    await runBefore(deadline, (signal) => options.cleanup(scenario, signal));
+    const result = await runBeforeDeadline((signal) => options.runChecks(scenario, signal));
+    return { checks: result };
   } catch (error) {
-    throw failure(
-      'cleanup', failedCheckId, cleanupOperationIdsFromError(error), failedMediaStep, failedOwnerStep,
-      failedOwnerFinalizeOutcome,
-    );
+    if (error instanceof UnsettledOperationError) throw failure('checks_unsettled');
+    if (error instanceof OperationTimeoutError) throw failure('checks_timeout');
+    throw failure('checks', error);
   }
-
-  if (failedStage !== undefined || checks === undefined) {
-    throw failure(
-      failedStage ?? 'checks', failedCheckId, undefined, failedMediaStep, failedOwnerStep, failedOwnerFinalizeOutcome,
-    );
-  }
-
-  try {
-    await runBefore(deadline, (signal) => options.emitEvidence(checks!, signal));
-  } catch {
-    throw failure('evidence');
-  }
-  return { checks, cleanupPassed: true };
 }

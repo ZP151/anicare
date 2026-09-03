@@ -57,17 +57,21 @@ function credentials(role: Role): Readonly<{ email: string; password: string }> 
   };
 }
 
-function adminClient(env: HostedGateEnvironment) {
+function phaseInit(init: RequestInit | undefined, signal: AbortSignal | undefined): RequestInit | undefined {
+  return signal ? { ...init, signal } : init;
+}
+
+function adminClient(env: HostedGateEnvironment, signal?: AbortSignal) {
   return createClient(env.apiUrl, env.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-    global: { fetch: (input, init) => fetchWithTimeout(input, init, REQUEST_TIMEOUT_MS) },
+    global: { fetch: (input, init) => fetchWithTimeout(input, phaseInit(init, signal), REQUEST_TIMEOUT_MS) },
   });
 }
 
-function publicClient(env: HostedGateEnvironment) {
+function publicClient(env: HostedGateEnvironment, signal?: AbortSignal) {
   return createClient(env.apiUrl, env.anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-    global: { fetch: (input, init) => fetchWithTimeout(input, init, REQUEST_TIMEOUT_MS) },
+    global: { fetch: (input, init) => fetchWithTimeout(input, phaseInit(init, signal), REQUEST_TIMEOUT_MS) },
   });
 }
 
@@ -76,8 +80,8 @@ function alreadyAbsentAuthUser(error: unknown): boolean {
     (error as Record<string, unknown>).status === 404 && (error as Record<string, unknown>).code === 'user_not_found');
 }
 
-export function createHostedFixtureAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
-  const admin = adminClient(env);
+export function createHostedFixtureAdapter(env: HostedGateEnvironment, signal?: AbortSignal): HostedFixtureAdapter {
+  const admin = adminClient(env, signal);
   return {
     async createAuthUser(input) {
       const { data, error } = await admin.auth.admin.createUser({
@@ -88,7 +92,7 @@ export function createHostedFixtureAdapter(env: HostedGateEnvironment): HostedFi
       return data.user.id;
     },
     async signIn(input) {
-      const { data, error } = await publicClient(env).auth.signInWithPassword({
+      const { data, error } = await publicClient(env, signal).auth.signInWithPassword({
         email: input.email, password: input.password,
       });
       const id = data.user?.id;
@@ -111,6 +115,7 @@ export function createHostedFixtureAdapter(env: HostedGateEnvironment): HostedFi
         method: 'POST',
         redirect: 'error',
         cache: 'no-store',
+        ...(signal ? { signal } : {}),
         headers: { Authorization: `Bearer ${input.actor.accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           latitude: input.latitude,
@@ -202,9 +207,14 @@ async function cleanupPartial(
 
 export async function createHostedScenario(
   env: HostedGateEnvironment,
-  adapter: HostedFixtureAdapter = createHostedFixtureAdapter(env),
+  providedAdapter?: HostedFixtureAdapter,
   onProgress: (progress: HostedFixtureProgress) => Promise<void> = async () => undefined,
+  signal?: AbortSignal,
 ): Promise<HostedScenario> {
+  const adapter = providedAdapter ?? createHostedFixtureAdapter(env, signal);
+  const assertNotAborted = () => {
+    if (signal?.aborted) throw new Error('phase_cancelled');
+  };
   const userIds: string[] = [];
   const profileIds: string[] = [];
   const sightingIds: string[] = [];
@@ -212,19 +222,23 @@ export async function createHostedScenario(
   try {
     const actors = {} as Record<Role, SyntheticActor>;
     for (const role of ['owner', 'stranger'] as const) {
+      assertNotAborted();
       const secret = credentials(role);
       const recoveryId = randomUUID();
       await onProgress({ kind: 'auth-reference', recoveryId });
+      assertNotAborted();
       const id = await adapter.createAuthUser({ ...secret, role, emailConfirmed: true, recoveryId });
       if (!UUID.test(id) || userIds.includes(id)) throw new Error('invalid_actor');
       userIds.push(id);
       await onProgress({ kind: 'user', id });
+      assertNotAborted();
       const actor = await adapter.signIn({ ...secret, role });
       if (actor.id !== id || actor.accessToken.length === 0 || /[\s]/.test(actor.accessToken)) {
         throw new Error('invalid_session');
       }
       actors[role] = actor;
       profileIds.push(id);
+      assertNotAborted();
       await adapter.createAdultProfile({
         role, userId: id, publicName: `Synthetic ${role}`, adultConfirmedAt: new Date().toISOString(),
       });
@@ -234,6 +248,7 @@ export async function createHostedScenario(
       const clientDedupeKey = `pilot-gate-2b-${role}-${randomUUID().replaceAll('-', '')}`;
       sightingReferences.push({ reporterId: actor.id, clientDedupeKey });
       await onProgress({ kind: 'sighting-reference', reporterId: actor.id, clientDedupeKey });
+      assertNotAborted();
       const id = await adapter.createSighting({ role, actor, latitude, longitude, synthetic: true, clientDedupeKey });
       sightingIds.push(id);
       await onProgress({ kind: 'sighting', id });
@@ -253,6 +268,7 @@ export async function createHostedScenario(
       createdObjectPaths: [],
     };
   } catch {
+    if (signal?.aborted) throw new Error('hosted_fixture_failed');
     await cleanupPartial(
       adapter,
       [...sightingReferences].reverse(),

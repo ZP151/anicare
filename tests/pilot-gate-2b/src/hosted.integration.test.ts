@@ -13,12 +13,13 @@ import {
   type HostedOwnerHappyPathStep,
 } from './checks.js';
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
-import { persistCleanupMediaId, removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
+import { persistCleanupMediaId, writeCleanupLedger } from './cleanup-ledger.js';
 import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
 import { executeHostedGate, hostedGateControlFromError, type MutableHostedScenario } from './execute.js';
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
+import { writeChecksMarker } from './gate-markers.js';
 import {
-  cleanupHostedScenario, createHostedInspectionSession,
+  createHostedInspectionSession,
   hostedIsolationStepFromError,
   type HostedInspection, type HostedInspectionInput, type HostedInspectionSession,
   type HostedIsolationInspection, type PartialHostedScenario,
@@ -95,6 +96,8 @@ describe('real Hosted Gate 2B', () => {
     await verifyRemoteMigrationInventory(env);
     const ledgerPath = process.env.PILOT_GATE_2B_LEDGER_PATH;
     if (!ledgerPath) throw new Error('cleanup_ledger_invalid');
+    const checksPath = process.env.PILOT_GATE_2B_CHECKS_PATH;
+    if (!checksPath) throw new Error('hosted_gate_marker_invalid');
     const partial: CleanupLedger = {
       createdAuthRecoveryIds: [], createdUserIds: [], sightingRecoveryReferences: [],
       createdSightingIds: [], createdMediaIds: [],
@@ -104,7 +107,7 @@ describe('real Hosted Gate 2B', () => {
     let result;
     try {
       result = await executeHostedGate({
-      timeoutMs: 100_000,
+      timeoutMs: 180_000,
       createScenario: async (ledger, signal) => {
         if (signal.aborted) throw new Error('aborted');
         Object.assign(ledger, partial);
@@ -120,7 +123,7 @@ describe('real Hosted Gate 2B', () => {
           Object.assign(ledger, partial);
           await writeCleanupLedger(ledgerPath, partial);
         };
-        const fixture = await createHostedScenario(env, undefined, persistFixtureProgress);
+        const fixture = await createHostedScenario(env, undefined, persistFixtureProgress, signal);
         partial.createdUserIds = [...fixture.createdUserIds];
         partial.createdSightingIds = [fixture.ownerSightingId, fixture.strangerSightingId];
         Object.assign(ledger, partial);
@@ -140,6 +143,7 @@ describe('real Hosted Gate 2B', () => {
         const jpeg = deterministicJpegFixture();
         const admin = createClient(env.apiUrl, env.serviceRoleKey, {
           auth: { autoRefreshToken: false, persistSession: false },
+          global: { fetch: (input, init) => fetchWithTimeout(input, { ...init, signal }, REQUEST_TIMEOUT_MS) },
         });
         const atMediaStep = async <T>(step: HostedMediaStagingStep, operation: () => Promise<T>): Promise<T> => {
           try {
@@ -186,7 +190,7 @@ describe('real Hosted Gate 2B', () => {
             ('name' in item) && `jobs/${String(item.name)}` === objectPath);
         };
         const unchanged = async (): Promise<boolean> => Boolean(ownerExpected && ownerBaseline) &&
-          sameInspection(await inspection.inspectMedia(ownerExpected!), ownerBaseline!);
+          sameInspection(await inspection.inspectMedia(ownerExpected!, signal), ownerBaseline!);
         const isolationSnapshot = async (additionalMediaIds: readonly string[] = []) => {
           if (!ownerReservation || !strangerReservation || !mediaId) throw new Error('hosted_checks_failed');
           return await inspection.inspectIsolation({
@@ -196,7 +200,7 @@ describe('real Hosted Gate 2B', () => {
             strangerSightingId: scenario.strangerSightingId,
             mediaIds: [...new Set([mediaId, ...additionalMediaIds])],
             observedObjectPaths: [ownerReservation.path, strangerReservation.path],
-          });
+          }, signal);
         };
         const withoutIsolationMutation = async <T>(
           operation: () => Promise<T>,
@@ -250,7 +254,7 @@ describe('real Hosted Gate 2B', () => {
               jobId: ownerReservation.jobId, mediaAssetId: confirmedMediaAssetId, sha256: jpeg.sha256,
               byteLength: jpeg.bytes.byteLength, width: jpeg.width, height: jpeg.height,
             };
-            ownerBaseline = await atOwnerStep('inspect', () => inspection.inspectMedia(ownerExpected!));
+            ownerBaseline = await atOwnerStep('inspect', () => inspection.inspectMedia(ownerExpected!, signal));
             requireOwnerStep('inspect',
               ownerBaseline.jobCount === 1 && ownerBaseline.matchingFinalizedJobCount === 1 &&
               ownerBaseline.assetCount === 1 && ownerBaseline.matchingQuarantinedAssetCount === 1 &&
@@ -353,17 +357,12 @@ describe('real Hosted Gate 2B', () => {
             return deleteUnknown.unchanged && sameFailure(deleteActual.result, deleteUnknown.result) && await unchanged();
           },
         };
-        return await runHostedChecks(env, adapter);
-      },
-      cleanup: async (value) => {
-        if (value && typeof value === 'object' && 'tracked' in value && 'inspection' in value) {
-          const runtime = value as RuntimeScenario;
-          await runtime.inspection.cleanup(runtime.tracked);
-        } else {
-          await cleanupHostedScenario(env, value as PartialHostedScenario);
+        try {
+          return await runHostedChecks(env, adapter);
+        } finally {
+          await inspection.close();
         }
       },
-      emitEvidence: async () => { await removeCleanupLedger(ledgerPath); },
       });
     } catch (error) {
       const control = hostedGateControlFromError(error);
@@ -373,7 +372,11 @@ describe('real Hosted Gate 2B', () => {
       }
       throw error;
     }
-    expect(result).toMatchObject({ cleanupPassed: true });
+    await writeChecksMarker(checksPath, result.checks);
+    expect(result).toEqual({ checks: {
+      authRedirectCheck: 'passed', mediaStagingCheck: 'passed', publicKeyOriginCheck: 'passed',
+      syntheticOwnerHappyPath: 'passed', crossOwnerIsolation: 'passed',
+    } });
     process.stdout.write('hosted_gate_2b_passed\n');
-  }, 120_000);
+  }, 240_000);
 });

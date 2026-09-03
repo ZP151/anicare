@@ -109,9 +109,10 @@ type HostedIsolationAdapter = Readonly<{
 type HostedInspectionSessionAdapter = HostedMaintenanceAdapter & HostedIsolationAdapter;
 
 export type HostedInspectionSession = Readonly<{
-  inspectMedia(input: HostedInspectionInput): Promise<HostedInspection>;
-  inspectIsolation(input: HostedIsolationInspectionInput): Promise<HostedIsolationInspection>;
+  inspectMedia(input: HostedInspectionInput, signal?: AbortSignal): Promise<HostedInspection>;
+  inspectIsolation(input: HostedIsolationInspectionInput, signal?: AbortSignal): Promise<HostedIsolationInspection>;
   cleanup(scenario: PartialHostedScenario): Promise<void>;
+  close(): Promise<void>;
 }>;
 
 export type PartialHostedScenario = Readonly<{
@@ -625,9 +626,41 @@ export function createHostedInspectionSession(
   providedAdapter?: HostedInspectionSessionAdapter,
 ): HostedInspectionSession {
   const adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
+  let closed = false;
+  const closeAdapter = async () => {
+    if (closed) return;
+    closed = true;
+    await adapter.close();
+  };
+  const withinPhase = async <T>(signal: AbortSignal | undefined, operation: () => Promise<T>): Promise<T> => {
+    if (!signal) return await operation();
+    if (signal.aborted) {
+      await closeAdapter().catch(() => undefined);
+      throw new Error('hosted_inspection_failed');
+    }
+    let rejectAborted: ((error: Error) => void) | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => { rejectAborted = reject; });
+    const onAbort = () => {
+      void closeAdapter().catch(() => undefined);
+      rejectAborted?.(new Error('hosted_inspection_failed'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await Promise.race([operation(), aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+  };
   return {
-    inspectMedia: (input) => inspectHostedMedia(env, input, adapter),
-    inspectIsolation: (input) => inspectHostedIsolationState(env, input, adapter),
-    cleanup: (scenario) => cleanupHostedScenario(env, scenario, adapter),
+    inspectMedia: (input, signal) => withinPhase(signal, () => inspectHostedMedia(env, input, adapter)),
+    inspectIsolation: (input, signal) => withinPhase(signal, () => inspectHostedIsolationState(env, input, adapter)),
+    cleanup: async (scenario) => {
+      try {
+        await cleanupHostedScenario(env, scenario, adapter);
+      } finally {
+        closed = true;
+      }
+    },
+    close: closeAdapter,
   };
 }

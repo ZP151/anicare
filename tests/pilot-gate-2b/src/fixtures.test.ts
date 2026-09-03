@@ -60,6 +60,19 @@ function adapter(failAt?: string) {
 }
 
 describe('hosted synthetic fixtures', () => {
+  it('does not start a remote mutation when the correctness phase is already cancelled', async () => {
+    const fake = adapter();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(createHostedScenario(
+      env(), fake.implementation, async () => undefined, controller.signal,
+    )).rejects.toThrow('hosted_fixture_failed');
+
+    expect(fake.implementation.createAuthUser).not.toHaveBeenCalled();
+    expect(fake.implementation.createSighting).not.toHaveBeenCalled();
+  });
+
   it('creates two distinct confirmed adult actors and Singapore synthetic sightings', async () => {
     const fake = adapter();
     const scenario = await createHostedScenario(env(), fake.implementation, async (progress) => {
