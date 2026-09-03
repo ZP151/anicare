@@ -43,7 +43,12 @@ type CleanupTable = 'media_upload_jobs' | 'media_assets' | 'sightings' | 'user_p
 export type HostedMaintenanceAdapter = Readonly<{
   inspect(input: HostedInspectionInput): Promise<unknown>;
   removeObjects(paths: readonly string[]): Promise<void>;
-  deleteRows(table: CleanupTable, ids: readonly string[], mediaIds?: readonly string[]): Promise<void>;
+  deleteRows(
+    table: CleanupTable,
+    ids: readonly string[],
+    mediaIds?: readonly string[],
+    ownerIds?: readonly string[],
+  ): Promise<void>;
   deleteAuthUsers(ids: readonly string[]): Promise<void>;
   assertAbsent(scenario: Required<PartialHostedScenario>): Promise<boolean>;
   close(): Promise<void>;
@@ -171,12 +176,16 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
       const { error } = await admin.storage.from('media-staging').remove([...paths]);
       if (error) throw new Error('object_cleanup_failed');
     },
-    async deleteRows(table, ids, mediaIds = []) {
+    async deleteRows(table, ids, mediaIds = [], ownerIds = []) {
       if (ids.length === 0 && mediaIds.length === 0) return;
       if (table === 'media_upload_jobs') {
-        await sql`delete from private.media_upload_jobs where id = any(${ids}::uuid[]) or media_id = any(${mediaIds}::text[])`;
+        await sql`delete from private.media_upload_jobs
+          where id = any(${ids}::uuid[])
+             or (media_id = any(${mediaIds}::text[]) and uploader_id = any(${ownerIds}::uuid[]))`;
       } else if (table === 'media_assets') {
-        await sql`delete from public.media_assets where id = any(${ids}::uuid[]) or client_media_id = any(${mediaIds}::text[])`;
+        await sql`delete from public.media_assets
+          where id = any(${ids}::uuid[])
+             or (client_media_id = any(${mediaIds}::text[]) and uploader_id = any(${ownerIds}::uuid[]))`;
       }
       else if (table === 'sightings') await sql`delete from public.sightings where id = any(${ids}::uuid[])`;
       else if (table === 'user_profiles') await sql`delete from public.user_profiles where id = any(${ids}::uuid[])`;
@@ -193,8 +202,10 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
     async assertAbsent(scenario) {
       const rows = await sql<Array<{ tracked_count: number }>>`
         select (
-          (select count(*) from private.media_upload_jobs where id = any(${scenario.createdJobIds}::uuid[]) or media_id = any(${scenario.createdMediaIds}::text[])) +
-          (select count(*) from public.media_assets where id = any(${scenario.createdAssetIds}::uuid[]) or client_media_id = any(${scenario.createdMediaIds}::text[])) +
+          (select count(*) from private.media_upload_jobs where id = any(${scenario.createdJobIds}::uuid[])
+            or (media_id = any(${scenario.createdMediaIds}::text[]) and uploader_id = any(${scenario.createdUserIds}::uuid[]))) +
+          (select count(*) from public.media_assets where id = any(${scenario.createdAssetIds}::uuid[])
+            or (client_media_id = any(${scenario.createdMediaIds}::text[]) and uploader_id = any(${scenario.createdUserIds}::uuid[]))) +
           (select count(*) from public.sightings where id = any(${scenario.createdSightingIds}::uuid[])) +
           (select count(*) from public.user_profiles where id = any(${scenario.createdUserIds}::uuid[])) +
           (select count(*) from auth.users where id = any(${scenario.createdUserIds}::uuid[]))
@@ -243,8 +254,8 @@ export async function cleanupHostedScenario(
     const tracked = normalizeScenario(scenario);
     adapter = providedAdapter ?? createAdapter(env);
     await adapter.removeObjects(tracked.createdObjectPaths);
-    await adapter.deleteRows('media_upload_jobs', tracked.createdJobIds, tracked.createdMediaIds);
-    await adapter.deleteRows('media_assets', tracked.createdAssetIds, tracked.createdMediaIds);
+    await adapter.deleteRows('media_upload_jobs', tracked.createdJobIds, tracked.createdMediaIds, tracked.createdUserIds);
+    await adapter.deleteRows('media_assets', tracked.createdAssetIds, tracked.createdMediaIds, tracked.createdUserIds);
     await adapter.deleteRows('sightings', tracked.createdSightingIds);
     await adapter.deleteRows('user_profiles', tracked.createdUserIds);
     await adapter.deleteAuthUsers(tracked.createdUserIds);
