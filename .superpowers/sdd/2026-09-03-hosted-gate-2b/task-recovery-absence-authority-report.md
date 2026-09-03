@@ -135,6 +135,44 @@ git diff --check
 pnpm verify
 ```
 
+## Round 3 Auth recovery preservation hardening
+
+Auth recovery output now follows the same guarded bounded indexed-copy
+process as sighting recovery. Any malformed value, length access, or
+indexed getter failure is replaced with a fresh empty list and recorded
+as `recover_auth`. Unlike provisional sighting recovery, this failure is
+never suppressed by a successful final absence proof.
+
+RED was recorded with a stateful Auth-array getter that produced a
+hostile non-string value at the first recovery read:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts
+
+24 tests: 23 passed, 1 failed
+- contains a stateful Auth recovery array without suppressing recover_auth
+
+The observed failure was hosted_cleanup_failed with operationIds:
+[setup].
+```
+
+The green regression confirms the hostile Auth value is read once, all
+deletions, durable absence proof, and close run, and the final fixed
+diagnostic is exactly `recover_auth` without raw hostile content.
+
+Round 3 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts  # 24 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit                       # 169 passed
+pnpm test:pilot-gate-2b-ci                                                # 29 passed, 1 Windows symlink skip
+pnpm test:hosted-gate-2b-workflow                                         # 2 passed
+pnpm test:root-contracts                                                  # 3 passed
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify
+```
+
 ## Commits
 
 - `5ce28d5 fix(pilot): honor authoritative sighting absence proof`
