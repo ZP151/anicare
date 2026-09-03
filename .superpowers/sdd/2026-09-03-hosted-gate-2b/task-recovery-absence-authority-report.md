@@ -173,9 +173,60 @@ git diff --check
 pnpm verify
 ```
 
-## Commits
+## Round 4 final-proof authority hardening
 
-- `5ce28d5 fix(pilot): honor authoritative sighting absence proof`
-- This report is committed separately after creation.
+Only the literal boolean `true` now authorizes final absence proof.
+Truthy objects, numbers, and strings become `absence_proof` failures and
+cannot clear a provisional `recover_sighting` failure.
+
+Before invoking the sighting recovery adapter, cleanup now creates two
+independent plain snapshots of the validated durable recovery
+references: one only for the untrusted recovery lookup and one retained
+for the final recovered scenario and absence proof. The adapter cannot
+mutate the proof snapshot by replacing, splicing, or editing its own
+copy.
+
+RED was recorded before the production change:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts
+
+28 tests: 24 passed, 4 failed
+- preserves durable sighting recovery references when the recovery adapter mutates its copy
+- retains provisional sighting recovery failure when absence proof returns a truthy object
+- retains provisional sighting recovery failure when absence proof returns truthy one
+- retains provisional sighting recovery failure when absence proof returns a truthy string
+```
+
+The mutation regression used an adapter that edited an individual
+reference, spliced the received array, and threw. The green test proves
+the final proof receives the original durable references and authorizes
+only after that preserved proof returns literal `true`.
+
+Round 4 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts  # 28 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit                       # 173 passed
+pnpm test:pilot-gate-2b-ci                                                # 29 passed, 1 Windows symlink skip
+pnpm test:hosted-gate-2b-workflow                                         # 2 passed
+pnpm test:root-contracts                                                  # 3 passed
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify
+```
+
+## Slice commit history
+
+- Initial authority slice: `5ce28d5 fix(pilot): honor authoritative sighting absence proof`
+  and `f2874a4 docs(pilot): record recovery absence authority`.
+- Round 1: `3769b4b fix(pilot): contain malformed sighting recovery`
+  and `e47f894 docs(pilot): record malformed recovery guard`.
+- Round 2: `0503451 fix(pilot): sanitize sighting recovery arrays`
+  and `a73d781 docs(pilot): record recovery array sanitization`.
+- Round 3: `abe45c8 fix(pilot): contain malformed Auth recovery`
+  and `35a7444 docs(pilot): record Auth recovery hardening`.
+- Round 4: `552d4f4 fix(pilot): harden final absence authority` and this
+  report commit, `docs(pilot): record final absence authority hardening`.
 
 No push and no hosted rerun were performed.
