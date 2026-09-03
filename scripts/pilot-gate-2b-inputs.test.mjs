@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   DEPLOYED_FUNCTIONS, REVIEWED_MIGRATIONS, discoverPilotGate2BInputs, validatePilotGate2BInputs,
@@ -10,6 +11,7 @@ import {
 
 const reviewedEdgeLockUrl = new URL('../supabase/functions/deno.lock', import.meta.url);
 const reviewedEdgeLock = readFileSync(reviewedEdgeLockUrl);
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function functionConfig() {
   return {
@@ -69,6 +71,12 @@ test('discovers only the exact reviewed hosted deployment inventory', () => {
     });
     assert.match(discovered.deploymentTreeSha256, /^[a-f0-9]{64}$/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('accepts the exact current repository deployment inventory', () => {
+  const discovered = discoverPilotGate2BInputs(repositoryRoot);
+  assert.match(discovered.deploymentTreeSha256, /^[a-f0-9]{64}$/);
+  assert.equal(discovered.migrations.at(-1), '202609030001_finalize_media_preflight.sql');
 });
 
 test('hashes every deployable migration, config, function, and shared source file', () => {

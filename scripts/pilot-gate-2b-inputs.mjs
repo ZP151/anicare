@@ -23,6 +23,7 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202608310008_revoke_legacy_ai_proposal_bridge.sql',
   '202608310009_report_manual_area_submission.sql',
   '202608310010_my_reports_projection.sql',
+  '202609030001_finalize_media_preflight.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([
