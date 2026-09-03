@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   cleanupHostedScenario,
   cleanupOperationIdsFromError,
+  createHostedInspectionSession,
   inspectHostedIsolationState,
   inspectHostedMedia,
   type HostedMaintenanceAdapter,
@@ -46,6 +47,46 @@ function scenario(): PartialHostedScenario {
 }
 
 describe('hosted inspection and cleanup', () => {
+  it('reuses one inspection adapter through checks and closes it exactly once during cleanup', async () => {
+    const close = vi.fn(async () => undefined);
+    const inspection = {
+      jobCount: 1, matchingFinalizedJobCount: 1, assetCount: 1,
+      matchingQuarantinedAssetCount: 1, stagingObjectExists: true,
+    };
+    const isolationInput = {
+      ownerId: UUIDS[0]!, strangerId: UUIDS[5]!,
+      ownerSightingId: UUIDS[1]!, strangerSightingId: UUIDS[6]!,
+      mediaIds: [UUIDS[2]!],
+      observedObjectPaths: [`jobs/${UUIDS[3]}.jpg`, `jobs/${UUIDS[7]}.jpg`],
+    };
+    const isolation = { jobs: [], assets: [], objectExists: [true, false] };
+    const adapter = {
+      inspect: vi.fn(async () => inspection),
+      inspectIsolation: vi.fn(async () => isolation),
+      recoverAuthUserIds: vi.fn(async () => []), recoverSightingIds: vi.fn(async () => []),
+      removeObjects: vi.fn(), deleteRows: vi.fn(), deleteAuthUsers: vi.fn(),
+      assertAbsent: vi.fn(async () => true), close,
+    };
+    const session = createHostedInspectionSession(env(), adapter);
+    await expect(session.inspectMedia(input())).resolves.toEqual(inspection);
+    await expect(session.inspectIsolation(isolationInput)).resolves.toEqual(isolation);
+    expect(close).not.toHaveBeenCalled();
+    await expect(session.cleanup({})).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('closes a session-owned adapter when cleanup input validation fails', async () => {
+    const close = vi.fn(async () => undefined);
+    const adapter = {
+      inspect: vi.fn(), inspectIsolation: vi.fn(),
+      recoverAuthUserIds: vi.fn(), recoverSightingIds: vi.fn(), removeObjects: vi.fn(),
+      deleteRows: vi.fn(), deleteAuthUsers: vi.fn(), assertAbsent: vi.fn(), close,
+    };
+    const session = createHostedInspectionSession(env(), adapter);
+    await expect(session.cleanup({ createdUserIds: ['not-a-uuid'] })).rejects.toThrow('hosted_cleanup_failed');
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('accepts only bounded exact inspection inputs and returns exact normalized counts', async () => {
     const inspect = vi.fn(async () => ({
       jobCount: 1, matchingFinalizedJobCount: 1, assetCount: 1,

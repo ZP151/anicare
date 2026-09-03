@@ -18,9 +18,9 @@ import { readHostedGateEnvironment, type HostedGateEnvironment } from './environ
 import { executeHostedGate, hostedGateControlFromError, type MutableHostedScenario } from './execute.js';
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
 import {
-  cleanupHostedScenario, inspectHostedIsolationState, inspectHostedMedia,
-  type HostedInspection, type HostedInspectionInput, type HostedIsolationInspection,
-  type PartialHostedScenario,
+  cleanupHostedScenario, createHostedInspectionSession,
+  type HostedInspection, type HostedInspectionInput, type HostedInspectionSession,
+  type HostedIsolationInspection, type PartialHostedScenario,
 } from './inspection.js';
 import { verifyRemoteMigrationInventory } from './remote-state.js';
 import { readDeniedStorageFailure, sameDeniedStorageFailure } from './storage-oracle.js';
@@ -34,7 +34,9 @@ type CleanupLedger = MutableHostedScenario & {
   createdSightingIds: string[]; createdMediaIds: string[];
   createdJobIds: string[]; createdAssetIds: string[]; createdObjectPaths: string[];
 };
-type RuntimeScenario = Readonly<{ fixture: HostedScenario; tracked: CleanupLedger }>;
+type RuntimeScenario = Readonly<{
+  fixture: HostedScenario; tracked: CleanupLedger; inspection: HostedInspectionSession;
+}>;
 type FailureClass = Readonly<{ stage: string; status: number | null; code: string }>;
 
 function failureClass(error: unknown): FailureClass | null {
@@ -117,10 +119,12 @@ describe('real Hosted Gate 2B', () => {
         partial.createdSightingIds = [fixture.ownerSightingId, fixture.strangerSightingId];
         Object.assign(ledger, partial);
         await writeCleanupLedger(ledgerPath, partial);
-        return { fixture, tracked: partial } satisfies RuntimeScenario;
+        return {
+          fixture, tracked: partial, inspection: createHostedInspectionSession(env),
+        } satisfies RuntimeScenario;
       },
       runChecks: async (value, signal) => {
-        const { fixture: scenario, tracked } = value as RuntimeScenario;
+        const { fixture: scenario, tracked, inspection } = value as RuntimeScenario;
         let ownerReservation: Reservation | undefined;
         let ownerExpected: HostedInspectionInput | undefined;
         let ownerBaseline: HostedInspection | undefined;
@@ -176,10 +180,10 @@ describe('real Hosted Gate 2B', () => {
             ('name' in item) && `jobs/${String(item.name)}` === objectPath);
         };
         const unchanged = async (): Promise<boolean> => Boolean(ownerExpected && ownerBaseline) &&
-          sameInspection(await inspectHostedMedia(env, ownerExpected!), ownerBaseline!);
+          sameInspection(await inspection.inspectMedia(ownerExpected!), ownerBaseline!);
         const isolationSnapshot = async (additionalMediaIds: readonly string[] = []) => {
           if (!ownerReservation || !strangerReservation || !mediaId) throw new Error('hosted_checks_failed');
-          return await inspectHostedIsolationState(env, {
+          return await inspection.inspectIsolation({
             ownerId: scenario.owner.id,
             strangerId: scenario.stranger.id,
             ownerSightingId: scenario.ownerSightingId,
@@ -243,7 +247,7 @@ describe('real Hosted Gate 2B', () => {
               jobId: ownerReservation.jobId, mediaAssetId: confirmedMediaAssetId, sha256: jpeg.sha256,
               byteLength: jpeg.bytes.byteLength, width: jpeg.width, height: jpeg.height,
             };
-            ownerBaseline = await atOwnerStep('inspect', () => inspectHostedMedia(env, ownerExpected!));
+            ownerBaseline = await atOwnerStep('inspect', () => inspection.inspectMedia(ownerExpected!));
             requireOwnerStep('inspect',
               ownerBaseline.jobCount === 1 && ownerBaseline.matchingFinalizedJobCount === 1 &&
               ownerBaseline.assetCount === 1 && ownerBaseline.matchingQuarantinedAssetCount === 1 &&
@@ -346,10 +350,12 @@ describe('real Hosted Gate 2B', () => {
         return await runHostedChecks(env, adapter);
       },
       cleanup: async (value) => {
-        const tracked = value && typeof value === 'object' && 'tracked' in value
-          ? (value as RuntimeScenario).tracked
-          : value as PartialHostedScenario;
-        await cleanupHostedScenario(env, tracked);
+        if (value && typeof value === 'object' && 'tracked' in value && 'inspection' in value) {
+          const runtime = value as RuntimeScenario;
+          await runtime.inspection.cleanup(runtime.tracked);
+        } else {
+          await cleanupHostedScenario(env, value as PartialHostedScenario);
+        }
       },
       emitEvidence: async () => { await removeCleanupLedger(ledgerPath); },
       });

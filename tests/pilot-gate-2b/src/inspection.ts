@@ -80,6 +80,14 @@ type HostedIsolationAdapter = Readonly<{
   inspectIsolation(input: HostedIsolationInspectionInput): Promise<unknown>;
 }>;
 
+type HostedInspectionSessionAdapter = HostedMaintenanceAdapter & HostedIsolationAdapter;
+
+export type HostedInspectionSession = Readonly<{
+  inspectMedia(input: HostedInspectionInput): Promise<HostedInspection>;
+  inspectIsolation(input: HostedIsolationInspectionInput): Promise<HostedIsolationInspection>;
+  cleanup(scenario: PartialHostedScenario): Promise<void>;
+}>;
+
 export type PartialHostedScenario = Readonly<{
   createdAuthRecoveryIds?: readonly string[];
   createdUserIds?: readonly string[];
@@ -461,12 +469,12 @@ export async function cleanupHostedScenario(
   scenario: PartialHostedScenario,
   providedAdapter?: HostedMaintenanceAdapter,
 ): Promise<void> {
-  let adapter: HostedMaintenanceAdapter | undefined;
+  let adapter: HostedMaintenanceAdapter | undefined = providedAdapter;
   const failed = new Set<CleanupOperationId>();
   const fail = (operation: CleanupOperationId) => { failed.add(operation); };
   try {
     const tracked = normalizeScenario(scenario);
-    adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
+    adapter ??= createHostedMaintenanceAdapter(env);
     let recoveredUserIds: readonly string[] = [];
     let recoveredSightingIds: readonly string[] = [];
     try {
@@ -524,4 +532,16 @@ export async function cleanupHostedScenario(
   if (failed.size > 0) {
     throw new HostedCleanupFailure(CLEANUP_OPERATION_IDS.filter((operation) => failed.has(operation)));
   }
+}
+
+export function createHostedInspectionSession(
+  env: HostedGateEnvironment,
+  providedAdapter?: HostedInspectionSessionAdapter,
+): HostedInspectionSession {
+  const adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
+  return {
+    inspectMedia: (input) => inspectHostedMedia(env, input, adapter),
+    inspectIsolation: (input) => inspectHostedIsolationState(env, input, adapter),
+    cleanup: (scenario) => cleanupHostedScenario(env, scenario, adapter),
+  };
 }
