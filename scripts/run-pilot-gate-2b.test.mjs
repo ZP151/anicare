@@ -89,6 +89,7 @@ test('fails closed for invalid run selectors or a non-directory cleanup target',
 });
 
 test('deploys incrementally in fixed order without privileged command arguments', async () => {
+  const sourceArchive = path.join('C:/temp/source', 'source.tar');
   const commands = [];
   const processAdapter = {
     run: async (command, args, options) => {
@@ -123,8 +124,8 @@ test('deploys incrementally in fixed order without privileged command arguments'
   assert.deepEqual(commands.map(({ command, args }) => [command, ...args]), [
     ['git', 'rev-parse', 'HEAD'],
     ['git', 'status', '--porcelain=v1', '--untracked-files=all'],
-    ['git', 'archive', '--format=tar', '--output=C:\\temp\\source\\source.tar', 'a'.repeat(40)],
-    ['tar', '--extract', '--file', 'C:\\temp\\source\\source.tar', '--directory', 'C:/temp/source'],
+    ['git', 'archive', '--format=tar', `--output=${sourceArchive}`, 'a'.repeat(40)],
+    ['tar', '--extract', '--file', sourceArchive, '--directory', 'C:/temp/source'],
     ['supabase', 'link', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
     ['supabase', 'db', 'push', '--dry-run'],
     ['supabase', 'db', 'push'],
