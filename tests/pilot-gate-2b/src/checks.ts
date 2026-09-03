@@ -74,37 +74,54 @@ export function hostedOwnerStepFromError(error: unknown): HostedOwnerHappyPathSt
   return error.ownerStep;
 }
 
+function exactPlainObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+
 export function ownerFinalizeOutcomeFromActorResult(result: ActorResult | unknown): HostedOwnerFinalizeOutcome | undefined {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return undefined;
-  const candidate = result as Record<string, unknown>;
-  if (candidate.ok === true) {
-    return typeof candidate.mediaAssetId === 'string' && candidate.mediaAssetId.length > 0
-      ? undefined
-      : 'invalid_response';
+  try {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) return undefined;
+    const candidate = result as Record<string, unknown>;
+    if (candidate.ok === true) {
+      const hasMediaAssetId = Object.hasOwn(candidate, 'mediaAssetId');
+      if ((!hasMediaAssetId && !exactPlainObject(candidate, ['ok', 'status'])) ||
+          (hasMediaAssetId && !exactPlainObject(candidate, ['ok', 'status', 'mediaAssetId'])) ||
+          !Number.isInteger(candidate.status) || (candidate.status as number) < 100 || (candidate.status as number) > 599) {
+        return undefined;
+      }
+      return typeof candidate.mediaAssetId === 'string' && candidate.mediaAssetId.length > 0 ? undefined : 'invalid_response';
+    }
+    if (!exactPlainObject(candidate, ['ok', 'stage', 'kind', 'status', 'code']) ||
+        candidate.ok !== false || candidate.stage !== 'finalize' || typeof candidate.kind !== 'string' ||
+        typeof candidate.code !== 'string') return undefined;
+    if (candidate.kind === 'network') {
+      if (candidate.status !== null) return undefined;
+      if (candidate.code === 'request_timeout') return 'timeout';
+      return candidate.code === 'network_error' ? 'network' : undefined;
+    }
+    if (candidate.kind === 'invalid_response') {
+      return candidate.status === null && candidate.code === 'invalid_response' ? 'invalid_response' : undefined;
+    }
+    if (candidate.kind !== 'http' || !Number.isInteger(candidate.status) ||
+        (candidate.status as number) < 100 || (candidate.status as number) > 599) return undefined;
+    if (candidate.status === 401 && candidate.code === 'authentication_required') return 'http_401_authentication_required';
+    if (candidate.status === 403) {
+      return candidate.code === 'media_not_found_or_forbidden'
+        ? 'http_403_media_not_found_or_forbidden'
+        : 'http_403_unclassified';
+    }
+    if (candidate.status === 409 && candidate.code === 'media_finalization_conflict') {
+      return 'http_409_media_finalization_conflict';
+    }
+    if (candidate.status === 503 && candidate.code === 'service_unavailable') return 'http_503_service_unavailable';
+    return 'http_other';
+  } catch {
+    return undefined;
   }
-  if (candidate.ok !== false || candidate.stage !== 'finalize' || typeof candidate.kind !== 'string' ||
-      typeof candidate.code !== 'string') return undefined;
-  if (candidate.kind === 'network') {
-    if (candidate.status !== null) return undefined;
-    if (candidate.code === 'request_timeout') return 'timeout';
-    return candidate.code === 'network_error' ? 'network' : undefined;
-  }
-  if (candidate.kind === 'invalid_response') {
-    return candidate.status === null && candidate.code === 'invalid_response' ? 'invalid_response' : undefined;
-  }
-  if (candidate.kind !== 'http' || !Number.isInteger(candidate.status) ||
-      (candidate.status as number) < 100 || (candidate.status as number) > 599) return undefined;
-  if (candidate.status === 401 && candidate.code === 'authentication_required') return 'http_401_authentication_required';
-  if (candidate.status === 403) {
-    return candidate.code === 'media_not_found_or_forbidden'
-      ? 'http_403_media_not_found_or_forbidden'
-      : 'http_403_unclassified';
-  }
-  if (candidate.status === 409 && candidate.code === 'media_finalization_conflict') {
-    return 'http_409_media_finalization_conflict';
-  }
-  if (candidate.status === 503 && candidate.code === 'service_unavailable') return 'http_503_service_unavailable';
-  return 'http_other';
 }
 
 export function ownerFinalizedMediaAssetId(result: ActorResult): string {

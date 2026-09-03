@@ -428,6 +428,31 @@ describe('owner media actors', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it('keeps a captured first-finalize abort reason from replaying as a later timeout', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    let capturedAbortReason: unknown;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          capturedAbortReason = init.signal?.reason;
+          reject(capturedAbortReason);
+        }, { once: true });
+      }))
+      .mockImplementationOnce(async () => { throw capturedAbortReason; });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = finalizeMedia(actor(), finalizeInput(), env);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(first).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout',
+    });
+    await expect(finalizeMedia(actor(), finalizeInput(), env)).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps an external finalize rejection with the timeout text in the fixed network class', async () => {
     const env = localEnvironment();
     const fetchMock = vi.fn(async () => { throw new Error('request_timeout'); });

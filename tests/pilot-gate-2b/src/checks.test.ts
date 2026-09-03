@@ -266,6 +266,30 @@ describe('hosted check coordinator', () => {
     } as never)).toBeUndefined();
   });
 
+  it('requires exact plain failure and missing-asset success shapes before projecting an owner-finalize outcome', () => {
+    const failures = [
+      [{ ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout' }, 'timeout'],
+      [{ ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error' }, 'network'],
+      [{ ok: false, stage: 'finalize', kind: 'http', status: 401, code: 'authentication_required' }, 'http_401_authentication_required'],
+      [{ ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response' }, 'invalid_response'],
+    ] as const;
+    for (const [failure, outcome] of failures) {
+      expect(ownerFinalizeOutcomeFromActorResult(failure)).toBe(outcome);
+      expect(ownerFinalizeOutcomeFromActorResult(Object.assign(Object.create(null), failure))).toBe(outcome);
+      expect(ownerFinalizeOutcomeFromActorResult({ ...failure, raw: 'Bearer secret' })).toBeUndefined();
+      expect(ownerFinalizeOutcomeFromActorResult(Object.assign(Object.create({ raw: 'Bearer secret' }), failure)))
+        .toBeUndefined();
+    }
+    expect(ownerFinalizeOutcomeFromActorResult({ ok: true, status: 200 })).toBe('invalid_response');
+    expect(ownerFinalizeOutcomeFromActorResult({ ok: true, status: 200, raw: 'Bearer secret' })).toBeUndefined();
+    expect(ownerFinalizeOutcomeFromActorResult(Object.assign(Object.create({ raw: 'Bearer secret' }), {
+      ok: true, status: 200,
+    }))).toBeUndefined();
+    expect(ownerFinalizeOutcomeFromActorResult(new Proxy({}, {
+      getPrototypeOf() { throw new Error('Bearer secret'); },
+    }))).toBeUndefined();
+  });
+
   it('carries a failed first owner finalization ActorResult into its typed diagnostic failure', () => {
     try {
       ownerFinalizedMediaAssetId({

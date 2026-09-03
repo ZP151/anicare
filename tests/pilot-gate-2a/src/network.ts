@@ -10,13 +10,11 @@ function requestTimeoutError(): Error {
 }
 
 export function isRequestTimeoutError(error: unknown): boolean {
-  return error instanceof Error && requestTimeoutErrors.has(error);
+  return error instanceof Error && requestTimeoutErrors.delete(error);
 }
 
 function abortError(signal: AbortSignal): Error {
-  return isRequestTimeoutError(signal.reason)
-    ? signal.reason
-    : new Error('request_aborted');
+  return signal.reason instanceof Error ? signal.reason : new Error('request_aborted');
 }
 
 async function settleBeforeAbort<T>(work: Promise<T>, signal: AbortSignal, cancel: () => void): Promise<T> {
@@ -96,7 +94,11 @@ export async function fetchWithTimeout(
   const abortForCaller = () => controller.abort(new Error('request_aborted'));
   if (callerSignal?.aborted) abortForCaller();
   else callerSignal?.addEventListener('abort', abortForCaller, { once: true });
-  const timeout = setTimeout(() => controller.abort(requestTimeoutError()), timeoutMs);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error('request_aborted'));
+  }, timeoutMs);
   try {
     const response = await settleBeforeAbort(
       Promise.resolve(fetchImplementation(input, { ...init, signal: controller.signal })),
@@ -113,6 +115,9 @@ export async function fetchWithTimeout(
     Object.defineProperty(buffered, 'redirected', { value: response.redirected });
     Object.defineProperty(buffered, 'url', { value: response.url });
     return buffered;
+  } catch (error) {
+    if (timedOut) throw requestTimeoutError();
+    throw error;
   } finally {
     clearTimeout(timeout);
     callerSignal?.removeEventListener('abort', abortForCaller);

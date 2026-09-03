@@ -1,12 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchWithTimeout, MAX_HARNESS_RESPONSE_BYTES } from './network.js';
+import { fetchWithTimeout, isRequestTimeoutError, MAX_HARNESS_RESPONSE_BYTES } from './network.js';
 
 function delay<T>(value: T, timeoutMs: number): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), timeoutMs));
 }
 
 describe('fetchWithTimeout', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('consumes an internal timeout marker after one caller-visible classification', async () => {
+    vi.useFakeTimers();
+    const hungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    });
+    const errorResult = fetchWithTimeout('http://127.0.0.1', {}, 1, hungFetch)
+      .then(() => undefined, (error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1);
+    const error = await errorResult;
+
+    expect(isRequestTimeoutError(error)).toBe(true);
+    expect(isRequestTimeoutError(error)).toBe(false);
+  });
+
   it('aborts a request that does not settle before its deadline', async () => {
     let aborted = false;
     const hungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
@@ -37,6 +55,18 @@ describe('fetchWithTimeout', () => {
 
     await expect(request).rejects.toBeDefined();
     expect(aborted).toBe(true);
+  });
+
+  it('does not classify a caller cancellation with timeout text as a harness timeout', async () => {
+    const caller = new AbortController();
+    const hungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    });
+    const errorResult = fetchWithTimeout('http://127.0.0.1', { signal: caller.signal }, 100, hungFetch)
+      .then(() => undefined, (error: unknown) => error);
+    caller.abort(new Error('request_timeout'));
+
+    expect(isRequestTimeoutError(await errorResult)).toBe(false);
   });
 
   it('rejects a response whose body never finishes within the request deadline', async () => {
