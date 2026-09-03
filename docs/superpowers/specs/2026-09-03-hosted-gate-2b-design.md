@@ -42,12 +42,14 @@ Evidence remains valid after merge only when the tested source commit is an ance
 This environment is restricted initially to `codex/hosted-gate-2b`, requires reviewer `ZP151`, and permits self-review because the repository currently has one owner. It stores only the values needed for hosted deployment and synthetic inspection:
 
 - `SUPABASE_ACCESS_TOKEN`
-- `SUPABASE_DB_PASSWORD`
+- `SUPABASE_DATABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_PUBLIC_KEY`
 - `PRECISE_LOCATION_ENCRYPTION_KEY`
 
-The project ref, project origin, Auth redirect values, and media public origin are fixed non-secret source constants. Secrets are exposed only to the steps that validate, deploy, test, and clean up. Checkout, dependency setup, hashing, artifact upload, and attestation steps receive no secrets.
+The database value is the dashboard-provided session-pooler PostgreSQL URL for this project. Its parser requires PostgreSQL, database `postgres`, username `postgres.fhugdtpjbgiatqhvjioy`, the exact reviewed Supabase pooler host and port, no query or fragment, and a nonempty password. The orchestrator derives `SUPABASE_DB_PASSWORD` only in the memory of the minimum child environment required by the CLI; it never prints or writes the connection URL. The harness uses the same URL with prepared statements disabled for narrow parameterized inspection and cleanup.
+
+The project ref, project origin, reviewed pooler host, Auth redirect values, and media public origin are fixed non-secret source constants. Secrets are exposed only to the steps that validate, deploy, test, and clean up. Checkout, dependency setup, hashing, artifact upload, and attestation steps receive no secrets.
 
 ### `ios-device-lab`
 
@@ -90,7 +92,7 @@ The hosted environment parser accepts only:
 - a canonical 32-byte Base64 location encryption key;
 - `PILOT_GATE_2B=1`, exact source SHA, positive workflow run ID/attempt, and canonical millisecond UTC timestamps.
 
-The harness has no general-purpose SQL or shell interface. Privileged inspection uses narrowly typed Supabase service operations and exact table/RPC allowlists. Actor operations use only each actor's own access token and the public HTTP surface.
+The harness has no general-purpose SQL or shell interface. Privileged inspection and final fixture removal use fixed parameterized statements that accept only the exact in-memory run UUIDs; all other privileged operations use narrowly typed Supabase service operations and exact table/RPC allowlists. Actor operations use only each actor's own access token and the public HTTP surface.
 
 ## Synthetic data model
 
@@ -170,7 +172,7 @@ The local promotion adapter accepts only an artifact from the pinned producer wo
 
 Expected output is limited to stage names and fixed snake-case result codes. Failure diagnostics may retain only an allowlisted stage, normalized HTTP status class, count, and fixed code. Sanitization runs before any artifact is written and rejects bearer strings, JWT shapes, secret prefixes, URLs with queries, UUIDs, object paths, emails, coordinates, request bodies, and long lines.
 
-Cleanup runs in `finally` semantics after partial fixture creation, test failure, cancellation, or timeout. It deletes only exact objects and Auth users created by the run and then proves their absence. Cleanup failure is a release failure. Schema and reviewed Edge deployments persist because this is a dedicated hosted test project; the producer does not roll them back to older code.
+Cleanup runs in `finally` semantics after partial fixture creation, test failure, cancellation, or timeout. It removes exact Storage objects through the service client, deletes only rows bound to the in-memory synthetic IDs through fixed parameterized database statements in foreign-key order, deletes the exact Auth users, and then proves their absence. It never truncates tables, selects by time range or email domain, accepts a table name, or executes caller-provided SQL. Cleanup failure is a release failure. Schema and reviewed Edge deployments persist because this is a dedicated hosted test project; the producer does not roll them back to older code.
 
 ## Verification and review gates
 
