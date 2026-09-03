@@ -29,9 +29,16 @@ export type HostedFixtureAdapter = Readonly<{
   }>): Promise<void>;
   createSighting(input: Readonly<{
     role: Role; actor: SyntheticActor; latitude: number; longitude: number; synthetic: true;
+    clientDedupeKey: string;
   }>): Promise<string>;
+  recoverSightingIds(references: readonly Readonly<{ reporterId: string; clientDedupeKey: string }>[])
+    : Promise<readonly string[]>;
+  deleteSightings(ids: readonly string[]): Promise<void>;
   deleteProfiles(ids: readonly string[]): Promise<void>;
   deleteAuthUsers(ids: readonly string[]): Promise<void>;
+  assertFixturesAbsent(input: Readonly<{
+    sightingIds: readonly string[]; profileIds: readonly string[]; userIds: readonly string[];
+  }>): Promise<boolean>;
 }>;
 
 function credentials(role: Role): Readonly<{ email: string; password: string }> {
@@ -98,13 +105,33 @@ function defaultAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
           risk: 'normal',
           traits: { synthetic: input.synthetic, gate: '2b' },
           notes: null,
-          clientDedupeKey: `pilot-gate-2b-${input.role}-${randomUUID()}`,
+          clientDedupeKey: input.clientDedupeKey,
         }),
       }, REQUEST_TIMEOUT_MS);
       const value = await response.json().catch(() => null) as Record<string, unknown> | null;
       if (response.status !== 201 || response.redirected || !value || !UUID.test(String(value.sightingId)) ||
           value.visibility !== 'public' || typeof value.visibleAt !== 'string') throw new Error('sighting_failed');
       return value.sightingId as string;
+    },
+    async recoverSightingIds(references) {
+      const ids: string[] = [];
+      for (const reference of references) {
+        const { data, error } = await admin.from('sightings').select('id')
+          .eq('reporter_id', reference.reporterId)
+          .eq('client_dedupe_key', reference.clientDedupeKey)
+          .limit(1);
+        if (error || !Array.isArray(data) || data.length > 1 ||
+            data.some((row) => !row || typeof row.id !== 'string' || !UUID.test(row.id))) {
+          throw new Error('sighting_recovery_failed');
+        }
+        if (data[0]?.id) ids.push(data[0].id);
+      }
+      return ids;
+    },
+    async deleteSightings(ids) {
+      if (ids.length === 0) return;
+      const { error } = await admin.from('sightings').delete().in('id', [...ids]);
+      if (error) throw new Error('sighting_cleanup_failed');
     },
     async deleteProfiles(ids) {
       if (ids.length === 0) return;
@@ -119,17 +146,43 @@ function defaultAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
       }
       if (failed) throw new Error('auth_cleanup_failed');
     },
+    async assertFixturesAbsent(input) {
+      const [sightings, profiles] = await Promise.all([
+        input.sightingIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : admin.from('sightings').select('id').in('id', [...input.sightingIds]),
+        input.profileIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : admin.from('user_profiles').select('id').in('id', [...input.profileIds]),
+      ]);
+      if (sightings.error || profiles.error || sightings.data?.length !== 0 || profiles.data?.length !== 0) return false;
+      for (const id of input.userIds) {
+        const { data, error } = await admin.auth.admin.getUserById(id);
+        if (data.user !== null || error?.status !== 404 || error.code !== 'user_not_found') return false;
+      }
+      return true;
+    },
   };
 }
 
 async function cleanupPartial(
   adapter: HostedFixtureAdapter,
+  sightingReferences: readonly Readonly<{ reporterId: string; clientDedupeKey: string }>[],
+  sightingIds: readonly string[],
   profileIds: readonly string[],
   userIds: readonly string[],
 ): Promise<void> {
   let failed = false;
+  let recoveredIds: readonly string[] = [];
+  await adapter.recoverSightingIds(sightingReferences).then((ids) => { recoveredIds = ids; })
+    .catch(() => { failed = true; });
+  const exactSightingIds = [...new Set([...sightingIds, ...recoveredIds])];
+  await adapter.deleteSightings(exactSightingIds).catch(() => { failed = true; });
   await adapter.deleteProfiles(profileIds).catch(() => { failed = true; });
   await adapter.deleteAuthUsers(userIds).catch(() => { failed = true; });
+  await adapter.assertFixturesAbsent({ sightingIds: exactSightingIds, profileIds, userIds })
+    .then((absent) => { if (!absent) failed = true; })
+    .catch(() => { failed = true; });
   if (failed) throw new Error('hosted_fixture_cleanup_failed');
 }
 
@@ -139,6 +192,8 @@ export async function createHostedScenario(
 ): Promise<HostedScenario> {
   const userIds: string[] = [];
   const profileIds: string[] = [];
+  const sightingIds: string[] = [];
+  const sightingReferences: Array<{ reporterId: string; clientDedupeKey: string }> = [];
   try {
     const actors = {} as Record<Role, SyntheticActor>;
     for (const role of ['owner', 'stranger'] as const) {
@@ -157,12 +212,15 @@ export async function createHostedScenario(
       });
     }
     if (actors.owner.accessToken === actors.stranger.accessToken) throw new Error('invalid_isolation');
-    const ownerSightingId = await adapter.createSighting({
-      role: 'owner', actor: actors.owner, latitude: 1.3001, longitude: 103.8001, synthetic: true,
-    });
-    const strangerSightingId = await adapter.createSighting({
-      role: 'stranger', actor: actors.stranger, latitude: 1.3002, longitude: 103.8002, synthetic: true,
-    });
+    const createTrackedSighting = async (role: Role, actor: SyntheticActor, latitude: number, longitude: number) => {
+      const clientDedupeKey = `pilot-gate-2b-${role}-${randomUUID()}`;
+      sightingReferences.push({ reporterId: actor.id, clientDedupeKey });
+      const id = await adapter.createSighting({ role, actor, latitude, longitude, synthetic: true, clientDedupeKey });
+      sightingIds.push(id);
+      return id;
+    };
+    const ownerSightingId = await createTrackedSighting('owner', actors.owner, 1.3001, 103.8001);
+    const strangerSightingId = await createTrackedSighting('stranger', actors.stranger, 1.3002, 103.8002);
     if (!UUID.test(ownerSightingId) || !UUID.test(strangerSightingId) || ownerSightingId === strangerSightingId) {
       throw new Error('invalid_sightings');
     }
@@ -175,7 +233,13 @@ export async function createHostedScenario(
       createdObjectPaths: [],
     };
   } catch {
-    await cleanupPartial(adapter, [...profileIds].reverse(), [...userIds].reverse()).catch(() => {
+    await cleanupPartial(
+      adapter,
+      [...sightingReferences].reverse(),
+      [...sightingIds].reverse(),
+      [...profileIds].reverse(),
+      [...userIds].reverse(),
+    ).catch(() => {
       throw new Error('hosted_fixture_cleanup_failed');
     });
     throw new Error('hosted_fixture_failed');

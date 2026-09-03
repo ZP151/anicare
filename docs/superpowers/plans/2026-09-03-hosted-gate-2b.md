@@ -118,7 +118,7 @@ export type HostedScenario = Readonly<{
   strangerSightingId: string;
   createdUserIds: readonly string[];
   createdObjectPaths: readonly string[];
-}>; 
+}>;
 
 export type ReadinessChecks = Readonly<{
   authRedirectCheck: 'passed' | 'failed';

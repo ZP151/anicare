@@ -4,133 +4,235 @@ import { createClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
 
 import {
-  deleteMedia, finalizeMedia, putSignedMedia, reserveMedia, type Reservation, type ReserveInput,
+  deleteMedia, finalizeMedia, putSignedMedia, reserveMedia, type ActorResult, type Reservation, type ReserveInput,
 } from '../../pilot-gate-2a/src/actors.js';
 import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.js';
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
 import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
-import { readHostedGateEnvironment } from './environment.js';
-import { createHostedScenario } from './fixtures.js';
-import { cleanupHostedScenario, inspectHostedMedia } from './inspection.js';
+import { removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
+import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
+import { executeHostedGate, type MutableHostedScenario } from './execute.js';
+import { createHostedScenario, type HostedScenario } from './fixtures.js';
+import {
+  cleanupHostedScenario, inspectHostedMedia, type HostedInspection, type HostedInspectionInput,
+  type PartialHostedScenario,
+} from './inspection.js';
+import { verifyRemoteMigrationInventory } from './remote-state.js';
 
 const DENIED = new Set([400, 401, 403, 404, 406]);
+const REQUEST_TIMEOUT_MS = 8_000;
+
+type CleanupLedger = MutableHostedScenario & {
+  createdUserIds: string[]; createdSightingIds: string[]; createdMediaIds: string[];
+  createdJobIds: string[]; createdAssetIds: string[]; createdObjectPaths: string[];
+};
+type RuntimeScenario = Readonly<{ fixture: HostedScenario; tracked: CleanupLedger }>;
+type FailureClass = Readonly<{ stage: string; status: number | null; code: string }>;
+
+function failureClass(error: unknown): FailureClass | null {
+  if (!error || typeof error !== 'object' || !('stage' in error) || !('status' in error) || !('code' in error)) return null;
+  const { stage, status, code } = error as Record<string, unknown>;
+  return typeof stage === 'string' && (typeof status === 'number' || status === null) && typeof code === 'string'
+    ? { stage, status, code }
+    : null;
+}
+
+function failedResult(result: ActorResult): FailureClass | null {
+  return result.ok ? null : { stage: result.stage, status: result.status, code: result.code };
+}
+
+async function reserveFailure(actor: HostedScenario['owner'], input: ReserveInput, env: HostedGateEnvironment) {
+  try {
+    await reserveMedia(actor, input, env);
+    return null;
+  } catch (error) {
+    return failureClass(error);
+  }
+}
+
+function sameFailure(actual: FailureClass | null, unknown: FailureClass | null): boolean {
+  return actual !== null && actual.status === 403 && JSON.stringify(actual) === JSON.stringify(unknown);
+}
+
+function sameInspection(actual: HostedInspection, expected: HostedInspection): boolean {
+  return JSON.stringify(actual) === JSON.stringify(expected);
+}
+
+function reservationInput(sightingId: string, mediaId: string, sha256: string, byteLength: number): ReserveInput {
+  return {
+    sightingId, mediaId, sha256, byteLength,
+    review: {
+      recipeVersion: 'jpeg-srgb-2048-q88.v1',
+      detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
+      width: 1, height: 1, confirmedAtLocal: new Date().toISOString(),
+    },
+  };
+}
 
 describe('real Hosted Gate 2B', () => {
   it('executes the fixed hosted media readiness scenario', async () => {
     const env = readHostedGateEnvironment(process.env);
-    const scenario = await createHostedScenario(env);
-    const tracked: {
-      createdUserIds: string[]; createdSightingIds: string[]; createdMediaIds: string[];
-      createdJobIds: string[]; createdAssetIds: string[]; createdObjectPaths: string[];
-    } = {
-      createdUserIds: [...scenario.createdUserIds],
-      createdSightingIds: [scenario.ownerSightingId, scenario.strangerSightingId],
-      createdMediaIds: [], createdJobIds: [], createdAssetIds: [], createdObjectPaths: [],
-    };
-    let ownerReservation: Reservation | undefined;
-    let mediaAssetId: string | undefined;
-    let mediaId: string | undefined;
-    const jpeg = deterministicJpegFixture();
-    const admin = createClient(env.apiUrl, env.serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const denyRead = async (accessToken: string | null, path: string): Promise<boolean> => {
-      const bearer = accessToken ?? env.anonKey;
-      const response = await fetchWithTimeout(`${env.apiUrl}${path}`, {
-        method: 'GET', redirect: 'error', cache: 'no-store',
-        headers: { apikey: env.anonKey, Authorization: `Bearer ${bearer}` },
-      }, 8_000);
-      return !response.ok && DENIED.has(response.status);
+    await verifyRemoteMigrationInventory(env);
+    const ledgerPath = process.env.PILOT_GATE_2B_LEDGER_PATH;
+    if (!ledgerPath) throw new Error('cleanup_ledger_invalid');
+    const partial: CleanupLedger = {
+      createdUserIds: [], createdSightingIds: [], createdMediaIds: [],
+      createdJobIds: [], createdAssetIds: [], createdObjectPaths: [],
     };
 
-    const adapter: HostedCheckAdapter = {
-      // The deployment orchestrator performs the authenticated PATCH + exact GET readback immediately before this harness.
-      verifyAuthRedirects: async () => true,
-      verifyMediaStaging: async (expected) => {
-        const { data, error } = await admin.storage.listBuckets();
-        const bucket = data?.find((candidate) => candidate.name === expected.bucket);
-        return !error && bucket?.public === false && bucket.file_size_limit === expected.fileSizeLimit &&
-          JSON.stringify(bucket.allowed_mime_types) === JSON.stringify(expected.allowedMimeTypes);
+    await expect(executeHostedGate({
+      timeoutMs: 100_000,
+      createScenario: async (ledger, signal) => {
+        if (signal.aborted) throw new Error('aborted');
+        Object.assign(ledger, partial);
+        await writeCleanupLedger(ledgerPath, partial);
+        const fixture = await createHostedScenario(env);
+        partial.createdUserIds = [...fixture.createdUserIds];
+        partial.createdSightingIds = [fixture.ownerSightingId, fixture.strangerSightingId];
+        Object.assign(ledger, partial);
+        await writeCleanupLedger(ledgerPath, partial);
+        return { fixture, tracked: partial } satisfies RuntimeScenario;
       },
-      verifyPublicKeyOrigin: async (origin) => {
-        const response = await fetchWithTimeout(`${origin}/auth/v1/settings`, {
-          method: 'GET', redirect: 'error', cache: 'no-store', headers: { apikey: env.anonKey },
-        }, 8_000);
-        const body = new Uint8Array(await response.arrayBuffer());
-        return response.ok && !response.redirected && response.url.startsWith(`${origin}/`) && body.byteLength <= 64 * 1024;
-      },
-      runOwnerHappyPath: async () => {
-        mediaId = randomUUID();
-        tracked.createdMediaIds = [mediaId];
-        const receipt: ReserveInput = {
-          sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-          byteLength: jpeg.bytes.byteLength,
-          review: {
-            recipeVersion: 'jpeg-srgb-2048-q88.v1',
-            detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
-            width: jpeg.width, height: jpeg.height, confirmedAtLocal: new Date().toISOString(),
+      runChecks: async (value, signal) => {
+        const { fixture: scenario, tracked } = value as RuntimeScenario;
+        let ownerReservation: Reservation | undefined;
+        let ownerExpected: HostedInspectionInput | undefined;
+        let ownerBaseline: HostedInspection | undefined;
+        let mediaAssetId: string | undefined;
+        let mediaId: string | undefined;
+        const jpeg = deterministicJpegFixture();
+        const admin = createClient(env.apiUrl, env.serviceRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        const authHeaders = (accessToken: string | null) => ({
+          apikey: env.anonKey,
+          Authorization: `Bearer ${accessToken ?? env.anonKey}`,
+        });
+        const readStatus = async (accessToken: string | null, objectPath: string): Promise<number> => {
+          const encoded = objectPath.split('/').map(encodeURIComponent).join('/');
+          const response = await fetchWithTimeout(`${env.apiUrl}/storage/v1/object/media-staging/${encoded}`, {
+            method: 'GET', redirect: 'error', cache: 'no-store', signal,
+            headers: authHeaders(accessToken),
+          }, REQUEST_TIMEOUT_MS);
+          return response.status;
+        };
+        const listHides = async (accessToken: string | null, objectPath: string): Promise<boolean> => {
+          const response = await fetchWithTimeout(`${env.apiUrl}/storage/v1/object/list/media-staging`, {
+            method: 'POST', redirect: 'error', cache: 'no-store', signal,
+            headers: { ...authHeaders(accessToken), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prefix: 'jobs/', limit: 100, offset: 0 }),
+          }, REQUEST_TIMEOUT_MS);
+          if (DENIED.has(response.status)) return true;
+          if (!response.ok || response.status !== 200) return false;
+          const body = await response.json().catch(() => null);
+          return Array.isArray(body) && !body.some((item) => item && typeof item === 'object' &&
+            ('name' in item) && `jobs/${String(item.name)}` === objectPath);
+        };
+        const unchanged = async (): Promise<boolean> => Boolean(ownerExpected && ownerBaseline) &&
+          sameInspection(await inspectHostedMedia(env, ownerExpected!), ownerBaseline!);
+
+        const adapter: HostedCheckAdapter = {
+          verifyAuthRedirects: async () => true,
+          verifyPublicKeyOrigin: async (origin) => {
+            const response = await fetchWithTimeout(`${origin}/auth/v1/settings`, {
+              method: 'GET', redirect: 'error', cache: 'no-store', signal, headers: { apikey: env.anonKey },
+            }, REQUEST_TIMEOUT_MS);
+            return response.ok && !response.redirected && response.url.startsWith(`${origin}/`);
+          },
+          runOwnerHappyPath: async () => {
+            mediaId = randomUUID();
+            partial.createdMediaIds = [mediaId];
+            await writeCleanupLedger(ledgerPath, partial);
+            ownerReservation = await reserveMedia(
+              scenario.owner,
+              reservationInput(scenario.ownerSightingId, mediaId, jpeg.sha256, jpeg.bytes.byteLength),
+              env,
+            );
+            partial.createdJobIds = [ownerReservation.jobId];
+            partial.createdObjectPaths = [ownerReservation.path];
+            await writeCleanupLedger(ledgerPath, partial);
+            if (!(await putSignedMedia(ownerReservation, jpeg.bytes)).ok) return false;
+            const finalized = await finalizeMedia(scenario.owner, {
+              sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
+            }, env);
+            if (!finalized.ok || !finalized.mediaAssetId) return false;
+            mediaAssetId = finalized.mediaAssetId;
+            partial.createdAssetIds = [mediaAssetId];
+            await writeCleanupLedger(ledgerPath, partial);
+            ownerExpected = {
+              ownerId: scenario.owner.id, sightingId: scenario.ownerSightingId, mediaId,
+              jobId: ownerReservation.jobId, mediaAssetId, sha256: jpeg.sha256,
+              byteLength: jpeg.bytes.byteLength, width: jpeg.width, height: jpeg.height,
+            };
+            ownerBaseline = await inspectHostedMedia(env, ownerExpected);
+            const repeated = await finalizeMedia(scenario.owner, {
+              sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
+            }, env);
+            return ownerBaseline.jobCount === 1 && ownerBaseline.matchingFinalizedJobCount === 1 &&
+              ownerBaseline.assetCount === 1 && ownerBaseline.matchingQuarantinedAssetCount === 1 &&
+              ownerBaseline.stagingObjectExists && repeated.ok && repeated.mediaAssetId === mediaAssetId &&
+              await unchanged();
+          },
+          verifyMediaStaging: async (expected) => {
+            if (!ownerReservation || !ownerBaseline) return false;
+            const { data, error } = await admin.storage.listBuckets();
+            const bucket = data?.find((candidate) => candidate.name === expected.bucket);
+            if (error || bucket?.public !== false || bucket.file_size_limit !== expected.fileSizeLimit ||
+                JSON.stringify(bucket.allowed_mime_types) !== JSON.stringify(expected.allowedMimeTypes)) return false;
+            const unknownPath = `jobs/${randomUUID()}.jpg`;
+            for (const token of [null, scenario.owner.accessToken, scenario.stranger.accessToken]) {
+              const actualStatus = await readStatus(token, ownerReservation.path);
+              const unknownStatus = await readStatus(token, unknownPath);
+              if (!DENIED.has(actualStatus) || actualStatus !== unknownStatus ||
+                  !await listHides(token, ownerReservation.path) || !await unchanged()) return false;
+            }
+            return true;
+          },
+          verifyCrossOwnerIsolation: async () => {
+            if (!ownerReservation || !ownerExpected || !ownerBaseline || !mediaId || !mediaAssetId) return false;
+            const strangerAgainstOwner = reservationInput(
+              scenario.ownerSightingId, mediaId, jpeg.sha256, jpeg.bytes.byteLength,
+            );
+            const reserveActual = await reserveFailure(scenario.stranger, strangerAgainstOwner, env);
+            if (!await unchanged()) return false;
+            const reserveUnknown = await reserveFailure(scenario.stranger, {
+              ...strangerAgainstOwner, sightingId: randomUUID(),
+            }, env);
+            if (!sameFailure(reserveActual, reserveUnknown) || !await unchanged()) return false;
+
+            const strangerReservation = await reserveMedia(scenario.stranger, {
+              ...strangerAgainstOwner, sightingId: scenario.strangerSightingId,
+            }, env);
+            partial.createdJobIds = [...(tracked.createdJobIds ?? []), strangerReservation.jobId];
+            partial.createdObjectPaths = [...(tracked.createdObjectPaths ?? []), strangerReservation.path];
+            await writeCleanupLedger(ledgerPath, partial);
+            if (!await unchanged()) return false;
+
+            const finalizeActual = failedResult(await finalizeMedia(scenario.stranger, {
+              sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
+            }, env));
+            if (!await unchanged()) return false;
+            const finalizeUnknown = failedResult(await finalizeMedia(scenario.stranger, {
+              sightingId: randomUUID(), mediaId: randomUUID(), sha256: jpeg.sha256,
+            }, env));
+            if (!sameFailure(finalizeActual, finalizeUnknown) || !await unchanged()) return false;
+
+            const deleteActual = failedResult(await deleteMedia(scenario.stranger, mediaAssetId, env));
+            if (!await unchanged()) return false;
+            const deleteUnknown = failedResult(await deleteMedia(scenario.stranger, randomUUID(), env));
+            return sameFailure(deleteActual, deleteUnknown) && await unchanged();
           },
         };
-        ownerReservation = await reserveMedia(scenario.owner, receipt, env);
-        tracked.createdJobIds = [ownerReservation.jobId];
-        tracked.createdObjectPaths = [ownerReservation.path];
-        if (!(await putSignedMedia(ownerReservation, jpeg.bytes)).ok) return false;
-        const finalized = await finalizeMedia(scenario.owner, {
-          sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-        }, env);
-        if (!finalized.ok || !finalized.mediaAssetId) return false;
-        mediaAssetId = finalized.mediaAssetId;
-        tracked.createdAssetIds = [mediaAssetId];
-        const expected = {
-          ownerId: scenario.owner.id, sightingId: scenario.ownerSightingId, mediaId,
-          jobId: ownerReservation.jobId, mediaAssetId, sha256: jpeg.sha256,
-          byteLength: jpeg.bytes.byteLength, width: jpeg.width, height: jpeg.height,
-        };
-        const inspection = await inspectHostedMedia(env, expected);
-        const repeated = await finalizeMedia(scenario.owner, {
-          sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-        }, env);
-        return inspection.jobCount === 1 && inspection.matchingFinalizedJobCount === 1 &&
-          inspection.assetCount === 1 && inspection.matchingQuarantinedAssetCount === 1 &&
-          inspection.stagingObjectExists && repeated.ok && repeated.mediaAssetId === mediaAssetId;
+        return await runHostedChecks(env, adapter);
       },
-      verifyCrossOwnerIsolation: async () => {
-        if (!ownerReservation || !mediaId || !mediaAssetId) return false;
-        const strangerReceipt: ReserveInput = {
-          sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-          byteLength: jpeg.bytes.byteLength,
-          review: {
-            recipeVersion: 'jpeg-srgb-2048-q88.v1',
-            detectorVersions: { cats: 'unavailable', people: 'unavailable', plates: 'unavailable' },
-            width: 1, height: 1, confirmedAtLocal: new Date().toISOString(),
-          },
-        };
-        let reserveDenied = false;
-        try {
-          await reserveMedia(scenario.stranger, strangerReceipt, env);
-        } catch (error) {
-          reserveDenied = typeof error === 'object' && error !== null && 'status' in error && error.status === 403;
-        }
-        const finalize = await finalizeMedia(scenario.stranger, {
-          sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-        }, env);
-        const deletion = await deleteMedia(scenario.stranger, mediaAssetId, env);
-        const path = ownerReservation.path.split('/').map(encodeURIComponent).join('/');
-        return reserveDenied && !finalize.ok && finalize.status === 403 && !deletion.ok && deletion.status === 403 &&
-          await denyRead(null, `/storage/v1/object/media-staging/${path}`) &&
-          await denyRead(scenario.stranger.accessToken, `/storage/v1/object/media-staging/${path}`);
+      cleanup: async (value) => {
+        const tracked = value && typeof value === 'object' && 'tracked' in value
+          ? (value as RuntimeScenario).tracked
+          : value as PartialHostedScenario;
+        await cleanupHostedScenario(env, tracked);
       },
-    };
-
-    try {
-      await expect(runHostedChecks(env, adapter)).resolves.toEqual({
-        authRedirectCheck: 'passed', mediaStagingCheck: 'passed', publicKeyOriginCheck: 'passed',
-        syntheticOwnerHappyPath: 'passed', crossOwnerIsolation: 'passed',
-      });
-    } finally {
-      await cleanupHostedScenario(env, tracked);
-    }
+      emitEvidence: async () => { await removeCleanupLedger(ledgerPath); },
+    })).resolves.toMatchObject({ cleanupPassed: true });
     process.stdout.write('hosted_gate_2b_passed\n');
   }, 120_000);
 });

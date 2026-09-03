@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { promotePilotGate2BEvidence } from './promote-pilot-gate-2b-evidence.mjs';
+import {
+  acquireVerifiedPilotGate2BArtifact,
+  promotePilotGate2BEvidence,
+} from './promote-pilot-gate-2b-evidence.mjs';
 
 function evidence() {
   return {
@@ -86,4 +89,68 @@ test('rejects run identity, source ancestry, and deployed-input mismatch', async
       }), /gate_2b_promotion_invalid/);
     } finally { await item.cleanup(); }
   }
+});
+
+test('downloads the exact run-attempt artifact and verifies its attestation before use', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'gate-2b-acquire-'));
+  const calls = [];
+  const processAdapter = async (command, args) => {
+    calls.push([command, ...args]);
+    if (args[0] === 'api') return { stdout: JSON.stringify({
+      total_count: 1,
+      artifacts: [{
+        name: 'pilot-gate-2b-readiness-123-1', expired: false, digest: `sha256:${'d'.repeat(64)}`,
+        workflow_run: { id: 123, head_sha: 'a'.repeat(40), head_branch: 'codex/hosted-gate-2b' },
+      }],
+    }) };
+    if (args[0] === 'run') {
+      const directory = args[args.indexOf('--dir') + 1];
+      await writeFile(path.join(directory, 'pilot-gate-2b-readiness.json'), `${JSON.stringify(evidence(), null, 2)}\n`);
+    }
+    return { stdout: args[0] === 'attestation' ? '[{"verificationResult":{"statement":{}}}]' : '' };
+  };
+  try {
+    const acquired = await acquireVerifiedPilotGate2BArtifact({
+      runId: 123, runAttempt: 1, temporaryRoot: root, processAdapter,
+      sourceDigest: 'a'.repeat(40), sourceRef: 'refs/heads/codex/hosted-gate-2b',
+    });
+    assert.equal(path.dirname(acquired.file), acquired.directory);
+    assert.deepEqual(calls, [
+      ['gh', 'api', '--method', 'GET',
+        'repos/ZP151/anicare/actions/runs/123/artifacts?name=pilot-gate-2b-readiness-123-1&per_page=100'],
+      ['gh', 'run', 'download', '123', '--repo', 'ZP151/anicare', '--name',
+        'pilot-gate-2b-readiness-123-1', '--dir', acquired.directory],
+      ['gh', 'attestation', 'verify', acquired.file, '--repo', 'ZP151/anicare',
+        '--signer-workflow', 'ZP151/anicare/.github/workflows/hosted-gate-2b.yml',
+        '--signer-digest', 'a'.repeat(40), '--source-digest', 'a'.repeat(40),
+        '--source-ref', 'refs/heads/codex/hosted-gate-2b',
+        '--predicate-type', 'https://slsa.dev/provenance/v1', '--deny-self-hosted-runners', '--no-public-good',
+        '--format', 'json'],
+    ]);
+    await acquired.cleanup();
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('fails closed when attestation verification is absent or malformed', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'gate-2b-acquire-invalid-'));
+  const processAdapter = async (_command, args) => {
+    if (args[0] === 'api') return { stdout: JSON.stringify({
+      total_count: 1,
+      artifacts: [{
+        name: 'pilot-gate-2b-readiness-123-1', expired: false, digest: `sha256:${'d'.repeat(64)}`,
+        workflow_run: { id: 123, head_sha: 'a'.repeat(40), head_branch: 'codex/hosted-gate-2b' },
+      }],
+    }) };
+    if (args[0] === 'run') {
+      const directory = args[args.indexOf('--dir') + 1];
+      await writeFile(path.join(directory, 'pilot-gate-2b-readiness.json'), `${JSON.stringify(evidence(), null, 2)}\n`);
+    }
+    return { stdout: '[]' };
+  };
+  try {
+    await assert.rejects(acquireVerifiedPilotGate2BArtifact({
+      runId: 123, runAttempt: 1, temporaryRoot: root, processAdapter,
+      sourceDigest: 'a'.repeat(40), sourceRef: 'refs/heads/codex/hosted-gate-2b',
+    }), /gate_2b_promotion_invalid/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

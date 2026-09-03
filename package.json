@@ -14,7 +14,7 @@
     "promote:pilot-gate-2b-evidence": "node scripts/promote-pilot-gate-2b-evidence.mjs",
     "test": "turbo run test",
     "test:pilot-gate-2a-ci": "node --test scripts/pilot-gate-2a-inputs.test.mjs scripts/run-pilot-gate-2a.test.mjs",
-    "test:pilot-gate-2b-ci": "node --test scripts/pilot-gate-2b-inputs.test.mjs scripts/run-pilot-gate-2b.test.mjs",
+    "test:pilot-gate-2b-ci": "node --test scripts/pilot-gate-2b-inputs.test.mjs scripts/run-pilot-gate-2b.test.mjs scripts/promote-pilot-gate-2b-evidence.test.mjs",
     "test:pilot-gate-2b-promotion": "node --test scripts/promote-pilot-gate-2b-evidence.test.mjs",
     "test:root-contracts": "node --test scripts/root-verify-contract.test.mjs",
     "test:ios-device-lab-workflow": "node --test scripts/ios-device-lab-workflow-contract.test.mjs",
@@ -23,7 +23,7 @@
     "test:ios-device-lab-policy": "pnpm --filter @animalhelper/mobile test:ios-device-lab-policy",
     "typecheck": "turbo run typecheck",
     "validate:pilot-policies": "pnpm --filter @animalhelper/mobile validate:native-config && pnpm --filter @animalhelper/mobile validate:pilot-build",
-    "verify": "pnpm validate:pilot-policies && pnpm test:root-contracts && pnpm test:ios-device-lab-workflow && pnpm test:hosted-gate-2b-workflow && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm validate:pilot-policies && pnpm test:root-contracts && pnpm test:pilot-gate-2b-ci && pnpm test:ios-device-lab-workflow && pnpm test:hosted-gate-2b-workflow && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

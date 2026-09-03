@@ -99,6 +99,7 @@ export async function fetchWithTimeout(
       headers: response.headers,
     });
     Object.defineProperty(buffered, 'redirected', { value: response.redirected });
+    Object.defineProperty(buffered, 'url', { value: response.url });
     return buffered;
   } finally {
     clearTimeout(timeout);

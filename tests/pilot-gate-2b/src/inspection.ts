@@ -43,7 +43,7 @@ type CleanupTable = 'media_upload_jobs' | 'media_assets' | 'sightings' | 'user_p
 export type HostedMaintenanceAdapter = Readonly<{
   inspect(input: HostedInspectionInput): Promise<unknown>;
   removeObjects(paths: readonly string[]): Promise<void>;
-  deleteRows(table: CleanupTable, ids: readonly string[]): Promise<void>;
+  deleteRows(table: CleanupTable, ids: readonly string[], mediaIds?: readonly string[]): Promise<void>;
   deleteAuthUsers(ids: readonly string[]): Promise<void>;
   assertAbsent(scenario: Required<PartialHostedScenario>): Promise<boolean>;
   close(): Promise<void>;
@@ -138,7 +138,8 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
               and width = ${input.width} and height = ${input.height}
               and status = 'finalized' and media_asset_id = ${input.mediaAssetId}::uuid
             )::integer as matching_finalized_job_count
-          from private.media_upload_jobs where media_id = ${input.mediaId}
+          from private.media_upload_jobs
+          where media_id = ${input.mediaId} and uploader_id = ${input.ownerId}::uuid
         ), asset_counts as (
           select count(*)::integer as asset_count,
             count(*) filter (where id = ${input.mediaAssetId}::uuid
@@ -147,7 +148,8 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
               and width = ${input.width} and height = ${input.height}
               and status = 'quarantined' and deleted_at is null
             )::integer as matching_quarantined_asset_count
-          from public.media_assets where client_media_id = ${input.mediaId}
+          from public.media_assets
+          where client_media_id = ${input.mediaId} and uploader_id = ${input.ownerId}::uuid
         )
         select * from job_counts cross join asset_counts
       `;
@@ -169,10 +171,13 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
       const { error } = await admin.storage.from('media-staging').remove([...paths]);
       if (error) throw new Error('object_cleanup_failed');
     },
-    async deleteRows(table, ids) {
-      if (ids.length === 0) return;
-      if (table === 'media_upload_jobs') await sql`delete from private.media_upload_jobs where id = any(${ids}::uuid[])`;
-      else if (table === 'media_assets') await sql`delete from public.media_assets where id = any(${ids}::uuid[])`;
+    async deleteRows(table, ids, mediaIds = []) {
+      if (ids.length === 0 && mediaIds.length === 0) return;
+      if (table === 'media_upload_jobs') {
+        await sql`delete from private.media_upload_jobs where id = any(${ids}::uuid[]) or media_id = any(${mediaIds}::text[])`;
+      } else if (table === 'media_assets') {
+        await sql`delete from public.media_assets where id = any(${ids}::uuid[]) or client_media_id = any(${mediaIds}::text[])`;
+      }
       else if (table === 'sightings') await sql`delete from public.sightings where id = any(${ids}::uuid[])`;
       else if (table === 'user_profiles') await sql`delete from public.user_profiles where id = any(${ids}::uuid[])`;
       else throw new Error('invalid_cleanup_table');
@@ -191,17 +196,14 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
           (select count(*) from private.media_upload_jobs where id = any(${scenario.createdJobIds}::uuid[]) or media_id = any(${scenario.createdMediaIds}::text[])) +
           (select count(*) from public.media_assets where id = any(${scenario.createdAssetIds}::uuid[]) or client_media_id = any(${scenario.createdMediaIds}::text[])) +
           (select count(*) from public.sightings where id = any(${scenario.createdSightingIds}::uuid[])) +
-          (select count(*) from public.user_profiles where id = any(${scenario.createdUserIds}::uuid[]))
+          (select count(*) from public.user_profiles where id = any(${scenario.createdUserIds}::uuid[])) +
+          (select count(*) from auth.users where id = any(${scenario.createdUserIds}::uuid[]))
         )::integer as tracked_count
       `;
       if (rows.length !== 1 || rows[0]?.tracked_count !== 0) return false;
       for (const path of scenario.createdObjectPaths) {
         const { data, error } = await admin.storage.from('media-staging').exists(path);
         if (error || data !== false) return false;
-      }
-      for (const id of scenario.createdUserIds) {
-        const { data } = await admin.auth.admin.getUserById(id);
-        if (data.user !== null) return false;
       }
       return true;
     },
@@ -241,8 +243,8 @@ export async function cleanupHostedScenario(
     const tracked = normalizeScenario(scenario);
     adapter = providedAdapter ?? createAdapter(env);
     await adapter.removeObjects(tracked.createdObjectPaths);
-    await adapter.deleteRows('media_upload_jobs', tracked.createdJobIds);
-    await adapter.deleteRows('media_assets', tracked.createdAssetIds);
+    await adapter.deleteRows('media_upload_jobs', tracked.createdJobIds, tracked.createdMediaIds);
+    await adapter.deleteRows('media_assets', tracked.createdAssetIds, tracked.createdMediaIds);
     await adapter.deleteRows('sightings', tracked.createdSightingIds);
     await adapter.deleteRows('user_profiles', tracked.createdUserIds);
     await adapter.deleteAuthUsers(tracked.createdUserIds);

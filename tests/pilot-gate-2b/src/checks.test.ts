@@ -39,7 +39,7 @@ describe('hosted check coordinator', () => {
       authRedirectCheck: 'passed', mediaStagingCheck: 'passed', publicKeyOriginCheck: 'passed',
       syntheticOwnerHappyPath: 'passed', crossOwnerIsolation: 'passed',
     });
-    expect(fake.order).toEqual(['auth', 'staging', 'origin', 'owner', 'isolation']);
+    expect(fake.order).toEqual(['auth', 'origin', 'owner', 'staging', 'isolation']);
   });
 
   it.each([

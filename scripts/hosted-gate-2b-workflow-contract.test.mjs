@@ -33,6 +33,10 @@ function assertContract(source, value) {
     push: { branches: ['codex/hosted-gate-2b'], paths }, workflow_dispatch: null,
   });
   assert.deepEqual(value.permissions, { contents: 'read' });
+  assert.deepEqual(value.concurrency, {
+    group: 'hosted-gate-2b-${{ github.repository }}-fhugdtpjbgiatqhvjioy',
+    'cancel-in-progress': false,
+  });
   assert.deepEqual(Object.keys(value.jobs), ['hosted_gate_2b', 'attest_evidence']);
   const producer = value.jobs.hosted_gate_2b;
   assert.equal(producer.environment, 'hosted-gate-2b');
@@ -43,14 +47,26 @@ function assertContract(source, value) {
   assert.deepEqual(producer.steps.filter((step) => step.uses).map((step) => step.uses), [
     SHAS.checkout, SHAS.pnpm, SHAS.node, SHAS.deno, SHAS.supabase, SHAS.upload, SHAS.upload,
   ]);
+  assert.deepEqual(producer.steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 0, 'persist-credentials': false });
   const run = producer.steps.find((step) => step.name === 'Run protected Hosted Gate 2B');
   assert.deepEqual(Object.keys(run.env).sort(), [
     'GITHUB_ENVIRONMENT', 'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_ACCESS_TOKEN',
     'SUPABASE_DATABASE_URL', 'SUPABASE_PUBLIC_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'TMPDIR',
   ]);
   assert.equal(run.run, 'pnpm pilot-gate-2b');
-  assert.equal(producer.steps.at(-1).if, 'always()');
-  assert.deepEqual(producer.steps.at(-1).run, [
+  assert.equal(run['timeout-minutes'], 15);
+  const hostedCleanup = producer.steps.find((step) => step.name === 'Recover exact hosted fixtures');
+  assert.equal(hostedCleanup.if, 'always()');
+  assert.equal(hostedCleanup['timeout-minutes'], 3);
+  assert.equal(hostedCleanup.run, 'pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted');
+  assert.deepEqual(Object.keys(hostedCleanup.env).sort(), [
+    'GITHUB_RUN_ATTEMPT', 'GITHUB_RUN_ID', 'GITHUB_SHA', 'PILOT_GATE_2B_LEDGER_PATH',
+    'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_DATABASE_URL', 'SUPABASE_PUBLIC_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_URL',
+  ]);
+  const localCleanup = producer.steps.at(-1);
+  assert.equal(localCleanup.if, 'always()');
+  assert.deepEqual(localCleanup.run, [
     'pnpm pilot-gate-2b:cleanup-diagnostic',
     'rm -f -- docs/evidence/pilot-gate-2b-readiness.json',
     '',
@@ -88,7 +104,7 @@ test('contract rejects environment, permissions, secret scope, action, and clean
     (item) => { item.jobs.hosted_gate_2b.permissions.contents = 'write'; },
     (item) => { item.jobs.hosted_gate_2b.env = { SUPABASE_ACCESS_TOKEN: 'secret' }; },
     (item) => { item.jobs.hosted_gate_2b.steps[0].uses = 'actions/checkout@v4'; },
-    (item) => { item.jobs.hosted_gate_2b.steps.at(-1).if = 'success()'; },
+    (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').if = 'success()'; },
   ];
   for (const mutate of mutations) {
     const candidate = structuredClone(value); mutate(candidate);

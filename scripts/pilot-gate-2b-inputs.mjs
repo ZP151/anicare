@@ -1,4 +1,5 @@
-import { lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export const REVIEWED_MIGRATIONS = Object.freeze([
@@ -51,6 +52,43 @@ function fixedFile(root, relativePath, maxBytes = 2 * 1024 * 1024) {
   if (!inside(root, real) || !statSync(real).isFile()) return invalidInputs();
 }
 
+function deploymentTree(root) {
+  const supabaseRoot = realpathSync(path.join(root, 'supabase'));
+  const targets = [path.join(supabaseRoot, 'config.toml'), path.join(supabaseRoot, 'migrations'), path.join(supabaseRoot, 'functions')];
+  const files = [];
+  const walk = (target) => {
+    const link = lstatSync(target);
+    if (link.isSymbolicLink()) return invalidInputs();
+    if (link.isDirectory()) {
+      for (const name of readdirSync(target).sort()) {
+        if (['node_modules', 'dist', '.turbo'].includes(name)) continue;
+        walk(path.join(target, name));
+      }
+      return;
+    }
+    if (!link.isFile() || link.size < 1 || link.size > 2 * 1024 * 1024) return invalidInputs();
+    const real = realpathSync(target);
+    if (!inside(supabaseRoot, real) || !statSync(real).isFile()) return invalidInputs();
+    files.push(real);
+  };
+  for (const target of targets) walk(target);
+  files.sort((left, right) => path.relative(supabaseRoot, left).replaceAll('\\', '/').localeCompare(
+    path.relative(supabaseRoot, right).replaceAll('\\', '/')));
+  const hash = createHash('sha256');
+  hash.update('animalhelper-hosted-deployment-tree-v1\0');
+  let total = 0;
+  for (const file of files) {
+    const name = path.relative(supabaseRoot, file).replaceAll('\\', '/');
+    const bytes = readFileSync(file);
+    total += bytes.byteLength;
+    if (total > 32 * 1024 * 1024) return invalidInputs();
+    hash.update(`${Buffer.byteLength(name)}:${name}\0${bytes.byteLength}:`);
+    hash.update(bytes);
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
+
 export function discoverPilotGate2BInputs(repoRoot) {
   const root = realpathSync(path.resolve(repoRoot));
   if (!statSync(root).isDirectory()) return invalidInputs();
@@ -67,7 +105,10 @@ export function discoverPilotGate2BInputs(repoRoot) {
   if (JSON.stringify(functions) !== JSON.stringify(DEPLOYED_FUNCTIONS)) return invalidInputs();
   for (const name of functions) fixedFile(root, `supabase/functions/${name}/index.ts`);
   for (const relativePath of Object.values(FIXED_FILES)) fixedFile(root, relativePath);
-  return { migrations: [...REVIEWED_MIGRATIONS], functions: [...DEPLOYED_FUNCTIONS], ...FIXED_FILES };
+  return {
+    migrations: [...REVIEWED_MIGRATIONS], functions: [...DEPLOYED_FUNCTIONS], ...FIXED_FILES,
+    deploymentTreeSha256: deploymentTree(root),
+  };
 }
 
 export function validatePilotGate2BInputs(input) {

@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFile as execFileCallback } from 'node:child_process';
 import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { lstat, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +53,61 @@ async function canonicalEvidenceFile(file, requirePassed = true) {
   try { value = JSON.parse(source); } catch { return invalid(); }
   if (!validEvidence(value, requirePassed) || source !== `${JSON.stringify(value, null, 2)}\n`) return invalid();
   return { source, value };
+}
+
+async function defaultProcessAdapter(command, args, options) {
+  return await execFile(command, args, options);
+}
+
+export async function acquireVerifiedPilotGate2BArtifact({
+  runId, runAttempt, temporaryRoot, sourceDigest, sourceRef, processAdapter = defaultProcessAdapter,
+}) {
+  if (!Number.isSafeInteger(runId) || runId < 1 || !Number.isSafeInteger(runAttempt) || runAttempt < 1 ||
+      typeof temporaryRoot !== 'string' || temporaryRoot.length < 1 || typeof sourceDigest !== 'string' ||
+      !COMMIT.test(sourceDigest) || !['refs/heads/codex/hosted-gate-2b', 'refs/heads/main'].includes(sourceRef)) return invalid();
+  const directory = await mkdtemp(path.join(path.resolve(temporaryRoot), 'animalhelper-gate-2b-artifact-'))
+    .catch(() => invalid());
+  const file = path.join(directory, FILE);
+  const options = { timeout: 30_000, maxBuffer: 128 * 1024, windowsHide: true };
+  const artifactName = `pilot-gate-2b-readiness-${runId}-${runAttempt}`;
+  try {
+    const listing = await processAdapter('gh', [
+      'api', '--method', 'GET',
+      `repos/ZP151/anicare/actions/runs/${runId}/artifacts?name=${artifactName}&per_page=100`,
+    ], options);
+    let artifactListing;
+    try { artifactListing = JSON.parse(listing.stdout); } catch { return invalid(); }
+    const artifact = artifactListing?.artifacts?.[0];
+    if (artifactListing?.total_count !== 1 || !Array.isArray(artifactListing.artifacts) ||
+        artifactListing.artifacts.length !== 1 || artifact?.name !== artifactName || artifact?.expired !== false ||
+        typeof artifact?.digest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest) ||
+        artifact?.workflow_run?.id !== runId || artifact?.workflow_run?.head_sha !== sourceDigest ||
+        `refs/heads/${artifact?.workflow_run?.head_branch}` !== sourceRef) return invalid();
+    await processAdapter('gh', [
+      'run', 'download', String(runId), '--repo', 'ZP151/anicare', '--name',
+      artifactName, '--dir', directory,
+    ], options);
+    await canonicalEvidenceFile(file);
+    const verification = await processAdapter('gh', [
+      'attestation', 'verify', file, '--repo', 'ZP151/anicare',
+      '--signer-workflow', 'ZP151/anicare/.github/workflows/hosted-gate-2b.yml',
+      '--signer-digest', sourceDigest, '--source-digest', sourceDigest, '--source-ref', sourceRef,
+      '--predicate-type', 'https://slsa.dev/provenance/v1', '--deny-self-hosted-runners', '--no-public-good',
+      '--format', 'json',
+    ], options);
+    let parsed;
+    try { parsed = JSON.parse(verification.stdout); } catch { return invalid(); }
+    if (!Array.isArray(parsed) || parsed.length < 1 || !parsed.every((item) =>
+      record(item) && record(item.verificationResult))) return invalid();
+    return {
+      directory,
+      file,
+      cleanup: async () => { await rm(directory, { recursive: true, force: true }); },
+    };
+  } catch {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    return invalid();
+  }
 }
 
 export async function promotePilotGate2BEvidence({ repoRoot, artifactDirectory, runMetadata, now }) {
@@ -131,19 +187,26 @@ function currentInputs(repoRoot) {
 }
 
 async function cli() {
-  const artifactDirectory = process.argv[2];
-  const runIdText = process.argv[3];
-  const attemptText = process.argv[4];
-  if (!artifactDirectory || !/^[1-9][0-9]*$/.test(runIdText ?? '') || !/^[1-9][0-9]*$/.test(attemptText ?? '')) return invalid();
+  const runIdText = process.argv[2];
+  const attemptText = process.argv[3];
+  if (!/^[1-9][0-9]*$/.test(runIdText ?? '') || !/^[1-9][0-9]*$/.test(attemptText ?? '')) return invalid();
   const runId = Number(runIdText); const runAttempt = Number(attemptText);
   if (!Number.isSafeInteger(runId) || !Number.isSafeInteger(runAttempt)) return invalid();
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const { stdout } = await execFile('gh', ['api', `repos/ZP151/anicare/actions/runs/${runId}`], {
+  const { stdout } = await execFile('gh', ['api', '--method', 'GET', `repos/ZP151/anicare/actions/runs/${runId}`], {
     cwd: repoRoot, timeout: 15_000, maxBuffer: 128 * 1024, windowsHide: true,
   });
   const remote = JSON.parse(stdout);
-  if (remote.id !== runId || remote.run_attempt !== runAttempt) return invalid();
-  const artifact = await canonicalEvidenceFile(path.resolve(artifactDirectory, FILE));
+  if (remote.id !== runId || remote.run_attempt !== runAttempt || remote.status !== 'completed' ||
+      remote.conclusion !== 'success' || remote.path !== '.github/workflows/hosted-gate-2b.yml' ||
+      remote.repository?.full_name !== 'ZP151/anicare' || remote.head_repository?.full_name !== 'ZP151/anicare') return invalid();
+  const sourceRef = `refs/heads/${remote.head_branch}`;
+  const acquired = await acquireVerifiedPilotGate2BArtifact({
+    runId, runAttempt, temporaryRoot: tmpdir(),
+    sourceDigest: remote.head_sha, sourceRef,
+  });
+  try {
+  const artifact = await canonicalEvidenceFile(acquired.file);
   const source = artifact.value.sourceCommit;
   let sourceIsAncestor = true;
   try {
@@ -154,16 +217,19 @@ async function cli() {
   });
   const inputs = currentInputs(repoRoot);
   await promotePilotGate2BEvidence({
-    repoRoot, artifactDirectory: path.resolve(artifactDirectory), now: new Date(),
+    repoRoot, artifactDirectory: acquired.directory, now: new Date(),
     runMetadata: {
       repository: remote.repository?.full_name, workflowPath: remote.path,
       headSha: remote.head_sha, runId: remote.id, runAttempt: remote.run_attempt,
-      conclusion: remote.conclusion, event: remote.event, ref: `refs/heads/${remote.head_branch}`,
+      conclusion: remote.conclusion, event: remote.event, ref: sourceRef,
       sourceIsAncestor, migrationHistoryChanged: diff.stdout.trim().length > 0,
       migrationHead: inputs.migrationHead, edgeFunctionsTreeSha256: inputs.edgeFunctionsTreeSha256,
     },
   });
   process.stdout.write('gate_2b_evidence_promoted\n');
+  } finally {
+    await acquired.cleanup();
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -27,6 +27,16 @@ test('root verification blocks on both native pilot policy validators', async ()
     /pnpm test:ios-device-lab-workflow/,
     'root verification must include the iOS Device Lab workflow contract',
   );
+  assert.match(
+    packageJson.scripts['test:pilot-gate-2b-ci'],
+    /scripts\/promote-pilot-gate-2b-evidence\.test\.mjs/,
+    'the required Gate 2B aggregate must cover evidence promotion',
+  );
+  assert.match(
+    packageJson.scripts.verify,
+    /pnpm test:pilot-gate-2b-ci/,
+    'root verification must include the full Gate 2B Node policy aggregate',
+  );
   assert.equal(
     packageJson.scripts['test:hosted-gate-2b-workflow'],
     'node --test scripts/hosted-gate-2b-workflow-contract.test.mjs',

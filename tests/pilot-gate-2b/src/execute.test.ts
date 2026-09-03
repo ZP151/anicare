@@ -64,12 +64,18 @@ describe('hosted gate execution', () => {
       timeoutMs: 20,
       runChecks: async (_scenario, signal) => {
         observedSignal = signal;
-        await new Promise(() => undefined);
-        return checks;
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => {
+          fixture.order.push('aborted');
+          setTimeout(() => {
+            fixture.order.push('settled');
+            resolve();
+          }, 5);
+        }, { once: true }));
+        throw new Error('cancelled');
       },
     });
     await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_checks');
     expect(observedSignal?.aborted).toBe(true);
-    expect(fixture.order).toEqual(['create', 'cleanup']);
+    expect(fixture.order).toEqual(['create', 'aborted', 'settled', 'cleanup']);
   });
 });

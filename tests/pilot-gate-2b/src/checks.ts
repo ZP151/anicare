@@ -35,9 +35,9 @@ export async function runHostedChecks(
   adapter: HostedCheckAdapter,
 ): Promise<ReadinessChecks> {
   await requirePassed(() => adapter.verifyAuthRedirects(AUTH_CONFIGURATION));
-  await requirePassed(() => adapter.verifyMediaStaging(STAGING_CONFIGURATION));
   await requirePassed(() => adapter.verifyPublicKeyOrigin(env.apiUrl));
   await requirePassed(() => adapter.runOwnerHappyPath());
+  await requirePassed(() => adapter.verifyMediaStaging(STAGING_CONFIGURATION));
   await requirePassed(() => adapter.verifyCrossOwnerIsolation());
   return {
     authRedirectCheck: 'passed',

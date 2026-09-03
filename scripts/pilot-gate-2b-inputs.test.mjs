@@ -20,6 +20,10 @@ function fixture() {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, 'export {};\n');
   }
+  writeFileSync(path.join(root, 'supabase', 'config.toml'), 'project_id = "fixture"\n');
+  const shared = path.join(root, 'supabase', 'functions', '_shared', 'policy.ts');
+  mkdirSync(path.dirname(shared), { recursive: true });
+  writeFileSync(shared, 'export const policy = true;\n');
   for (const file of [
     'tests/pilot-gate-2b/src/hosted.integration.test.ts',
     'docs/evidence/pilot-gate-2b-readiness.schema.json',
@@ -35,13 +39,26 @@ function fixture() {
 test('discovers only the exact reviewed hosted deployment inventory', () => {
   const root = fixture();
   try {
-    assert.deepEqual(discoverPilotGate2BInputs(root), {
+    const discovered = discoverPilotGate2BInputs(root);
+    assert.deepEqual({ ...discovered, deploymentTreeSha256: undefined }, {
       migrations: REVIEWED_MIGRATIONS,
       functions: DEPLOYED_FUNCTIONS,
       integration: 'tests/pilot-gate-2b/src/hosted.integration.test.ts',
       schema: 'docs/evidence/pilot-gate-2b-readiness.schema.json',
       workflow: '.github/workflows/hosted-gate-2b.yml',
+      deploymentTreeSha256: undefined,
     });
+    assert.match(discovered.deploymentTreeSha256, /^[a-f0-9]{64}$/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('hashes every deployable migration, config, function, and shared source file', () => {
+  const root = fixture();
+  try {
+    const before = discoverPilotGate2BInputs(root).deploymentTreeSha256;
+    writeFileSync(path.join(root, 'supabase', 'functions', '_shared', 'policy.ts'), 'export const policy = false;\n');
+    const after = discoverPilotGate2BInputs(root).deploymentTreeSha256;
+    assert.notEqual(after, before);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -31,19 +31,25 @@ URL, service key, access token, or Apple Account credential.
 1. Review the exact `codex/hosted-gate-2b` SHA and all required checks.
 2. Push that SHA. The narrow bootstrap `push` trigger queues the producer.
 3. Inspect the queued SHA and approve the `hosted-gate-2b` deployment in GitHub.
-4. The producer verifies the public origin, incrementally runs `db push`, sets
-   the exact Auth redirects, deploys the six allowlisted functions, runs two
-   synthetic users, proves exact cleanup, and uploads one three-day evidence
+4. The producer verifies a clean checkout, deploys from an immutable archive
+   of the exact workflow SHA, verifies the public origin, incrementally runs
+   `db push`, sets the exact Auth redirects, deploys and reads back the six
+   allowlisted functions, checks the exact remote migration version/name
+   inventory, runs two synthetic users, proves exact cleanup, and uploads one three-day evidence
    artifact. It never resets, repairs, seeds, dumps, restores, prunes, deletes,
    pauses, or queries the project through a general-purpose operator command.
-5. Download the artifact into a new local directory containing only
-   `pilot-gate-2b-readiness.json`.
-6. Promote it with the successful run ID and attempt:
+   A mode-0600 exact-ID cleanup ledger is updated before each ambiguous media
+   mutation; an unconditional protected cleanup step replays it after timeout
+   or failure and refuses to delete by wildcard, time range, email, or domain.
+5. Promote it with the successful run ID and attempt:
 
-   `pnpm promote:pilot-gate-2b-evidence -- <artifact-directory> <run-id> <attempt>`
+   `pnpm promote:pilot-gate-2b-evidence -- <run-id> <attempt>`
 
-The promotion command queries GitHub for the immutable run identity, validates
-the exact workflow/repository/SHA, ancestry and current deployment hashes, and
+The promotion command creates a private temporary directory, selects and
+downloads the exact attempt-qualified artifact itself, verifies its GitHub
+attestation against the fixed repository, workflow, source SHA/ref,
+GitHub-hosted runner and SLSA provenance, validates the immutable run identity,
+ancestry and current deployment hashes, and
 atomically replaces only `docs/evidence/pilot-gate-2b-readiness.json`. It prints
 no evidence contents or secrets.
 

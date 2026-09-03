@@ -39,11 +39,20 @@ function adapter(failAt?: string) {
     }),
     createSighting: vi.fn(async (input) => {
       calls.push(`sighting:${input.role}:${input.latitude}:${input.longitude}:${input.synthetic}`);
-      if (failAt === `sighting:${input.role}`) throw new Error('secret detail');
+      if (failAt === `sighting:${input.role}` || failAt === `sighting:${input.role}:ambiguous`) throw new Error('secret detail');
       return IDS[sightingIndex++]!;
     }),
+    recoverSightingIds: vi.fn(async (references: readonly Readonly<{ reporterId: string; clientDedupeKey: string }>[]) => {
+      calls.push(`recover:${references.map((item) => item.reporterId).join(',')}`);
+      return failAt === 'sighting:owner:ambiguous' ? [IDS[2]] : [];
+    }),
     deleteProfiles: vi.fn(async (ids) => { calls.push(`delete-profiles:${ids.join(',')}`); }),
+    deleteSightings: vi.fn(async (ids) => { calls.push(`delete-sightings:${ids.join(',')}`); }),
     deleteAuthUsers: vi.fn(async (ids) => { calls.push(`delete-auth:${ids.join(',')}`); }),
+    assertFixturesAbsent: vi.fn(async (tracked) => {
+      calls.push(`absent:${tracked.sightingIds.join(',')}:${tracked.profileIds.join(',')}:${tracked.userIds.join(',')}`);
+      return true;
+    }),
   };
   return { implementation, calls };
 }
@@ -69,9 +78,12 @@ describe('hosted synthetic fixtures', () => {
   it('cleans every exact fixture after a partial owner profile failure', async () => {
     const fake = adapter('profile:owner');
     await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');
-    expect(fake.calls.slice(-2)).toEqual([
+    expect(fake.calls.slice(-5)).toEqual([
+      'recover:',
+      'delete-sightings:',
       `delete-profiles:${IDS[0]}`,
       `delete-auth:${IDS[0]}`,
+      `absent::${IDS[0]}:${IDS[0]}`,
     ]);
     expect(fake.calls.join('\n')).not.toMatch(/\*|@example\.invalid|secret detail/);
   });
@@ -81,7 +93,31 @@ describe('hosted synthetic fixtures', () => {
       const fake = adapter(boundary);
       await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');
       const cleanup = fake.calls.filter((call) => call.startsWith('delete-'));
-      expect(cleanup).toHaveLength(2);
+      expect(cleanup).toHaveLength(3);
       expect(cleanup.join('\n')).not.toMatch(/\*|example\.invalid|before|after|domain/i);
     });
+
+  it('deletes and proves absence of the owner sighting when stranger sighting creation fails', async () => {
+    const fake = adapter('sighting:stranger');
+    await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');
+    expect(fake.calls.slice(-5)).toEqual([
+      `recover:${IDS[1]},${IDS[0]}`,
+      `delete-sightings:${IDS[2]}`,
+      `delete-profiles:${IDS[1]},${IDS[0]}`,
+      `delete-auth:${IDS[1]},${IDS[0]}`,
+      `absent:${IDS[2]}:${IDS[1]},${IDS[0]}:${IDS[1]},${IDS[0]}`,
+    ]);
+  });
+
+  it('recovers an exact dedupe-key sighting after an ambiguous create failure before deleting it', async () => {
+    const fake = adapter('sighting:owner:ambiguous');
+    await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');
+    expect(fake.calls.slice(-5)).toEqual([
+      `recover:${IDS[0]}`,
+      `delete-sightings:${IDS[2]}`,
+      `delete-profiles:${IDS[1]},${IDS[0]}`,
+      `delete-auth:${IDS[1]},${IDS[0]}`,
+      `absent:${IDS[2]}:${IDS[1]},${IDS[0]}:${IDS[1]},${IDS[0]}`,
+    ]);
+  });
 });

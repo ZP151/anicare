@@ -59,7 +59,9 @@ describe('hosted inspection and cleanup', () => {
     const adapter: HostedMaintenanceAdapter = {
       inspect: vi.fn(),
       removeObjects: vi.fn(async (paths) => { calls.push(`objects:${paths.join(',')}`); }),
-      deleteRows: vi.fn(async (table, ids) => { calls.push(`${table}:${ids.join(',')}`); }),
+      deleteRows: vi.fn(async (table, ids, mediaIds) => {
+        calls.push(`${table}:${ids.join(',')}:${mediaIds?.join(',') ?? ''}`);
+      }),
       deleteAuthUsers: vi.fn(async (ids) => { calls.push(`auth:${ids.join(',')}`); }),
       assertAbsent: vi.fn(async (tracked) => {
         calls.push(`absent:${Object.keys(tracked).sort().join(',')}`);
@@ -70,10 +72,10 @@ describe('hosted inspection and cleanup', () => {
     await cleanupHostedScenario(env(), scenario(), adapter);
     expect(calls).toEqual([
       `objects:jobs/${UUIDS[3]}.jpg`,
-      `media_upload_jobs:${UUIDS[3]}`,
-      `media_assets:${UUIDS[4]}`,
-      `sightings:${UUIDS[1]},${UUIDS[6]}`,
-      `user_profiles:${UUIDS[0]},${UUIDS[5]}`,
+      `media_upload_jobs:${UUIDS[3]}:${UUIDS[2]}`,
+      `media_assets:${UUIDS[4]}:${UUIDS[2]}`,
+      `sightings:${UUIDS[1]},${UUIDS[6]}:`,
+      `user_profiles:${UUIDS[0]},${UUIDS[5]}:`,
       `auth:${UUIDS[0]},${UUIDS[5]}`,
       'absent:createdAssetIds,createdJobIds,createdMediaIds,createdObjectPaths,createdSightingIds,createdUserIds',
       'close',

@@ -19,6 +19,7 @@ type Stage = 'create' | 'checks' | 'cleanup' | 'evidence';
 
 async function bounded<T>(timeoutMs: number, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
+  const work = Promise.resolve().then(() => operation(controller.signal));
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
@@ -27,7 +28,10 @@ async function bounded<T>(timeoutMs: number, operation: (signal: AbortSignal) =>
     }, timeoutMs);
   });
   try {
-    return await Promise.race([operation(controller.signal), timeout]);
+    return await Promise.race([work, timeout]);
+  } catch (error) {
+    if (controller.signal.aborted) await work.catch(() => undefined);
+    throw error;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }

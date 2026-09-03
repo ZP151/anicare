@@ -56,11 +56,13 @@ function minimalEnvironment(parent, additions = {}) {
 
 function defaultProcessAdapter() {
   let temporaryDirectory;
+  let sourceDirectory;
   return {
     async run(command, args, options) {
       return await new Promise((resolve, reject) => {
         const child = spawn(command, args, {
           cwd: options.cwd, env: options.env, shell: false, windowsHide: true,
+          detached: process.platform !== 'win32',
           stdio: ['ignore', 'pipe', 'pipe'],
         });
         const stdout = []; const stderr = []; let bytes = 0;
@@ -69,7 +71,11 @@ function defaultProcessAdapter() {
           if (bytes <= 128 * 1024) target.push(Buffer.from(chunk));
         };
         child.stdout.on('data', collect(stdout)); child.stderr.on('data', collect(stderr));
-        const timer = setTimeout(() => { child.kill('SIGKILL'); }, options.timeoutMs);
+        const timer = setTimeout(() => {
+          if (process.platform !== 'win32' && child.pid) {
+            try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+          } else child.kill('SIGKILL');
+        }, options.timeoutMs);
         child.on('error', reject);
         child.on('exit', (code) => {
           clearTimeout(timer);
@@ -89,8 +95,16 @@ function defaultProcessAdapter() {
       await chmod(target, 0o600);
       return target;
     },
+    async createSourceDirectory() {
+      sourceDirectory = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-source-'));
+      return sourceDirectory;
+    },
     async removeTemporaryFiles() {
-      if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
+      let failed = false;
+      for (const directory of [temporaryDirectory, sourceDirectory]) {
+        if (directory) await rm(directory, { recursive: true, force: true }).catch(() => { failed = true; });
+      }
+      if (failed) throw new Error('hosted_temporary_cleanup_failed');
     },
   };
 }
@@ -101,6 +115,41 @@ function required(parent, name) {
     return invalid('pilot_gate_2b_environment_invalid');
   }
   return value;
+}
+
+function jwtRole(value) {
+  const parts = value.split('.');
+  if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))) return null;
+  try {
+    const payloadBytes = Buffer.from(parts[1], 'base64url');
+    if (payloadBytes.byteLength < 2 || payloadBytes.byteLength > 4096) return null;
+    const payload = JSON.parse(payloadBytes.toString('utf8'));
+    return payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.role === 'string'
+      ? payload.role
+      : null;
+  } catch { return null; }
+}
+
+export function validHostedApiKeys(publicKey, serviceRoleKey) {
+  if (typeof publicKey !== 'string' || typeof serviceRoleKey !== 'string' || publicKey === serviceRoleKey ||
+      /\s/.test(publicKey) || /\s/.test(serviceRoleKey)) return false;
+  const validPublic = (publicKey.startsWith('sb_publishable_') && publicKey.length > 'sb_publishable_'.length) ||
+    jwtRole(publicKey) === 'anon';
+  const validService = (serviceRoleKey.startsWith('sb_secret_') && serviceRoleKey.length > 'sb_secret_'.length) ||
+    jwtRole(serviceRoleKey) === 'service_role';
+  return validPublic && validService;
+}
+
+export function validateRemoteFunctionInventory(source) {
+  let value;
+  try { value = JSON.parse(source); } catch { return invalid('remote_functions_invalid'); }
+  if (!Array.isArray(value) || value.length !== DEPLOYED_FUNCTIONS.length || value.some((item) =>
+    !item || typeof item !== 'object' || Array.isArray(item) || typeof item.id !== 'string' ||
+    typeof item.slug !== 'string' || item.status !== 'ACTIVE')) return invalid('remote_functions_invalid');
+  const actual = value.map((item) => item.slug).sort();
+  if (new Set(actual).size !== actual.length || JSON.stringify(actual) !== JSON.stringify([...DEPLOYED_FUNCTIONS].sort())) {
+    return invalid('remote_functions_invalid');
+  }
 }
 
 function databasePassword(databaseUrl) {
@@ -120,7 +169,7 @@ export async function runPilotGate2B({
   outputAdapter = process.stdout,
   discoverInputs = discoverPilotGate2BInputs,
 }) {
-  discoverInputs(repoRoot);
+  const initialInputs = discoverInputs(repoRoot);
   validatePilotGate2BInputs({
     repository: required(parentEnvironment, 'GITHUB_REPOSITORY'),
     eventName: required(parentEnvironment, 'GITHUB_EVENT_NAME'), ref: required(parentEnvironment, 'GITHUB_REF'),
@@ -133,8 +182,7 @@ export async function runPilotGate2B({
   const serviceRoleKey = required(parentEnvironment, 'SUPABASE_SERVICE_ROLE_KEY');
   const publicKey = required(parentEnvironment, 'SUPABASE_PUBLIC_KEY');
   const encryptionKey = required(parentEnvironment, 'PRECISE_LOCATION_ENCRYPTION_KEY');
-  if (publicKey === serviceRoleKey || !publicKey.startsWith('sb_publishable_') ||
-      !serviceRoleKey.startsWith('sb_secret_') || !/^[A-Za-z0-9+/]{43}=$/.test(encryptionKey) ||
+  if (!validHostedApiKeys(publicKey, serviceRoleKey) || !/^[A-Za-z0-9+/]{43}=$/.test(encryptionKey) ||
       Buffer.from(encryptionKey, 'base64').byteLength !== 32) {
     return invalid('pilot_gate_2b_environment_invalid');
   }
@@ -142,20 +190,45 @@ export async function runPilotGate2B({
   const cli = minimalEnvironment(parentEnvironment, { SUPABASE_ACCESS_TOKEN: accessToken });
   const dbCli = minimalEnvironment(parentEnvironment, { SUPABASE_ACCESS_TOKEN: accessToken, SUPABASE_DB_PASSWORD: dbPassword });
   let edgeSecretFile;
+  let sourceRoot;
   try {
     const head = await processAdapter.run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, env: base, timeoutMs: 10_000 });
     if (head?.stdout?.trim() !== parentEnvironment.GITHUB_SHA) return invalid('pilot_gate_2b_sha_invalid');
+    const status = await processAdapter.run('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+      cwd: repoRoot, env: base, timeoutMs: 10_000,
+    });
+    if (status?.stdout?.length !== 0) return invalid('pilot_gate_2b_source_invalid');
+    sourceRoot = await processAdapter.createSourceDirectory();
+    const archive = path.join(sourceRoot, 'source.tar');
+    await processAdapter.run('git', ['archive', '--format=tar', `--output=${archive}`, parentEnvironment.GITHUB_SHA], {
+      cwd: repoRoot, env: base, timeoutMs: 30_000,
+    });
+    await processAdapter.run('tar', ['--extract', '--file', archive, '--directory', sourceRoot], {
+      cwd: repoRoot, env: base, timeoutMs: 30_000,
+    });
+    const immutableInputs = discoverInputs(sourceRoot);
+    if (initialInputs?.deploymentTreeSha256 !== immutableInputs?.deploymentTreeSha256) {
+      return invalid('pilot_gate_2b_source_invalid');
+    }
     await verifyPublicKeyOrigin(fetchAdapter, publicKey);
-    await processAdapter.run('supabase', ['link', '--project-ref', PROJECT_REF], { cwd: repoRoot, env: cli, timeoutMs: 60_000 });
-    await processAdapter.run('supabase', ['db', 'push', '--dry-run'], { cwd: repoRoot, env: dbCli, timeoutMs: 120_000 });
-    await processAdapter.run('supabase', ['db', 'push'], { cwd: repoRoot, env: dbCli, timeoutMs: 300_000 });
+    await processAdapter.run('supabase', ['link', '--project-ref', PROJECT_REF], { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
+    await processAdapter.run('supabase', ['db', 'push', '--dry-run'], { cwd: sourceRoot, env: dbCli, timeoutMs: 120_000 });
+    await processAdapter.run('supabase', ['db', 'push'], { cwd: sourceRoot, env: dbCli, timeoutMs: 300_000 });
     await configureHostedAuth({ fetchAdapter, accessToken });
     edgeSecretFile = await processAdapter.writeEdgeSecretFile({ PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey });
     await processAdapter.run('supabase', ['secrets', 'set', '--env-file', edgeSecretFile, '--project-ref', PROJECT_REF],
-      { cwd: repoRoot, env: cli, timeoutMs: 60_000 });
+      { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
     for (const name of DEPLOYED_FUNCTIONS) {
       await processAdapter.run('supabase', ['functions', 'deploy', name, '--project-ref', PROJECT_REF, '--use-api'],
-        { cwd: repoRoot, env: cli, timeoutMs: 120_000 });
+        { cwd: sourceRoot, env: cli, timeoutMs: 120_000 });
+    }
+    const remoteFunctions = await processAdapter.run('supabase', [
+      'functions', 'list', '--project-ref', PROJECT_REF, '--output', 'json',
+    ], { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
+    validateRemoteFunctionInventory(remoteFunctions.stdout);
+    if (discoverInputs(sourceRoot)?.deploymentTreeSha256 !== initialInputs?.deploymentTreeSha256 ||
+        discoverInputs(repoRoot)?.deploymentTreeSha256 !== initialInputs?.deploymentTreeSha256) {
+      return invalid('pilot_gate_2b_source_invalid');
     }
     const harness = minimalEnvironment(parentEnvironment, {
       PILOT_GATE_2B: '1', SUPABASE_URL: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
@@ -164,13 +237,17 @@ export async function runPilotGate2B({
       GITHUB_SHA: parentEnvironment.GITHUB_SHA, GITHUB_RUN_ID: required(parentEnvironment, 'GITHUB_RUN_ID'),
       GITHUB_RUN_ATTEMPT: required(parentEnvironment, 'GITHUB_RUN_ATTEMPT'),
     });
+    harness.PILOT_GATE_2B_LEDGER_PATH = path.join(
+      tmpdir(),
+      `animalhelper-pilot-gate-2b-ledger-${harness.GITHUB_RUN_ID}-${harness.GITHUB_RUN_ATTEMPT}.json`,
+    );
     await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
       { cwd: repoRoot, env: harness, timeoutMs: 180_000 });
     await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
       { cwd: repoRoot, env: harness, timeoutMs: 30_000 });
     outputAdapter.write('pilot_gate_2b_deployment_passed\n');
   } finally {
-    await processAdapter.removeTemporaryFiles(edgeSecretFile).catch(() => undefined);
+    await processAdapter.removeTemporaryFiles(edgeSecretFile);
   }
 }
 

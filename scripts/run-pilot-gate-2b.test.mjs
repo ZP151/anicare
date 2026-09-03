@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { configureHostedAuth, runPilotGate2B } from './run-pilot-gate-2b.mjs';
+import {
+  configureHostedAuth, runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
+} from './run-pilot-gate-2b.mjs';
 import { DEPLOYED_FUNCTIONS } from './pilot-gate-2b-inputs.mjs';
 
 test('configures and reads back the exact Auth redirects', async () => {
@@ -29,13 +31,49 @@ test('rejects wildcard or unrelated Auth readback', async () => {
   await assert.rejects(configureHostedAuth({ fetchAdapter, accessToken: 'token-value' }), /hosted_auth_invalid/);
 });
 
+test('accepts only correctly paired modern keys or legacy role JWTs', () => {
+  const jwt = (role) => [
+    Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
+    Buffer.from(JSON.stringify({ role })).toString('base64url'),
+    'signature',
+  ].join('.');
+  assert.equal(validHostedApiKeys('sb_publishable_public', 'sb_secret_service'), true);
+  assert.equal(validHostedApiKeys(jwt('anon'), jwt('service_role')), true);
+  assert.equal(validHostedApiKeys(jwt('service_role'), jwt('anon')), false);
+  assert.equal(validHostedApiKeys(jwt('anon'), jwt('anon')), false);
+  assert.equal(validHostedApiKeys('sb_publishable_public', jwt('service_role')), true);
+});
+
+test('accepts only the exact active deployed function inventory', () => {
+  const inventory = DEPLOYED_FUNCTIONS.map((slug, index) => ({
+    id: `function-${index}`, name: slug, slug, status: 'ACTIVE', version: 1,
+    created_at: 1, updated_at: 1,
+  }));
+  assert.doesNotThrow(() => validateRemoteFunctionInventory(JSON.stringify(inventory)));
+  assert.throws(() => validateRemoteFunctionInventory(JSON.stringify(inventory.slice(1))), /remote_functions_invalid/);
+  assert.throws(() => validateRemoteFunctionInventory(JSON.stringify([
+    ...inventory, { ...inventory[0], id: 'extra', name: 'extra', slug: 'extra' },
+  ])), /remote_functions_invalid/);
+  assert.throws(() => validateRemoteFunctionInventory(JSON.stringify([
+    { ...inventory[0], status: 'THROTTLED' }, ...inventory.slice(1),
+  ])), /remote_functions_invalid/);
+});
+
 test('deploys incrementally in fixed order without privileged command arguments', async () => {
   const commands = [];
   const processAdapter = {
     run: async (command, args, options) => {
       commands.push({ command, args, options });
-      return { stdout: command === 'git' ? `${'a'.repeat(40)}\n` : '' };
+      if (command === 'git' && args[0] === 'rev-parse') return { stdout: `${'a'.repeat(40)}\n` };
+      if (command === 'supabase' && args[0] === 'functions' && args[1] === 'list') {
+        return { stdout: JSON.stringify(DEPLOYED_FUNCTIONS.map((slug, index) => ({
+          id: `function-${index}`, name: slug, slug, status: 'ACTIVE', version: 1,
+          created_at: 1, updated_at: 1,
+        }))) };
+      }
+      return { stdout: '' };
     },
+    createSourceDirectory: async () => 'C:/temp/source',
     writeEdgeSecretFile: async () => 'C:/temp/edge.env',
     removeTemporaryFiles: async () => undefined,
   };
@@ -52,14 +90,18 @@ test('deploys incrementally in fixed order without privileged command arguments'
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
   };
   await runPilotGate2B({ repoRoot: 'C:/repo', processAdapter, fetchAdapter, parentEnvironment: values,
-    discoverInputs: () => ({}), outputAdapter: { write: () => undefined } });
+    discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }), outputAdapter: { write: () => undefined } });
   assert.deepEqual(commands.map(({ command, args }) => [command, ...args]), [
     ['git', 'rev-parse', 'HEAD'],
+    ['git', 'status', '--porcelain=v1', '--untracked-files=all'],
+    ['git', 'archive', '--format=tar', '--output=C:\\temp\\source\\source.tar', 'a'.repeat(40)],
+    ['tar', '--extract', '--file', 'C:\\temp\\source\\source.tar', '--directory', 'C:/temp/source'],
     ['supabase', 'link', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
     ['supabase', 'db', 'push', '--dry-run'],
     ['supabase', 'db', 'push'],
     ['supabase', 'secrets', 'set', '--env-file', 'C:/temp/edge.env', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
     ...DEPLOYED_FUNCTIONS.map((name) => ['supabase', 'functions', 'deploy', name, '--project-ref', 'fhugdtpjbgiatqhvjioy', '--use-api']),
+    ['supabase', 'functions', 'list', '--project-ref', 'fhugdtpjbgiatqhvjioy', '--output', 'json'],
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
   ]);

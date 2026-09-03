@@ -79,17 +79,20 @@ describe('fetchWithTimeout', () => {
   });
 
   it('returns a bounded reconstructed response that callers can read normally', async () => {
-    const normalFetch: typeof fetch = async () => new Response('ready', {
+    const original = new Response('ready', {
       status: 201,
       statusText: 'Created',
       headers: { 'content-type': 'text/plain', 'x-fixture': 'normal' },
     });
+    Object.defineProperty(original, 'url', { value: 'https://fhugdtpjbgiatqhvjioy.supabase.co/auth/v1/settings' });
+    const normalFetch: typeof fetch = async () => original;
 
     const response = await fetchWithTimeout('http://127.0.0.1', {}, 100, normalFetch);
 
     expect(response.status).toBe(201);
     expect(response.statusText).toBe('Created');
     expect(response.headers.get('x-fixture')).toBe('normal');
+    expect(response.url).toBe('https://fhugdtpjbgiatqhvjioy.supabase.co/auth/v1/settings');
     await expect(response.text()).resolves.toBe('ready');
   });
 });
