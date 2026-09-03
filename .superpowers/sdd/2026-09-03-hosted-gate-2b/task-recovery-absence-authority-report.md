@@ -54,6 +54,47 @@ pnpm verify
 `pnpm verify` completed its policy, producer-contract, workflow,
 lint, workspace typecheck, test, and build gates successfully.
 
+## Round 1 hostile-runtime recovery hardening
+
+The recovery result guard now requires every recovered sighting ID to be
+a string before applying the UUID expression. Any malformed result,
+including an array containing a `Symbol`, is discarded as a provisional
+`recover_sighting` failure before cleanup selectors are assembled. The
+recovery validation catch also resets the result to an empty array, so a
+throwing runtime value cannot become a later `setup` failure or skip
+deletions and durable absence proof.
+
+RED was recorded with the hostile-array case before the production
+change:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts
+
+22 tests: 21 passed, 1 failed
+- accepts authoritative absence after a hostile malformed sighting recovery array
+
+The observed failure was hosted_cleanup_failed with operationIds:
+[setup, recover_sighting].
+```
+
+The strengthened success coverage proves `assertAbsent` receives the
+complete durable `sightingRecoveryReferences` value, and the hostile
+case proves that all deletion stages, absence proof, and close run
+before the successful authoritative result is returned.
+
+Round 1 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts  # 22 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit                       # 167 passed
+pnpm test:pilot-gate-2b-ci                                                # 29 passed, 1 Windows symlink skip
+pnpm test:hosted-gate-2b-workflow                                         # 2 passed
+pnpm test:root-contracts                                                  # 3 passed
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify
+```
+
 ## Commits
 
 - `5ce28d5 fix(pilot): honor authoritative sighting absence proof`
