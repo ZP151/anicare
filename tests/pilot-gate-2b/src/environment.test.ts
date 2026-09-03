@@ -16,6 +16,7 @@ function hostedEnvironment(): NodeJS.ProcessEnv {
     GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123456789',
     GITHUB_RUN_ATTEMPT: '1',
+    PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: '5000',
   };
 }
 
@@ -26,11 +27,19 @@ describe('hosted Gate 2B environment', () => {
       sourceCommit: 'a'.repeat(40),
       workflowRunId: 123456789,
       workflowRunAttempt: 1,
+      firstOwnerFinalizeTimeoutMs: 5_000,
     });
     expect(() => readHostedGateEnvironment({
       ...hostedEnvironment(),
       SUPABASE_URL: 'https://other.supabase.co',
     })).toThrow('hosted_environment_invalid');
+  });
+
+  it('accepts only the producer-derived canonical first-owner finalize budgets', () => {
+    expect(readHostedGateEnvironment({
+      ...hostedEnvironment(),
+      PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: '30000',
+    }).firstOwnerFinalizeTimeoutMs).toBe(30_000);
   });
 
   it.each([
@@ -42,6 +51,7 @@ describe('hosted Gate 2B environment', () => {
     'GITHUB_SHA',
     'GITHUB_RUN_ID',
     'GITHUB_RUN_ATTEMPT',
+    'PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS',
   ])('rejects missing or empty %s', (name) => {
     const missing = hostedEnvironment();
     delete missing[name];
@@ -123,4 +133,12 @@ describe('hosted Gate 2B environment', () => {
     expect(() => readHostedGateEnvironment({ ...hostedEnvironment(), [name]: value }))
       .toThrow('hosted_environment_invalid');
   });
+
+  it.each(['5000 ', '030000', '30000.0', 'true', '6000', '15000'])
+    ('rejects a noncanonical first-owner finalize timeout %s', (value) => {
+      expect(() => readHostedGateEnvironment({
+        ...hostedEnvironment(),
+        PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: value,
+      })).toThrow('hosted_environment_invalid');
+    });
 });

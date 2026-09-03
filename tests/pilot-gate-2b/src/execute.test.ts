@@ -242,4 +242,42 @@ describe('hosted gate execution', () => {
     expect(Date.now() - startedAt).toBeLessThan(550);
     expect(fixture.order).toEqual(['create', 'checks', 'cleanup']);
   });
+
+  it('keeps the hosted checks budget at 75,000 ms and the cleanup reserve at 25,000 ms', async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    let checksAbortedAt: number | undefined;
+    let cleanupStartedAt: number | undefined;
+    let cleanupAbortedAt: number | undefined;
+    const fixture = options({
+      timeoutMs: 100_000,
+      cancellationGraceMs: 1,
+      runChecks: async (_scenario, signal) => await new Promise<ReadinessChecks>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          checksAbortedAt = Date.now();
+          reject(new Error('checks_cancelled'));
+        }, { once: true });
+      }),
+      cleanup: async (_scenario, signal) => {
+        cleanupStartedAt = Date.now();
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            cleanupAbortedAt = Date.now();
+            reject(new Error('cleanup_cancelled'));
+          }, { once: true });
+        });
+      },
+    });
+
+    const result = executeHostedGate(fixture.value);
+    const expectedFailure = expect(result).rejects.toThrow('hosted_gate_failed_at_cleanup');
+    await vi.advanceTimersByTimeAsync(75_000);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(checksAbortedAt).toBe(startedAt + 75_000);
+    expect(cleanupStartedAt).toBe(startedAt + 75_000);
+
+    await vi.advanceTimersByTimeAsync(25_001);
+    await expectedFailure;
+    expect(cleanupAbortedAt).toBe(startedAt + 100_000);
+  });
 });

@@ -30,7 +30,17 @@ async function workflow() {
 function assertContract(source, value) {
   assert.equal(value.name, 'Hosted Gate 2B');
   assert.deepEqual(value.on, {
-    push: { branches: ['codex/hosted-gate-2b'], paths }, workflow_dispatch: null,
+    push: { branches: ['codex/hosted-gate-2b'], paths },
+    workflow_dispatch: {
+      inputs: {
+        relaxed_finalize_timeout: {
+          description: 'Allow a 30-second timeout only for the first owner happy-path finalization.',
+          required: false,
+          default: false,
+          type: 'boolean',
+        },
+      },
+    },
   });
   assert.deepEqual(value.permissions, { contents: 'read' });
   assert.deepEqual(value.concurrency, {
@@ -50,9 +60,11 @@ function assertContract(source, value) {
   assert.deepEqual(producer.steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 0, 'persist-credentials': false });
   const run = producer.steps.find((step) => step.name === 'Run protected Hosted Gate 2B');
   assert.deepEqual(Object.keys(run.env).sort(), [
-    'GITHUB_ENVIRONMENT', 'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_ACCESS_TOKEN',
+    'GITHUB_ENVIRONMENT', 'PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT', 'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_ACCESS_TOKEN',
     'SUPABASE_DATABASE_URL', 'SUPABASE_PUBLIC_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'TMPDIR',
   ]);
+  assert.equal(run.env.PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT,
+    "${{ github.event_name == 'workflow_dispatch' && inputs.relaxed_finalize_timeout == true && 'true' || 'false' }}");
   assert.equal(run.run, 'pnpm pilot-gate-2b');
   assert.equal(run['timeout-minutes'], 15);
   const hostedCleanup = producer.steps.find((step) => step.name === 'Recover exact hosted fixtures');
@@ -60,10 +72,12 @@ function assertContract(source, value) {
   assert.equal(hostedCleanup['timeout-minutes'], 3);
   assert.equal(hostedCleanup.run, 'pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted');
   assert.deepEqual(Object.keys(hostedCleanup.env).sort(), [
-    'GITHUB_RUN_ATTEMPT', 'GITHUB_RUN_ID', 'GITHUB_SHA', 'PILOT_GATE_2B_LEDGER_PATH',
+    'GITHUB_RUN_ATTEMPT', 'GITHUB_RUN_ID', 'GITHUB_SHA',
+    'PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS', 'PILOT_GATE_2B_LEDGER_PATH',
     'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_DATABASE_URL', 'SUPABASE_PUBLIC_KEY',
     'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_URL',
   ]);
+  assert.equal(hostedCleanup.env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS, '5000');
   const localCleanup = producer.steps.at(-1);
   assert.equal(localCleanup.if, 'always()');
   assert.deepEqual(localCleanup.env, {
@@ -108,8 +122,21 @@ test('contract rejects environment, permissions, secret scope, action, and clean
     (item) => { item.jobs.hosted_gate_2b.environment = 'ios-device-lab'; },
     (item) => { item.jobs.hosted_gate_2b.permissions.contents = 'write'; },
     (item) => { item.jobs.hosted_gate_2b.env = { SUPABASE_ACCESS_TOKEN: 'secret' }; },
+    (item) => {
+      item.on.workflow_dispatch = { inputs: { relaxed_finalize_timeout: {
+        description: 'Allow a 30-second timeout only for the first owner happy-path finalization.',
+        required: false, default: true, type: 'boolean',
+      } } };
+    },
+    (item) => {
+      const run = item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Run protected Hosted Gate 2B');
+      run.env = { ...run.env, PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'true' };
+    },
     (item) => { item.jobs.hosted_gate_2b.steps[0].uses = 'actions/checkout@v4'; },
     (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').if = 'success()'; },
+    (item) => { delete item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS; },
+    (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS = '30000'; },
+    (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS = "${{ github.event_name == 'workflow_dispatch' && inputs.relaxed_finalize_timeout == true && '30000' || '5000' }}"; },
   ];
   for (const mutate of mutations) {
     const candidate = structuredClone(value); mutate(candidate);

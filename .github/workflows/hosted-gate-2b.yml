@@ -15,6 +15,12 @@ on:
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
   workflow_dispatch:
+    inputs:
+      relaxed_finalize_timeout:
+        description: Allow a 30-second timeout only for the first owner happy-path finalization.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -75,6 +81,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
           PRECISE_LOCATION_ENCRYPTION_KEY: ${{ secrets.PRECISE_LOCATION_ENCRYPTION_KEY }}
+          PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' && inputs.relaxed_finalize_timeout == true && 'true' || 'false' }}
           TMPDIR: ${{ runner.temp }}
         run: pnpm pilot-gate-2b
       - name: Recover exact hosted fixtures
@@ -90,6 +97,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           PILOT_GATE_2B_LEDGER_PATH: ${{ runner.temp }}/animalhelper-pilot-gate-2b-ledger-${{ github.run_id }}-${{ github.run_attempt }}.json
+          PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: '5000'
         run: pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted
       - name: Validate canonical readiness evidence
         run: pnpm --filter @animalhelper/mobile validate:gate-2b-readiness

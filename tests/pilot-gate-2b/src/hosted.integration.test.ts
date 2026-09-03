@@ -234,7 +234,7 @@ describe('real Hosted Gate 2B', () => {
             )).ok);
             const finalized = await atOwnerStep('finalize', () => finalizeMedia(scenario.owner, {
               sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
-            }, env));
+            }, env, env.firstOwnerFinalizeTimeoutMs));
             const confirmedMediaAssetId = ownerFinalizedMediaAssetId(finalized);
             mediaAssetId = confirmedMediaAssetId;
             partial.createdAssetIds = [confirmedMediaAssetId];

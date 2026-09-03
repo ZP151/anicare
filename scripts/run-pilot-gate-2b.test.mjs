@@ -137,6 +137,7 @@ test('deploys incrementally in fixed order without privileged command arguments'
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
   };
   await runPilotGate2B({ repoRoot: 'C:/repo', processAdapter, fetchAdapter, parentEnvironment: values,
     discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }), outputAdapter: { write: () => undefined },
@@ -166,11 +167,100 @@ test('deploys incrementally in fixed order without privileged command arguments'
     commandText.includes('sb_secret_service'), false);
   const forbidden = new Set(['reset', 'repair', 'seed', 'dump', 'restore', 'prune', 'delete', 'pause', 'query']);
   assert.equal(commands.some(({ command, args }) => [command, ...args].some((token) => forbidden.has(token))), false);
+  const integration = commands.find(({ command, args }) =>
+    command === 'pnpm' && args[2] === 'test:integration');
+  assert.equal(integration.options.env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS, '5000');
   assert.deepEqual(stages, [
     'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
     'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
     'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
   ]);
+});
+
+test('derives and propagates the first-owner finalize budget only from the manual switch', async () => {
+  const common = {
+    SUPABASE_ACCESS_TOKEN: 'access-secret',
+    SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_service', SUPABASE_PUBLIC_KEY: 'sb_publishable_public',
+    PRECISE_LOCATION_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+  };
+  for (const [eventName, ref, relaxed, expected] of [
+    ['push', 'refs/heads/codex/hosted-gate-2b', 'false', '5000'],
+    ['workflow_dispatch', 'refs/heads/main', 'false', '5000'],
+    ['workflow_dispatch', 'refs/heads/codex/hosted-gate-2b', 'true', '30000'],
+  ]) {
+    const commands = [];
+    const processAdapter = {
+      run: async (command, args, options) => {
+        commands.push({ command, args, options });
+        if (command === 'git' && args[0] === 'rev-parse') return { stdout: `${'a'.repeat(40)}\n` };
+        if (command === 'supabase' && args[0] === 'functions' && args[1] === 'list') {
+          return { stdout: JSON.stringify(DEPLOYED_FUNCTIONS.map((slug, index) => ({
+            id: `function-${index}`, name: slug, slug, status: 'ACTIVE', version: 1,
+          }))) };
+        }
+        return { stdout: '' };
+      },
+      createSourceDirectory: async () => 'C:/temp/source',
+      writeEdgeSecretFile: async () => 'C:/temp/edge.env',
+      removeTemporaryFiles: async () => undefined,
+    };
+    await runPilotGate2B({
+      repoRoot: 'C:/repo', processAdapter,
+      fetchAdapter: async () => new Response(JSON.stringify({
+        site_url: 'animalhelper://', uri_allow_list: 'animalhelper://auth/callback',
+      }), { status: 200 }),
+      parentEnvironment: { ...common, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref,
+        PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: relaxed },
+      discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
+      outputAdapter: { write: () => undefined },
+    });
+    const integration = commands.find(({ command, args }) => command === 'pnpm' && args[2] === 'test:integration');
+    assert.equal(integration.options.env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS, expected);
+  }
+});
+
+test('fails closed for a relaxed timeout switch outside the exact producer allowlist', async () => {
+  const common = {
+    SUPABASE_ACCESS_TOKEN: 'access-secret',
+    SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_service', SUPABASE_PUBLIC_KEY: 'sb_publishable_public',
+    PRECISE_LOCATION_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+  };
+  const processAdapter = {
+    run: async (command, args) => {
+      if (command === 'git' && args[0] === 'rev-parse') return { stdout: `${'a'.repeat(40)}\n` };
+      if (command === 'supabase' && args[0] === 'functions' && args[1] === 'list') {
+        return { stdout: JSON.stringify(DEPLOYED_FUNCTIONS.map((slug, index) => ({
+          id: `function-${index}`, name: slug, slug, status: 'ACTIVE', version: 1,
+        }))) };
+      }
+      return { stdout: '' };
+    },
+    createSourceDirectory: async () => 'C:/temp/source',
+    writeEdgeSecretFile: async () => 'C:/temp/edge.env',
+    removeTemporaryFiles: async () => undefined,
+  };
+  for (const [eventName, ref, relaxed] of [
+    ['push', 'refs/heads/codex/hosted-gate-2b', 'true'],
+    ['workflow_dispatch', 'refs/heads/main', 'True'],
+    ['workflow_dispatch', 'refs/heads/main', '1'],
+    ['workflow_dispatch', 'refs/heads/main', ' false'],
+  ]) {
+    await assert.rejects(runPilotGate2B({
+      repoRoot: 'C:/repo', processAdapter, parentEnvironment: {
+        ...common, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref, PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: relaxed,
+      },
+      fetchAdapter: async () => new Response(JSON.stringify({
+        site_url: 'animalhelper://', uri_allow_list: 'animalhelper://auth/callback',
+      }), { status: 200 }),
+      discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
+    }), /pilot_gate_2b_environment_invalid/);
+  }
 });
 
 test('fails before every hosted operation when the Docker bundler is unavailable', async () => {
@@ -194,6 +284,7 @@ test('fails before every hosted operation when the Docker bundler is unavailable
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
   };
   await assert.rejects(runPilotGate2B({
     repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
@@ -219,6 +310,7 @@ test('reports the fixed source verification stage before an operation fails', as
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
   };
   await assert.rejects(runPilotGate2B({
     repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
@@ -412,6 +504,7 @@ test('propagates only a canonical owned diagnostic and ignores hostile child out
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
   };
   for (const [contents, expectedControls] of [
     ['{"gateStage":"cleanup","check":"media_staging","mediaStep":"privacy_list","cleanup":["storage_remove","absence_proof"]}\n', [{
@@ -480,6 +573,7 @@ test('reports temporary cleanup only when cleanup itself fails', async () => {
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
   };
   await assert.rejects(runPilotGate2B({
     repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,

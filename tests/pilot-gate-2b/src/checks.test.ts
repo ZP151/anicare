@@ -21,7 +21,7 @@ function env(): HostedGateEnvironment {
     apiUrl: 'https://fhugdtpjbgiatqhvjioy.supabase.co', anonKey: 'sb_publishable_test',
     serviceRoleKey: 'sb_secret_test', databaseUrl: 'postgresql://unused',
     preciseLocationEncryptionKey: Buffer.alloc(32).toString('base64'), sourceCommit: 'a'.repeat(40),
-    workflowRunId: 1, workflowRunAttempt: 1,
+    workflowRunId: 1, workflowRunAttempt: 1, firstOwnerFinalizeTimeoutMs: 5_000,
   };
 }
 
@@ -103,12 +103,13 @@ function objectPropertyValue(node: Node | undefined, name: string): Expression |
 }
 
 function assertFirstFinalizeArguments(call: CallExpression): void {
-  const [owner, payload] = call.arguments;
+  const [owner, payload, environment, timeoutMs] = call.arguments;
   if (!isPropertyAccessNamed(owner, 'scenario', 'owner') ||
       !isPropertyAccessNamed(objectPropertyValue(payload, 'sightingId'), 'scenario', 'ownerSightingId') ||
       !isIdentifierNamed(objectPropertyValue(payload, 'mediaId'), 'confirmedMediaId') ||
-      !isPropertyAccessNamed(objectPropertyValue(payload, 'sha256'), 'jpeg', 'sha256')) {
-    throw new Error('first finalizeMedia call must use the owner scenario and confirmed owner media input');
+      !isPropertyAccessNamed(objectPropertyValue(payload, 'sha256'), 'jpeg', 'sha256') ||
+      !isIdentifierNamed(environment, 'env') || !isPropertyAccessNamed(timeoutMs, 'env', 'firstOwnerFinalizeTimeoutMs')) {
+    throw new Error('first finalizeMedia call must use the owner scenario, confirmed media input, and the derived timeout');
   }
 }
 
@@ -350,6 +351,12 @@ describe('hosted check coordinator', () => {
         throw new Error('runOwnerHappyPath must contain only the distinct finalize and replay finalizeMedia calls');
       }
       assertFirstFinalizeArguments(firstFinalizeCall);
+      const allHostedFinalizeCalls = callsNamed(file, 'finalizeMedia');
+      if (allHostedFinalizeCalls.filter((call) => call.arguments.length === 4).length !== 1 ||
+          !allHostedFinalizeCalls.some((call) => call.arguments.length === 4 && sameSyntaxNode(call, firstFinalizeCall)) ||
+          replayFinalizeCall.arguments.length !== 3) {
+        throw new Error('only the first owner finalizeMedia call may receive the derived timeout');
+      }
       const firstFinalizeBinding = awaitedCallBinding(statements, firstFinalizeStep);
       const replayBinding = awaitedCallBinding(statements, replayStep);
       if (firstFinalizeCall.pos >= replayFinalizeCall.pos || firstFinalizeBinding.index >= replayBinding.index) {

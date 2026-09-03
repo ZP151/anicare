@@ -170,7 +170,8 @@ export function discoverPilotGate2BInputs(repoRoot) {
 
 export function validatePilotGate2BInputs(input) {
   const bootstrap = input?.eventName === 'push' && input?.ref === 'refs/heads/codex/hosted-gate-2b';
-  const refresh = input?.eventName === 'workflow_dispatch' && input?.ref === 'refs/heads/main';
+  const refresh = input?.eventName === 'workflow_dispatch' &&
+    (input?.ref === 'refs/heads/main' || input?.ref === 'refs/heads/codex/hosted-gate-2b');
   if (input?.repository !== 'ZP151/anicare' || (!bootstrap && !refresh) ||
       input?.environment !== 'hosted-gate-2b' || input?.projectRef !== 'fhugdtpjbgiatqhvjioy' ||
       typeof input?.sha !== 'string' || !/^[a-f0-9]{40}$/.test(input.sha)) {

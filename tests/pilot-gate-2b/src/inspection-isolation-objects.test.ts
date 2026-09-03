@@ -22,7 +22,7 @@ const environment: HostedGateEnvironment = {
   apiUrl: 'https://fhugdtpjbgiatqhvjioy.supabase.co', anonKey: 'sb_publishable_test',
   serviceRoleKey: 'sb_secret_test', databaseUrl: 'postgresql://unused',
   preciseLocationEncryptionKey: Buffer.alloc(32).toString('base64'), sourceCommit: 'a'.repeat(40),
-  workflowRunId: 1, workflowRunAttempt: 1,
+  workflowRunId: 1, workflowRunAttempt: 1, firstOwnerFinalizeTimeoutMs: 5_000,
 };
 
 const isolationInput = {

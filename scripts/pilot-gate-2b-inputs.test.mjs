@@ -178,3 +178,17 @@ test('accepts only the exact bootstrap workflow context', () => {
     }), /pilot_gate_2b_context_invalid/);
   }
 });
+
+test('accepts a manual Hosted Gate 2B dispatch at the protected producer ref', () => {
+  assert.doesNotThrow(() => validatePilotGate2BInputs({
+    repository: 'ZP151/anicare', eventName: 'workflow_dispatch', ref: 'refs/heads/codex/hosted-gate-2b',
+    sha: 'a'.repeat(40), environment: 'hosted-gate-2b', projectRef: 'fhugdtpjbgiatqhvjioy',
+  }));
+});
+
+test('rejects a manual Hosted Gate 2B dispatch from an arbitrary branch', () => {
+  assert.throws(() => validatePilotGate2BInputs({
+    repository: 'ZP151/anicare', eventName: 'workflow_dispatch', ref: 'refs/heads/feature/relaxed-timeout',
+    sha: 'a'.repeat(40), environment: 'hosted-gate-2b', projectRef: 'fhugdtpjbgiatqhvjioy',
+  }), /pilot_gate_2b_context_invalid/);
+});

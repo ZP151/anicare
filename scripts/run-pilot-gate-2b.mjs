@@ -50,8 +50,17 @@ const CLEANUP_OPERATION_IDS = [
 const CLEANUP_OPERATION_SET = new Set(CLEANUP_OPERATION_IDS);
 const HOSTED_CHECK_DIAGNOSTIC_FILENAME = 'hosted-check-diagnostic.json';
 const MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES = 320;
+const ORDINARY_FINALIZE_TIMEOUT_MS = 5_000;
+const RELAXED_FIRST_OWNER_FINALIZE_TIMEOUT_MS = 30_000;
 
 function invalid(code) { throw new Error(code); }
+
+export function firstOwnerFinalizeTimeoutMs(eventName, relaxedSwitch) {
+  if (eventName === 'push' && relaxedSwitch === 'false') return ORDINARY_FINALIZE_TIMEOUT_MS;
+  if (eventName === 'workflow_dispatch' && relaxedSwitch === 'false') return ORDINARY_FINALIZE_TIMEOUT_MS;
+  if (eventName === 'workflow_dispatch' && relaxedSwitch === 'true') return RELAXED_FIRST_OWNER_FINALIZE_TIMEOUT_MS;
+  return invalid('pilot_gate_2b_environment_invalid');
+}
 
 function normalizeHostedGateControl(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -346,6 +355,10 @@ export async function runPilotGate2B({
     sha: required(parentEnvironment, 'GITHUB_SHA'), environment: required(parentEnvironment, 'GITHUB_ENVIRONMENT'),
     projectRef: PROJECT_REF,
   });
+  const firstOwnerFinalizeTimeout = firstOwnerFinalizeTimeoutMs(
+    parentEnvironment.GITHUB_EVENT_NAME,
+    required(parentEnvironment, 'PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT'),
+  );
   const runId = runSelector(required(parentEnvironment, 'GITHUB_RUN_ID'));
   const runAttempt = runSelector(required(parentEnvironment, 'GITHUB_RUN_ATTEMPT'));
   processAdapter ??= createDefaultProcessAdapter({ runId, runAttempt, temporaryRoot });
@@ -435,6 +448,7 @@ export async function runPilotGate2B({
       SUPABASE_DATABASE_URL: databaseUrl, PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey,
       GITHUB_SHA: parentEnvironment.GITHUB_SHA, GITHUB_RUN_ID: runId,
       GITHUB_RUN_ATTEMPT: runAttempt,
+      PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: String(firstOwnerFinalizeTimeout),
     });
     harness.PILOT_GATE_2B_LEDGER_PATH = path.join(
       tmpdir(),

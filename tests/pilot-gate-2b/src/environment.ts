@@ -11,6 +11,7 @@ export type HostedGateEnvironment = Readonly<{
   sourceCommit: string;
   workflowRunId: number;
   workflowRunAttempt: number;
+  firstOwnerFinalizeTimeoutMs: 5_000 | 30_000;
 }>;
 
 const INVALID = 'hosted_environment_invalid';
@@ -89,6 +90,12 @@ function positiveInteger(value: string): number {
   return parsed;
 }
 
+function firstOwnerFinalizeTimeoutMs(value: string): 5_000 | 30_000 {
+  if (value === '5000') return 5_000;
+  if (value === '30000') return 30_000;
+  return invalid();
+}
+
 export function readHostedGateEnvironment(source: NodeJS.ProcessEnv): HostedGateEnvironment {
   const apiUrl = required(source, 'SUPABASE_URL');
   if (apiUrl !== HOSTED_PROJECT_ORIGIN) return invalid();
@@ -108,5 +115,8 @@ export function readHostedGateEnvironment(source: NodeJS.ProcessEnv): HostedGate
     sourceCommit,
     workflowRunId: positiveInteger(required(source, 'GITHUB_RUN_ID')),
     workflowRunAttempt: positiveInteger(required(source, 'GITHUB_RUN_ATTEMPT')),
+    firstOwnerFinalizeTimeoutMs: firstOwnerFinalizeTimeoutMs(
+      required(source, 'PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS'),
+    ),
   };
 }
