@@ -90,6 +90,8 @@ test('fails closed for invalid run selectors or a non-directory cleanup target',
 
 test('deploys incrementally in fixed order without privileged command arguments', async () => {
   const sourceArchive = path.join('C:/temp/source', 'source.tar');
+  const functionsRoot = path.join('C:/temp/source', 'supabase', 'functions');
+  const runtimeDigest = 'public.ecr.aws/supabase/edge-runtime@sha256:3775cdbe86dab8cd7495157af69377dfedf208ba3cb4165031b58ed691514c22';
   const commands = [];
   const stages = [];
   const processAdapter = {
@@ -128,11 +130,17 @@ test('deploys incrementally in fixed order without privileged command arguments'
     ['git', 'status', '--porcelain=v1', '--untracked-files=all'],
     ['git', 'archive', '--format=tar', `--output=${sourceArchive}`, 'a'.repeat(40)],
     ['tar', '--extract', '--file', sourceArchive, '--directory', 'C:/temp/source'],
+    ['docker', 'info', '--format', '{{.ServerVersion}}'],
+    ['docker', 'pull', runtimeDigest],
+    ['docker', 'image', 'tag', runtimeDigest, 'public.ecr.aws/supabase/edge-runtime:v1.73.0'],
+    ['docker', 'run', '--rm', '-e', 'DENO_NO_PACKAGE_JSON=1', '--mount',
+      `type=bind,src=${functionsRoot},dst=/work/functions,readonly`, runtimeDigest,
+      'bundle', '--entrypoint', '/work/functions/cleanup-legacy-media/index.ts', '--output', '/tmp/probe.eszip'],
     ['supabase', 'link', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
     ['supabase', 'db', 'push', '--dry-run'],
     ['supabase', 'db', 'push'],
     ['supabase', 'secrets', 'set', '--env-file', 'C:/temp/edge.env', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
-    ...DEPLOYED_FUNCTIONS.map((name) => ['supabase', 'functions', 'deploy', name, '--project-ref', 'fhugdtpjbgiatqhvjioy', '--use-api']),
+    ...DEPLOYED_FUNCTIONS.map((name) => ['supabase', 'functions', 'deploy', name, '--project-ref', 'fhugdtpjbgiatqhvjioy', '--use-docker']),
     ['supabase', 'functions', 'list', '--project-ref', 'fhugdtpjbgiatqhvjioy', '--output', 'json'],
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
@@ -143,10 +151,42 @@ test('deploys incrementally in fixed order without privileged command arguments'
   const forbidden = new Set(['reset', 'repair', 'seed', 'dump', 'restore', 'prune', 'delete', 'pause', 'query']);
   assert.equal(commands.some(({ command, args }) => [command, ...args].some((token) => forbidden.has(token))), false);
   assert.deepEqual(stages, [
-    'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
+    'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
     'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
     'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
   ]);
+});
+
+test('fails before every hosted operation when the Docker bundler is unavailable', async () => {
+  const commands = [];
+  let fetchCalls = 0;
+  const processAdapter = {
+    run: async (command, args) => {
+      commands.push([command, ...args]);
+      if (command === 'git' && args[0] === 'rev-parse') return { stdout: `${'a'.repeat(40)}\n` };
+      if (command === 'docker') throw new Error('docker daemon unavailable');
+      return { stdout: '' };
+    },
+    createSourceDirectory: async () => 'C:/temp/source',
+    removeTemporaryFiles: async () => undefined,
+  };
+  const values = {
+    SUPABASE_ACCESS_TOKEN: 'access-secret',
+    SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_service', SUPABASE_PUBLIC_KEY: 'sb_publishable_public',
+    PRECISE_LOCATION_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+  };
+  await assert.rejects(runPilotGate2B({
+    repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
+    fetchAdapter: async () => { fetchCalls += 1; return new Response(null, { status: 200 }); },
+    discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
+    stageAdapter: { enter: () => undefined },
+  }), /docker daemon unavailable/);
+  assert.equal(fetchCalls, 0);
+  assert.equal(commands.some(([command]) => command === 'supabase'), false);
 });
 
 test('reports the fixed source verification stage before an operation fails', async () => {
@@ -176,6 +216,7 @@ test('serializes only allowlisted producer diagnostics with canonical bytes', as
   const { buildProducerFailureDiagnostic } = await import('./run-pilot-gate-2b.mjs');
   const allowed = [
     'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
+    'docker_bundler_verification',
     'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
     'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
     'temporary_cleanup',

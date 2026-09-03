@@ -8,10 +8,12 @@ import { DEPLOYED_FUNCTIONS, discoverPilotGate2BInputs, validatePilotGate2BInput
 
 const PROJECT_REF = 'fhugdtpjbgiatqhvjioy';
 const MANAGEMENT_URL = `https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth`;
+const EDGE_RUNTIME_DIGEST = 'public.ecr.aws/supabase/edge-runtime@sha256:3775cdbe86dab8cd7495157af69377dfedf208ba3cb4165031b58ed691514c22';
+const EDGE_RUNTIME_TAG = 'public.ecr.aws/supabase/edge-runtime:v1.73.0';
 const DIAGNOSTIC_PATH = path.join(tmpdir(), 'animalhelper-pilot-gate-2b-failure.log');
 const SAFE_ENV = ['PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TMP', 'TEMP', 'CI', 'GITHUB_ACTIONS'];
 const PRODUCER_STAGES = new Set([
-  'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
+  'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
   'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
   'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
   'temporary_cleanup',
@@ -260,6 +262,22 @@ export async function runPilotGate2B({
     if (initialInputs?.deploymentTreeSha256 !== immutableInputs?.deploymentTreeSha256) {
       return invalid('pilot_gate_2b_source_invalid');
     }
+    stageAdapter.enter('docker_bundler_verification');
+    await processAdapter.run('docker', ['info', '--format', '{{.ServerVersion}}'], {
+      cwd: sourceRoot, env: base, timeoutMs: 30_000,
+    });
+    await processAdapter.run('docker', ['pull', EDGE_RUNTIME_DIGEST], {
+      cwd: sourceRoot, env: base, timeoutMs: 120_000,
+    });
+    await processAdapter.run('docker', ['image', 'tag', EDGE_RUNTIME_DIGEST, EDGE_RUNTIME_TAG], {
+      cwd: sourceRoot, env: base, timeoutMs: 10_000,
+    });
+    const functionsRoot = path.join(sourceRoot, 'supabase', 'functions');
+    await processAdapter.run('docker', [
+      'run', '--rm', '-e', 'DENO_NO_PACKAGE_JSON=1', '--mount',
+      `type=bind,src=${functionsRoot},dst=/work/functions,readonly`, EDGE_RUNTIME_DIGEST,
+      'bundle', '--entrypoint', '/work/functions/cleanup-legacy-media/index.ts', '--output', '/tmp/probe.eszip',
+    ], { cwd: sourceRoot, env: base, timeoutMs: 180_000 });
     stageAdapter.enter('public_key_origin');
     await verifyPublicKeyOrigin(fetchAdapter, publicKey);
     stageAdapter.enter('supabase_link');
@@ -276,7 +294,7 @@ export async function runPilotGate2B({
       { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
     stageAdapter.enter('function_deployment');
     for (const name of DEPLOYED_FUNCTIONS) {
-      await processAdapter.run('supabase', ['functions', 'deploy', name, '--project-ref', PROJECT_REF, '--use-api'],
+      await processAdapter.run('supabase', ['functions', 'deploy', name, '--project-ref', PROJECT_REF, '--use-docker'],
         { cwd: sourceRoot, env: cli, timeoutMs: 120_000 });
     }
     stageAdapter.enter('function_inventory');
