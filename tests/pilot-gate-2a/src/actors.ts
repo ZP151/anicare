@@ -8,7 +8,6 @@ import {
 } from '../../../apps/mobile/src/api/media.js';
 import { isStableMediaId } from '../../../apps/mobile/src/media/media-reference.js';
 
-import type { LocalStackEnvironment } from './environment.js';
 import { edgeEndpointUrl } from './edge-endpoints.js';
 import type { SyntheticActor } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
@@ -28,6 +27,8 @@ const EDGE_ERROR_CODES = new Set([
   'service_unavailable',
   'storage_deletion_pending',
 ]);
+
+export type MediaActorEnvironment = Readonly<{ apiUrl: string }>;
 
 type DetectorVersions = Readonly<{
   cats: 'unavailable';
@@ -178,7 +179,7 @@ async function httpFailure(stage: ActorStage, response: Response): Promise<Actor
 export async function reserveMedia(
   actor: SyntheticActor,
   input: ReserveInput,
-  env: LocalStackEnvironment,
+  env: MediaActorEnvironment,
 ): Promise<Reservation> {
   const serializedBody = reservationRequest(input);
   if (serializedBody === null) throw failure('reserve', 'invalid_response', null, 'invalid_response');
@@ -270,7 +271,7 @@ function finalizationSuccess(value: unknown): string | null {
 export async function finalizeMedia(
   actor: SyntheticActor,
   input: FinalizeInput,
-  env: LocalStackEnvironment,
+  env: MediaActorEnvironment,
 ): Promise<ActorResult> {
   const serializedBody = finalizationRequest(input);
   if (serializedBody === null) {
@@ -293,7 +294,7 @@ export async function finalizeMedia(
 export async function deleteMedia(
   actor: SyntheticActor,
   mediaAssetId: string,
-  env: LocalStackEnvironment,
+  env: MediaActorEnvironment,
 ): Promise<ActorResult> {
   const serializedBody = deletionRequest(mediaAssetId);
   if (serializedBody === null) {

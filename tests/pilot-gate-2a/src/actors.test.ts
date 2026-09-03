@@ -9,6 +9,7 @@ import {
   putSignedMedia,
   reserveMedia,
   type FinalizeInput,
+  type MediaActorEnvironment,
   type Reservation,
   type ReserveInput,
 } from './actors.js';
@@ -19,6 +20,12 @@ const UUID_MEDIA = '22222222-2222-4222-8222-222222222222';
 const UUID_SIGHTING = '33333333-3333-4333-8333-333333333333';
 const UUID_ASSET = '44444444-4444-4444-8444-444444444444';
 const LOCAL_CORS_ORIGIN = 'http://127.0.0.1:8081';
+
+const hostedActorEnvironment: MediaActorEnvironment = {
+  apiUrl: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
+};
+
+void hostedActorEnvironment;
 
 function localEnvironment(): LocalStackEnvironment {
   const apiUrl = ['http:', '//127.0.0.1:54321'].join('');
