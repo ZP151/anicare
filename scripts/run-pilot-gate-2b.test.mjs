@@ -91,6 +91,7 @@ test('fails closed for invalid run selectors or a non-directory cleanup target',
 test('deploys incrementally in fixed order without privileged command arguments', async () => {
   const sourceArchive = path.join('C:/temp/source', 'source.tar');
   const commands = [];
+  const stages = [];
   const processAdapter = {
     run: async (command, args, options) => {
       commands.push({ command, args, options });
@@ -120,7 +121,8 @@ test('deploys incrementally in fixed order without privileged command arguments'
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
   };
   await runPilotGate2B({ repoRoot: 'C:/repo', processAdapter, fetchAdapter, parentEnvironment: values,
-    discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }), outputAdapter: { write: () => undefined } });
+    discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }), outputAdapter: { write: () => undefined },
+    stageAdapter: { enter: (stage) => stages.push(stage) } });
   assert.deepEqual(commands.map(({ command, args }) => [command, ...args]), [
     ['git', 'rev-parse', 'HEAD'],
     ['git', 'status', '--porcelain=v1', '--untracked-files=all'],
@@ -140,4 +142,73 @@ test('deploys incrementally in fixed order without privileged command arguments'
     commandText.includes('sb_secret_service'), false);
   const forbidden = new Set(['reset', 'repair', 'seed', 'dump', 'restore', 'prune', 'delete', 'pause', 'query']);
   assert.equal(commands.some(({ command, args }) => [command, ...args].some((token) => forbidden.has(token))), false);
+  assert.deepEqual(stages, [
+    'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
+    'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
+    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
+  ]);
+});
+
+test('reports the fixed source verification stage before an operation fails', async () => {
+  let observedStage = 'unknown';
+  const processAdapter = {
+    run: async () => { throw new Error('external failure must not enter the diagnostic'); },
+    removeTemporaryFiles: async () => undefined,
+  };
+  const values = {
+    SUPABASE_ACCESS_TOKEN: 'access-secret',
+    SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_service', SUPABASE_PUBLIC_KEY: 'sb_publishable_public',
+    PRECISE_LOCATION_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+  };
+  await assert.rejects(runPilotGate2B({
+    repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
+    discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
+    stageAdapter: { enter: (stage) => { observedStage = stage; } },
+  }), /external failure/);
+  assert.equal(observedStage, 'source_verification');
+});
+
+test('serializes only allowlisted producer diagnostics with canonical bytes', async () => {
+  const { buildProducerFailureDiagnostic } = await import('./run-pilot-gate-2b.mjs');
+  const allowed = [
+    'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
+    'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
+    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
+    'temporary_cleanup',
+  ];
+  for (const stage of allowed) {
+    assert.equal(buildProducerFailureDiagnostic(stage),
+      `${JSON.stringify({ stage, code: 'hosted_gate_failed' })}\n`);
+  }
+  const hostile = 'function_deployment\\nBearer secret JWT.part.value https://db.example/path?id=1';
+  const diagnostic = buildProducerFailureDiagnostic(hostile);
+  assert.equal(diagnostic, '{"stage":"unknown","code":"hosted_gate_failed"}\n');
+  assert.equal(diagnostic.includes('secret') || diagnostic.includes('https://') || diagnostic.includes('Bearer'), false);
+});
+
+test('reports temporary cleanup only when cleanup itself fails', async () => {
+  let observedStage = 'unknown';
+  const processAdapter = {
+    run: async () => { throw new Error('primary failure'); },
+    removeTemporaryFiles: async () => { throw new Error('cleanup failure'); },
+  };
+  const values = {
+    SUPABASE_ACCESS_TOKEN: 'access-secret',
+    SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_service', SUPABASE_PUBLIC_KEY: 'sb_publishable_public',
+    PRECISE_LOCATION_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+  };
+  await assert.rejects(runPilotGate2B({
+    repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
+    discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
+    stageAdapter: { enter: (stage) => { observedStage = stage; } },
+  }), /cleanup failure/);
+  assert.equal(observedStage, 'temporary_cleanup');
 });

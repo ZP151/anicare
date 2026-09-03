@@ -10,8 +10,19 @@ const PROJECT_REF = 'fhugdtpjbgiatqhvjioy';
 const MANAGEMENT_URL = `https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth`;
 const DIAGNOSTIC_PATH = path.join(tmpdir(), 'animalhelper-pilot-gate-2b-failure.log');
 const SAFE_ENV = ['PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TMP', 'TEMP', 'CI', 'GITHUB_ACTIONS'];
+const PRODUCER_STAGES = new Set([
+  'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
+  'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
+  'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
+  'temporary_cleanup',
+]);
 
 function invalid(code) { throw new Error(code); }
+
+export function buildProducerFailureDiagnostic(stage) {
+  const safeStage = typeof stage === 'string' && PRODUCER_STAGES.has(stage) ? stage : 'unknown';
+  return `${JSON.stringify({ stage: safeStage, code: 'hosted_gate_failed' })}\n`;
+}
 
 async function boundedFetch(fetchAdapter, url, init, timeoutMs = 10_000) {
   const controller = new AbortController();
@@ -201,7 +212,9 @@ export async function runPilotGate2B({
   parentEnvironment = process.env,
   outputAdapter = process.stdout,
   discoverInputs = discoverPilotGate2BInputs,
+  stageAdapter = { enter: () => undefined },
 }) {
+  stageAdapter.enter('environment_validation');
   const initialInputs = discoverInputs(repoRoot);
   validatePilotGate2BInputs({
     repository: required(parentEnvironment, 'GITHUB_REPOSITORY'),
@@ -228,6 +241,7 @@ export async function runPilotGate2B({
   let edgeSecretFile;
   let sourceRoot;
   try {
+    stageAdapter.enter('source_verification');
     const head = await processAdapter.run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, env: base, timeoutMs: 10_000 });
     if (head?.stdout?.trim() !== parentEnvironment.GITHUB_SHA) return invalid('pilot_gate_2b_sha_invalid');
     const status = await processAdapter.run('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
@@ -246,22 +260,31 @@ export async function runPilotGate2B({
     if (initialInputs?.deploymentTreeSha256 !== immutableInputs?.deploymentTreeSha256) {
       return invalid('pilot_gate_2b_source_invalid');
     }
+    stageAdapter.enter('public_key_origin');
     await verifyPublicKeyOrigin(fetchAdapter, publicKey);
+    stageAdapter.enter('supabase_link');
     await processAdapter.run('supabase', ['link', '--project-ref', PROJECT_REF], { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
+    stageAdapter.enter('database_dry_run');
     await processAdapter.run('supabase', ['db', 'push', '--dry-run'], { cwd: sourceRoot, env: dbCli, timeoutMs: 120_000 });
+    stageAdapter.enter('database_push');
     await processAdapter.run('supabase', ['db', 'push'], { cwd: sourceRoot, env: dbCli, timeoutMs: 300_000 });
+    stageAdapter.enter('auth_configuration');
     await configureHostedAuth({ fetchAdapter, accessToken });
+    stageAdapter.enter('edge_secret_configuration');
     edgeSecretFile = await processAdapter.writeEdgeSecretFile({ PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey });
     await processAdapter.run('supabase', ['secrets', 'set', '--env-file', edgeSecretFile, '--project-ref', PROJECT_REF],
       { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
+    stageAdapter.enter('function_deployment');
     for (const name of DEPLOYED_FUNCTIONS) {
       await processAdapter.run('supabase', ['functions', 'deploy', name, '--project-ref', PROJECT_REF, '--use-api'],
         { cwd: sourceRoot, env: cli, timeoutMs: 120_000 });
     }
+    stageAdapter.enter('function_inventory');
     const remoteFunctions = await processAdapter.run('supabase', [
       'functions', 'list', '--project-ref', PROJECT_REF, '--output', 'json',
     ], { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
     validateRemoteFunctionInventory(remoteFunctions.stdout);
+    stageAdapter.enter('source_reverification');
     if (discoverInputs(sourceRoot)?.deploymentTreeSha256 !== initialInputs?.deploymentTreeSha256 ||
         discoverInputs(repoRoot)?.deploymentTreeSha256 !== initialInputs?.deploymentTreeSha256) {
       return invalid('pilot_gate_2b_source_invalid');
@@ -277,13 +300,20 @@ export async function runPilotGate2B({
       tmpdir(),
       `animalhelper-pilot-gate-2b-ledger-${harness.GITHUB_RUN_ID}-${harness.GITHUB_RUN_ATTEMPT}.json`,
     );
+    stageAdapter.enter('hosted_checks');
     await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
       { cwd: repoRoot, env: harness, timeoutMs: 180_000 });
+    stageAdapter.enter('evidence_write');
     await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
       { cwd: repoRoot, env: harness, timeoutMs: 30_000 });
     outputAdapter.write('pilot_gate_2b_deployment_passed\n');
   } finally {
-    await processAdapter.removeTemporaryFiles(edgeSecretFile);
+    try {
+      await processAdapter.removeTemporaryFiles(edgeSecretFile);
+    } catch (error) {
+      stageAdapter.enter('temporary_cleanup');
+      throw error;
+    }
   }
 }
 
@@ -302,8 +332,12 @@ if (entry === fileURLToPath(import.meta.url)) {
       process.exitCode = 1;
     }
   } else {
-    runPilotGate2B({ repoRoot }).catch(async () => {
-      await writeFile(DIAGNOSTIC_PATH, '{"stage":"unknown","code":"hosted_gate_failed"}\n', { mode: 0o600 })
+    let diagnosticStage = 'unknown';
+    runPilotGate2B({
+      repoRoot,
+      stageAdapter: { enter: (stage) => { diagnosticStage = PRODUCER_STAGES.has(stage) ? stage : 'unknown'; } },
+    }).catch(async () => {
+      await writeFile(DIAGNOSTIC_PATH, buildProducerFailureDiagnostic(diagnosticStage), { mode: 0o600 })
         .catch(() => undefined);
       process.stderr.write('pilot_gate_2b_failed\n');
       process.exitCode = 1;
