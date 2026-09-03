@@ -14,6 +14,7 @@ import {
   type ReserveInput,
 } from './actors.js';
 import { edgeEndpointUrl } from './edge-endpoints.js';
+import { fetchWithTimeout } from './network.js';
 
 const UUID_JOB = '11111111-1111-4111-8111-111111111111';
 const UUID_MEDIA = '22222222-2222-4222-8222-222222222222';
@@ -453,12 +454,43 @@ describe('owner media actors', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps an unconsumed direct helper timeout from replaying into a later finalize result', async () => {
+    vi.useFakeTimers();
+    const directHungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    });
+    const directTimeout = fetchWithTimeout('http://127.0.0.1', {}, 1, directHungFetch)
+      .then(() => undefined, (error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1);
+    const fetchMock = vi.fn(async () => { throw await directTimeout; });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(actor(), finalizeInput(), localEnvironment())).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('keeps an external finalize rejection with the timeout text in the fixed network class', async () => {
     const env = localEnvironment();
     const fetchMock = vi.fn(async () => { throw new Error('request_timeout'); });
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(finalizeMedia(actor(), finalizeInput(), env)).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('contains a hostile proxy network rejection without inspecting its shape', async () => {
+    const hostile = new Proxy({}, {
+      getPrototypeOf() { throw new Error('Bearer secret'); },
+      ownKeys() { throw new Error('https://hostile.invalid'); },
+    });
+    const fetchMock = vi.fn(async () => { throw hostile; });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(actor(), finalizeInput(), localEnvironment())).resolves.toEqual({
       ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
     });
     expect(fetchMock).toHaveBeenCalledOnce();

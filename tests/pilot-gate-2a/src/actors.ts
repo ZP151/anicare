@@ -10,7 +10,7 @@ import { isStableMediaId } from '../../../apps/mobile/src/media/media-reference.
 
 import { edgeEndpointUrl } from './edge-endpoints.js';
 import type { SyntheticActor } from './fixtures.js';
-import { fetchWithTimeout, isRequestTimeoutError } from './network.js';
+import { fetchWithTimeout } from './network.js';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_REQUEST_BYTES = 8 * 1024;
@@ -77,10 +77,6 @@ function failure(
   code: string,
 ): ActorFailure {
   return { stage, kind, status, code };
-}
-
-function networkFailureCode(error: unknown): 'request_timeout' | 'network_error' {
-  return isRequestTimeoutError(error) ? 'request_timeout' : 'network_error';
 }
 
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
@@ -161,6 +157,7 @@ async function actorPost(
   serializedBody: string,
 ): Promise<Response | ActorFailure> {
   if (!validActor(actor)) return failure(stage, 'invalid_response', null, 'invalid_response');
+  const timeoutResult = Symbol();
   try {
     return await fetchWithTimeout(endpoint, {
       method: 'POST',
@@ -171,9 +168,9 @@ async function actorPost(
         'Content-Type': 'application/json',
       },
       body: serializedBody,
-    }, REQUEST_TIMEOUT_MS);
+    }, REQUEST_TIMEOUT_MS, globalThis.fetch, timeoutResult);
   } catch (error) {
-    return failure(stage, 'network', null, networkFailureCode(error));
+    return failure(stage, 'network', null, error === timeoutResult ? 'request_timeout' : 'network_error');
   }
 }
 
@@ -253,7 +250,7 @@ export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array
       body: bytes.buffer as ArrayBuffer,
     }, REQUEST_TIMEOUT_MS);
   } catch (error) {
-    return { ok: false, ...failure('upload', 'network', null, networkFailureCode(error)) };
+    return { ok: false, ...failure('upload', 'network', null, 'network_error') };
   }
   if (!response.ok) {
     return { ok: false, ...failure('upload', 'http', response.status, 'storage_upload_failed') };

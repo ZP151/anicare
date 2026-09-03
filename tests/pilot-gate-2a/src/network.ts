@@ -1,28 +1,14 @@
 // Control-plane JSON (Auth and Edge responses) is intentionally bounded to 64 KiB.
 export const MAX_HARNESS_RESPONSE_BYTES = 64 * 1024;
 
-const requestTimeoutErrors = new WeakSet<Error>();
-
-function requestTimeoutError(): Error {
-  const error = new Error('request_timeout');
-  requestTimeoutErrors.add(error);
-  return error;
-}
-
-export function isRequestTimeoutError(error: unknown): boolean {
-  return error instanceof Error && requestTimeoutErrors.delete(error);
-}
-
-function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error('request_aborted');
-}
+function abortError(): Error { return new Error('request_aborted'); }
 
 async function settleBeforeAbort<T>(work: Promise<T>, signal: AbortSignal, cancel: () => void): Promise<T> {
   let removeAbortListener: () => void = () => {};
   const aborted = new Promise<never>((_resolve, reject) => {
     const abort = () => {
       cancel();
-      reject(abortError(signal));
+      reject(abortError());
     };
     if (signal.aborted) {
       abort();
@@ -88,6 +74,7 @@ export async function fetchWithTimeout(
   init: RequestInit = {},
   timeoutMs: number,
   fetchImplementation: typeof fetch = globalThis.fetch,
+  timeoutResult?: symbol,
 ): Promise<Response> {
   const controller = new AbortController();
   const callerSignal = init.signal;
@@ -116,7 +103,7 @@ export async function fetchWithTimeout(
     Object.defineProperty(buffered, 'url', { value: response.url });
     return buffered;
   } catch (error) {
-    if (timedOut) throw requestTimeoutError();
+    if (timedOut) throw timeoutResult ?? new Error('request_timeout');
     throw error;
   } finally {
     clearTimeout(timeout);
