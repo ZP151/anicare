@@ -305,6 +305,9 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', control),
     '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"media_staging","mediaStep":"privacy_list","cleanup":["storage_remove","absence_proof"]}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
+    gateStage: 'checks', check: 'media_staging', mediaStep: 'isolation_validation',
+  }), '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"checks","check":"media_staging","mediaStep":"isolation_validation"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
     gateStage: 'checks', check: 'owner_happy_path', mediaStep: 'privacy_list',
   }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', {

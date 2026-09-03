@@ -16,6 +16,32 @@ export const CLEANUP_OPERATION_IDS = [
 ] as const;
 export type CleanupOperationId = typeof CLEANUP_OPERATION_IDS[number];
 
+export const HOSTED_ISOLATION_STEPS = [
+  'isolation_jobs', 'isolation_assets', 'isolation_objects', 'isolation_validation',
+] as const;
+export type HostedIsolationStep = typeof HOSTED_ISOLATION_STEPS[number];
+
+export class HostedIsolationFailure extends Error {
+  constructor(readonly isolationStep: HostedIsolationStep) {
+    super('hosted_inspection_failed');
+  }
+}
+
+export function hostedIsolationStepFromError(error: unknown): HostedIsolationStep | undefined {
+  return error instanceof HostedIsolationFailure &&
+    (HOSTED_ISOLATION_STEPS as readonly string[]).includes(error.isolationStep)
+    ? error.isolationStep
+    : undefined;
+}
+
+async function atIsolationStep<T>(step: HostedIsolationStep, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    throw new HostedIsolationFailure(step);
+  }
+}
+
 export class HostedCleanupFailure extends Error {
   readonly operationIds: readonly CleanupOperationId[];
 
@@ -336,7 +362,7 @@ export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): Host
     async inspectIsolation(input) {
       const userIds = [input.ownerId, input.strangerId];
       const sightingIds = [input.ownerSightingId, input.strangerSightingId];
-      const jobs = await sql<HostedIsolationJob[]>`
+      const jobs = await atIsolationStep('isolation_jobs', () => sql<HostedIsolationJob[]>`
         select id::text as id, uploader_id::text as "uploaderId", sighting_id::text as "sightingId",
           media_id as "mediaId", sha256, byte_length as "byteLength", width, height,
           object_path as "objectPath", status::text as status, media_asset_id::text as "mediaAssetId"
@@ -345,8 +371,8 @@ export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): Host
            or (uploader_id = any(${userIds}::uuid[]) and media_id = any(${input.mediaIds}::text[]))
         order by id
         limit ${MAX_ISOLATION_ROWS + 1}
-      `;
-      const assets = await sql<HostedIsolationAsset[]>`
+      `);
+      const assets = await atIsolationStep('isolation_assets', () => sql<HostedIsolationAsset[]>`
         select id::text as id, uploader_id::text as "uploaderId", sighting_id::text as "sightingId",
           client_media_id as "clientMediaId", storage_bucket as "storageBucket", storage_path as "storagePath",
           sha256, byte_length as "byteLength", width, height, status, deleted_at::text as "deletedAt"
@@ -355,13 +381,16 @@ export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): Host
            or (uploader_id = any(${userIds}::uuid[]) and client_media_id = any(${input.mediaIds}::text[]))
         order by id
         limit ${MAX_ISOLATION_ROWS + 1}
-      `;
-      const objectExists: boolean[] = [];
-      for (const objectPath of input.observedObjectPaths) {
-        const { data, error } = await admin.storage.from('media-staging').exists(objectPath);
-        if (error || typeof data !== 'boolean') throw new Error('inspect_failed');
-        objectExists.push(data);
-      }
+      `);
+      const objectExists = await atIsolationStep('isolation_objects', async () => {
+        const results: boolean[] = [];
+        for (const objectPath of input.observedObjectPaths) {
+          const { data, error } = await admin.storage.from('media-staging').exists(objectPath);
+          if (error || typeof data !== 'boolean') throw new Error('inspect_failed');
+          results.push(data);
+        }
+        return results;
+      });
       return { jobs, assets, objectExists };
     },
     async removeObjects(paths) {
@@ -453,9 +482,12 @@ export async function inspectHostedIsolationState(
   const adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
   try {
     const result = await adapter.inspectIsolation(input);
-    if (!validIsolationInspection(result, input.observedObjectPaths.length)) throw new Error('invalid');
+    if (!validIsolationInspection(result, input.observedObjectPaths.length)) {
+      throw new HostedIsolationFailure('isolation_validation');
+    }
     return result;
-  } catch {
+  } catch (error) {
+    if (hostedIsolationStepFromError(error) !== undefined) throw error;
     throw new Error('hosted_inspection_failed');
   } finally {
     if (!providedAdapter && 'close' in adapter && typeof adapter.close === 'function') {

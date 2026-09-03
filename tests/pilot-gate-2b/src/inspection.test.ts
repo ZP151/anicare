@@ -4,6 +4,8 @@ import {
   cleanupHostedScenario,
   cleanupOperationIdsFromError,
   createHostedInspectionSession,
+  HostedIsolationFailure,
+  hostedIsolationStepFromError,
   inspectHostedIsolationState,
   inspectHostedMedia,
   type HostedMaintenanceAdapter,
@@ -129,14 +131,36 @@ describe('hosted inspection and cleanup', () => {
       mediaIds: [UUIDS[2]!],
       observedObjectPaths: [`jobs/${UUIDS[3]}.jpg`, `jobs/${UUIDS[7]}.jpg`],
     };
-    await expect(inspectHostedIsolationState(env(), isolationInput, {
-      inspectIsolation: async () => ({ jobs: [], assets: [], objectExists: [true, 'false'] }),
-    })).rejects.toThrow('hosted_inspection_failed');
+    try {
+      await inspectHostedIsolationState(env(), isolationInput, {
+        inspectIsolation: async () => ({ jobs: [], assets: [], objectExists: [true, 'false'] }),
+      });
+      throw new Error('expected isolation validation failure');
+    } catch (error) {
+      expect(hostedIsolationStepFromError(error)).toBe('isolation_validation');
+    }
     await expect(inspectHostedIsolationState(env(), isolationInput, {
       inspectIsolation: async () => ({
         jobs: Array.from({ length: 17 }, () => ({})), assets: [], objectExists: [true, false],
       }),
     })).rejects.toThrow('hosted_inspection_failed');
+  });
+
+  it('preserves only a typed finite isolation operation step', async () => {
+    const isolationInput = {
+      ownerId: UUIDS[0]!, strangerId: UUIDS[5]!,
+      ownerSightingId: UUIDS[1]!, strangerSightingId: UUIDS[6]!, mediaIds: [UUIDS[2]!],
+      observedObjectPaths: [`jobs/${UUIDS[3]}.jpg`, `jobs/${UUIDS[7]}.jpg`],
+    };
+    try {
+      await inspectHostedIsolationState(env(), isolationInput, {
+        inspectIsolation: async () => { throw new HostedIsolationFailure('isolation_jobs'); },
+      });
+      throw new Error('expected isolation query failure');
+    } catch (error) {
+      expect(hostedIsolationStepFromError(error)).toBe('isolation_jobs');
+      expect(String(error)).not.toMatch(/Bearer|https:|secret/);
+    }
   });
 
   it('removes exact objects, deletes rows in fixed order, deletes Auth last, and proves absence', async () => {

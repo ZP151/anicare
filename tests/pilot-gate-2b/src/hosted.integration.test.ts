@@ -19,6 +19,7 @@ import { executeHostedGate, hostedGateControlFromError, type MutableHostedScenar
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
 import {
   cleanupHostedScenario, createHostedInspectionSession,
+  hostedIsolationStepFromError,
   type HostedInspection, type HostedInspectionInput, type HostedInspectionSession,
   type HostedIsolationInspection, type PartialHostedScenario,
 } from './inspection.js';
@@ -138,8 +139,8 @@ describe('real Hosted Gate 2B', () => {
         const atMediaStep = async <T>(step: HostedMediaStagingStep, operation: () => Promise<T>): Promise<T> => {
           try {
             return await operation();
-          } catch {
-            throw new HostedCheckFailure('media_staging', step);
+          } catch (error) {
+            throw new HostedCheckFailure('media_staging', hostedIsolationStepFromError(error) ?? step);
           }
         };
         const requireMediaStep = (step: HostedMediaStagingStep, passed: boolean): void => {

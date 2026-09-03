@@ -19,6 +19,7 @@ export type HostedCheckId = typeof HOSTED_CHECK_IDS[number];
 
 export const HOSTED_MEDIA_STAGING_STEPS = [
   'prerequisite_state', 'bucket_configuration', 'stranger_reservation', 'isolation_snapshot',
+  'isolation_jobs', 'isolation_assets', 'isolation_objects', 'isolation_validation',
   'privacy_read_actual', 'privacy_read_unknown', 'privacy_read_equivalence', 'privacy_list',
   'isolation_compare', 'owner_unchanged',
 ] as const;
