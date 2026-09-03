@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
+    "characterize:hosted": "tsx src/characterize-hosted.ts",
     "cleanup:hosted": "tsx src/cleanup-hosted.ts",
     "evidence:write": "tsx src/write-evidence.ts",
     "lint": "tsc -p tsconfig.json --noEmit",

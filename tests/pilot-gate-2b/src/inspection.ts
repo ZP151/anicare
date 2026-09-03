@@ -7,7 +7,7 @@ import type { HostedGateEnvironment } from './environment.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256 = /^[a-f0-9]{64}$/;
 const OBJECT_PATH = /^jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
-const MAX_TRACKED = 8;
+const MAX_TRACKED = 32;
 const MAX_ISOLATION_ROWS = 16;
 
 export const CLEANUP_OPERATION_IDS = [

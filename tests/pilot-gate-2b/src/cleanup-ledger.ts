@@ -10,6 +10,7 @@ const KEYS = [
 ] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OBJECT_PATH = /^jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
+const MAX_TRACKED = 32;
 const LEDGER_FILE = /^animalhelper-pilot-gate-2b-ledger-[1-9][0-9]*-[1-9][0-9]*\.json$/;
 
 type CleanupLedger = Required<PartialHostedScenario>;
@@ -22,12 +23,12 @@ function normalize(value: unknown): CleanupLedger {
   const record = value as Record<string, unknown>;
   const ids = (key: typeof KEYS[number]): readonly string[] => {
     const list = record[key];
-    if (!Array.isArray(list) || list.length > 8 || list.some((item) => typeof item !== 'string' || !UUID.test(item)) ||
+    if (!Array.isArray(list) || list.length > MAX_TRACKED || list.some((item) => typeof item !== 'string' || !UUID.test(item)) ||
         new Set(list).size !== list.length) return invalid();
     return [...list];
   };
   const paths = record.createdObjectPaths;
-  if (!Array.isArray(paths) || paths.length > 8 ||
+  if (!Array.isArray(paths) || paths.length > MAX_TRACKED ||
       paths.some((item) => typeof item !== 'string' || !OBJECT_PATH.test(item)) || new Set(paths).size !== paths.length) {
     return invalid();
   }
@@ -36,7 +37,7 @@ function normalize(value: unknown): CleanupLedger {
     createdUserIds: ids('createdUserIds'),
     sightingRecoveryReferences: (() => {
       const references = record.sightingRecoveryReferences;
-      if (!Array.isArray(references) || references.length > 8 || references.some((item) =>
+      if (!Array.isArray(references) || references.length > MAX_TRACKED || references.some((item) =>
         !item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).length !== 2 ||
         !UUID.test(item.reporterId) || !/^pilot-gate-2b-(?:owner|stranger)-[a-f0-9]{32}$/i.test(item.clientDedupeKey)) ||
         new Set(references.map((item) => `${item.reporterId}:${item.clientDedupeKey}`)).size !== references.length) {
@@ -75,7 +76,7 @@ export async function persistCleanupMediaId(
   mediaId: string,
 ): Promise<CleanupLedger> {
   const tracked = normalize(value);
-  if (!UUID.test(mediaId) || tracked.createdMediaIds.includes(mediaId) || tracked.createdMediaIds.length >= 8) {
+  if (!UUID.test(mediaId) || tracked.createdMediaIds.includes(mediaId) || tracked.createdMediaIds.length >= MAX_TRACKED) {
     return invalid();
   }
   const updated = normalize({

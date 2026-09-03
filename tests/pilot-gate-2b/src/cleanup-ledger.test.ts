@@ -8,6 +8,22 @@ import { persistCleanupMediaId, readCleanupLedger, writeCleanupLedger } from './
 const ID = '11111111-1111-4111-8111-111111111111';
 
 describe('durable hosted cleanup ledger', () => {
+  it('retains all 25 bounded characterization reservations for crash recovery', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'gate-2b-ledger-characterize-'));
+    const file = path.join(root, 'animalhelper-pilot-gate-2b-ledger-123-1.json');
+    const ids = Array.from({ length: 25 }, (_value, index) =>
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+    const value = {
+      createdAuthRecoveryIds: [], createdUserIds: [], sightingRecoveryReferences: [],
+      createdSightingIds: [], createdMediaIds: ids,
+      createdJobIds: ids, createdAssetIds: ids, createdObjectPaths: ids.map((id) => `jobs/${id}.jpg`),
+    };
+    try {
+      await writeCleanupLedger(file, value);
+      await expect(readCleanupLedger(file)).resolves.toEqual(value);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it('writes and reads only canonical exact cleanup selectors', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'gate-2b-ledger-'));
     const file = path.join(root, 'animalhelper-pilot-gate-2b-ledger-123-1.json');
