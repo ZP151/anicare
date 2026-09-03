@@ -320,6 +320,10 @@ describe('hosted check coordinator', () => {
       }
       assertFirstFinalizeArguments(firstFinalizeCall);
       const firstFinalizeBinding = awaitedCallBinding(statements, firstFinalizeStep);
+      const replayBinding = awaitedCallBinding(statements, replayStep);
+      if (firstFinalizeCall.pos >= replayFinalizeCall.pos || firstFinalizeBinding.index >= replayBinding.index) {
+        throw new Error('the first finalize call and binding must precede the replay call and binding');
+      }
       if (!isDirectOwnerFinalizeSeam(statements[firstFinalizeBinding.index + 1], firstFinalizeBinding.name)) {
         throw new Error('the first finalize result must flow immediately into ownerFinalizedMediaAssetId');
       }
