@@ -87,3 +87,43 @@ pnpm verify                                           # passed
 ```
 
 Round 1 implementation commit: `e814abe fix(pilot): brand request timeout failures`.
+
+## Round 2: marker-replay and malformed-result hardening
+
+Security review found that the Round 1 branded error was itself passed as the
+internal `AbortSignal.reason`. A fetch implementation could retain that object
+and reject a later request with it, replaying the timeout classification.
+
+RED captured the first finalize signal reason during a genuine 5,000 ms timer
+expiry and threw it from a second finalize request. The second request was
+incorrectly classified as `request_timeout`. A companion RED test showed that
+the marker predicate accepted the same returned error more than once.
+
+The timer now sets invocation-local `timedOut` state and aborts with only an
+unbranded fixed abort error. `fetchWithTimeout` catches that invocation's
+failure and creates a fresh private timeout marker only when its own timer
+won. The exported predicate consumes its marker with `WeakSet.delete`, so an
+already classified error cannot be replayed. External same-message errors,
+captured signal reasons, and caller cancellation all remain non-timeout.
+
+The same review also required the Hosted result mapper to fail closed for
+hostile object shapes. It now accepts only exact own-key records with either
+the plain-object or null prototype. Extra-own fields, custom inherited fields,
+and reflective proxy failures return no outcome for timeout, network, HTTP,
+and invalid-response mappings. The exact `{ ok: true, status: 200 }`
+missing-asset shape remains `invalid_response`; raw values are never
+serialized.
+
+Round 2 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2a test:unit  # 14 files, 103 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit  # 15 files, 176 passed
+pnpm test:pilot-gate-2b-ci                           # 30 passed, 1 Windows symlink capability skip
+pnpm --filter @animalhelper/pilot-gate-2a typecheck
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify                                           # passed
+```
+
+Round 2 implementation commit: `b246a06 fix(pilot): prevent timeout marker replay`.
