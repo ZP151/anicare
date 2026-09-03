@@ -61,6 +61,7 @@ test('deploys incrementally in fixed order without privileged command arguments'
     ['supabase', 'secrets', 'set', '--env-file', 'C:/temp/edge.env', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
     ...DEPLOYED_FUNCTIONS.map((name) => ['supabase', 'functions', 'deploy', name, '--project-ref', 'fhugdtpjbgiatqhvjioy', '--use-api']),
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
+    ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
   ]);
   const commandText = JSON.stringify(commands.map(({ command, args }) => [command, args]));
   assert.equal(commandText.includes('access-secret') || commandText.includes('db-secret') ||

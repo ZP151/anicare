@@ -166,6 +166,8 @@ export async function runPilotGate2B({
     });
     await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
       { cwd: repoRoot, env: harness, timeoutMs: 180_000 });
+    await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
+      { cwd: repoRoot, env: harness, timeoutMs: 30_000 });
     outputAdapter.write('pilot_gate_2b_deployment_passed\n');
   } finally {
     await processAdapter.removeTemporaryFiles(edgeSecretFile).catch(() => undefined);

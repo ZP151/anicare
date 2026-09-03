@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
+    "evidence:write": "tsx src/write-evidence.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:unit": "vitest run --config vitest.config.ts",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@types/node": "latest",
     "typescript": "latest",
+    "tsx": "4.23.12",
     "vitest": "latest"
   }
 }
