@@ -27,17 +27,38 @@ test('root verification blocks on both native pilot policy validators', async ()
     /pnpm test:ios-device-lab-workflow/,
     'root verification must include the iOS Device Lab workflow contract',
   );
+  assert.match(
+    packageJson.scripts['test:pilot-gate-2b-ci'],
+    /scripts\/promote-pilot-gate-2b-evidence\.test\.mjs/,
+    'the required Gate 2B aggregate must cover evidence promotion',
+  );
+  assert.match(
+    packageJson.scripts.verify,
+    /pnpm test:pilot-gate-2b-ci/,
+    'root verification must include the full Gate 2B Node policy aggregate',
+  );
+  assert.equal(
+    packageJson.scripts['test:hosted-gate-2b-workflow'],
+    'node --test scripts/hosted-gate-2b-workflow-contract.test.mjs',
+  );
+  assert.match(
+    packageJson.scripts.verify,
+    /pnpm test:hosted-gate-2b-workflow/,
+    'root verification must include the Hosted Gate 2B workflow contract',
+  );
 });
 
 test('CI invokes the policy and contract gates independently before root verify', async () => {
   const workflow = await readFile(workflowUrl, 'utf8');
   const policyIndex = workflow.indexOf('- run: pnpm validate:pilot-policies');
   const contractIndex = workflow.indexOf('- run: pnpm test:root-contracts');
+  const hostedContractIndex = workflow.indexOf('- run: pnpm test:hosted-gate-2b-workflow');
   const verifyIndex = workflow.indexOf('- run: pnpm verify');
 
   assert.ok(policyIndex >= 0, 'CI must invoke the native pilot policy gate directly');
   assert.ok(contractIndex > policyIndex, 'CI must invoke the root contract after policy validation');
-  assert.ok(verifyIndex > contractIndex, 'both independent gates must run before root verification');
+  assert.ok(hostedContractIndex > contractIndex, 'CI must invoke the Hosted Gate 2B workflow contract independently');
+  assert.ok(verifyIndex > hostedContractIndex, 'all independent gates must run before root verification');
 });
 
 test('workspace type analysis builds dependency packages before clean-checkout resolution', async () => {

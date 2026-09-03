@@ -45,7 +45,7 @@ try {
     isAncestor: (source, candidate) => gitStatus('merge-base', '--is-ancestor', source, candidate),
     hasMigrationChanges: (source, candidate) => git('diff', '--name-only', source, candidate, '--', 'supabase/migrations').trim().length > 0,
     migrationHead,
-    edgeFunctionsTreeSha256: createHash('sha256').update(gitBuffer('ls-tree', '-r', 'HEAD', 'supabase/functions')).digest('hex'),
+    edgeFunctionsTreeSha256: hashEdgeFunctionsTree(repositoryRoot),
   });
   if (codes.length > 0) fail(codes);
   process.stdout.write('gate_2b_readiness_valid\n');
@@ -55,10 +55,6 @@ try {
 
 function git(...args: string[]): string {
   return execFileSync('git', args, { cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-}
-
-function gitBuffer(...args: string[]): Buffer {
-  return execFileSync('git', args, { cwd: repositoryRoot, stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
 function gitStatus(...args: string[]): boolean {
@@ -83,11 +79,48 @@ function fixedDirectory(path: string, root: string): string {
 }
 
 function readFixedRegularFile(path: string, root: string): string {
+  return readFixedRegularBuffer(path, root).toString('utf8');
+}
+
+function readFixedRegularBuffer(path: string, root: string): Buffer {
   const link = lstatSync(path);
-  if (!link.isFile() || link.isSymbolicLink()) throw new Error('invalid');
+  if (!link.isFile() || link.isSymbolicLink() || link.size > 2 * 1024 * 1024) throw new Error('invalid');
   const realPath = realpathSync(path);
   if (!isWithin(root, realPath) || !statSync(realPath).isFile()) throw new Error('invalid');
-  return readFileSync(realPath, 'utf8');
+  return readFileSync(realPath);
+}
+
+function hashEdgeFunctionsTree(root: string): string {
+  const functionsRoot = fixedDirectory(resolve(root, 'supabase/functions'), root);
+  const files: string[] = [];
+  const walk = (directory: string): void => {
+    for (const name of readdirSync(directory).sort((left, right) => left.localeCompare(right))) {
+      if (name === 'node_modules' || name === 'dist' || name === '.turbo') continue;
+      const path = resolve(directory, name);
+      const link = lstatSync(path);
+      if (link.isSymbolicLink()) throw new Error('invalid');
+      if (link.isDirectory()) walk(realpathSync(path));
+      else if (link.isFile()) files.push(realpathSync(path));
+      else throw new Error('invalid');
+    }
+  };
+  walk(functionsRoot);
+  files.sort((left, right) => relative(functionsRoot, left).replaceAll('\\', '/').localeCompare(
+    relative(functionsRoot, right).replaceAll('\\', '/'),
+  ));
+  const hash = createHash('sha256');
+  hash.update('animalhelper-edge-functions-tree-v1\0');
+  let totalBytes = 0;
+  for (const path of files) {
+    const relativePath = relative(functionsRoot, path).replaceAll('\\', '/');
+    const bytes = readFixedRegularBuffer(path, functionsRoot);
+    totalBytes += bytes.byteLength;
+    if (totalBytes > 32 * 1024 * 1024) throw new Error('invalid');
+    hash.update(`${Buffer.byteLength(relativePath)}:${relativePath}\0${bytes.byteLength}:`);
+    hash.update(bytes);
+    hash.update('\0');
+  }
+  return hash.digest('hex');
 }
 
 function isWithin(root: string, path: string): boolean {

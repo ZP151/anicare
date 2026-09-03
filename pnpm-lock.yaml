@@ -244,6 +244,28 @@ importers:
         specifier: latest
         version: 4.1.11(@types/node@26.4.0)(jsdom@20.0.3(supports-color@8.1.1))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  tests/pilot-gate-2b:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: 2.98.0
+        version: 2.98.0
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
+    devDependencies:
+      '@types/node':
+        specifier: latest
+        version: 26.4.0
+      typescript:
+        specifier: latest
+        version: 7.0.2
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      vitest:
+        specifier: latest
+        version: 4.1.11(@types/node@26.4.0)(jsdom@20.0.3(supports-color@8.1.1))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.2)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+
 packages:
 
   '@babel/code-frame@7.29.7':

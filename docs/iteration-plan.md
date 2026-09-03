@@ -70,6 +70,16 @@ Gate 2B, installation, or physical-device completion. Missing candidate or
 current hosted-readiness evidence remains an external blocker, not an
 authorization to dispatch or refresh anything.
 
+## Hosted Gate 2B producer (implemented, not yet executed)
+
+The protected producer, hosted synthetic harness, exact cleanup proof, workflow
+contract, and fail-closed evidence promotion command are implemented. The
+[operator runbook](runbooks/hosted-gate-2b.md) defines the credential,
+environment-approval, merge-commit, 72-hour refresh, and redaction boundaries.
+No hosted-readiness claim exists until the exact reviewed SHA completes a real
+owner-approved run and its validated evidence is committed. The real two-hour
+Storage-token expiry/replay gate remains open.
+
 ## Sprint 3A — complete mobile product surfaces (planned, required)
 
 The five-tab shell is not an application-completeness claim. Current visual

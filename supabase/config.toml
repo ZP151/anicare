@@ -26,3 +26,7 @@ enable_signup = true
 enabled = true
 file_size_limit = "20MiB"
 
+[edge_runtime]
+enabled = true
+deno_version = 2
+

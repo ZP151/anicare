@@ -8,7 +8,6 @@ import {
 } from '../../../apps/mobile/src/api/media.js';
 import { isStableMediaId } from '../../../apps/mobile/src/media/media-reference.js';
 
-import type { LocalStackEnvironment } from './environment.js';
 import { edgeEndpointUrl } from './edge-endpoints.js';
 import type { SyntheticActor } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
@@ -19,6 +18,7 @@ const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACTOR_TOKEN = /^\S{1,8192}$/;
+const HOSTED_MEDIA_ORIGIN = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 const EDGE_ERROR_CODES = new Set([
   'authentication_required',
   'invalid_request',
@@ -28,6 +28,13 @@ const EDGE_ERROR_CODES = new Set([
   'service_unavailable',
   'storage_deletion_pending',
 ]);
+
+export type MediaActorEnvironment = Readonly<{ apiUrl: string }>;
+
+export type ActorRequestOptions = Readonly<{
+  signal?: AbortSignal;
+  timeoutMs?: 5_000 | 10_000 | 12_000 | 15_000 | 30_000;
+}>;
 
 type DetectorVersions = Readonly<{
   cats: 'unavailable';
@@ -153,21 +160,24 @@ async function actorPost(
   endpoint: string,
   actor: SyntheticActor,
   serializedBody: string,
+  options: ActorRequestOptions = {},
 ): Promise<Response | ActorFailure> {
   if (!validActor(actor)) return failure(stage, 'invalid_response', null, 'invalid_response');
+  const timeoutResult = Symbol();
   try {
     return await fetchWithTimeout(endpoint, {
       method: 'POST',
       redirect: 'error',
       cache: 'no-store',
+      ...(options.signal ? { signal: options.signal } : {}),
       headers: {
         Authorization: `Bearer ${actor.accessToken}`,
         'Content-Type': 'application/json',
       },
       body: serializedBody,
-    }, REQUEST_TIMEOUT_MS);
-  } catch {
-    return failure(stage, 'network', null, 'network_error');
+    }, options.timeoutMs ?? REQUEST_TIMEOUT_MS, globalThis.fetch, timeoutResult);
+  } catch (error) {
+    return failure(stage, 'network', null, error === timeoutResult ? 'request_timeout' : 'network_error');
   }
 }
 
@@ -178,12 +188,13 @@ async function httpFailure(stage: ActorStage, response: Response): Promise<Actor
 export async function reserveMedia(
   actor: SyntheticActor,
   input: ReserveInput,
-  env: LocalStackEnvironment,
+  env: MediaActorEnvironment,
+  options: ActorRequestOptions = {},
 ): Promise<Reservation> {
   const serializedBody = reservationRequest(input);
   if (serializedBody === null) throw failure('reserve', 'invalid_response', null, 'invalid_response');
   const response = await actorPost(
-    'reserve', edgeEndpointUrl(env.apiUrl, 'reserveMediaUpload'), actor, serializedBody,
+    'reserve', edgeEndpointUrl(env.apiUrl, 'reserveMediaUpload'), actor, serializedBody, options,
   );
   if (!(response instanceof Response)) throw response;
   if (!response.ok) throw await httpFailure('reserve', response);
@@ -218,7 +229,8 @@ function canonicalUploadUrl(reservation: Reservation): string | null {
   try {
     const origin = parseTrustedSupabaseOrigin(reservation.origin, [reservation.origin]);
     const parsedOrigin = new URL(origin);
-    if (parsedOrigin.protocol !== 'http:' || parsedOrigin.hostname !== '127.0.0.1') return null;
+    const localOrigin = parsedOrigin.protocol === 'http:' && parsedOrigin.hostname === '127.0.0.1';
+    if (!localOrigin && origin !== HOSTED_MEDIA_ORIGIN) return null;
     return `${origin}/storage/v1/object/upload/sign/media-staging/${reservation.path}` +
       `?token=${encodeURIComponent(reservation.token)}`;
   } catch {
@@ -226,7 +238,11 @@ function canonicalUploadUrl(reservation: Reservation): string | null {
   }
 }
 
-export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array): Promise<ActorResult> {
+export async function putSignedMedia(
+  reservation: Reservation,
+  bytes: Uint8Array,
+  options: ActorRequestOptions = {},
+): Promise<ActorResult> {
   const uploadUrl = canonicalUploadUrl(reservation);
   if (uploadUrl === null || bytes.byteLength < 1 || bytes.byteLength > MAX_MEDIA_BYTES ||
       bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
@@ -238,14 +254,15 @@ export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array
       method: 'PUT',
       redirect: 'error',
       cache: 'no-store',
+      ...(options.signal ? { signal: options.signal } : {}),
       headers: {
         'Content-Type': 'image/jpeg',
         'x-upsert': 'false',
         'Cache-Control': 'no-cache',
       },
       body: bytes.buffer as ArrayBuffer,
-    }, REQUEST_TIMEOUT_MS);
-  } catch {
+    }, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  } catch (error) {
     return { ok: false, ...failure('upload', 'network', null, 'network_error') };
   }
   if (!response.ok) {
@@ -270,14 +287,15 @@ function finalizationSuccess(value: unknown): string | null {
 export async function finalizeMedia(
   actor: SyntheticActor,
   input: FinalizeInput,
-  env: LocalStackEnvironment,
+  env: MediaActorEnvironment,
+  options: ActorRequestOptions = {},
 ): Promise<ActorResult> {
   const serializedBody = finalizationRequest(input);
   if (serializedBody === null) {
     return { ok: false, ...failure('finalize', 'invalid_response', null, 'invalid_response') };
   }
   const response = await actorPost(
-    'finalize', edgeEndpointUrl(env.apiUrl, 'finalizeMediaUpload'), actor, serializedBody,
+    'finalize', edgeEndpointUrl(env.apiUrl, 'finalizeMediaUpload'), actor, serializedBody, options,
   );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('finalize', response) };
@@ -293,14 +311,15 @@ export async function finalizeMedia(
 export async function deleteMedia(
   actor: SyntheticActor,
   mediaAssetId: string,
-  env: LocalStackEnvironment,
+  env: MediaActorEnvironment,
+  options: ActorRequestOptions = {},
 ): Promise<ActorResult> {
   const serializedBody = deletionRequest(mediaAssetId);
   if (serializedBody === null) {
     return { ok: false, ...failure('delete', 'invalid_response', null, 'invalid_response') };
   }
   const response = await actorPost(
-    'delete', edgeEndpointUrl(env.apiUrl, 'deleteMedia'), actor, serializedBody,
+    'delete', edgeEndpointUrl(env.apiUrl, 'deleteMedia'), actor, serializedBody, options,
   );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('delete', response) };

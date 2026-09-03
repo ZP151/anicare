@@ -9,16 +9,24 @@ import {
   putSignedMedia,
   reserveMedia,
   type FinalizeInput,
+  type MediaActorEnvironment,
   type Reservation,
   type ReserveInput,
 } from './actors.js';
 import { edgeEndpointUrl } from './edge-endpoints.js';
+import { fetchWithTimeout } from './network.js';
 
 const UUID_JOB = '11111111-1111-4111-8111-111111111111';
 const UUID_MEDIA = '22222222-2222-4222-8222-222222222222';
 const UUID_SIGHTING = '33333333-3333-4333-8333-333333333333';
 const UUID_ASSET = '44444444-4444-4444-8444-444444444444';
 const LOCAL_CORS_ORIGIN = 'http://127.0.0.1:8081';
+
+const hostedActorEnvironment: MediaActorEnvironment = {
+  apiUrl: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
+};
+
+void hostedActorEnvironment;
 
 function localEnvironment(): LocalStackEnvironment {
   const apiUrl = ['http:', '//127.0.0.1:54321'].join('');
@@ -99,10 +107,34 @@ async function reservationFailure(operation: Promise<Reservation>): Promise<unkn
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('owner media actors', () => {
+  it('accepts a signed upload only from the fixed hosted project origin', async () => {
+    const hosted: Reservation = {
+      jobId: UUID_JOB,
+      mediaId: UUID_MEDIA,
+      path: `jobs/${UUID_JOB}.jpg`,
+      token: 'signed-hosted-token',
+      usableUntil: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+      origin: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
+    };
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      Key: `media-staging/jobs/${UUID_JOB}.jpg`,
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(putSignedMedia(hosted, new Uint8Array([0xff, 0xd8, 0xff, 0xd9])))
+      .resolves.toEqual({ ok: true, status: 200 });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/^https:\/\/fhugdtpjbgiatqhvjioy\.supabase\.co\//);
+
+    await expect(putSignedMedia({ ...hosted, origin: 'https://attacker.example' }, new Uint8Array([1])))
+      .resolves.toMatchObject({ ok: false, stage: 'upload', code: 'invalid_response' });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('trusts the validated Supabase API origin when the unrelated CORS origin differs', async () => {
     const env = localEnvironment();
     const owner = actor();
@@ -377,6 +409,232 @@ describe('owner media actors', () => {
     await expect(finalizeMedia(owner, finalizeInput(), env)).resolves.toEqual({
       ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
+  });
+
+  it('propagates caller cancellation through finalization before the local deadline', async () => {
+    const env = localEnvironment();
+    const owner = actor();
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = finalizeMedia(owner, finalizeInput(), env, {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    controller.abort();
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(requestSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('times out a 6,000 ms finalization response under the ordinary 5,000 ms budget', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    const owner = actor();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => new Promise<Response>((resolve) => {
+      setTimeout(() => resolve(new Response(JSON.stringify({
+        mediaAssetId: UUID_ASSET,
+        status: 'quarantined',
+      }), { status: 200 })), 6_000);
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = finalizeMedia(owner, finalizeInput(), env);
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('accepts the first owner finalization response that arrives at 6,000 ms under the relaxed 30,000 ms budget', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    const owner = actor();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => new Promise<Response>((resolve) => {
+      setTimeout(() => resolve(new Response(JSON.stringify({
+        mediaAssetId: UUID_ASSET,
+        status: 'quarantined',
+      }), { status: 200 })), 6_000);
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = finalizeMedia(owner, finalizeInput(), env, { timeoutMs: 30_000 });
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(result).resolves.toEqual({ ok: true, status: 200, mediaAssetId: UUID_ASSET });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('maps only the 30,000 ms relaxed first owner finalization deadline to the fixed request-timeout code without retrying', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    const owner = actor();
+    const startedAt = Date.now();
+    let abortedAt: number | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        abortedAt = Date.now();
+        reject(init.signal?.reason);
+      }, { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = finalizeMedia(owner, finalizeInput(), env, { timeoutMs: 30_000 });
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout',
+    });
+    expect(abortedAt).toBe(startedAt + 30_000);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the reserve request timeout at 5,000 ms without retrying', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    const startedAt = Date.now();
+    let abortedAt: number | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        abortedAt = Date.now();
+        reject(init.signal?.reason);
+      }, { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = reservationFailure(reserveMedia(actor(), reserveInput(), env));
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(result).resolves.toEqual({
+      stage: 'reserve', kind: 'network', status: null, code: 'request_timeout',
+    });
+    expect(abortedAt).toBe(startedAt + 5_000);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the signed Storage upload timeout at 5,000 ms without retrying', async () => {
+    vi.useFakeTimers();
+    const capability = reservation(localEnvironment());
+    const startedAt = Date.now();
+    let abortedAt: number | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        abortedAt = Date.now();
+        reject(init.signal?.reason);
+      }, { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = putSignedMedia(capability, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'upload', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(abortedAt).toBe(startedAt + 5_000);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the delete request timeout at 5,000 ms without retrying', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    const startedAt = Date.now();
+    let abortedAt: number | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        abortedAt = Date.now();
+        reject(init.signal?.reason);
+      }, { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = deleteMedia(actor(), UUID_ASSET, env);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'delete', kind: 'network', status: null, code: 'request_timeout',
+    });
+    expect(abortedAt).toBe(startedAt + 5_000);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a captured first-finalize abort reason from replaying as a later timeout', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    let capturedAbortReason: unknown;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          capturedAbortReason = init.signal?.reason;
+          reject(capturedAbortReason);
+        }, { once: true });
+      }))
+      .mockImplementationOnce(async () => { throw capturedAbortReason; });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = finalizeMedia(actor(), finalizeInput(), env);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(first).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout',
+    });
+    await expect(finalizeMedia(actor(), finalizeInput(), env)).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an unconsumed direct helper timeout from replaying into a later finalize result', async () => {
+    vi.useFakeTimers();
+    const directHungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    });
+    const directTimeout = fetchWithTimeout('http://127.0.0.1', {}, 1, directHungFetch)
+      .then(() => undefined, (error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1);
+    const fetchMock = vi.fn(async () => { throw await directTimeout; });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(actor(), finalizeInput(), localEnvironment())).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an external finalize rejection with the timeout text in the fixed network class', async () => {
+    const env = localEnvironment();
+    const fetchMock = vi.fn(async () => { throw new Error('request_timeout'); });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(actor(), finalizeInput(), env)).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('contains a hostile proxy network rejection without inspecting its shape', async () => {
+    const hostile = new Proxy({}, {
+      getPrototypeOf() { throw new Error('Bearer secret'); },
+      ownKeys() { throw new Error('https://hostile.invalid'); },
+    });
+    const fetchMock = vi.fn(async () => { throw hostile; });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(actor(), finalizeInput(), localEnvironment())).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('maps deletion and accepts only the exact deletion acknowledgement', async () => {

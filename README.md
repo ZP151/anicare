@@ -93,6 +93,11 @@ Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable th
 Gate 2A evidence and the remaining gates that still block pilot-ready status
 are:
 
+- The protected Hosted Gate 2B producer and its local promotion validator are
+  implemented; see the [operator runbook](docs/runbooks/hosted-gate-2b.md).
+  Hosted readiness is **not passed** until an owner-approved real run succeeds
+  and its canonical 72-hour evidence is committed.
+
 - The experimental Windows [iOS free-account device-test runbook](docs/runbooks/ios-free-account-device-test.md)
   and its [empty physical evidence template](docs/evidence/ios-device-physical-test-template.md)
   are handoff material only. They fail closed until a protected unsigned

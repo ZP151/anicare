@@ -31,6 +31,7 @@ jobs:
       - run: python -m mypy services/ai/src
       - run: pnpm validate:pilot-policies
       - run: pnpm test:root-contracts
+      - run: pnpm test:hosted-gate-2b-workflow
       - run: pnpm verify
       - run: git diff --check
 
