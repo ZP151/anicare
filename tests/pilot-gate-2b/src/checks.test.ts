@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -178,5 +180,11 @@ describe('hosted check coordinator', () => {
       expect(hostedOwnerStepFromError(error)).toBe('finalize');
       expect(hostedOwnerFinalizeOutcomeFromError(error)).toBe('http_409_media_finalization_conflict');
     }
+  });
+
+  it('routes the real first finalization result through the typed seam without a preempting owner assertion', async () => {
+    const source = await readFile(new URL('./hosted.integration.test.ts', import.meta.url), 'utf8');
+    expect(source).toContain('const confirmedMediaAssetId = ownerFinalizedMediaAssetId(finalized);');
+    expect(source).not.toContain("requireOwnerStep('finalize'");
   });
 });

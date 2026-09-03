@@ -112,7 +112,16 @@ export function buildProducerFailureDiagnostic(stage, control) {
     if (safeControl.ownerFinalizeOutcome !== undefined) diagnostic.ownerFinalizeOutcome = safeControl.ownerFinalizeOutcome;
     if (safeControl.cleanup !== undefined) diagnostic.cleanup = safeControl.cleanup;
   }
-  return `${JSON.stringify(diagnostic)}\n`;
+  let source = `${JSON.stringify(diagnostic)}\n`;
+  if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES &&
+      diagnostic.ownerFinalizeOutcome !== undefined) {
+    delete diagnostic.ownerFinalizeOutcome;
+    source = `${JSON.stringify(diagnostic)}\n`;
+  }
+  if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES) {
+    return `${JSON.stringify({ stage: safeStage, code: 'hosted_gate_failed' })}\n`;
+  }
+  return source;
 }
 
 export function hostedCheckDiagnosticPath({ temporaryRoot = tmpdir(), runId, runAttempt }) {

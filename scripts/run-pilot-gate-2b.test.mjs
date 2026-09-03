@@ -303,6 +303,28 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.ok(Buffer.byteLength(`${JSON.stringify(maximalFinalizeControl)}\n`) > 320);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', maximalFinalizeControl),
     '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","cleanup":["setup","recover_auth","recover_sighting","storage_remove","jobs_delete","assets_delete","sightings_delete","profiles_delete","auth_delete","absence_proof","connection_close"]}\n');
+  const nearCapFinalizeControl = {
+    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
+    ownerFinalizeOutcome: 'http_401_authentication_required', cleanup: [
+      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+    ],
+  };
+  assert.equal(Buffer.byteLength(`${JSON.stringify(nearCapFinalizeControl)}\n`), 319);
+  const nearCapDiagnostic = buildProducerFailureDiagnostic('hosted_checks', nearCapFinalizeControl);
+  assert.ok(Buffer.byteLength(nearCapDiagnostic) <= 320);
+  assert.equal(nearCapDiagnostic,
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","cleanup":["setup","recover_auth","recover_sighting","storage_remove","jobs_delete","assets_delete","sightings_delete","profiles_delete","auth_delete","absence_proof","connection_close"]}\n');
+  const oversizedBaseControl = {
+    gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_read_equivalence', cleanup: [
+      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+    ],
+  };
+  assert.ok(Buffer.byteLength(`${JSON.stringify(oversizedBaseControl)}\n`) <= 320);
+  const oversizedBaseDiagnostic = buildProducerFailureDiagnostic('hosted_checks', oversizedBaseControl);
+  assert.ok(Buffer.byteLength(oversizedBaseDiagnostic) <= 320);
+  assert.equal(oversizedBaseDiagnostic, '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   for (const invalidOutcomeControl of [
     { gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'replay', ownerFinalizeOutcome: 'network' },
     { gateStage: 'checks', check: 'media_staging', mediaStep: 'privacy_list', ownerFinalizeOutcome: 'network' },
