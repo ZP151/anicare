@@ -1,12 +1,35 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
+import { HOSTED_OWNER_FINALIZE_OUTCOMES } from './checks.js';
 
 describe('hosted check diagnostic writer', () => {
+  it('bounds every allowlisted owner-finalize outcome to canonical 320-byte control output', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-hosted-check-diagnostic-'));
+    const cleanup = [
+      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+    ] as const;
+    try {
+      for (const ownerFinalizeOutcome of HOSTED_OWNER_FINALIZE_OUTCOMES) {
+        const target = path.join(root, ownerFinalizeOutcome, 'hosted-check-diagnostic.json');
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeHostedCheckDiagnostic(target, {
+          gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome, cleanup,
+        });
+        const source = await readFile(target, 'utf8');
+        expect(Buffer.byteLength(source, 'utf8')).toBeLessThanOrEqual(320);
+        expect(source.endsWith('\n')).toBe(true);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('drops only the optional outcome when the maximal valid control exceeds the byte cap', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-hosted-check-diagnostic-'));
     const target = path.join(root, 'hosted-check-diagnostic.json');
@@ -64,6 +87,16 @@ describe('hosted check diagnostic writer', () => {
         gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'finalize',
         ownerFinalizeOutcome: 'Bearer secret',
       })).rejects.toThrow('hosted_check_diagnostic_invalid');
+      await expect(writeHostedCheckDiagnostic(target, {
+        gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'replay',
+        ownerFinalizeOutcome: 'timeout',
+      })).rejects.toThrow('hosted_check_diagnostic_invalid');
+      const timeout = {
+        gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome: 'timeout',
+      } as const;
+      await writeHostedCheckDiagnostic(target, timeout);
+      await expect(readFile(target, 'utf8')).resolves.toBe(`${JSON.stringify(timeout)}\n`);
+      await rm(target);
       const control = {
         gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
         ownerFinalizeOutcome: 'http_403_media_not_found_or_forbidden', cleanup: [

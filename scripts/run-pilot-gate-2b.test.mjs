@@ -246,6 +246,24 @@ test('serializes only allowlisted producer diagnostics with canonical bytes', as
   assert.equal(diagnostic.includes('secret') || diagnostic.includes('https://') || diagnostic.includes('Bearer'), false);
 });
 
+test('caps every fixed owner-finalize producer outcome without widening its diagnostic shape', () => {
+  const cleanup = [
+    'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+    'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+  ];
+  for (const ownerFinalizeOutcome of [
+    'timeout', 'network', 'http_401_authentication_required', 'http_403_media_not_found_or_forbidden',
+    'http_403_unclassified', 'http_409_media_finalization_conflict', 'http_503_service_unavailable',
+    'http_other', 'invalid_response',
+  ]) {
+    const diagnostic = buildProducerFailureDiagnostic('hosted_checks', {
+      gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome, cleanup,
+    });
+    assert.ok(Buffer.byteLength(diagnostic, 'utf8') <= 320);
+    assert.match(diagnostic, /^\{"stage":"hosted_checks","code":"hosted_gate_failed"(?:,|\})/);
+  }
+});
+
 test('reads only a canonical regular hosted-check diagnostic inside the owned run directory', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-diagnostic-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -293,6 +311,13 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), finalizeControl);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', finalizeControl),
     '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"http_409_media_finalization_conflict","cleanup":["recover_sighting"]}\n');
+  const timeoutControl = {
+    gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome: 'timeout',
+  };
+  await writeFile(diagnostic, `${JSON.stringify(timeoutControl)}\n`);
+  assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), timeoutControl);
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', timeoutControl),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"checks","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"timeout"}\n');
   const maximalFinalizeControl = {
     gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
     ownerFinalizeOutcome: 'http_403_media_not_found_or_forbidden', cleanup: [

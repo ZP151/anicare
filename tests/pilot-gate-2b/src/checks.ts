@@ -33,6 +33,7 @@ export const HOSTED_OWNER_HAPPY_PATH_STEPS = [
 export type HostedOwnerHappyPathStep = typeof HOSTED_OWNER_HAPPY_PATH_STEPS[number];
 
 export const HOSTED_OWNER_FINALIZE_OUTCOMES = [
+  'timeout',
   'network',
   'http_401_authentication_required',
   'http_403_media_not_found_or_forbidden',
@@ -84,7 +85,9 @@ export function ownerFinalizeOutcomeFromActorResult(result: ActorResult | unknow
   if (candidate.ok !== false || candidate.stage !== 'finalize' || typeof candidate.kind !== 'string' ||
       typeof candidate.code !== 'string') return undefined;
   if (candidate.kind === 'network') {
-    return candidate.status === null && candidate.code === 'network_error' ? 'network' : undefined;
+    if (candidate.status !== null) return undefined;
+    if (candidate.code === 'request_timeout') return 'timeout';
+    return candidate.code === 'network_error' ? 'network' : undefined;
   }
   if (candidate.kind === 'invalid_response') {
     return candidate.status === null && candidate.code === 'invalid_response' ? 'invalid_response' : undefined;

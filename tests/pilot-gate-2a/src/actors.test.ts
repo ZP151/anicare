@@ -106,6 +106,7 @@ async function reservationFailure(operation: Promise<Reservation>): Promise<unkn
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -407,6 +408,35 @@ describe('owner media actors', () => {
     await expect(finalizeMedia(owner, finalizeInput(), env)).resolves.toEqual({
       ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response',
     });
+  });
+
+  it('maps only the 5,000 ms finalize deadline to the fixed request-timeout code without retrying', async () => {
+    vi.useFakeTimers();
+    const env = localEnvironment();
+    const owner = actor();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = finalizeMedia(owner, finalizeInput(), env);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a non-timeout finalize network exception in the fixed network class', async () => {
+    const env = localEnvironment();
+    const fetchMock = vi.fn(async () => { throw new Error('hostile network detail'); });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(finalizeMedia(actor(), finalizeInput(), env)).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('maps deletion and accepts only the exact deletion acknowledgement', async () => {

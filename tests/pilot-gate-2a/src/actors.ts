@@ -79,6 +79,10 @@ function failure(
   return { stage, kind, status, code };
 }
 
+function networkFailureCode(error: unknown): 'request_timeout' | 'network_error' {
+  return error instanceof Error && error.message === 'request_timeout' ? 'request_timeout' : 'network_error';
+}
+
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -168,8 +172,8 @@ async function actorPost(
       },
       body: serializedBody,
     }, REQUEST_TIMEOUT_MS);
-  } catch {
-    return failure(stage, 'network', null, 'network_error');
+  } catch (error) {
+    return failure(stage, 'network', null, networkFailureCode(error));
   }
 }
 
@@ -248,8 +252,8 @@ export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array
       },
       body: bytes.buffer as ArrayBuffer,
     }, REQUEST_TIMEOUT_MS);
-  } catch {
-    return { ok: false, ...failure('upload', 'network', null, 'network_error') };
+  } catch (error) {
+    return { ok: false, ...failure('upload', 'network', null, networkFailureCode(error)) };
   }
   if (!response.ok) {
     return { ok: false, ...failure('upload', 'http', response.status, 'storage_upload_failed') };

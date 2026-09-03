@@ -32,6 +32,7 @@ const HOSTED_OWNER_HAPPY_PATH_STEPS = new Set([
   'ledger_asset', 'inspect', 'replay', 'verify',
 ]);
 const HOSTED_OWNER_FINALIZE_OUTCOMES = new Set([
+  'timeout',
   'network',
   'http_401_authentication_required',
   'http_403_media_not_found_or_forbidden',

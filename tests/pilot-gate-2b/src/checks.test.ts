@@ -237,6 +237,7 @@ describe('hosted check coordinator', () => {
   });
 
   it.each([
+    [{ ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout' }, 'timeout'],
     [{ ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error' }, 'network'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 401, code: 'authentication_required' }, 'http_401_authentication_required'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 401, code: 'Bearer secret' }, 'http_other'],
@@ -256,6 +257,12 @@ describe('hosted check coordinator', () => {
     expect(ownerFinalizeOutcomeFromActorResult({ ok: true, status: 200, mediaAssetId: 'asset' })).toBeUndefined();
     expect(ownerFinalizeOutcomeFromActorResult({
       ok: false, stage: 'finalize', kind: 'http', status: 'Bearer secret', code: 'https://hostile.invalid',
+    } as never)).toBeUndefined();
+    expect(ownerFinalizeOutcomeFromActorResult({
+      ok: false, stage: 'upload', kind: 'network', status: null, code: 'request_timeout',
+    } as never)).toBeUndefined();
+    expect(ownerFinalizeOutcomeFromActorResult({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'request_timeout\nBearer secret',
     } as never)).toBeUndefined();
   });
 
