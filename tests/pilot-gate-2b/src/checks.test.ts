@@ -1,6 +1,11 @@
-import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it, vi } from 'vitest';
+import { API } from 'typescript/unstable/sync';
+import {
+  isArrowFunction, isAwaitExpression, isBlock, isCallExpression, isIdentifier, isPropertyAssignment,
+  isStringLiteral, isVariableStatement, type Block, type Expression, type Node, type Statement,
+} from 'typescript/unstable/ast';
 
 import {
   HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerFinalizeOutcomeFromError,
@@ -182,9 +187,78 @@ describe('hosted check coordinator', () => {
     }
   });
 
-  it('routes the real first finalization result through the typed seam without a preempting owner assertion', async () => {
-    const source = await readFile(new URL('./hosted.integration.test.ts', import.meta.url), 'utf8');
-    expect(source).toContain('const confirmedMediaAssetId = ownerFinalizedMediaAssetId(finalized);');
-    expect(source).not.toContain("requireOwnerStep('finalize'");
+  it('routes the actual first finalization flow through the typed seam without a preempting finalize assertion', async () => {
+    const integrationPath = fileURLToPath(new URL('./hosted.integration.test.ts', import.meta.url));
+    const api = new API({ cwd: fileURLToPath(new URL('.', import.meta.url)) });
+    const snapshot = api.updateSnapshot({ openFiles: [integrationPath] });
+    try {
+      const file = snapshot.getDefaultProjectForFile(integrationPath)?.program.getSourceFile(integrationPath);
+      if (!file) throw new Error('hosted integration source was not loaded into the TypeScript program');
+      let ownerBody: Block | undefined;
+      let ownerImplementationCount = 0;
+      const findOwnerHappyPath = (node: Node): void => {
+        if (isPropertyAssignment(node) && isIdentifier(node.name) && node.name.text === 'runOwnerHappyPath' &&
+            isArrowFunction(node.initializer) && isBlock(node.initializer.body)) {
+          ownerImplementationCount += 1;
+          ownerBody = node.initializer.body;
+        }
+        node.forEachChild(findOwnerHappyPath);
+      };
+      findOwnerHappyPath(file);
+      if (!ownerBody || ownerImplementationCount !== 1) {
+        throw new Error('exactly one runOwnerHappyPath implementation was not found');
+      }
+      const statements = ownerBody.statements;
+      const variableInitializer = (statement: Statement, name: string): Expression | undefined => {
+        if (!isVariableStatement(statement)) return undefined;
+        return statement.declarationList.declarations.find((declaration) =>
+          isIdentifier(declaration.name) && declaration.name.text === name)?.initializer;
+      };
+      const finalizedIndex = statements.findIndex((statement) => variableInitializer(statement, 'finalized') !== undefined);
+      if (finalizedIndex < 0) throw new Error('first finalization result binding was not found');
+      const finalizedStatement = statements[finalizedIndex];
+      if (!finalizedStatement) throw new Error('first finalization result statement was not found');
+      const finalizedInitializer = variableInitializer(finalizedStatement, 'finalized');
+      if (!finalizedInitializer || !isAwaitExpression(finalizedInitializer)) {
+        throw new Error('first finalization result must bind an awaited call');
+      }
+      const finalizeStep = finalizedInitializer.expression;
+      if (!isCallExpression(finalizeStep) || !isIdentifier(finalizeStep.expression) ||
+          finalizeStep.expression.text !== 'atOwnerStep') {
+        throw new Error('first finalization result must come directly from atOwnerStep(finalize, finalizeMedia)');
+      }
+      const [stepName, finalizeOperation] = finalizeStep.arguments;
+      if (!stepName || !finalizeOperation || !isStringLiteral(stepName) || stepName.text !== 'finalize' ||
+          !isArrowFunction(finalizeOperation) ||
+          !isCallExpression(finalizeOperation.body) || !isIdentifier(finalizeOperation.body.expression) ||
+          finalizeOperation.body.expression.text !== 'finalizeMedia') {
+        throw new Error('first finalization result must come directly from atOwnerStep(finalize, finalizeMedia)');
+      }
+      const seamStatement = statements[finalizedIndex + 1];
+      if (!seamStatement) throw new Error('finalize diagnostic seam statement was not found');
+      const seamInitializer = variableInitializer(seamStatement, 'confirmedMediaAssetId');
+      if (!seamInitializer || !isCallExpression(seamInitializer) || !isIdentifier(seamInitializer.expression) ||
+          seamInitializer.expression.text !== 'ownerFinalizedMediaAssetId' || seamInitializer.arguments.length !== 1) {
+        throw new Error('the first finalization result must flow immediately into ownerFinalizedMediaAssetId(finalized)');
+      }
+      const [seamArgument] = seamInitializer.arguments;
+      if (!seamArgument || !isIdentifier(seamArgument) || seamArgument.text !== 'finalized') {
+        throw new Error('the first finalization result must flow immediately into ownerFinalizedMediaAssetId(finalized)');
+      }
+      let preemptingFinalizeAssertion = false;
+      const inspectForPreemption = (node: Node): void => {
+        const [assertionStep] = isCallExpression(node) ? node.arguments : [];
+        if (isCallExpression(node) && isIdentifier(node.expression) && node.expression.text === 'requireOwnerStep' &&
+            assertionStep && isStringLiteral(assertionStep) && assertionStep.text === 'finalize') {
+          preemptingFinalizeAssertion = true;
+        }
+        node.forEachChild(inspectForPreemption);
+      };
+      for (const statement of statements.slice(0, finalizedIndex + 1)) inspectForPreemption(statement);
+      expect(preemptingFinalizeAssertion).toBe(false);
+    } finally {
+      snapshot.dispose();
+      api.close();
+    }
   });
 });
