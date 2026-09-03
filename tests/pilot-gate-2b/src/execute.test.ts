@@ -119,6 +119,26 @@ describe('hosted gate execution', () => {
     }
   });
 
+  it('retains a fixed owner finalization outcome through cleanup control', async () => {
+    const fixture = options({
+      runChecks: async () => {
+        throw new HostedCheckFailure(
+          'owner_happy_path', undefined, 'finalize', 'http_503_service_unavailable',
+        );
+      },
+      cleanup: async () => { throw new HostedCleanupFailure(['recover_sighting']); },
+    });
+    try {
+      await executeHostedGate(fixture.value);
+      throw new Error('expected hosted gate failure');
+    } catch (error) {
+      expect(hostedGateControlFromError(error)).toEqual({
+        gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
+        ownerFinalizeOutcome: 'http_503_service_unavailable', cleanup: ['recover_sighting'],
+      });
+    }
+  });
+
   it('normalizes duplicate and out-of-order typed cleanup IDs before preserving them', async () => {
     const fixture = options({
       cleanup: async () => {

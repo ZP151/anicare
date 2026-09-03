@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerStepFromError, runHostedChecks,
+  HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerFinalizeOutcomeFromError,
+  hostedOwnerStepFromError, ownerFinalizeOutcomeFromActorResult, runHostedChecks,
   type HostedCheckAdapter,
 } from './checks.js';
+import type { ActorResult } from '../../pilot-gate-2a/src/actors.js';
 import type { HostedGateEnvironment } from './environment.js';
 
 function env(): HostedGateEnvironment {
@@ -111,7 +113,45 @@ describe('hosted check coordinator', () => {
     } catch (error) {
       expect(hostedCheckIdFromError(error)).toBe('owner_happy_path');
       expect(hostedOwnerStepFromError(error)).toBe('replay');
+      expect(hostedOwnerFinalizeOutcomeFromError(error)).toBeUndefined();
       expect(hostedMediaStepFromError(error)).toBeUndefined();
+    }
+  });
+
+  it.each([
+    [{ ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error' }, 'network'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 401, code: 'authentication_required' }, 'http_401_authentication_required'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 403, code: 'media_not_found_or_forbidden' }, 'http_403_media_not_found_or_forbidden'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 403, code: 'media_transport_failed' }, 'http_403_unclassified'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 409, code: 'media_finalization_conflict' }, 'http_409_media_finalization_conflict'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 503, code: 'service_unavailable' }, 'http_503_service_unavailable'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 500, code: 'media_transport_failed' }, 'http_other'],
+    [{ ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response' }, 'invalid_response'],
+  ] as const)('maps the bounded first finalization result %# to %s', (result, outcome) => {
+    expect(ownerFinalizeOutcomeFromActorResult(result as ActorResult)).toBe(outcome);
+  });
+
+  it('suppresses malformed or successful finalization results without exposing their details', () => {
+    expect(ownerFinalizeOutcomeFromActorResult({ ok: true, status: 200, mediaAssetId: 'asset' })).toBeUndefined();
+    expect(ownerFinalizeOutcomeFromActorResult({
+      ok: false, stage: 'finalize', kind: 'http', status: 'Bearer secret', code: 'https://hostile.invalid',
+    } as never)).toBeUndefined();
+  });
+
+  it('propagates a fixed finalization outcome only from a typed owner-finalize failure', async () => {
+    const fake = adapter({
+      runOwnerHappyPath: vi.fn(async () => {
+        throw new HostedCheckFailure(
+          'owner_happy_path', undefined, 'finalize', 'http_409_media_finalization_conflict',
+        );
+      }),
+    });
+    try {
+      await runHostedChecks(env(), fake.implementation);
+      throw new Error('expected hosted check failure');
+    } catch (error) {
+      expect(hostedOwnerStepFromError(error)).toBe('finalize');
+      expect(hostedOwnerFinalizeOutcomeFromError(error)).toBe('http_409_media_finalization_conflict');
     }
   });
 });

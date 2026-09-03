@@ -9,7 +9,7 @@ import {
 import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.js';
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
 import {
-  HostedCheckFailure, runHostedChecks, type HostedCheckAdapter, type HostedMediaStagingStep,
+  HostedCheckFailure, ownerFinalizeOutcomeFromActorResult, runHostedChecks, type HostedCheckAdapter, type HostedMediaStagingStep,
   type HostedOwnerHappyPathStep,
 } from './checks.js';
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
@@ -237,7 +237,7 @@ describe('real Hosted Gate 2B', () => {
             }, env));
             requireOwnerStep('finalize', finalized.ok && Boolean(finalized.mediaAssetId));
             if (!finalized.ok || !finalized.mediaAssetId) throw new HostedCheckFailure(
-              'owner_happy_path', undefined, 'finalize',
+              'owner_happy_path', undefined, 'finalize', ownerFinalizeOutcomeFromActorResult(finalized),
             );
             const confirmedMediaAssetId = finalized.mediaAssetId;
             mediaAssetId = confirmedMediaAssetId;

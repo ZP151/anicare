@@ -29,12 +29,26 @@ describe('hosted check diagnostic writer', () => {
       await expect(writeHostedCheckDiagnostic(target, {
         gateStage: 'checks', check: 'media_staging', mediaStep: 'Bearer secret',
       })).rejects.toThrow('hosted_check_diagnostic_invalid');
+      await expect(writeHostedCheckDiagnostic(target, {
+        gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'replay',
+        ownerFinalizeOutcome: 'network',
+      })).rejects.toThrow('hosted_check_diagnostic_invalid');
+      await expect(writeHostedCheckDiagnostic(target, {
+        gateStage: 'checks', check: 'media_staging', mediaStep: 'privacy_list',
+        ownerFinalizeOutcome: 'network',
+      })).rejects.toThrow('hosted_check_diagnostic_invalid');
+      await expect(writeHostedCheckDiagnostic(target, {
+        gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'finalize',
+        ownerFinalizeOutcome: 'Bearer secret',
+      })).rejects.toThrow('hosted_check_diagnostic_invalid');
       const control = {
-        gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'replay', cleanup: [
+        gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
+        ownerFinalizeOutcome: 'http_403_media_not_found_or_forbidden', cleanup: [
           'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
-          'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+          'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof',
         ],
       } as const;
+      expect(Buffer.byteLength(`${JSON.stringify(control)}\n`, 'utf8')).toBeLessThanOrEqual(320);
       await writeHostedCheckDiagnostic(target, control);
       await expect(readFile(target, 'utf8')).resolves.toBe(`${JSON.stringify(control)}\n`);
       await expect(writeHostedCheckDiagnostic(target, control)).rejects.toThrow('hosted_check_diagnostic_invalid');

@@ -31,6 +31,16 @@ const HOSTED_OWNER_HAPPY_PATH_STEPS = new Set([
   'ledger_media', 'reserve', 'ledger_reserve', 'upload', 'finalize',
   'ledger_asset', 'inspect', 'replay', 'verify',
 ]);
+const HOSTED_OWNER_FINALIZE_OUTCOMES = new Set([
+  'network',
+  'http_401_authentication_required',
+  'http_403_media_not_found_or_forbidden',
+  'http_403_unclassified',
+  'http_409_media_finalization_conflict',
+  'http_503_service_unavailable',
+  'http_other',
+  'invalid_response',
+]);
 const GATE_STAGES = new Set(['create', 'checks', 'cleanup', 'evidence']);
 const CLEANUP_OPERATION_IDS = [
   'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
@@ -46,7 +56,7 @@ function normalizeHostedGateControl(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const candidate = value;
   const keys = Object.keys(candidate);
-  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'ownerStep', 'cleanup'].includes(key)) ||
+  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'ownerStep', 'ownerFinalizeOutcome', 'cleanup'].includes(key)) ||
       typeof candidate.gateStage !== 'string' || !GATE_STAGES.has(candidate.gateStage)) return undefined;
   const control = { gateStage: candidate.gateStage };
   if (Object.hasOwn(candidate, 'check')) {
@@ -63,6 +73,12 @@ function normalizeHostedGateControl(value) {
     if (control.check !== 'owner_happy_path' || typeof candidate.ownerStep !== 'string' ||
         !HOSTED_OWNER_HAPPY_PATH_STEPS.has(candidate.ownerStep)) return undefined;
     control.ownerStep = candidate.ownerStep;
+  }
+  if (Object.hasOwn(candidate, 'ownerFinalizeOutcome')) {
+    if (control.check !== 'owner_happy_path' || control.ownerStep !== 'finalize' ||
+        typeof candidate.ownerFinalizeOutcome !== 'string' ||
+        !HOSTED_OWNER_FINALIZE_OUTCOMES.has(candidate.ownerFinalizeOutcome)) return undefined;
+    control.ownerFinalizeOutcome = candidate.ownerFinalizeOutcome;
   }
   if (Object.hasOwn(candidate, 'cleanup')) {
     if (candidate.gateStage !== 'cleanup' || !Array.isArray(candidate.cleanup) || candidate.cleanup.length < 1 ||
@@ -86,6 +102,7 @@ export function buildProducerFailureDiagnostic(stage, control) {
     if (safeControl.check !== undefined) diagnostic.check = safeControl.check;
     if (safeControl.mediaStep !== undefined) diagnostic.mediaStep = safeControl.mediaStep;
     if (safeControl.ownerStep !== undefined) diagnostic.ownerStep = safeControl.ownerStep;
+    if (safeControl.ownerFinalizeOutcome !== undefined) diagnostic.ownerFinalizeOutcome = safeControl.ownerFinalizeOutcome;
     if (safeControl.cleanup !== undefined) diagnostic.cleanup = safeControl.cleanup;
   }
   return `${JSON.stringify(diagnostic)}\n`;

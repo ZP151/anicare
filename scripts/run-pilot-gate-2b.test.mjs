@@ -285,6 +285,22 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   await writeFile(diagnostic, '{"gateStage":"cleanup","check":"media_staging"}');
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  const finalizeControl = {
+    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
+    ownerFinalizeOutcome: 'http_409_media_finalization_conflict', cleanup: ['recover_sighting'],
+  };
+  await writeFile(diagnostic, `${JSON.stringify(finalizeControl)}\n`);
+  assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), finalizeControl);
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', finalizeControl),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"http_409_media_finalization_conflict","cleanup":["recover_sighting"]}\n');
+  for (const invalidOutcomeControl of [
+    { gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'replay', ownerFinalizeOutcome: 'network' },
+    { gateStage: 'checks', check: 'media_staging', mediaStep: 'privacy_list', ownerFinalizeOutcome: 'network' },
+    { gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome: 'Bearer secret' },
+  ]) {
+    assert.equal(buildProducerFailureDiagnostic('hosted_checks', invalidOutcomeControl),
+      '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+  }
   await rm(diagnostic);
   await writeFile(path.join(owned, 'target'), `${JSON.stringify(control)}\n`);
   try {

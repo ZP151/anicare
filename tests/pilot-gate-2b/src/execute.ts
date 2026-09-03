@@ -1,7 +1,7 @@
 import type { ReadinessChecks } from './evidence.js';
 import {
-  hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerStepFromError, type HostedCheckId,
-  type HostedMediaStagingStep, type HostedOwnerHappyPathStep,
+  hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerFinalizeOutcomeFromError, hostedOwnerStepFromError,
+  type HostedCheckId, type HostedMediaStagingStep, type HostedOwnerFinalizeOutcome, type HostedOwnerHappyPathStep,
 } from './checks.js';
 import { cleanupOperationIdsFromError, type CleanupOperationId } from './inspection.js';
 
@@ -28,6 +28,7 @@ export type HostedGateControl = Readonly<{
   check?: HostedCheckId;
   mediaStep?: HostedMediaStagingStep;
   ownerStep?: HostedOwnerHappyPathStep;
+  ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome;
   cleanup?: readonly CleanupOperationId[];
 }>;
 
@@ -80,15 +81,19 @@ function failure(
   cleanup?: readonly CleanupOperationId[],
   mediaStep?: HostedMediaStagingStep,
   ownerStep?: HostedOwnerHappyPathStep,
+  ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome,
 ): HostedGateFailure {
   const control: {
     gateStage: GateStage; check?: HostedCheckId; mediaStep?: HostedMediaStagingStep;
-    ownerStep?: HostedOwnerHappyPathStep;
+    ownerStep?: HostedOwnerHappyPathStep; ownerFinalizeOutcome?: HostedOwnerFinalizeOutcome;
     cleanup?: readonly CleanupOperationId[];
   } = { gateStage };
   if (check !== undefined) control.check = check;
   if (check === 'media_staging' && mediaStep !== undefined) control.mediaStep = mediaStep;
   if (check === 'owner_happy_path' && ownerStep !== undefined) control.ownerStep = ownerStep;
+  if (check === 'owner_happy_path' && ownerStep === 'finalize' && ownerFinalizeOutcome !== undefined) {
+    control.ownerFinalizeOutcome = ownerFinalizeOutcome;
+  }
   if (cleanup !== undefined && cleanup.length > 0) control.cleanup = cleanup;
   return new HostedGateFailure(control);
 }
@@ -127,6 +132,7 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
   let failedCheckId: HostedCheckId | undefined;
   let failedMediaStep: HostedMediaStagingStep | undefined;
   let failedOwnerStep: HostedOwnerHappyPathStep | undefined;
+  let failedOwnerFinalizeOutcome: HostedOwnerFinalizeOutcome | undefined;
   let unsettled = false;
   try {
     scenario = await runBefore(workDeadline, (signal) => options.createScenario(partial, signal));
@@ -138,22 +144,30 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
       failedCheckId = hostedCheckIdFromError(error);
       failedMediaStep = hostedMediaStepFromError(error);
       failedOwnerStep = hostedOwnerStepFromError(error);
+      failedOwnerFinalizeOutcome = hostedOwnerFinalizeOutcomeFromError(error);
     }
   }
 
   // An uncooperative operation may still be mutating hosted state. The parent
   // process must terminate this harness before the workflow's independent
   // durable-ledger cleanup process runs.
-  if (unsettled) throw failure('cleanup', failedCheckId, undefined, failedMediaStep, failedOwnerStep);
+  if (unsettled) throw failure(
+    'cleanup', failedCheckId, undefined, failedMediaStep, failedOwnerStep, failedOwnerFinalizeOutcome,
+  );
 
   try {
     await runBefore(deadline, (signal) => options.cleanup(scenario, signal));
   } catch (error) {
-    throw failure('cleanup', failedCheckId, cleanupOperationIdsFromError(error), failedMediaStep, failedOwnerStep);
+    throw failure(
+      'cleanup', failedCheckId, cleanupOperationIdsFromError(error), failedMediaStep, failedOwnerStep,
+      failedOwnerFinalizeOutcome,
+    );
   }
 
   if (failedStage !== undefined || checks === undefined) {
-    throw failure(failedStage ?? 'checks', failedCheckId, undefined, failedMediaStep, failedOwnerStep);
+    throw failure(
+      failedStage ?? 'checks', failedCheckId, undefined, failedMediaStep, failedOwnerStep, failedOwnerFinalizeOutcome,
+    );
   }
 
   try {
