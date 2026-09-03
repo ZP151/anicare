@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,9 +54,44 @@ function minimalEnvironment(parent, additions = {}) {
   return { ...result, ...additions };
 }
 
-function defaultProcessAdapter() {
-  let temporaryDirectory;
-  let sourceDirectory;
+function runSelector(value) {
+  if (typeof value !== 'string' || !/^[1-9][0-9]{0,19}$/.test(value)) {
+    return invalid('hosted_temporary_cleanup_failed');
+  }
+  return value;
+}
+
+function ownedTemporaryDirectory(temporaryRoot, runId, runAttempt) {
+  const root = path.resolve(temporaryRoot);
+  const target = path.resolve(root, `animalhelper-gate-2b-${runSelector(runId)}-${runSelector(runAttempt)}`);
+  if (path.dirname(target) !== root) return invalid('hosted_temporary_cleanup_failed');
+  return target;
+}
+
+export async function cleanupRunnerTemporary({ temporaryRoot = tmpdir(), runId, runAttempt }) {
+  const target = ownedTemporaryDirectory(temporaryRoot, runId, runAttempt);
+  let metadata;
+  try {
+    metadata = await lstat(target);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    return invalid('hosted_temporary_cleanup_failed');
+  }
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) return invalid('hosted_temporary_cleanup_failed');
+  await rm(target, { recursive: true, force: false }).catch(() => invalid('hosted_temporary_cleanup_failed'));
+}
+
+function defaultProcessAdapter(runId, runAttempt) {
+  const temporaryDirectory = ownedTemporaryDirectory(tmpdir(), runId, runAttempt);
+  const sourceDirectory = path.join(temporaryDirectory, 'source');
+  const secretDirectory = path.join(temporaryDirectory, 'secret');
+  let created = false;
+  const ensureTemporaryDirectory = async () => {
+    if (!created) {
+      await mkdir(temporaryDirectory, { mode: 0o700 });
+      created = true;
+    }
+  };
   return {
     async run(command, args, options) {
       return await new Promise((resolve, reject) => {
@@ -85,8 +120,9 @@ function defaultProcessAdapter() {
       });
     },
     async writeEdgeSecretFile(values) {
-      temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-'));
-      const target = path.join(temporaryDirectory, 'edge.env');
+      await ensureTemporaryDirectory();
+      await mkdir(secretDirectory, { mode: 0o700 });
+      const target = path.join(secretDirectory, 'edge.env');
       await writeFile(target, [
         `PRECISE_LOCATION_ENCRYPTION_KEY=${values.PRECISE_LOCATION_ENCRYPTION_KEY}`,
         'MEDIA_ALLOWED_ORIGIN=https://fhugdtpjbgiatqhvjioy.supabase.co',
@@ -96,15 +132,12 @@ function defaultProcessAdapter() {
       return target;
     },
     async createSourceDirectory() {
-      sourceDirectory = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-source-'));
+      await ensureTemporaryDirectory();
+      await mkdir(sourceDirectory, { mode: 0o700 });
       return sourceDirectory;
     },
     async removeTemporaryFiles() {
-      let failed = false;
-      for (const directory of [temporaryDirectory, sourceDirectory]) {
-        if (directory) await rm(directory, { recursive: true, force: true }).catch(() => { failed = true; });
-      }
-      if (failed) throw new Error('hosted_temporary_cleanup_failed');
+      await cleanupRunnerTemporary({ runId, runAttempt });
     },
   };
 }
@@ -163,7 +196,7 @@ function databasePassword(databaseUrl) {
 
 export async function runPilotGate2B({
   repoRoot,
-  processAdapter = defaultProcessAdapter(),
+  processAdapter,
   fetchAdapter = fetch,
   parentEnvironment = process.env,
   outputAdapter = process.stdout,
@@ -176,6 +209,9 @@ export async function runPilotGate2B({
     sha: required(parentEnvironment, 'GITHUB_SHA'), environment: required(parentEnvironment, 'GITHUB_ENVIRONMENT'),
     projectRef: PROJECT_REF,
   });
+  const runId = runSelector(required(parentEnvironment, 'GITHUB_RUN_ID'));
+  const runAttempt = runSelector(required(parentEnvironment, 'GITHUB_RUN_ATTEMPT'));
+  processAdapter ??= defaultProcessAdapter(runId, runAttempt);
   const accessToken = required(parentEnvironment, 'SUPABASE_ACCESS_TOKEN');
   const databaseUrl = required(parentEnvironment, 'SUPABASE_DATABASE_URL');
   const dbPassword = databasePassword(databaseUrl);
@@ -234,8 +270,8 @@ export async function runPilotGate2B({
       PILOT_GATE_2B: '1', SUPABASE_URL: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
       SUPABASE_PUBLIC_KEY: publicKey, SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
       SUPABASE_DATABASE_URL: databaseUrl, PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey,
-      GITHUB_SHA: parentEnvironment.GITHUB_SHA, GITHUB_RUN_ID: required(parentEnvironment, 'GITHUB_RUN_ID'),
-      GITHUB_RUN_ATTEMPT: required(parentEnvironment, 'GITHUB_RUN_ATTEMPT'),
+      GITHUB_SHA: parentEnvironment.GITHUB_SHA, GITHUB_RUN_ID: runId,
+      GITHUB_RUN_ATTEMPT: runAttempt,
     });
     harness.PILOT_GATE_2B_LEDGER_PATH = path.join(
       tmpdir(),
@@ -255,7 +291,16 @@ const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
 if (entry === fileURLToPath(import.meta.url)) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   if (process.argv[2] === 'cleanup-diagnostic') {
-    rm(DIAGNOSTIC_PATH, { force: true }).catch(() => undefined);
+    let failed = false;
+    await cleanupRunnerTemporary({
+      runId: process.env.GITHUB_RUN_ID,
+      runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+    }).catch(() => { failed = true; });
+    await rm(DIAGNOSTIC_PATH, { force: true }).catch(() => { failed = true; });
+    if (failed) {
+      process.stderr.write('pilot_gate_2b_local_cleanup_failed\n');
+      process.exitCode = 1;
+    }
   } else {
     runPilotGate2B({ repoRoot }).catch(async () => {
       await writeFile(DIAGNOSTIC_PATH, '{"stage":"unknown","code":"hosted_gate_failed"}\n', { mode: 0o600 })

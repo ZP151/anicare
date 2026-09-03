@@ -41,7 +41,7 @@ function assertContract(source, value) {
   const producer = value.jobs.hosted_gate_2b;
   assert.equal(producer.environment, 'hosted-gate-2b');
   assert.equal(producer['runs-on'], 'ubuntu-latest');
-  assert.equal(producer['timeout-minutes'], 20);
+  assert.equal(producer['timeout-minutes'], 30);
   assert.deepEqual(producer.permissions, { contents: 'read' });
   assert.equal('env' in producer, false);
   assert.deepEqual(producer.steps.filter((step) => step.uses).map((step) => step.uses), [
@@ -66,6 +66,11 @@ function assertContract(source, value) {
   ]);
   const localCleanup = producer.steps.at(-1);
   assert.equal(localCleanup.if, 'always()');
+  assert.deepEqual(localCleanup.env, {
+    TMPDIR: '${{ runner.temp }}',
+    GITHUB_RUN_ID: '${{ github.run_id }}',
+    GITHUB_RUN_ATTEMPT: '${{ github.run_attempt }}',
+  });
   assert.deepEqual(localCleanup.run, [
     'pnpm pilot-gate-2b:cleanup-diagnostic',
     'rm -f -- docs/evidence/pilot-gate-2b-readiness.json',

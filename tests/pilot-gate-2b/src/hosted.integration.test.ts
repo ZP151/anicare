@@ -14,10 +14,12 @@ import { readHostedGateEnvironment, type HostedGateEnvironment } from './environ
 import { executeHostedGate, type MutableHostedScenario } from './execute.js';
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
 import {
-  cleanupHostedScenario, inspectHostedMedia, type HostedInspection, type HostedInspectionInput,
+  cleanupHostedScenario, inspectHostedIsolationState, inspectHostedMedia,
+  type HostedInspection, type HostedInspectionInput, type HostedIsolationInspection,
   type PartialHostedScenario,
 } from './inspection.js';
 import { verifyRemoteMigrationInventory } from './remote-state.js';
+import { readDeniedStorageFailure, sameDeniedStorageFailure } from './storage-oracle.js';
 
 const DENIED = new Set([400, 401, 403, 404, 406]);
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -57,6 +59,10 @@ function sameFailure(actual: FailureClass | null, unknown: FailureClass | null):
 }
 
 function sameInspection(actual: HostedInspection, expected: HostedInspection): boolean {
+  return JSON.stringify(actual) === JSON.stringify(expected);
+}
+
+function sameIsolation(actual: HostedIsolationInspection, expected: HostedIsolationInspection): boolean {
   return JSON.stringify(actual) === JSON.stringify(expected);
 }
 
@@ -112,6 +118,7 @@ describe('real Hosted Gate 2B', () => {
         let ownerReservation: Reservation | undefined;
         let ownerExpected: HostedInspectionInput | undefined;
         let ownerBaseline: HostedInspection | undefined;
+        let strangerReservation: Reservation | undefined;
         let mediaAssetId: string | undefined;
         let mediaId: string | undefined;
         const jpeg = deterministicJpegFixture();
@@ -122,13 +129,13 @@ describe('real Hosted Gate 2B', () => {
           apikey: env.anonKey,
           Authorization: `Bearer ${accessToken ?? env.anonKey}`,
         });
-        const readStatus = async (accessToken: string | null, objectPath: string): Promise<number> => {
+        const readFailure = async (accessToken: string | null, objectPath: string) => {
           const encoded = objectPath.split('/').map(encodeURIComponent).join('/');
           const response = await fetchWithTimeout(`${env.apiUrl}/storage/v1/object/media-staging/${encoded}`, {
             method: 'GET', redirect: 'error', cache: 'no-store', signal,
             headers: authHeaders(accessToken),
           }, REQUEST_TIMEOUT_MS);
-          return response.status;
+          return await readDeniedStorageFailure(response);
         };
         const listHides = async (accessToken: string | null, objectPath: string): Promise<boolean> => {
           const response = await fetchWithTimeout(`${env.apiUrl}/storage/v1/object/list/media-staging`, {
@@ -144,6 +151,26 @@ describe('real Hosted Gate 2B', () => {
         };
         const unchanged = async (): Promise<boolean> => Boolean(ownerExpected && ownerBaseline) &&
           sameInspection(await inspectHostedMedia(env, ownerExpected!), ownerBaseline!);
+        const isolationSnapshot = async (additionalMediaIds: readonly string[] = []) => {
+          if (!ownerReservation || !strangerReservation || !mediaId) throw new Error('hosted_checks_failed');
+          return await inspectHostedIsolationState(env, {
+            ownerId: scenario.owner.id,
+            strangerId: scenario.stranger.id,
+            ownerSightingId: scenario.ownerSightingId,
+            strangerSightingId: scenario.strangerSightingId,
+            mediaIds: [...new Set([mediaId, ...additionalMediaIds])],
+            observedObjectPaths: [ownerReservation.path, strangerReservation.path],
+          });
+        };
+        const withoutIsolationMutation = async <T>(
+          operation: () => Promise<T>,
+          additionalMediaIds: readonly string[] = [],
+        ): Promise<Readonly<{ result: T; unchanged: boolean }>> => {
+          const before = await isolationSnapshot(additionalMediaIds);
+          const result = await operation();
+          const after = await isolationSnapshot(additionalMediaIds);
+          return { result, unchanged: sameIsolation(after, before) };
+        };
 
         const adapter: HostedCheckAdapter = {
           verifyAuthRedirects: async () => true,
@@ -193,48 +220,64 @@ describe('real Hosted Gate 2B', () => {
             const bucket = data?.find((candidate) => candidate.name === expected.bucket);
             if (error || bucket?.public !== false || bucket.file_size_limit !== expected.fileSizeLimit ||
                 JSON.stringify(bucket.allowed_mime_types) !== JSON.stringify(expected.allowedMimeTypes)) return false;
+            strangerReservation = await reserveMedia(scenario.stranger, reservationInput(
+              scenario.strangerSightingId, mediaId!, jpeg.sha256, jpeg.bytes.byteLength,
+            ), env);
+            partial.createdJobIds = [...(tracked.createdJobIds ?? []), strangerReservation.jobId];
+            partial.createdObjectPaths = [...(tracked.createdObjectPaths ?? []), strangerReservation.path];
+            await writeCleanupLedger(ledgerPath, partial);
             const unknownPath = `jobs/${randomUUID()}.jpg`;
             for (const token of [null, scenario.owner.accessToken, scenario.stranger.accessToken]) {
-              const actualStatus = await readStatus(token, ownerReservation.path);
-              const unknownStatus = await readStatus(token, unknownPath);
-              if (!DENIED.has(actualStatus) || actualStatus !== unknownStatus ||
-                  !await listHides(token, ownerReservation.path) || !await unchanged()) return false;
+              const actual = await withoutIsolationMutation(() => readFailure(token, ownerReservation!.path));
+              if (!actual.unchanged) return false;
+              const unknown = await withoutIsolationMutation(() => readFailure(token, unknownPath));
+              if (!unknown.unchanged || !sameDeniedStorageFailure(actual.result, unknown.result)) return false;
+              const listed = await withoutIsolationMutation(() => listHides(token, ownerReservation!.path));
+              if (!listed.unchanged || !listed.result || !await unchanged()) return false;
             }
             return true;
           },
           verifyCrossOwnerIsolation: async () => {
-            if (!ownerReservation || !ownerExpected || !ownerBaseline || !mediaId || !mediaAssetId) return false;
+            if (!ownerReservation || !strangerReservation || !ownerExpected || !ownerBaseline || !mediaId || !mediaAssetId) {
+              return false;
+            }
+            const confirmedMediaId = mediaId;
+            const confirmedMediaAssetId = mediaAssetId;
             const strangerAgainstOwner = reservationInput(
-              scenario.ownerSightingId, mediaId, jpeg.sha256, jpeg.bytes.byteLength,
+              scenario.ownerSightingId, confirmedMediaId, jpeg.sha256, jpeg.bytes.byteLength,
             );
-            const reserveActual = await reserveFailure(scenario.stranger, strangerAgainstOwner, env);
-            if (!await unchanged()) return false;
-            const reserveUnknown = await reserveFailure(scenario.stranger, {
-              ...strangerAgainstOwner, sightingId: randomUUID(),
-            }, env);
-            if (!sameFailure(reserveActual, reserveUnknown) || !await unchanged()) return false;
+            const reserveActual = await withoutIsolationMutation(
+              () => reserveFailure(scenario.stranger, strangerAgainstOwner, env),
+            );
+            if (!reserveActual.unchanged) return false;
+            const reserveProbeMediaId = randomUUID();
+            const reserveUnknown = await withoutIsolationMutation(() => reserveFailure(scenario.stranger, {
+              ...strangerAgainstOwner, sightingId: randomUUID(), mediaId: reserveProbeMediaId,
+            }, env), [reserveProbeMediaId]);
+            if (!reserveUnknown.unchanged || !sameFailure(reserveActual.result, reserveUnknown.result)) return false;
 
-            const strangerReservation = await reserveMedia(scenario.stranger, {
-              ...strangerAgainstOwner, sightingId: scenario.strangerSightingId,
-            }, env);
-            partial.createdJobIds = [...(tracked.createdJobIds ?? []), strangerReservation.jobId];
-            partial.createdObjectPaths = [...(tracked.createdObjectPaths ?? []), strangerReservation.path];
-            await writeCleanupLedger(ledgerPath, partial);
-            if (!await unchanged()) return false;
+            const finalizeActual = await withoutIsolationMutation(async () => failedResult(await finalizeMedia(
+              scenario.stranger,
+              { sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256 },
+              env,
+            )));
+            if (!finalizeActual.unchanged) return false;
+            const finalizeProbeMediaId = randomUUID();
+            const finalizeUnknown = await withoutIsolationMutation(async () => failedResult(await finalizeMedia(
+              scenario.stranger,
+              { sightingId: randomUUID(), mediaId: finalizeProbeMediaId, sha256: jpeg.sha256 },
+              env,
+            )), [finalizeProbeMediaId]);
+            if (!finalizeUnknown.unchanged || !sameFailure(finalizeActual.result, finalizeUnknown.result)) return false;
 
-            const finalizeActual = failedResult(await finalizeMedia(scenario.stranger, {
-              sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-            }, env));
-            if (!await unchanged()) return false;
-            const finalizeUnknown = failedResult(await finalizeMedia(scenario.stranger, {
-              sightingId: randomUUID(), mediaId: randomUUID(), sha256: jpeg.sha256,
-            }, env));
-            if (!sameFailure(finalizeActual, finalizeUnknown) || !await unchanged()) return false;
-
-            const deleteActual = failedResult(await deleteMedia(scenario.stranger, mediaAssetId, env));
-            if (!await unchanged()) return false;
-            const deleteUnknown = failedResult(await deleteMedia(scenario.stranger, randomUUID(), env));
-            return sameFailure(deleteActual, deleteUnknown) && await unchanged();
+            const deleteActual = await withoutIsolationMutation(
+              async () => failedResult(await deleteMedia(scenario.stranger, confirmedMediaAssetId, env)),
+            );
+            if (!deleteActual.unchanged) return false;
+            const deleteUnknown = await withoutIsolationMutation(
+              async () => failedResult(await deleteMedia(scenario.stranger, randomUUID(), env)),
+            );
+            return deleteUnknown.unchanged && sameFailure(deleteActual.result, deleteUnknown.result) && await unchanged();
           },
         };
         return await runHostedChecks(env, adapter);

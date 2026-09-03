@@ -133,7 +133,12 @@ Every fixture carries a random run marker stored only in fields already intended
 - The stranger cannot reserve against, finalize, delete, list, or read the owner's sighting, upload job, media asset, or Storage object.
 - Owner and stranger may use the same client media UUID only within their own owner-scoped sightings.
 - Denials use the documented bounded response classes and reveal no existence oracle.
-- Database and Storage ownership remain unchanged after every denied operation.
+- Every denied operation is bracketed by a bounded canonical snapshot covering
+  both synthetic users, both fresh sightings, all probe media IDs, and both
+  known Storage paths. Database rows, soft-delete state, and object existence
+  must remain byte-for-byte equivalent. Storage read denials must also match on
+  both HTTP status and an allowlisted normalized error code; unknown, malformed,
+  redirected, successful, or oversized responses fail closed.
 
 All five readiness values are `passed` only after cleanup also succeeds. Otherwise no passing evidence is emitted.
 
@@ -172,7 +177,11 @@ The local promotion adapter accepts only an artifact from the pinned producer wo
 
 Expected output is limited to stage names and fixed snake-case result codes. Failure diagnostics may retain only an allowlisted stage, normalized HTTP status class, count, and fixed code. Sanitization runs before any artifact is written and rejects bearer strings, JWT shapes, secret prefixes, URLs with queries, UUIDs, object paths, emails, coordinates, request bodies, and long lines.
 
-Cleanup runs in `finally` semantics after partial fixture creation, test failure, cancellation, or timeout. It removes exact Storage objects through the service client, deletes only rows bound to the in-memory synthetic IDs through fixed parameterized database statements in foreign-key order, deletes the exact Auth users, and then proves their absence. It never truncates tables, selects by time range or email domain, accepts a table name, or executes caller-provided SQL. Cleanup failure is a release failure. Schema and reviewed Edge deployments persist because this is a dedicated hosted test project; the producer does not roll them back to older code.
+Cleanup runs in `finally` semantics after partial fixture creation, test failure, cancellation, or timeout. It removes exact Storage objects through the service client, deletes only rows bound to the in-memory synthetic IDs through fixed parameterized database statements in foreign-key order, deletes the exact Auth users, and then proves their absence. Every recovery, deletion category, and absence proof is attempted best-effort; failures are aggregated and the durable ledger is retained unless the complete absence proof succeeds. An operation that ignores cooperative cancellation receives only a bounded grace period; in-process cleanup is then suppressed until the parent terminates the harness, and the workflow starts the independent ledger cleanup process. The workflow reserves a separate cleanup budget inside a 30-minute job and removes only its exact numeric run/attempt directory under `runner.temp`. It never truncates tables, selects by time range or email domain, accepts a table name, or executes caller-provided SQL. Cleanup failure is a release failure. Schema and reviewed Edge deployments persist because this is a dedicated hosted test project; the producer does not roll them back to older code.
+
+The integration harness requires `PILOT_GATE_2B=1`. The cleanup-only process
+deliberately does not: recovery must remain callable if cancellation occurs
+before the integration configuration is evaluated.
 
 ## Verification and review gates
 

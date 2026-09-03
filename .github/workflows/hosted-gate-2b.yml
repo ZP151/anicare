@@ -26,7 +26,7 @@ concurrency:
 jobs:
   hosted_gate_2b:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: hosted-gate-2b
     permissions:
       contents: read
@@ -112,6 +112,8 @@ jobs:
         if: always()
         env:
           TMPDIR: ${{ runner.temp }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           pnpm pilot-gate-2b:cleanup-diagnostic
           rm -f -- docs/evidence/pilot-gate-2b-readiness.json

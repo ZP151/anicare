@@ -373,6 +373,10 @@ git status --short --untracked-files=all
 ```
 
 - [ ] Obtain independent specification and security/code-quality review of the exact branch. Resolve every Critical and Important finding with a failing regression test before a fix.
+- [x] Close review findings for durable best-effort cleanup, a single bounded
+  execution deadline with cancellation grace, exact runner-temporary cleanup,
+  and two-actor/two-sighting post-denial invariance with normalized Storage
+  error classes.
 - [ ] Push `codex/hosted-gate-2b` with Git identity `zhouping151140 <zhouping151140@gmail.com>` and open a stacked PR targeting `codex/ios-device-lab`.
 - [ ] Stop for immediate owner confirmation before creating a Supabase personal access token or transmitting the five Hosted Gate secrets and three Device Lab client values to GitHub.
 - [ ] Create `hosted-gate-2b` with required reviewer `ZP151`, self-review allowed, and exact branch policy `codex/hosted-gate-2b`. Create `ios-device-lab` with reviewer `ZP151` and exact branch policy `main`.

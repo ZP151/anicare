@@ -8,6 +8,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256 = /^[a-f0-9]{64}$/;
 const OBJECT_PATH = /^jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
 const MAX_TRACKED = 8;
+const MAX_ISOLATION_ROWS = 16;
 
 export type HostedInspectionInput = Readonly<{
   ownerId: string;
@@ -27,6 +28,37 @@ export type HostedInspection = Readonly<{
   assetCount: number;
   matchingQuarantinedAssetCount: number;
   stagingObjectExists: boolean;
+}>;
+
+export type HostedIsolationInspectionInput = Readonly<{
+  ownerId: string;
+  strangerId: string;
+  ownerSightingId: string;
+  strangerSightingId: string;
+  mediaIds: readonly string[];
+  observedObjectPaths: readonly string[];
+}>;
+
+type HostedIsolationJob = Readonly<{
+  id: string; uploaderId: string | null; sightingId: string; mediaId: string;
+  sha256: string; byteLength: number; width: number; height: number;
+  objectPath: string; status: string; mediaAssetId: string | null;
+}>;
+
+type HostedIsolationAsset = Readonly<{
+  id: string; uploaderId: string | null; sightingId: string | null; clientMediaId: string | null;
+  storageBucket: string; storagePath: string; sha256: string; byteLength: number | null;
+  width: number | null; height: number | null; status: string; deletedAt: string | null;
+}>;
+
+export type HostedIsolationInspection = Readonly<{
+  jobs: readonly HostedIsolationJob[];
+  assets: readonly HostedIsolationAsset[];
+  objectExists: readonly boolean[];
+}>;
+
+type HostedIsolationAdapter = Readonly<{
+  inspectIsolation(input: HostedIsolationInspectionInput): Promise<unknown>;
 }>;
 
 export type PartialHostedScenario = Readonly<{
@@ -91,6 +123,67 @@ function validInspection(value: unknown): value is HostedInspection {
     typeof value.stagingObjectExists === 'boolean';
 }
 
+function validIsolationInput(value: unknown): value is HostedIsolationInspectionInput {
+  if (!exactObject(value, [
+    'ownerId', 'strangerId', 'ownerSightingId', 'strangerSightingId', 'mediaIds', 'observedObjectPaths',
+  ])) return false;
+  if (![value.ownerId, value.strangerId, value.ownerSightingId, value.strangerSightingId]
+    .every((item) => typeof item === 'string' && UUID.test(item))) return false;
+  if (value.ownerId === value.strangerId || value.ownerSightingId === value.strangerSightingId) return false;
+  if (!Array.isArray(value.mediaIds) || value.mediaIds.length < 1 || value.mediaIds.length > 4 ||
+      value.mediaIds.some((item) => typeof item !== 'string' || !UUID.test(item)) ||
+      new Set(value.mediaIds).size !== value.mediaIds.length) return false;
+  return Array.isArray(value.observedObjectPaths) && value.observedObjectPaths.length === 2 &&
+    value.observedObjectPaths.every((item) => typeof item === 'string' && OBJECT_PATH.test(item)) &&
+    new Set(value.observedObjectPaths).size === value.observedObjectPaths.length;
+}
+
+function sortedUniqueIds(rows: readonly unknown[]): boolean {
+  const ids = rows.map((row) => row && typeof row === 'object' && 'id' in row ? (row as { id?: unknown }).id : null);
+  return ids.every((id) => typeof id === 'string' && UUID.test(id)) &&
+    new Set(ids).size === ids.length && ids.every((id, index) => index === 0 || String(ids[index - 1]) < String(id));
+}
+
+function validIsolationJob(value: unknown): value is HostedIsolationJob {
+  if (!exactObject(value, [
+    'id', 'uploaderId', 'sightingId', 'mediaId', 'sha256', 'byteLength', 'width', 'height',
+    'objectPath', 'status', 'mediaAssetId',
+  ])) return false;
+  return UUID.test(String(value.id)) && (value.uploaderId === null || UUID.test(String(value.uploaderId))) &&
+    UUID.test(String(value.sightingId)) && UUID.test(String(value.mediaId)) && SHA256.test(String(value.sha256)) &&
+    Number.isInteger(value.byteLength) && Number(value.byteLength) > 0 && Number(value.byteLength) <= 20 * 1024 * 1024 &&
+    Number.isInteger(value.width) && Number(value.width) > 0 && Number(value.width) <= 2048 &&
+    Number.isInteger(value.height) && Number(value.height) > 0 && Number(value.height) <= 2048 &&
+    OBJECT_PATH.test(String(value.objectPath)) && ['reserved', 'finalized', 'deletion_pending'].includes(String(value.status)) &&
+    (value.mediaAssetId === null || UUID.test(String(value.mediaAssetId)));
+}
+
+function validIsolationAsset(value: unknown): value is HostedIsolationAsset {
+  if (!exactObject(value, [
+    'id', 'uploaderId', 'sightingId', 'clientMediaId', 'storageBucket', 'storagePath', 'sha256',
+    'byteLength', 'width', 'height', 'status', 'deletedAt',
+  ])) return false;
+  return UUID.test(String(value.id)) && (value.uploaderId === null || UUID.test(String(value.uploaderId))) &&
+    (value.sightingId === null || UUID.test(String(value.sightingId))) &&
+    (value.clientMediaId === null || UUID.test(String(value.clientMediaId))) &&
+    ['public-media', 'private-evidence', 'media-staging'].includes(String(value.storageBucket)) &&
+    typeof value.storagePath === 'string' && value.storagePath.length > 0 && value.storagePath.length <= 256 &&
+    SHA256.test(String(value.sha256)) &&
+    (value.byteLength === null || (Number.isInteger(value.byteLength) && Number(value.byteLength) > 0 && Number(value.byteLength) <= 20 * 1024 * 1024)) &&
+    (value.width === null || (Number.isInteger(value.width) && Number(value.width) > 0 && Number(value.width) <= 2048)) &&
+    (value.height === null || (Number.isInteger(value.height) && Number(value.height) > 0 && Number(value.height) <= 2048)) &&
+    value.status === 'quarantined' && (value.deletedAt === null || typeof value.deletedAt === 'string');
+}
+
+function validIsolationInspection(value: unknown, expectedObjects: number): value is HostedIsolationInspection {
+  if (!exactObject(value, ['jobs', 'assets', 'objectExists']) || !Array.isArray(value.jobs) ||
+      !Array.isArray(value.assets) || !Array.isArray(value.objectExists)) return false;
+  return value.jobs.length <= MAX_ISOLATION_ROWS && value.assets.length <= MAX_ISOLATION_ROWS &&
+    value.jobs.every(validIsolationJob) && value.assets.every(validIsolationAsset) &&
+    sortedUniqueIds(value.jobs) && sortedUniqueIds(value.assets) && value.objectExists.length === expectedObjects &&
+    value.objectExists.every((item) => typeof item === 'boolean');
+}
+
 function normalizeScenario(value: PartialHostedScenario): Required<PartialHostedScenario> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('hosted_cleanup_failed');
   const allowed = new Set([
@@ -127,7 +220,7 @@ function normalizeScenario(value: PartialHostedScenario): Required<PartialHosted
   };
 }
 
-function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
+function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & HostedIsolationAdapter {
   const sql = postgres(env.databaseUrl, {
     max: 1,
     connect_timeout: 5,
@@ -207,6 +300,37 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
         matchingQuarantinedAssetCount: row.matching_quarantined_asset_count,
         stagingObjectExists,
       };
+    },
+    async inspectIsolation(input) {
+      const userIds = [input.ownerId, input.strangerId];
+      const sightingIds = [input.ownerSightingId, input.strangerSightingId];
+      const jobs = await sql<HostedIsolationJob[]>`
+        select id::text as id, uploader_id::text as "uploaderId", sighting_id::text as "sightingId",
+          media_id as "mediaId", sha256, byte_length as "byteLength", width, height,
+          object_path as "objectPath", status::text as status, media_asset_id::text as "mediaAssetId"
+        from private.media_upload_jobs
+        where sighting_id = any(${sightingIds}::uuid[])
+           or (uploader_id = any(${userIds}::uuid[]) and media_id = any(${input.mediaIds}::text[]))
+        order by id
+        limit ${MAX_ISOLATION_ROWS + 1}
+      `;
+      const assets = await sql<HostedIsolationAsset[]>`
+        select id::text as id, uploader_id::text as "uploaderId", sighting_id::text as "sightingId",
+          client_media_id as "clientMediaId", storage_bucket as "storageBucket", storage_path as "storagePath",
+          sha256, byte_length as "byteLength", width, height, status, deleted_at::text as "deletedAt"
+        from public.media_assets
+        where sighting_id = any(${sightingIds}::uuid[])
+           or (uploader_id = any(${userIds}::uuid[]) and client_media_id = any(${input.mediaIds}::text[]))
+        order by id
+        limit ${MAX_ISOLATION_ROWS + 1}
+      `;
+      const objectExists: boolean[] = [];
+      for (const objectPath of input.observedObjectPaths) {
+        const { data, error } = await admin.storage.from('media-staging').exists(objectPath);
+        if (error || typeof data !== 'boolean') throw new Error('inspect_failed');
+        objectExists.push(data);
+      }
+      return { jobs, assets, objectExists };
     },
     async removeObjects(paths) {
       if (paths.length === 0) return;
@@ -290,32 +414,91 @@ export async function inspectHostedMedia(
   }
 }
 
+export async function inspectHostedIsolationState(
+  env: HostedGateEnvironment,
+  input: HostedIsolationInspectionInput,
+  providedAdapter?: HostedIsolationAdapter,
+): Promise<HostedIsolationInspection> {
+  if (!validIsolationInput(input)) throw new Error('hosted_inspection_failed');
+  const adapter = providedAdapter ?? createAdapter(env);
+  try {
+    const result = await adapter.inspectIsolation(input);
+    if (!validIsolationInspection(result, input.observedObjectPaths.length)) throw new Error('invalid');
+    return result;
+  } catch {
+    throw new Error('hosted_inspection_failed');
+  } finally {
+    if (!providedAdapter && 'close' in adapter && typeof adapter.close === 'function') {
+      await adapter.close().catch(() => undefined);
+    }
+  }
+}
+
 export async function cleanupHostedScenario(
   env: HostedGateEnvironment,
   scenario: PartialHostedScenario,
   providedAdapter?: HostedMaintenanceAdapter,
 ): Promise<void> {
   let adapter: HostedMaintenanceAdapter | undefined;
+  let failed = false;
   try {
     const tracked = normalizeScenario(scenario);
     adapter = providedAdapter ?? createAdapter(env);
-    const recoveredUserIds = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
-    const recoveredSightingIds = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
-    const userIds = [...new Set([...tracked.createdUserIds, ...recoveredUserIds])];
-    const sightingIds = [...new Set([...tracked.createdSightingIds, ...recoveredSightingIds])];
-    if (userIds.length > MAX_TRACKED || sightingIds.length > MAX_TRACKED ||
-        userIds.some((id) => !UUID.test(id)) || sightingIds.some((id) => !UUID.test(id))) throw new Error('recovery_failed');
+    let recoveredUserIds: readonly string[] = [];
+    let recoveredSightingIds: readonly string[] = [];
+    try {
+      recoveredUserIds = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
+    } catch {
+      failed = true;
+    }
+    try {
+      recoveredSightingIds = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
+    } catch {
+      failed = true;
+    }
+    if (recoveredUserIds.length > MAX_TRACKED || recoveredSightingIds.length > MAX_TRACKED ||
+        recoveredUserIds.some((id) => !UUID.test(id)) || recoveredSightingIds.some((id) => !UUID.test(id))) {
+      failed = true;
+    }
+    const userIds = [...new Set([
+      ...tracked.createdUserIds,
+      ...recoveredUserIds.filter((id) => UUID.test(id)),
+    ])].slice(0, MAX_TRACKED);
+    const sightingIds = [...new Set([
+      ...tracked.createdSightingIds,
+      ...recoveredSightingIds.filter((id) => UUID.test(id)),
+    ])].slice(0, MAX_TRACKED);
     const recovered = { ...tracked, createdUserIds: userIds, createdSightingIds: sightingIds };
-    await adapter.removeObjects(recovered.createdObjectPaths);
-    await adapter.deleteRows('media_upload_jobs', recovered.createdJobIds, recovered.createdMediaIds, recovered.createdUserIds);
-    await adapter.deleteRows('media_assets', recovered.createdAssetIds, recovered.createdMediaIds, recovered.createdUserIds);
-    await adapter.deleteRows('sightings', recovered.createdSightingIds);
-    await adapter.deleteRows('user_profiles', recovered.createdUserIds);
-    await adapter.deleteAuthUsers(recovered.createdUserIds);
-    if (!await adapter.assertAbsent(recovered)) throw new Error('absence_not_proven');
+    const attempt = async (operation: () => Promise<unknown>) => {
+      try {
+        await operation();
+      } catch {
+        failed = true;
+      }
+    };
+    await attempt(() => adapter!.removeObjects(recovered.createdObjectPaths));
+    await attempt(() => adapter!.deleteRows(
+      'media_upload_jobs', recovered.createdJobIds, recovered.createdMediaIds, recovered.createdUserIds,
+    ));
+    await attempt(() => adapter!.deleteRows(
+      'media_assets', recovered.createdAssetIds, recovered.createdMediaIds, recovered.createdUserIds,
+    ));
+    await attempt(() => adapter!.deleteRows('sightings', recovered.createdSightingIds));
+    await attempt(() => adapter!.deleteRows('user_profiles', recovered.createdUserIds));
+    await attempt(() => adapter!.deleteAuthUsers(recovered.createdUserIds));
+    try {
+      if (!await adapter.assertAbsent(recovered)) failed = true;
+    } catch {
+      failed = true;
+    }
   } catch {
-    throw new Error('hosted_cleanup_failed');
+    failed = true;
   } finally {
-    await adapter?.close().catch(() => undefined);
+    try {
+      await adapter?.close();
+    } catch {
+      failed = true;
+    }
   }
+  if (failed) throw new Error('hosted_cleanup_failed');
 }

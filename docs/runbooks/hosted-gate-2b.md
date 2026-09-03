@@ -41,6 +41,9 @@ URL, service key, access token, or Apple Account credential.
    A mode-0600 exact-ID cleanup ledger is updated before each ambiguous media
    mutation; an unconditional protected cleanup step replays it after timeout
    or failure and refuses to delete by wildcard, time range, email, or domain.
+   Recovery attempts every exact deletion category and the final absence proof
+   even after a transient failure. The final runner cleanup removes only the
+   current numeric run/attempt directory directly under `runner.temp`.
 5. Promote it with the successful run ID and attempt:
 
    `pnpm promote:pilot-gate-2b-evidence -- <run-id> <attempt>`
@@ -68,3 +71,8 @@ retained for three days; treat any unexpected content as an incident.
 
 The true post-token-expiry cleanup/replay test remains open because it requires
 the real capability lifetime. Do not infer that result from readiness evidence.
+
+`PILOT_GATE_2B=1` is required only by the hosted integration-test configuration.
+The separate unconditional cleanup process intentionally does not require that
+flag: it must be able to replay the durable ledger after the test process is
+cancelled before integration configuration is reached.

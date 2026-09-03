@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   cleanupHostedScenario,
+  inspectHostedIsolationState,
   inspectHostedMedia,
   type HostedMaintenanceAdapter,
   type PartialHostedScenario,
@@ -56,6 +57,44 @@ describe('hosted inspection and cleanup', () => {
       .rejects.toThrow('hosted_inspection_failed');
     await expect(inspectHostedMedia(env(), { ...input(), sql: 'select *' } as never, { inspect } as never))
       .rejects.toThrow('hosted_inspection_failed');
+  });
+
+  it('accepts only an exact two-actor isolation scope and a canonical bounded snapshot', async () => {
+    const isolationInput = {
+      ownerId: UUIDS[0]!, strangerId: UUIDS[5]!,
+      ownerSightingId: UUIDS[1]!, strangerSightingId: UUIDS[6]!,
+      mediaIds: [UUIDS[2]!],
+      observedObjectPaths: [`jobs/${UUIDS[3]}.jpg`, `jobs/${UUIDS[7]}.jpg`],
+    };
+    const snapshot = { jobs: [], assets: [], objectExists: [true, false] };
+    const inspectIsolation = vi.fn(async () => snapshot);
+    await expect(inspectHostedIsolationState(env(), isolationInput, { inspectIsolation }))
+      .resolves.toEqual(snapshot);
+    expect(inspectIsolation).toHaveBeenCalledWith(isolationInput);
+    await expect(inspectHostedIsolationState(env(), {
+      ...isolationInput, strangerId: isolationInput.ownerId,
+    }, { inspectIsolation })).rejects.toThrow('hosted_inspection_failed');
+    await expect(inspectHostedIsolationState(env(), {
+      ...isolationInput,
+      observedObjectPaths: [...isolationInput.observedObjectPaths, `jobs/${UUIDS[4]}.jpg`],
+    }, { inspectIsolation })).rejects.toThrow('hosted_inspection_failed');
+  });
+
+  it('rejects malformed or overflowing isolation snapshots', async () => {
+    const isolationInput = {
+      ownerId: UUIDS[0]!, strangerId: UUIDS[5]!,
+      ownerSightingId: UUIDS[1]!, strangerSightingId: UUIDS[6]!,
+      mediaIds: [UUIDS[2]!],
+      observedObjectPaths: [`jobs/${UUIDS[3]}.jpg`, `jobs/${UUIDS[7]}.jpg`],
+    };
+    await expect(inspectHostedIsolationState(env(), isolationInput, {
+      inspectIsolation: async () => ({ jobs: [], assets: [], objectExists: [true, 'false'] }),
+    })).rejects.toThrow('hosted_inspection_failed');
+    await expect(inspectHostedIsolationState(env(), isolationInput, {
+      inspectIsolation: async () => ({
+        jobs: Array.from({ length: 17 }, () => ({})), assets: [], objectExists: [true, false],
+      }),
+    })).rejects.toThrow('hosted_inspection_failed');
   });
 
   it('removes exact objects, deletes rows in fixed order, deletes Auth last, and proves absence', async () => {
@@ -126,6 +165,28 @@ describe('hosted inspection and cleanup', () => {
     expect(deleted).toEqual([
       'media_upload_jobs:', 'media_assets:', `sightings:${UUIDS[1]}`,
       `user_profiles:${UUIDS[0]}`, `auth:${UUIDS[0]}`,
+    ]);
+  });
+
+  it('best-effort attempts every cleanup category and absence proof after transient failures', async () => {
+    const calls: string[] = [];
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(),
+      recoverAuthUserIds: vi.fn(async () => { calls.push('recover-auth'); throw new Error('transient'); }),
+      recoverSightingIds: vi.fn(async () => { calls.push('recover-sightings'); return []; }),
+      removeObjects: vi.fn(async () => { calls.push('objects'); throw new Error('transient'); }),
+      deleteRows: vi.fn(async (table) => {
+        calls.push(table);
+        if (table === 'media_upload_jobs') throw new Error('transient');
+      }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent: vi.fn(async () => { calls.push('absent'); return false; }),
+      close: vi.fn(async () => { calls.push('close'); }),
+    };
+    await expect(cleanupHostedScenario(env(), scenario(), adapter)).rejects.toThrow('hosted_cleanup_failed');
+    expect(calls).toEqual([
+      'recover-auth', 'recover-sightings', 'objects', 'media_upload_jobs', 'media_assets',
+      'sightings', 'user_profiles', 'auth', 'absent', 'close',
     ]);
   });
 

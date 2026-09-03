@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
-  configureHostedAuth, runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
+  cleanupRunnerTemporary, configureHostedAuth, runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
 } from './run-pilot-gate-2b.mjs';
 import { DEPLOYED_FUNCTIONS } from './pilot-gate-2b-inputs.mjs';
 
@@ -57,6 +60,32 @@ test('accepts only the exact active deployed function inventory', () => {
   assert.throws(() => validateRemoteFunctionInventory(JSON.stringify([
     { ...inventory[0], status: 'THROTTLED' }, ...inventory.slice(1),
   ])), /remote_functions_invalid/);
+});
+
+test('removes only the exact current-run temporary directory', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-cleanup-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const current = path.join(root, 'animalhelper-gate-2b-123-1');
+  const other = path.join(root, 'animalhelper-gate-2b-123-2');
+  await mkdir(current);
+  await mkdir(other);
+  await cleanupRunnerTemporary({ temporaryRoot: root, runId: '123', runAttempt: '1' });
+  await assert.rejects(access(current));
+  await access(other);
+});
+
+test('fails closed for invalid run selectors or a non-directory cleanup target', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-cleanup-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await assert.rejects(
+    cleanupRunnerTemporary({ temporaryRoot: root, runId: '../123', runAttempt: '1' }),
+    /hosted_temporary_cleanup_failed/,
+  );
+  await writeFile(path.join(root, 'animalhelper-gate-2b-123-1'), 'not a directory');
+  await assert.rejects(
+    cleanupRunnerTemporary({ temporaryRoot: root, runId: '123', runAttempt: '1' }),
+    /hosted_temporary_cleanup_failed/,
+  );
 });
 
 test('deploys incrementally in fixed order without privileged command arguments', async () => {

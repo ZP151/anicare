@@ -61,7 +61,8 @@ describe('hosted gate execution', () => {
   it('bounds a stalled operation, aborts it, and still attempts cleanup', async () => {
     let observedSignal: AbortSignal | undefined;
     const fixture = options({
-      timeoutMs: 20,
+      timeoutMs: 200,
+      cancellationGraceMs: 10,
       runChecks: async (_scenario, signal) => {
         observedSignal = signal;
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => {
@@ -77,5 +78,57 @@ describe('hosted gate execution', () => {
     await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_checks');
     expect(observedSignal?.aborted).toBe(true);
     expect(fixture.order).toEqual(['create', 'aborted', 'settled', 'cleanup']);
+  });
+
+  it('fails within a bounded grace period and defers cleanup when work ignores cancellation', async () => {
+    const fixture = options({
+      timeoutMs: 40,
+      cancellationGraceMs: 5,
+      runChecks: async (_scenario, signal) => {
+        signal.addEventListener('abort', () => fixture.order.push('aborted'), { once: true });
+        return await new Promise<ReadinessChecks>(() => undefined);
+      },
+    });
+    const startedAt = Date.now();
+    await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_cleanup');
+    expect(Date.now() - startedAt).toBeLessThan(200);
+    expect(fixture.order).toEqual(['create', 'aborted']);
+    expect(fixture.evidenceWrites).toEqual([]);
+  });
+
+  it('also defers cleanup when fixture creation ignores cancellation', async () => {
+    const fixture = options({
+      timeoutMs: 40,
+      cancellationGraceMs: 5,
+      createScenario: async (_partial, signal) => {
+        signal.addEventListener('abort', () => fixture.order.push('aborted-create'), { once: true });
+        return await new Promise<unknown>(() => undefined);
+      },
+    });
+    await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_cleanup');
+    expect(fixture.order).toEqual(['aborted-create']);
+    expect(fixture.evidenceWrites).toEqual([]);
+  });
+
+  it('shares one deadline across creation and checks while reserving cleanup time', async () => {
+    const fixture = options({
+      timeoutMs: 100,
+      cancellationGraceMs: 5,
+      createScenario: async () => {
+        fixture.order.push('create');
+        await new Promise((resolve) => setTimeout(resolve, 55));
+        return { createdUserIds: [] };
+      },
+      runChecks: async (_scenario, signal) => {
+        fixture.order.push('checks');
+        return await new Promise<ReadinessChecks>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true });
+        });
+      },
+    });
+    const startedAt = Date.now();
+    await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_checks');
+    expect(Date.now() - startedAt).toBeLessThan(150);
+    expect(fixture.order).toEqual(['create', 'checks', 'cleanup']);
   });
 });
