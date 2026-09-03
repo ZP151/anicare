@@ -170,6 +170,8 @@ test('deploys incrementally in fixed order without privileged command arguments'
     command === 'pnpm' && args[2] === 'test:integration');
   assert.equal(integration.options.env.PILOT_GATE_2B_MODE, 'correctness');
   assert.equal(integration.options.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '15000');
+  assert.match(integration.options.env.PILOT_GATE_2B_LEDGER_PATH,
+    /animalhelper-pilot-gate-2b-ledger-123-1\.json$/);
   assert.match(integration.options.env.PILOT_GATE_2B_CHECKS_PATH, /hosted-gate-2b-checks\.json$/);
   assert.equal('PILOT_GATE_2B_CLEANUP_PATH' in integration.options.env, false);
   assert.deepEqual(stages, [

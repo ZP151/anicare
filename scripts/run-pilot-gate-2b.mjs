@@ -46,7 +46,6 @@ const GATE_STAGES = new Set(['create', 'checks', 'checks_timeout', 'checks_unset
 const HOSTED_CHECK_DIAGNOSTIC_FILENAME = 'hosted-check-diagnostic.json';
 const HOSTED_CHECKS_FILENAME = 'hosted-gate-2b-checks.json';
 const HOSTED_PERFORMANCE_FILENAME = 'hosted-gate-2b-performance.json';
-const HOSTED_LEDGER_FILENAME = 'hosted-gate-2b-ledger.json';
 const MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES = 320;
 
 function invalid(code) { throw new Error(code); }
@@ -445,7 +444,8 @@ export async function runPilotGate2B({
       PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: String(runtime.finalizeTimeoutMs),
     });
     harness.PILOT_GATE_2B_LEDGER_PATH = ownedTemporaryFile({
-      temporaryRoot, runId, runAttempt, filename: HOSTED_LEDGER_FILENAME,
+      temporaryRoot, runId, runAttempt,
+      filename: `animalhelper-pilot-gate-2b-ledger-${runId}-${runAttempt}.json`,
     });
     harness.PILOT_GATE_2B_CHECK_DIAGNOSTIC_PATH = hostedCheckDiagnosticPath({ temporaryRoot, runId, runAttempt });
     harness.PILOT_GATE_2B_CHECKS_PATH = ownedTemporaryFile({

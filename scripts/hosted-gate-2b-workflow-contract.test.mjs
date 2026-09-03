@@ -66,6 +66,8 @@ function assertContract(source, value) {
   assert.equal(cleanup.if, 'always()');
   assert.equal(cleanup['timeout-minutes'], 3);
   assert.equal(cleanup.run, 'pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted');
+  assert.match(cleanup.env.PILOT_GATE_2B_LEDGER_PATH,
+    /animalhelper-pilot-gate-2b-ledger-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}\.json$/);
   assert.match(cleanup.env.PILOT_GATE_2B_CHECKS_PATH, /hosted-gate-2b-checks\.json$/);
   assert.match(cleanup.env.PILOT_GATE_2B_CLEANUP_PATH, /hosted-gate-2b-cleanup\.json$/);
   assert.equal(cleanup.env.PILOT_GATE_2B_MODE,

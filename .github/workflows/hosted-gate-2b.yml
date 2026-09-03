@@ -119,7 +119,7 @@ jobs:
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           PILOT_GATE_2B_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'correctness' }}
           PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize' && '30000' || '15000' }}
-          PILOT_GATE_2B_LEDGER_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-ledger.json
+          PILOT_GATE_2B_LEDGER_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/animalhelper-pilot-gate-2b-ledger-${{ github.run_id }}-${{ github.run_attempt }}.json
           PILOT_GATE_2B_CHECKS_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-checks.json
           PILOT_GATE_2B_CLEANUP_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-cleanup.json
         run: pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted
