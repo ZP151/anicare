@@ -331,6 +331,37 @@ describe('hosted inspection and cleanup', () => {
     expect(assertAbsent).toHaveBeenCalledOnce();
   });
 
+  it('preserves durable sighting recovery references when the recovery adapter mutates its copy', async () => {
+    const calls: string[] = [];
+    const cleanupScenario = scenario();
+    let recoveryReferences: readonly Readonly<{ reporterId: string; clientDedupeKey: string }>[] | undefined;
+    const assertAbsent = vi.fn(async (tracked: Required<PartialHostedScenario>) => {
+      calls.push('absent');
+      expect(tracked.sightingRecoveryReferences).toEqual(cleanupScenario.sightingRecoveryReferences);
+      expect(tracked.sightingRecoveryReferences).not.toBe(recoveryReferences);
+      return true;
+    });
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),
+      recoverSightingIds: vi.fn(async (references) => {
+        recoveryReferences = references;
+        const mutable = references as Array<{ reporterId: string; clientDedupeKey: string }>;
+        mutable[0]!.clientDedupeKey = 'pilot-gate-2b-owner-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+        mutable.splice(0, 1);
+        throw new Error('hostile');
+      }),
+      removeObjects: vi.fn(async () => { calls.push('objects'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent, close: vi.fn(async () => { calls.push('close'); }),
+    };
+    await expect(cleanupHostedScenario(env(), cleanupScenario, adapter)).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      'objects', 'media_upload_jobs', 'media_assets', 'sightings', 'user_profiles', 'auth', 'absent', 'close',
+    ]);
+    expect(assertAbsent).toHaveBeenCalledOnce();
+  });
+
   it('contains a stateful Auth recovery array without suppressing recover_auth', async () => {
     const calls: string[] = [];
     const authResult: unknown[] = [];
@@ -368,6 +399,9 @@ describe('hosted inspection and cleanup', () => {
   it.each([
     ['returns false', async () => false],
     ['throws', async () => { throw new Error('transient'); }],
+    ['returns a truthy object', async () => ({}) as never],
+    ['returns truthy one', async () => 1 as never],
+    ['returns a truthy string', async () => 'true' as never],
   ])('retains provisional sighting recovery failure when absence proof %s', async (_label, assertAbsent) => {
     const adapter: HostedMaintenanceAdapter = {
       inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),

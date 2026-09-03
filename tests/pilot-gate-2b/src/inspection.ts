@@ -517,6 +517,14 @@ export async function cleanupHostedScenario(
   const fail = (operation: CleanupOperationId) => { failed.add(operation); };
   try {
     const tracked = normalizeScenario(scenario);
+    const proofSightingRecoveryReferences = tracked.sightingRecoveryReferences.map((reference) => ({
+      reporterId: reference.reporterId,
+      clientDedupeKey: reference.clientDedupeKey,
+    }));
+    const recoverySightingReferences = proofSightingRecoveryReferences.map((reference) => ({
+      reporterId: reference.reporterId,
+      clientDedupeKey: reference.clientDedupeKey,
+    }));
     adapter ??= createHostedMaintenanceAdapter(env);
     let recoveredUserIds: readonly string[] = [];
     let recoveredSightingIds: readonly string[] = [];
@@ -540,7 +548,7 @@ export async function cleanupHostedScenario(
       recoveredUserIds = [];
     }
     try {
-      const candidate = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
+      const candidate = await adapter.recoverSightingIds(recoverySightingReferences);
       if (!Array.isArray(candidate)) throw new Error('invalid_recovery_result');
       const count = candidate.length;
       if (!Number.isInteger(count) || count < 0 || count > MAX_TRACKED) {
@@ -566,7 +574,12 @@ export async function cleanupHostedScenario(
       ...tracked.createdSightingIds,
       ...recoveredSightingIds.filter((id) => UUID.test(id)),
     ])].slice(0, MAX_TRACKED);
-    const recovered = { ...tracked, createdUserIds: userIds, createdSightingIds: sightingIds };
+    const recovered = {
+      ...tracked,
+      createdUserIds: userIds,
+      createdSightingIds: sightingIds,
+      sightingRecoveryReferences: proofSightingRecoveryReferences,
+    };
     const attempt = async (operationId: CleanupOperationId, operation: () => Promise<unknown>) => {
       try {
         await operation();
@@ -585,7 +598,7 @@ export async function cleanupHostedScenario(
     await attempt('profiles_delete', () => adapter!.deleteRows('user_profiles', recovered.createdUserIds));
     await attempt('auth_delete', () => adapter!.deleteAuthUsers(recovered.createdUserIds));
     try {
-      if (await adapter.assertAbsent(recovered)) {
+      if (await adapter.assertAbsent(recovered) === true) {
         if (provisionalSightingRecoveryFailure) failed.delete('recover_sighting');
       } else {
         fail('absence_proof');
