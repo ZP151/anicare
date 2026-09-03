@@ -10,6 +10,7 @@ import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.j
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
 import {
   HostedCheckFailure, runHostedChecks, type HostedCheckAdapter, type HostedMediaStagingStep,
+  type HostedOwnerHappyPathStep,
 } from './checks.js';
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
 import { persistCleanupMediaId, removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
@@ -140,6 +141,16 @@ describe('real Hosted Gate 2B', () => {
         const requireMediaStep = (step: HostedMediaStagingStep, passed: boolean): void => {
           if (!passed) throw new HostedCheckFailure('media_staging', step);
         };
+        const atOwnerStep = async <T>(step: HostedOwnerHappyPathStep, operation: () => Promise<T>): Promise<T> => {
+          try {
+            return await operation();
+          } catch {
+            throw new HostedCheckFailure('owner_happy_path', undefined, step);
+          }
+        };
+        const requireOwnerStep = (step: HostedOwnerHappyPathStep, passed: boolean): void => {
+          if (!passed) throw new HostedCheckFailure('owner_happy_path', undefined, step);
+        };
         const authHeaders = (accessToken: string | null) => ({
           apikey: env.anonKey,
           Authorization: `Bearer ${accessToken ?? env.anonKey}`,
@@ -201,38 +212,48 @@ describe('real Hosted Gate 2B', () => {
             return response.ok && !response.redirected && response.url.startsWith(`${origin}/`);
           },
           runOwnerHappyPath: async () => {
-            mediaId = randomUUID();
-            partial.createdMediaIds = [mediaId];
-            await writeCleanupLedger(ledgerPath, partial);
-            ownerReservation = await reserveMedia(
+            const confirmedMediaId = randomUUID();
+            mediaId = confirmedMediaId;
+            partial.createdMediaIds = [confirmedMediaId];
+            await atOwnerStep('ledger_media', () => writeCleanupLedger(ledgerPath, partial));
+            ownerReservation = await atOwnerStep('reserve', () => reserveMedia(
               scenario.owner,
-              reservationInput(scenario.ownerSightingId, mediaId, jpeg.sha256, jpeg.bytes.byteLength),
+              reservationInput(scenario.ownerSightingId, confirmedMediaId, jpeg.sha256, jpeg.bytes.byteLength),
               env,
-            );
+            ));
             partial.createdJobIds = [ownerReservation.jobId];
             partial.createdObjectPaths = [ownerReservation.path];
-            await writeCleanupLedger(ledgerPath, partial);
-            if (!(await putSignedMedia(ownerReservation, jpeg.bytes)).ok) return false;
-            const finalized = await finalizeMedia(scenario.owner, {
-              sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-            }, env);
-            if (!finalized.ok || !finalized.mediaAssetId) return false;
-            mediaAssetId = finalized.mediaAssetId;
-            partial.createdAssetIds = [mediaAssetId];
-            await writeCleanupLedger(ledgerPath, partial);
+            await atOwnerStep('ledger_reserve', () => writeCleanupLedger(ledgerPath, partial));
+            requireOwnerStep('upload', (await atOwnerStep(
+              'upload', () => putSignedMedia(ownerReservation!, jpeg.bytes),
+            )).ok);
+            const finalized = await atOwnerStep('finalize', () => finalizeMedia(scenario.owner, {
+              sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
+            }, env));
+            requireOwnerStep('finalize', finalized.ok && Boolean(finalized.mediaAssetId));
+            if (!finalized.ok || !finalized.mediaAssetId) throw new HostedCheckFailure(
+              'owner_happy_path', undefined, 'finalize',
+            );
+            const confirmedMediaAssetId = finalized.mediaAssetId;
+            mediaAssetId = confirmedMediaAssetId;
+            partial.createdAssetIds = [confirmedMediaAssetId];
+            await atOwnerStep('ledger_asset', () => writeCleanupLedger(ledgerPath, partial));
             ownerExpected = {
-              ownerId: scenario.owner.id, sightingId: scenario.ownerSightingId, mediaId,
-              jobId: ownerReservation.jobId, mediaAssetId, sha256: jpeg.sha256,
+              ownerId: scenario.owner.id, sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId,
+              jobId: ownerReservation.jobId, mediaAssetId: confirmedMediaAssetId, sha256: jpeg.sha256,
               byteLength: jpeg.bytes.byteLength, width: jpeg.width, height: jpeg.height,
             };
-            ownerBaseline = await inspectHostedMedia(env, ownerExpected);
-            const repeated = await finalizeMedia(scenario.owner, {
-              sightingId: scenario.ownerSightingId, mediaId, sha256: jpeg.sha256,
-            }, env);
-            return ownerBaseline.jobCount === 1 && ownerBaseline.matchingFinalizedJobCount === 1 &&
+            ownerBaseline = await atOwnerStep('inspect', () => inspectHostedMedia(env, ownerExpected!));
+            requireOwnerStep('inspect',
+              ownerBaseline.jobCount === 1 && ownerBaseline.matchingFinalizedJobCount === 1 &&
               ownerBaseline.assetCount === 1 && ownerBaseline.matchingQuarantinedAssetCount === 1 &&
-              ownerBaseline.stagingObjectExists && repeated.ok && repeated.mediaAssetId === mediaAssetId &&
-              await unchanged();
+              ownerBaseline.stagingObjectExists);
+            const repeated = await atOwnerStep('replay', () => finalizeMedia(scenario.owner, {
+              sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
+            }, env));
+            requireOwnerStep('replay', repeated.ok && repeated.mediaAssetId === confirmedMediaAssetId);
+            requireOwnerStep('verify', await atOwnerStep('verify', unchanged));
+            return true;
           },
           verifyMediaStaging: async (expected) => {
             requireMediaStep('prerequisite_state', Boolean(ownerReservation && ownerBaseline));

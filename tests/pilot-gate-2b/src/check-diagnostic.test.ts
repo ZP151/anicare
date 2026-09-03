@@ -24,10 +24,13 @@ describe('hosted check diagnostic writer', () => {
         gateStage: 'checks', check: 'owner_happy_path', mediaStep: 'privacy_list',
       })).rejects.toThrow('hosted_check_diagnostic_invalid');
       await expect(writeHostedCheckDiagnostic(target, {
+        gateStage: 'checks', check: 'media_staging', ownerStep: 'upload',
+      })).rejects.toThrow('hosted_check_diagnostic_invalid');
+      await expect(writeHostedCheckDiagnostic(target, {
         gateStage: 'checks', check: 'media_staging', mediaStep: 'Bearer secret',
       })).rejects.toThrow('hosted_check_diagnostic_invalid');
       const control = {
-        gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_read_equivalence', cleanup: [
+        gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'replay', cleanup: [
           'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
           'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
         ],

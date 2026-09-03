@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, runHostedChecks, type HostedCheckAdapter,
+  HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerStepFromError, runHostedChecks,
+  type HostedCheckAdapter,
 } from './checks.js';
 import type { HostedGateEnvironment } from './environment.js';
 
@@ -95,6 +96,22 @@ describe('hosted check coordinator', () => {
     } catch (error) {
       expect(hostedCheckIdFromError(error)).toBe('media_staging');
       expect(hostedMediaStepFromError(error)).toBe('privacy_read_equivalence');
+    }
+  });
+
+  it('preserves only a fixed owner-happy-path step from a typed adapter failure', async () => {
+    const fake = adapter({
+      runOwnerHappyPath: vi.fn(async () => {
+        throw new HostedCheckFailure('owner_happy_path', undefined, 'replay');
+      }),
+    });
+    try {
+      await runHostedChecks(env(), fake.implementation);
+      throw new Error('expected hosted check failure');
+    } catch (error) {
+      expect(hostedCheckIdFromError(error)).toBe('owner_happy_path');
+      expect(hostedOwnerStepFromError(error)).toBe('replay');
+      expect(hostedMediaStepFromError(error)).toBeUndefined();
     }
   });
 });

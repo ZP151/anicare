@@ -101,6 +101,24 @@ describe('hosted gate execution', () => {
     }
   });
 
+  it('retains a fixed owner step when cleanup overrides the owner check failure', async () => {
+    const fixture = options({
+      runChecks: async () => {
+        throw new HostedCheckFailure('owner_happy_path', undefined, 'inspect');
+      },
+      cleanup: async () => { throw new HostedCleanupFailure(['recover_sighting']); },
+    });
+    try {
+      await executeHostedGate(fixture.value);
+      throw new Error('expected hosted gate failure');
+    } catch (error) {
+      expect(hostedGateControlFromError(error)).toEqual({
+        gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'inspect',
+        cleanup: ['recover_sighting'],
+      });
+    }
+  });
+
   it('normalizes duplicate and out-of-order typed cleanup IDs before preserving them', async () => {
     const fixture = options({
       cleanup: async () => {

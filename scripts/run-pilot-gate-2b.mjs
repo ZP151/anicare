@@ -26,6 +26,10 @@ const HOSTED_MEDIA_STAGING_STEPS = new Set([
   'privacy_read_actual', 'privacy_read_unknown', 'privacy_read_equivalence', 'privacy_list',
   'isolation_compare', 'owner_unchanged',
 ]);
+const HOSTED_OWNER_HAPPY_PATH_STEPS = new Set([
+  'ledger_media', 'reserve', 'ledger_reserve', 'upload', 'finalize',
+  'ledger_asset', 'inspect', 'replay', 'verify',
+]);
 const GATE_STAGES = new Set(['create', 'checks', 'cleanup', 'evidence']);
 const CLEANUP_OPERATION_IDS = [
   'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
@@ -41,7 +45,7 @@ function normalizeHostedGateControl(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const candidate = value;
   const keys = Object.keys(candidate);
-  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'cleanup'].includes(key)) ||
+  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'ownerStep', 'cleanup'].includes(key)) ||
       typeof candidate.gateStage !== 'string' || !GATE_STAGES.has(candidate.gateStage)) return undefined;
   const control = { gateStage: candidate.gateStage };
   if (Object.hasOwn(candidate, 'check')) {
@@ -53,6 +57,11 @@ function normalizeHostedGateControl(value) {
     if (control.check !== 'media_staging' || typeof candidate.mediaStep !== 'string' ||
         !HOSTED_MEDIA_STAGING_STEPS.has(candidate.mediaStep)) return undefined;
     control.mediaStep = candidate.mediaStep;
+  }
+  if (Object.hasOwn(candidate, 'ownerStep')) {
+    if (control.check !== 'owner_happy_path' || typeof candidate.ownerStep !== 'string' ||
+        !HOSTED_OWNER_HAPPY_PATH_STEPS.has(candidate.ownerStep)) return undefined;
+    control.ownerStep = candidate.ownerStep;
   }
   if (Object.hasOwn(candidate, 'cleanup')) {
     if (candidate.gateStage !== 'cleanup' || !Array.isArray(candidate.cleanup) || candidate.cleanup.length < 1 ||
@@ -75,6 +84,7 @@ export function buildProducerFailureDiagnostic(stage, control) {
     diagnostic.gateStage = safeControl.gateStage;
     if (safeControl.check !== undefined) diagnostic.check = safeControl.check;
     if (safeControl.mediaStep !== undefined) diagnostic.mediaStep = safeControl.mediaStep;
+    if (safeControl.ownerStep !== undefined) diagnostic.ownerStep = safeControl.ownerStep;
     if (safeControl.cleanup !== undefined) diagnostic.cleanup = safeControl.cleanup;
   }
   return `${JSON.stringify(diagnostic)}\n`;

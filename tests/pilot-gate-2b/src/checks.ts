@@ -24,8 +24,18 @@ export const HOSTED_MEDIA_STAGING_STEPS = [
 ] as const;
 export type HostedMediaStagingStep = typeof HOSTED_MEDIA_STAGING_STEPS[number];
 
+export const HOSTED_OWNER_HAPPY_PATH_STEPS = [
+  'ledger_media', 'reserve', 'ledger_reserve', 'upload', 'finalize',
+  'ledger_asset', 'inspect', 'replay', 'verify',
+] as const;
+export type HostedOwnerHappyPathStep = typeof HOSTED_OWNER_HAPPY_PATH_STEPS[number];
+
 export class HostedCheckFailure extends Error {
-  constructor(readonly checkId: HostedCheckId, readonly mediaStep?: HostedMediaStagingStep) {
+  constructor(
+    readonly checkId: HostedCheckId,
+    readonly mediaStep?: HostedMediaStagingStep,
+    readonly ownerStep?: HostedOwnerHappyPathStep,
+  ) {
     super('hosted_checks_failed');
   }
 }
@@ -41,6 +51,13 @@ export function hostedMediaStepFromError(error: unknown): HostedMediaStagingStep
   return error.mediaStep;
 }
 
+export function hostedOwnerStepFromError(error: unknown): HostedOwnerHappyPathStep | undefined {
+  if (!(error instanceof HostedCheckFailure) || error.checkId !== 'owner_happy_path' ||
+      typeof error.ownerStep !== 'string' ||
+      !(HOSTED_OWNER_HAPPY_PATH_STEPS as readonly string[]).includes(error.ownerStep)) return undefined;
+  return error.ownerStep;
+}
+
 export type HostedCheckAdapter = Readonly<{
   verifyAuthRedirects(configuration: typeof AUTH_CONFIGURATION): Promise<boolean>;
   verifyMediaStaging(configuration: typeof STAGING_CONFIGURATION): Promise<boolean>;
@@ -52,13 +69,19 @@ export type HostedCheckAdapter = Readonly<{
 async function requirePassed(checkId: HostedCheckId, operation: () => Promise<boolean>): Promise<void> {
   let passed = false;
   let mediaStep: HostedMediaStagingStep | undefined;
+  let ownerStep: HostedOwnerHappyPathStep | undefined;
   try {
     passed = await operation();
   } catch (error) {
     mediaStep = hostedMediaStepFromError(error);
+    ownerStep = hostedOwnerStepFromError(error);
     passed = false;
   }
-  if (!passed) throw new HostedCheckFailure(checkId, checkId === 'media_staging' ? mediaStep : undefined);
+  if (!passed) throw new HostedCheckFailure(
+    checkId,
+    checkId === 'media_staging' ? mediaStep : undefined,
+    checkId === 'owner_happy_path' ? ownerStep : undefined,
+  );
 }
 
 export async function runHostedChecks(

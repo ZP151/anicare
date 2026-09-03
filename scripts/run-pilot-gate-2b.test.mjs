@@ -308,6 +308,13 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
     gateStage: 'checks', check: 'owner_happy_path', mediaStep: 'privacy_list',
   }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
+    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'replay',
+    cleanup: ['recover_sighting'],
+  }), '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"replay","cleanup":["recover_sighting"]}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
+    gateStage: 'checks', check: 'media_staging', ownerStep: 'upload',
+  }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
     gateStage: 'checks', check: 'media_staging', mediaStep: 'Bearer secret',
   }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', { gateStage: 'cleanup', check: 'media_staging\\nBearer secret' }),
@@ -335,8 +342,12 @@ test('propagates only a canonical owned diagnostic and ignores hostile child out
       gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_list',
       cleanup: ['storage_remove', 'absence_proof'],
     }]],
+    ['{"gateStage":"cleanup","check":"owner_happy_path","ownerStep":"replay","cleanup":["recover_sighting"]}\n', [{
+      gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'replay', cleanup: ['recover_sighting'],
+    }]],
     [undefined, []],
     ['{"gateStage":"cleanup","check":"media_staging","cleanup":["absence_proof","storage_remove"]}\n', []],
+    ['{"gateStage":"checks","check":"media_staging","ownerStep":"upload"}\n', []],
   ]) {
     const stages = []; const controls = [];
     const processAdapter = {
