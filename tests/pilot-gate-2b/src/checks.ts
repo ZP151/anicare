@@ -12,6 +12,21 @@ const STAGING_CONFIGURATION = {
   allowedMimeTypes: ['image/jpeg'],
 } as const;
 
+export const HOSTED_CHECK_IDS = [
+  'auth_redirect', 'public_origin', 'owner_happy_path', 'media_staging', 'cross_owner_isolation',
+] as const;
+export type HostedCheckId = typeof HOSTED_CHECK_IDS[number];
+
+export class HostedCheckFailure extends Error {
+  constructor(readonly checkId: HostedCheckId) {
+    super('hosted_checks_failed');
+  }
+}
+
+export function hostedCheckIdFromError(error: unknown): HostedCheckId | undefined {
+  return error instanceof HostedCheckFailure ? error.checkId : undefined;
+}
+
 export type HostedCheckAdapter = Readonly<{
   verifyAuthRedirects(configuration: typeof AUTH_CONFIGURATION): Promise<boolean>;
   verifyMediaStaging(configuration: typeof STAGING_CONFIGURATION): Promise<boolean>;
@@ -20,25 +35,25 @@ export type HostedCheckAdapter = Readonly<{
   verifyCrossOwnerIsolation(): Promise<boolean>;
 }>;
 
-async function requirePassed(operation: () => Promise<boolean>): Promise<void> {
+async function requirePassed(checkId: HostedCheckId, operation: () => Promise<boolean>): Promise<void> {
   let passed = false;
   try {
     passed = await operation();
   } catch {
     passed = false;
   }
-  if (!passed) throw new Error('hosted_checks_failed');
+  if (!passed) throw new HostedCheckFailure(checkId);
 }
 
 export async function runHostedChecks(
   env: HostedGateEnvironment,
   adapter: HostedCheckAdapter,
 ): Promise<ReadinessChecks> {
-  await requirePassed(() => adapter.verifyAuthRedirects(AUTH_CONFIGURATION));
-  await requirePassed(() => adapter.verifyPublicKeyOrigin(env.apiUrl));
-  await requirePassed(() => adapter.runOwnerHappyPath());
-  await requirePassed(() => adapter.verifyMediaStaging(STAGING_CONFIGURATION));
-  await requirePassed(() => adapter.verifyCrossOwnerIsolation());
+  await requirePassed('auth_redirect', () => adapter.verifyAuthRedirects(AUTH_CONFIGURATION));
+  await requirePassed('public_origin', () => adapter.verifyPublicKeyOrigin(env.apiUrl));
+  await requirePassed('owner_happy_path', () => adapter.runOwnerHappyPath());
+  await requirePassed('media_staging', () => adapter.verifyMediaStaging(STAGING_CONFIGURATION));
+  await requirePassed('cross_owner_isolation', () => adapter.verifyCrossOwnerIsolation());
   return {
     authRedirectCheck: 'passed',
     mediaStagingCheck: 'passed',

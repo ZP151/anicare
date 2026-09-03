@@ -9,9 +9,10 @@ import {
 import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.js';
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
 import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
+import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
 import { persistCleanupMediaId, removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
 import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
-import { executeHostedGate, type MutableHostedScenario } from './execute.js';
+import { executeHostedGate, hostedCheckIdFromGateError, type MutableHostedScenario } from './execute.js';
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
 import {
   cleanupHostedScenario, inspectHostedIsolationState, inspectHostedMedia,
@@ -89,7 +90,9 @@ describe('real Hosted Gate 2B', () => {
       createdJobIds: [], createdAssetIds: [], createdObjectPaths: [],
     };
 
-    await expect(executeHostedGate({
+    let result;
+    try {
+      result = await executeHostedGate({
       timeoutMs: 100_000,
       createScenario: async (ledger, signal) => {
         if (signal.aborted) throw new Error('aborted');
@@ -295,7 +298,16 @@ describe('real Hosted Gate 2B', () => {
         await cleanupHostedScenario(env, tracked);
       },
       emitEvidence: async () => { await removeCleanupLedger(ledgerPath); },
-    })).resolves.toMatchObject({ cleanupPassed: true });
+      });
+    } catch (error) {
+      const checkId = hostedCheckIdFromGateError(error);
+      const diagnosticPath = process.env.PILOT_GATE_2B_CHECK_DIAGNOSTIC_PATH;
+      if (checkId !== undefined && typeof diagnosticPath === 'string') {
+        await writeHostedCheckDiagnostic(diagnosticPath, checkId).catch(() => undefined);
+      }
+      throw error;
+    }
+    expect(result).toMatchObject({ cleanupPassed: true });
     process.stdout.write('hosted_gate_2b_passed\n');
   }, 120_000);
 });

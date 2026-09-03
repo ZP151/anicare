@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import {
-  cleanupRunnerTemporary, configureHostedAuth, runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
+  buildProducerFailureDiagnostic, cleanupRunnerTemporary, configureHostedAuth, hostedCheckDiagnosticPath,
+  readHostedCheckId, createDefaultProcessAdapter,
+  runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
 } from './run-pilot-gate-2b.mjs';
 import { DEPLOYED_FUNCTIONS } from './pilot-gate-2b-inputs.mjs';
 
@@ -86,6 +88,20 @@ test('fails closed for invalid run selectors or a non-directory cleanup target',
     cleanupRunnerTemporary({ temporaryRoot: root, runId: '123', runAttempt: '1' }),
     /hosted_temporary_cleanup_failed/,
   );
+});
+
+test('keeps bounded successful child output while discarding failing child output', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-child-output-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const adapter = createDefaultProcessAdapter({ temporaryRoot: root, runId: '123', runAttempt: '1' });
+  const successful = await adapter.run(process.execPath, ['-e', 'process.stdout.write("expected-output")'], {
+    cwd: root, env: process.env, timeoutMs: 10_000,
+  });
+  assert.equal(successful.stdout, 'expected-output');
+  await assert.rejects(adapter.run(process.execPath, [
+    '-e', 'process.stderr.write("PILOT_GATE_2B_CHECK=media_staging\\nBearer secret"); process.exit(1)',
+  ], { cwd: root, env: process.env, timeoutMs: 10_000 }), (error) =>
+    error instanceof Error && error.message === 'hosted_process_failed' && !Object.hasOwn(error, 'hostedCheckId'));
 });
 
 test('deploys incrementally in fixed order without privileged command arguments', async () => {
@@ -213,7 +229,6 @@ test('reports the fixed source verification stage before an operation fails', as
 });
 
 test('serializes only allowlisted producer diagnostics with canonical bytes', async () => {
-  const { buildProducerFailureDiagnostic } = await import('./run-pilot-gate-2b.mjs');
   const allowed = [
     'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
     'docker_bundler_verification',
@@ -229,6 +244,102 @@ test('serializes only allowlisted producer diagnostics with canonical bytes', as
   const diagnostic = buildProducerFailureDiagnostic(hostile);
   assert.equal(diagnostic, '{"stage":"unknown","code":"hosted_gate_failed"}\n');
   assert.equal(diagnostic.includes('secret') || diagnostic.includes('https://') || diagnostic.includes('Bearer'), false);
+});
+
+test('reads only a canonical regular hosted-check diagnostic inside the owned run directory', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-diagnostic-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const diagnostic = hostedCheckDiagnosticPath({ temporaryRoot: root, runId: '123', runAttempt: '1' });
+  const owned = path.join(root, 'animalhelper-gate-2b-123-1');
+  assert.equal(path.dirname(diagnostic), owned);
+  assert.equal(path.relative(owned, diagnostic), 'hosted-check-diagnostic.json');
+  await mkdir(owned, { recursive: true });
+  await writeFile(diagnostic, '{"check":"media_staging"}\n', { mode: 0o600 });
+  await assert.doesNotReject(async () => access(diagnostic));
+  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), 'media_staging');
+  await writeFile(diagnostic, '{"check":"media_staging", "extra":true}\n');
+  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  await writeFile(diagnostic, '{"check":"media_staging"}');
+  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  await rm(diagnostic);
+  await writeFile(path.join(owned, 'target'), '{"check":"media_staging"}\n');
+  try {
+    await symlink(path.join(owned, 'target'), diagnostic, 'file');
+  } catch (error) {
+    if (error?.code !== 'EPERM') throw error;
+    const directoryTarget = path.join(owned, 'target-directory');
+    await mkdir(directoryTarget);
+    try {
+      await symlink(directoryTarget, diagnostic, 'junction');
+    } catch (junctionError) {
+      if (junctionError?.code !== 'EPERM') throw junctionError;
+      t.skip('Windows symlink creation requires a developer-mode or elevated test host.');
+      return;
+    }
+  }
+  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', 'media_staging'),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","check":"media_staging"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', 'media_staging\\nBearer secret'),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+});
+
+test('propagates only a canonical owned diagnostic and ignores hostile child output', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-gate-2b-diagnostic-producer-test-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const values = {
+    SUPABASE_ACCESS_TOKEN: 'access-secret',
+    SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_service', SUPABASE_PUBLIC_KEY: 'sb_publishable_public',
+    PRECISE_LOCATION_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
+    GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
+  };
+  for (const [contents, expectedChecks] of [
+    ['{"check":"media_staging"}\n', ['media_staging']],
+    [undefined, []],
+    ['{"check":"media_staging", "extra":true}\n', []],
+  ]) {
+    const stages = []; const checks = [];
+    const processAdapter = {
+      run: async (command, args, options) => {
+        if (command === 'git' && args[0] === 'rev-parse') return { stdout: `${'a'.repeat(40)}\n` };
+        if (command === 'supabase' && args[0] === 'functions' && args[1] === 'list') {
+          return { stdout: JSON.stringify(DEPLOYED_FUNCTIONS.map((slug, index) => ({
+            id: `function-${index}`, name: slug, slug, status: 'ACTIVE', version: 1,
+          }))) };
+        }
+        if (command === 'pnpm' && args[2] === 'test:integration') {
+          if (contents !== undefined) {
+            const diagnostic = options.env.PILOT_GATE_2B_CHECK_DIAGNOSTIC_PATH;
+            await mkdir(path.dirname(diagnostic), { recursive: true });
+            await writeFile(diagnostic, contents, { mode: 0o600, flag: 'wx' });
+          }
+          const error = new Error('hosted_process_failed');
+          error.stdout = 'PILOT_GATE_2B_CHECK=auth_redirect\\nBearer secret https://hostile.invalid';
+          error.stderr = 'PILOT_GATE_2B_CHECK=cross_owner_isolation';
+          throw error;
+        }
+        return { stdout: '' };
+      },
+      createSourceDirectory: async () => 'C:/temp/source',
+      writeEdgeSecretFile: async () => 'C:/temp/edge.env',
+      removeTemporaryFiles: async () => undefined,
+    };
+    await rm(path.join(root, 'animalhelper-gate-2b-123-1'), { recursive: true, force: true });
+    await assert.rejects(runPilotGate2B({
+      repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
+      fetchAdapter: async () => new Response(JSON.stringify({
+        site_url: 'animalhelper://', uri_allow_list: 'animalhelper://auth/callback',
+      }), { status: 200 }),
+      discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
+      stageAdapter: { enter: (stage) => stages.push(stage), check: (check) => checks.push(check) },
+      temporaryRoot: root,
+    }), /hosted_process_failed/);
+    assert.equal(stages.at(-1), 'hosted_checks');
+    assert.deepEqual(checks, expectedChecks);
+  }
 });
 
 test('reports temporary cleanup only when cleanup itself fails', async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { executeHostedGate, type ExecuteHostedGateOptions } from './execute.js';
+import { executeHostedGate, hostedCheckIdFromGateError, type ExecuteHostedGateOptions } from './execute.js';
+import { HostedCheckFailure } from './checks.js';
 import type { ReadinessChecks } from './evidence.js';
 
 const checks: ReadinessChecks = {
@@ -56,6 +57,26 @@ describe('hosted gate execution', () => {
     await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_checks');
     expect(fixture.order).toEqual(['create', 'cleanup']);
     expect(fixture.evidenceWrites).toEqual([]);
+  });
+
+  it('preserves only a typed fixed check ID after cleanup', async () => {
+    const fixture = options({ runChecks: async () => { throw new HostedCheckFailure('media_staging'); } });
+    try {
+      await executeHostedGate(fixture.value);
+      throw new Error('expected hosted gate failure');
+    } catch (error) {
+      expect(error).toHaveProperty('message', 'hosted_gate_failed_at_checks');
+      expect(hostedCheckIdFromGateError(error)).toBe('media_staging');
+    }
+    expect(fixture.order).toEqual(['create', 'cleanup']);
+  });
+
+  it('discards a hostile marker-shaped check error after cleanup', async () => {
+    const fixture = options({ runChecks: async () => {
+      throw new Error('PILOT_GATE_2B_CHECK=media_staging\\nBearer secret https://hostile.invalid');
+    } });
+    await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_checks');
+    await expect(executeHostedGate(fixture.value)).rejects.not.toThrow('PILOT_GATE_2B_CHECK=');
   });
 
   it('bounds a stalled operation, aborts it, and still attempts cleanup', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
+import { hostedCheckIdFromError, runHostedChecks, type HostedCheckAdapter } from './checks.js';
 import type { HostedGateEnvironment } from './environment.js';
 
 function env(): HostedGateEnvironment {
@@ -49,6 +49,23 @@ describe('hosted check coordinator', () => {
     const fake = adapter({ [method]: vi.fn(async () => false) });
     await expect(runHostedChecks(env(), fake.implementation)).rejects.toThrow('hosted_checks_failed');
     expect(fake.order.length).toBeLessThan(5);
+  });
+
+  it.each([
+    ['verifyAuthRedirects', 'auth_redirect'],
+    ['verifyPublicKeyOrigin', 'public_origin'],
+    ['runOwnerHappyPath', 'owner_happy_path'],
+    ['verifyMediaStaging', 'media_staging'],
+    ['verifyCrossOwnerIsolation', 'cross_owner_isolation'],
+  ] as const)('marks the fixed failing check %s without accepting adapter error text', async (method, checkId) => {
+    const fake = adapter({ [method]: vi.fn(async () => { throw new Error('Bearer secret https://hostile.invalid'); }) });
+    try {
+      await runHostedChecks(env(), fake.implementation);
+      throw new Error('expected hosted check failure');
+    } catch (error) {
+      expect(error).toHaveProperty('message', 'hosted_checks_failed');
+      expect(hostedCheckIdFromError(error)).toBe(checkId);
+    }
   });
 
   it('uses only public configuration constants for static assertions', async () => {

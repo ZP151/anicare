@@ -1,4 +1,5 @@
 import type { ReadinessChecks } from './evidence.js';
+import { hostedCheckIdFromError, type HostedCheckId } from './checks.js';
 
 export type MutableHostedScenario = Record<string, unknown>;
 
@@ -55,8 +56,18 @@ async function bounded<T>(
   }
 }
 
-function failure(stage: Stage): Error {
-  return new Error(`hosted_gate_failed_at_${stage}`);
+class HostedGateFailure extends Error {
+  constructor(stage: Stage, readonly checkId?: HostedCheckId) {
+    super(`hosted_gate_failed_at_${stage}`);
+  }
+}
+
+function failure(stage: Stage, checkId?: HostedCheckId): HostedGateFailure {
+  return new HostedGateFailure(stage, stage === 'checks' ? checkId : undefined);
+}
+
+export function hostedCheckIdFromGateError(error: unknown): HostedCheckId | undefined {
+  return error instanceof HostedGateFailure ? error.checkId : undefined;
 }
 
 export async function executeHostedGate(options: ExecuteHostedGateOptions): Promise<HostedGateResult> {
@@ -82,6 +93,7 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
   let scenario: unknown = partial;
   let checks: ReadinessChecks | undefined;
   let failedStage: 'create' | 'checks' | undefined;
+  let failedCheckId: HostedCheckId | undefined;
   let unsettled = false;
   try {
     scenario = await runBefore(workDeadline, (signal) => options.createScenario(partial, signal));
@@ -89,6 +101,7 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
   } catch (error) {
     unsettled = error instanceof UnsettledOperationError;
     failedStage = checks === undefined && scenario === partial ? 'create' : 'checks';
+    if (failedStage === 'checks') failedCheckId = hostedCheckIdFromError(error);
   }
 
   // An uncooperative operation may still be mutating hosted state. The parent
@@ -102,7 +115,7 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
     throw failure('cleanup');
   }
 
-  if (failedStage !== undefined || checks === undefined) throw failure(failedStage ?? 'checks');
+  if (failedStage !== undefined || checks === undefined) throw failure(failedStage ?? 'checks', failedCheckId);
 
   try {
     await runBefore(deadline, (signal) => options.emitEvidence(checks!, signal));

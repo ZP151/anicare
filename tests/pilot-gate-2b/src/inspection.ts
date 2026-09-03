@@ -370,7 +370,9 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & H
           (select count(*) from public.sightings where id = any(${scenario.createdSightingIds}::uuid[])) +
           (select count(*) from public.user_profiles where id = any(${scenario.createdUserIds}::uuid[])) +
           (select count(*) from auth.users where id = any(${scenario.createdUserIds}::uuid[])
-            or raw_user_meta_data ->> 'pilot_gate_2b_recovery_id' = any(${scenario.createdAuthRecoveryIds}::text[]))
+            or raw_user_meta_data ->> 'pilot_gate_2b_recovery_id' = any(${scenario.createdAuthRecoveryIds}::text[])) +
+          (select count(*) from storage.objects
+            where bucket_id = 'media-staging' and name = any(${scenario.createdObjectPaths}::text[]))
         )::integer as tracked_count
       `;
       if (rows.length !== 1 || rows[0]?.tracked_count !== 0) return false;
@@ -381,10 +383,6 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & H
             and client_dedupe_key = ${reference.clientDedupeKey}
         `;
         if (sightings.length !== 1 || sightings[0]?.tracked_count !== 0) return false;
-      }
-      for (const path of scenario.createdObjectPaths) {
-        const { data, error } = await admin.storage.from('media-staging').exists(path);
-        if (error || data !== false) return false;
       }
       return true;
     },
