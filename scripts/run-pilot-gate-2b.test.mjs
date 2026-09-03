@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import {
   buildProducerFailureDiagnostic, cleanupRunnerTemporary, configureHostedAuth, hostedCheckDiagnosticPath,
-  readHostedGateControl, createDefaultProcessAdapter,
+  readHostedGateControl, createDefaultProcessAdapter, hostedGateRuntime,
   runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
 } from './run-pilot-gate-2b.mjs';
 import { DEPLOYED_FUNCTIONS } from './pilot-gate-2b-inputs.mjs';
@@ -137,7 +137,7 @@ test('deploys incrementally in fixed order without privileged command arguments'
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
-    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
+    PILOT_GATE_2B_MODE: 'correctness', PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000',
   };
   await runPilotGate2B({ repoRoot: 'C:/repo', processAdapter, fetchAdapter, parentEnvironment: values,
     discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }), outputAdapter: { write: () => undefined },
@@ -160,7 +160,6 @@ test('deploys incrementally in fixed order without privileged command arguments'
     ...DEPLOYED_FUNCTIONS.map((name) => ['supabase', 'functions', 'deploy', name, '--project-ref', 'fhugdtpjbgiatqhvjioy', '--use-docker']),
     ['supabase', 'functions', 'list', '--project-ref', 'fhugdtpjbgiatqhvjioy', '--output', 'json'],
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
-    ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
   ]);
   const commandText = JSON.stringify(commands.map(({ command, args }) => [command, args]));
   assert.equal(commandText.includes('access-secret') || commandText.includes('db-secret') ||
@@ -169,15 +168,28 @@ test('deploys incrementally in fixed order without privileged command arguments'
   assert.equal(commands.some(({ command, args }) => [command, ...args].some((token) => forbidden.has(token))), false);
   const integration = commands.find(({ command, args }) =>
     command === 'pnpm' && args[2] === 'test:integration');
-  assert.equal(integration.options.env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS, '5000');
+  assert.equal(integration.options.env.PILOT_GATE_2B_MODE, 'correctness');
+  assert.equal(integration.options.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '15000');
+  assert.match(integration.options.env.PILOT_GATE_2B_CHECKS_PATH, /hosted-gate-2b-checks\.json$/);
+  assert.equal('PILOT_GATE_2B_CLEANUP_PATH' in integration.options.env, false);
   assert.deepEqual(stages, [
     'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
     'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
-    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
+    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks',
   ]);
 });
 
-test('derives and propagates the first-owner finalize budget only from the manual switch', async () => {
+test('selects only fixed correctness and characterization runtime contracts', () => {
+  assert.deepEqual(hostedGateRuntime('correctness', '10000'), { mode: 'correctness', finalizeTimeoutMs: 10_000 });
+  assert.deepEqual(hostedGateRuntime('correctness', '12000'), { mode: 'correctness', finalizeTimeoutMs: 12_000 });
+  assert.deepEqual(hostedGateRuntime('correctness', '15000'), { mode: 'correctness', finalizeTimeoutMs: 15_000 });
+  assert.deepEqual(hostedGateRuntime('characterize', '30000'), { mode: 'characterize', finalizeTimeoutMs: 30_000 });
+  for (const pair of [['correctness', '5000'], ['correctness', '30000'], ['characterize', '15000'], ['other', '15000']]) {
+    assert.throws(() => hostedGateRuntime(...pair), /pilot_gate_2b_environment_invalid/);
+  }
+});
+
+test('runs the command selected by the explicit fixed runtime mode', async () => {
   const common = {
     SUPABASE_ACCESS_TOKEN: 'access-secret',
     SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
@@ -186,12 +198,12 @@ test('derives and propagates the first-owner finalize budget only from the manua
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
   };
-  for (const [eventName, ref, relaxed, expected] of [
-    ['push', 'refs/heads/codex/hosted-gate-2b', 'false', '5000'],
-    ['workflow_dispatch', 'refs/heads/main', 'false', '5000'],
-    ['workflow_dispatch', 'refs/heads/codex/hosted-gate-2b', 'true', '30000'],
+  for (const [eventName, ref, mode, timeout, commandName, stage] of [
+    ['push', 'refs/heads/codex/hosted-gate-2b', 'correctness', '15000', 'test:integration', 'hosted_checks'],
+    ['workflow_dispatch', 'refs/heads/codex/hosted-gate-2b', 'characterize', '30000', 'characterize:hosted', 'performance_characterization'],
   ]) {
     const commands = [];
+    const stages = [];
     const processAdapter = {
       run: async (command, args, options) => {
         commands.push({ command, args, options });
@@ -213,16 +225,20 @@ test('derives and propagates the first-owner finalize budget only from the manua
         site_url: 'animalhelper://', uri_allow_list: 'animalhelper://auth/callback',
       }), { status: 200 }),
       parentEnvironment: { ...common, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref,
-        PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: relaxed },
+        PILOT_GATE_2B_MODE: mode, PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: timeout },
       discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
       outputAdapter: { write: () => undefined },
+      stageAdapter: { enter: (value) => stages.push(value) },
     });
-    const integration = commands.find(({ command, args }) => command === 'pnpm' && args[2] === 'test:integration');
-    assert.equal(integration.options.env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS, expected);
+    const selected = commands.find(({ command, args }) => command === 'pnpm' && args[2] === commandName);
+    assert.equal(selected.options.env.PILOT_GATE_2B_MODE, mode);
+    assert.equal(selected.options.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, timeout);
+    assert.equal(stages.at(-1), stage);
+    if (mode === 'characterize') assert.match(selected.options.env.PILOT_GATE_2B_PERFORMANCE_PATH, /hosted-gate-2b-performance\.json$/);
   }
 });
 
-test('fails closed for a relaxed timeout switch outside the exact producer allowlist', async () => {
+test('fails closed for runtime mode or timeout outside the exact allowlist', async () => {
   const common = {
     SUPABASE_ACCESS_TOKEN: 'access-secret',
     SUPABASE_DATABASE_URL: 'postgresql://postgres.fhugdtpjbgiatqhvjioy:db-secret@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres',
@@ -245,15 +261,16 @@ test('fails closed for a relaxed timeout switch outside the exact producer allow
     writeEdgeSecretFile: async () => 'C:/temp/edge.env',
     removeTemporaryFiles: async () => undefined,
   };
-  for (const [eventName, ref, relaxed] of [
-    ['push', 'refs/heads/codex/hosted-gate-2b', 'true'],
-    ['workflow_dispatch', 'refs/heads/main', 'True'],
-    ['workflow_dispatch', 'refs/heads/main', '1'],
-    ['workflow_dispatch', 'refs/heads/main', ' false'],
+  for (const [eventName, ref, mode, timeout] of [
+    ['push', 'refs/heads/codex/hosted-gate-2b', 'correctness', '5000'],
+    ['workflow_dispatch', 'refs/heads/main', 'Correctness', '15000'],
+    ['workflow_dispatch', 'refs/heads/main', 'characterize', '15000'],
+    ['workflow_dispatch', 'refs/heads/main', 'correctness', '30000'],
   ]) {
     await assert.rejects(runPilotGate2B({
       repoRoot: 'C:/repo', processAdapter, parentEnvironment: {
-        ...common, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref, PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: relaxed,
+        ...common, GITHUB_EVENT_NAME: eventName, GITHUB_REF: ref,
+        PILOT_GATE_2B_MODE: mode, PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: timeout,
       },
       fetchAdapter: async () => new Response(JSON.stringify({
         site_url: 'animalhelper://', uri_allow_list: 'animalhelper://auth/callback',
@@ -284,7 +301,7 @@ test('fails before every hosted operation when the Docker bundler is unavailable
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
-    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
+    PILOT_GATE_2B_MODE: 'correctness', PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000',
   };
   await assert.rejects(runPilotGate2B({
     repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
@@ -310,7 +327,7 @@ test('reports the fixed source verification stage before an operation fails', as
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
-    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
+    PILOT_GATE_2B_MODE: 'correctness', PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000',
   };
   await assert.rejects(runPilotGate2B({
     repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,
@@ -325,7 +342,7 @@ test('serializes only allowlisted producer diagnostics with canonical bytes', as
     'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
     'docker_bundler_verification',
     'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
-    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
+    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'performance_characterization',
     'temporary_cleanup',
   ];
   for (const stage of allowed) {
@@ -339,17 +356,13 @@ test('serializes only allowlisted producer diagnostics with canonical bytes', as
 });
 
 test('caps every fixed owner-finalize producer outcome without widening its diagnostic shape', () => {
-  const cleanup = [
-    'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
-    'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
-  ];
   for (const ownerFinalizeOutcome of [
     'timeout', 'network', 'http_401_authentication_required', 'http_403_media_not_found_or_forbidden',
     'http_403_unclassified', 'http_409_media_finalization_conflict', 'http_503_service_unavailable',
     'http_other', 'invalid_response',
   ]) {
     const diagnostic = buildProducerFailureDiagnostic('hosted_checks', {
-      gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome, cleanup,
+      gateStage: 'checks_timeout', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome,
     });
     assert.ok(Buffer.byteLength(diagnostic, 'utf8') <= 320);
     assert.match(diagnostic, /^\{"stage":"hosted_checks","code":"hosted_gate_failed"(?:,|\})/);
@@ -365,22 +378,19 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.equal(path.relative(owned, diagnostic), 'hosted-check-diagnostic.json');
   await mkdir(owned, { recursive: true });
   const control = {
-    gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_list',
-    cleanup: ['storage_remove', 'absence_proof'],
+    gateStage: 'checks_unsettled', check: 'media_staging', mediaStep: 'privacy_list',
   };
   await writeFile(diagnostic, `${JSON.stringify(control)}\n`, { mode: 0o600 });
   await assert.doesNotReject(async () => access(diagnostic));
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), control);
-  const longest = {
+  const obsoleteCleanupControl = {
     gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_read_equivalence', cleanup: [
       'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
       'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
     ],
   };
-  const longestSource = `${JSON.stringify(longest)}\n`;
-  assert.ok(Buffer.byteLength(longestSource) > 256 && Buffer.byteLength(longestSource) <= 320);
-  await writeFile(diagnostic, longestSource);
-  assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), longest);
+  await writeFile(diagnostic, `${JSON.stringify(obsoleteCleanupControl)}\n`);
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   const oversized = `${JSON.stringify({
     gateStage: 'checks', check: 'media_staging', padding: 'x'.repeat(321),
   })}\n`;
@@ -396,13 +406,13 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   await writeFile(diagnostic, '{"gateStage":"cleanup","check":"media_staging"}');
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   const finalizeControl = {
-    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
-    ownerFinalizeOutcome: 'http_409_media_finalization_conflict', cleanup: ['recover_sighting'],
+    gateStage: 'checks_timeout', check: 'owner_happy_path', ownerStep: 'finalize',
+    ownerFinalizeOutcome: 'http_409_media_finalization_conflict',
   };
   await writeFile(diagnostic, `${JSON.stringify(finalizeControl)}\n`);
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), finalizeControl);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', finalizeControl),
-    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"http_409_media_finalization_conflict","cleanup":["recover_sighting"]}\n');
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"checks_timeout","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"http_409_media_finalization_conflict"}\n');
   const timeoutControl = {
     gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'finalize', ownerFinalizeOutcome: 'timeout',
   };
@@ -410,38 +420,8 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), timeoutControl);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', timeoutControl),
     '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"checks","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"timeout"}\n');
-  const maximalFinalizeControl = {
-    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
-    ownerFinalizeOutcome: 'http_403_media_not_found_or_forbidden', cleanup: [
-      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
-      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
-    ],
-  };
-  assert.ok(Buffer.byteLength(`${JSON.stringify(maximalFinalizeControl)}\n`) > 320);
-  assert.equal(buildProducerFailureDiagnostic('hosted_checks', maximalFinalizeControl),
-    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","cleanup":["setup","recover_auth","recover_sighting","storage_remove","jobs_delete","assets_delete","sightings_delete","profiles_delete","auth_delete","absence_proof","connection_close"]}\n');
-  const nearCapFinalizeControl = {
-    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
-    ownerFinalizeOutcome: 'http_401_authentication_required', cleanup: [
-      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
-      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
-    ],
-  };
-  assert.equal(Buffer.byteLength(`${JSON.stringify(nearCapFinalizeControl)}\n`), 319);
-  const nearCapDiagnostic = buildProducerFailureDiagnostic('hosted_checks', nearCapFinalizeControl);
-  assert.ok(Buffer.byteLength(nearCapDiagnostic) <= 320);
-  assert.equal(nearCapDiagnostic,
-    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","cleanup":["setup","recover_auth","recover_sighting","storage_remove","jobs_delete","assets_delete","sightings_delete","profiles_delete","auth_delete","absence_proof","connection_close"]}\n');
-  const oversizedBaseControl = {
-    gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_read_equivalence', cleanup: [
-      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
-      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
-    ],
-  };
-  assert.ok(Buffer.byteLength(`${JSON.stringify(oversizedBaseControl)}\n`) <= 320);
-  const oversizedBaseDiagnostic = buildProducerFailureDiagnostic('hosted_checks', oversizedBaseControl);
-  assert.ok(Buffer.byteLength(oversizedBaseDiagnostic) <= 320);
-  assert.equal(oversizedBaseDiagnostic, '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', obsoleteCleanupControl),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   for (const invalidOutcomeControl of [
     { gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'replay', ownerFinalizeOutcome: 'network' },
     { gateStage: 'checks', check: 'media_staging', mediaStep: 'privacy_list', ownerFinalizeOutcome: 'network' },
@@ -468,7 +448,7 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   }
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', control),
-    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"media_staging","mediaStep":"privacy_list","cleanup":["storage_remove","absence_proof"]}\n');
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"checks_unsettled","check":"media_staging","mediaStep":"privacy_list"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
     gateStage: 'checks', check: 'media_staging', mediaStep: 'isolation_validation',
   }), '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"checks","check":"media_staging","mediaStep":"isolation_validation"}\n');
@@ -478,7 +458,7 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
     gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'replay',
     cleanup: ['recover_sighting'],
-  }), '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"replay","cleanup":["recover_sighting"]}\n');
+  }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
     gateStage: 'checks', check: 'media_staging', ownerStep: 'upload',
   }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
@@ -504,18 +484,17 @@ test('propagates only a canonical owned diagnostic and ignores hostile child out
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
-    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
+    PILOT_GATE_2B_MODE: 'correctness', PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000',
   };
   for (const [contents, expectedControls] of [
-    ['{"gateStage":"cleanup","check":"media_staging","mediaStep":"privacy_list","cleanup":["storage_remove","absence_proof"]}\n', [{
-      gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_list',
-      cleanup: ['storage_remove', 'absence_proof'],
+    ['{"gateStage":"checks_unsettled","check":"media_staging","mediaStep":"privacy_list"}\n', [{
+      gateStage: 'checks_unsettled', check: 'media_staging', mediaStep: 'privacy_list',
     }]],
-    ['{"gateStage":"cleanup","check":"owner_happy_path","ownerStep":"replay","cleanup":["recover_sighting"]}\n', [{
-      gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'replay', cleanup: ['recover_sighting'],
+    ['{"gateStage":"checks_timeout","check":"owner_happy_path","ownerStep":"replay"}\n', [{
+      gateStage: 'checks_timeout', check: 'owner_happy_path', ownerStep: 'replay',
     }]],
     [undefined, []],
-    ['{"gateStage":"cleanup","check":"media_staging","cleanup":["absence_proof","storage_remove"]}\n', []],
+    ['{"gateStage":"cleanup","check":"media_staging","cleanup":["absence_proof"]}\n', []],
     ['{"gateStage":"checks","check":"media_staging","ownerStep":"upload"}\n', []],
   ]) {
     const stages = []; const controls = [];
@@ -573,7 +552,7 @@ test('reports temporary cleanup only when cleanup itself fails', async () => {
     GITHUB_REPOSITORY: 'ZP151/anicare', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
-    PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'false',
+    PILOT_GATE_2B_MODE: 'correctness', PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000',
   };
   await assert.rejects(runPilotGate2B({
     repoRoot: 'C:/repo', processAdapter, parentEnvironment: values,

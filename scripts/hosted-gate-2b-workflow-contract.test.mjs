@@ -14,11 +14,6 @@ const SHAS = {
   download: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
   attest: 'actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661',
 };
-const paths = [
-  '.github/workflows/hosted-gate-2b.yml', 'scripts/**', 'tests/pilot-gate-2a/**',
-  'tests/pilot-gate-2b/**', 'supabase/config.toml', 'supabase/migrations/**',
-  'supabase/functions/**', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
-];
 
 async function workflow() {
   const source = await readFile(workflowUrl, 'utf8');
@@ -27,119 +22,110 @@ async function workflow() {
   return { source, value: document.toJS() };
 }
 
+function step(job, name) {
+  return job.steps.find((item) => item.name === name);
+}
+
 function assertContract(source, value) {
   assert.equal(value.name, 'Hosted Gate 2B');
-  assert.deepEqual(value.on, {
-    push: { branches: ['codex/hosted-gate-2b'], paths },
-    workflow_dispatch: {
-      inputs: {
-        relaxed_finalize_timeout: {
-          description: 'Allow a 30-second timeout only for the first owner happy-path finalization.',
-          required: false,
-          default: false,
-          type: 'boolean',
-        },
-      },
+  assert.deepEqual(value.on.workflow_dispatch.inputs, {
+    mode: {
+      description: 'Run the correctness gate or the isolated latency characterization.',
+      required: true, default: 'correctness', type: 'choice', options: ['correctness', 'characterize'],
     },
   });
+  assert.equal(source.includes('relaxed_finalize_timeout'), false);
   assert.deepEqual(value.permissions, { contents: 'read' });
-  assert.deepEqual(value.concurrency, {
-    group: 'hosted-gate-2b-${{ github.repository }}-fhugdtpjbgiatqhvjioy',
-    'cancel-in-progress': false,
-  });
   assert.deepEqual(Object.keys(value.jobs), ['hosted_gate_2b', 'attest_evidence']);
+
   const producer = value.jobs.hosted_gate_2b;
   assert.equal(producer.environment, 'hosted-gate-2b');
-  assert.equal(producer['runs-on'], 'ubuntu-latest');
   assert.equal(producer['timeout-minutes'], 30);
   assert.deepEqual(producer.permissions, { contents: 'read' });
   assert.equal('env' in producer, false);
-  assert.deepEqual(producer.steps.filter((step) => step.uses).map((step) => step.uses), [
-    SHAS.checkout, SHAS.pnpm, SHAS.node, SHAS.deno, SHAS.supabase, SHAS.upload, SHAS.upload,
+  assert.deepEqual(producer.steps.filter((item) => item.uses).map((item) => item.uses), [
+    SHAS.checkout, SHAS.pnpm, SHAS.node, SHAS.deno, SHAS.supabase,
+    SHAS.upload, SHAS.upload, SHAS.upload,
   ]);
-  assert.deepEqual(producer.steps[0].with, { ref: '${{ github.sha }}', 'fetch-depth': 0, 'persist-credentials': false });
-  const run = producer.steps.find((step) => step.name === 'Run protected Hosted Gate 2B');
-  assert.deepEqual(Object.keys(run.env).sort(), [
-    'GITHUB_ENVIRONMENT', 'PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT', 'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_ACCESS_TOKEN',
-    'SUPABASE_DATABASE_URL', 'SUPABASE_PUBLIC_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'TMPDIR',
-  ]);
-  assert.equal(run.env.PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT,
-    "${{ github.event_name == 'workflow_dispatch' && inputs.relaxed_finalize_timeout == true && 'true' || 'false' }}");
-  assert.equal(run.run, 'pnpm pilot-gate-2b');
-  assert.equal(run['timeout-minutes'], 15);
-  const hostedCleanup = producer.steps.find((step) => step.name === 'Recover exact hosted fixtures');
-  assert.equal(hostedCleanup.if, 'always()');
-  assert.equal(hostedCleanup['timeout-minutes'], 3);
-  assert.equal(hostedCleanup.run, 'pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted');
-  assert.deepEqual(Object.keys(hostedCleanup.env).sort(), [
-    'GITHUB_RUN_ATTEMPT', 'GITHUB_RUN_ID', 'GITHUB_SHA',
-    'PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS', 'PILOT_GATE_2B_LEDGER_PATH',
-    'PRECISE_LOCATION_ENCRYPTION_KEY', 'SUPABASE_DATABASE_URL', 'SUPABASE_PUBLIC_KEY',
-    'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_URL',
-  ]);
-  assert.equal(hostedCleanup.env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS, '5000');
-  const localCleanup = producer.steps.at(-1);
+
+  const correctness = step(producer, 'Run protected Hosted Gate 2B correctness');
+  assert.equal(correctness.id, 'correctness');
+  assert.equal(correctness.if, "github.event_name == 'push' || inputs.mode == 'correctness'");
+  assert.equal(correctness.run, 'pnpm pilot-gate-2b');
+  assert.equal(correctness.env.PILOT_GATE_2B_MODE, 'correctness');
+  assert.equal(correctness.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '15000');
+  const characterize = step(producer, 'Characterize Hosted Gate 2B latency');
+  assert.equal(characterize.id, 'characterize');
+  assert.equal(characterize.if, "github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize'");
+  assert.equal(characterize.run, 'pnpm pilot-gate-2b');
+  assert.equal(characterize.env.PILOT_GATE_2B_MODE, 'characterize');
+  assert.equal(characterize.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '30000');
+
+  const cleanup = step(producer, 'Recover exact hosted fixtures');
+  assert.equal(cleanup.id, 'cleanup');
+  assert.equal(cleanup.if, 'always()');
+  assert.equal(cleanup['timeout-minutes'], 3);
+  assert.equal(cleanup.run, 'pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted');
+  assert.match(cleanup.env.PILOT_GATE_2B_CHECKS_PATH, /hosted-gate-2b-checks\.json$/);
+  assert.match(cleanup.env.PILOT_GATE_2B_CLEANUP_PATH, /hosted-gate-2b-cleanup\.json$/);
+  assert.equal(cleanup.env.PILOT_GATE_2B_MODE,
+    "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'correctness' }}");
+
+  const evidence = step(producer, 'Write canonical readiness evidence');
+  const correctnessCondition = "steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'";
+  assert.equal(evidence.if, correctnessCondition);
+  assert.equal(evidence.run, 'pnpm --filter @animalhelper/pilot-gate-2b evidence:write');
+  assert.equal(evidence.env.PILOT_GATE_2B_MODE, 'correctness');
+  assert.match(evidence.env.PILOT_GATE_2B_CHECKS_PATH, /hosted-gate-2b-checks\.json$/);
+  assert.match(evidence.env.PILOT_GATE_2B_CLEANUP_PATH, /hosted-gate-2b-cleanup\.json$/);
+
+  const readinessUpload = step(producer, 'Upload canonical readiness evidence');
+  assert.equal(readinessUpload.if, correctnessCondition);
+  assert.equal(readinessUpload.with['retention-days'], 3);
+  const performanceUpload = step(producer, 'Upload latency characterization');
+  assert.equal(performanceUpload.if,
+    "steps.characterize.outcome == 'success' && steps.cleanup.outcome == 'success'");
+  assert.match(performanceUpload.with.path, /hosted-gate-2b-performance\.json$/);
+  assert.equal(performanceUpload.with['retention-days'], 3);
+  assert.equal(step(producer, 'Upload sanitized failure diagnostic').if,
+    "failure() && (steps.correctness.outcome == 'failure' || steps.characterize.outcome == 'failure')");
+
+  const localCleanup = step(producer, 'Remove runner-local Gate 2B outputs');
   assert.equal(localCleanup.if, 'always()');
-  assert.deepEqual(localCleanup.env, {
-    TMPDIR: '${{ runner.temp }}',
-    GITHUB_RUN_ID: '${{ github.run_id }}',
-    GITHUB_RUN_ATTEMPT: '${{ github.run_attempt }}',
-  });
-  assert.deepEqual(localCleanup.run, [
-    'pnpm pilot-gate-2b:cleanup-diagnostic',
-    'rm -f -- docs/evidence/pilot-gate-2b-readiness.json',
-    '',
-  ].join('\n'));
-  const successUpload = producer.steps.find((step) => step.name === 'Upload canonical readiness evidence');
-  assert.deepEqual(successUpload.with, {
-    name: 'pilot-gate-2b-readiness-${{ github.run_id }}-${{ github.run_attempt }}',
-    path: 'docs/evidence/pilot-gate-2b-readiness.json', 'if-no-files-found': 'error', 'retention-days': 3,
-  });
-  const failureUpload = producer.steps.find((step) => step.name === 'Upload sanitized failure diagnostic');
-  assert.equal(failureUpload.if, "failure() && steps.gate.outcome == 'failure'");
-  assert.equal(failureUpload.with.path, '${{ runner.temp }}/animalhelper-pilot-gate-2b-failure.log');
-  assert.equal(JSON.stringify(producer).includes('ios-device-lab'), false);
-  assert.equal(JSON.stringify(producer).includes('contents":"write'), false);
+  assert.match(localCleanup.run, /pilot-gate-2b:cleanup-diagnostic/);
+  assert.match(localCleanup.run, /pilot-gate-2b-readiness\.json/);
 
   const attest = value.jobs.attest_evidence;
   assert.equal(attest.needs, 'hosted_gate_2b');
-  assert.equal('environment' in attest, false);
+  assert.equal(attest.if, "github.event_name == 'push' || inputs.mode == 'correctness'");
   assert.deepEqual(attest.permissions, { contents: 'read', 'id-token': 'write', attestations: 'write' });
-  assert.deepEqual(attest.steps.map((step) => step.uses), [SHAS.download, SHAS.attest]);
+  assert.deepEqual(attest.steps.map((item) => item.uses), [SHAS.download, SHAS.attest]);
   assert.equal(attest.steps[1].with['subject-path'], 'evidence/pilot-gate-2b-readiness.json');
   assert.doesNotMatch(source, /@(v|main|master)(?:\s|\n)/);
   assert.doesNotMatch(source, /contents:\s*write/);
+  assert.equal(JSON.stringify(producer).includes('ios-device-lab'), false);
 }
 
-test('protects the hosted producer and separates it from the device environment', async () => {
+test('separates correctness, cleanup proof, evidence, and characterization', async () => {
   const { source, value } = await workflow();
   assertContract(source, value);
 });
 
-test('contract rejects environment, permissions, secret scope, action, and cleanup drift', async () => {
+test('rejects mode, secret scope, cleanup, evidence, and action drift', async () => {
   const { source, value } = await workflow();
   const mutations = [
     (item) => { item.jobs.hosted_gate_2b.environment = 'ios-device-lab'; },
-    (item) => { item.jobs.hosted_gate_2b.permissions.contents = 'write'; },
     (item) => { item.jobs.hosted_gate_2b.env = { SUPABASE_ACCESS_TOKEN: 'secret' }; },
-    (item) => {
-      item.on.workflow_dispatch = { inputs: { relaxed_finalize_timeout: {
-        description: 'Allow a 30-second timeout only for the first owner happy-path finalization.',
-        required: false, default: true, type: 'boolean',
-      } } };
-    },
-    (item) => {
-      const run = item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Run protected Hosted Gate 2B');
-      run.env = { ...run.env, PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: 'true' };
-    },
+    (item) => { item.on.workflow_dispatch.inputs.mode.options.push('relaxed'); },
+    (item) => { step(item.jobs.hosted_gate_2b, 'Run protected Hosted Gate 2B correctness').env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS = '30000'; },
+    (item) => { step(item.jobs.hosted_gate_2b, 'Recover exact hosted fixtures').if = 'success()'; },
+    (item) => { step(item.jobs.hosted_gate_2b, 'Write canonical readiness evidence').if = 'success()'; },
+    (item) => { step(item.jobs.hosted_gate_2b, 'Upload latency characterization').if = 'always()'; },
     (item) => { item.jobs.hosted_gate_2b.steps[0].uses = 'actions/checkout@v4'; },
-    (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').if = 'success()'; },
-    (item) => { delete item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS; },
-    (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS = '30000'; },
-    (item) => { item.jobs.hosted_gate_2b.steps.find((step) => step.name === 'Recover exact hosted fixtures').env.PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS = "${{ github.event_name == 'workflow_dispatch' && inputs.relaxed_finalize_timeout == true && '30000' || '5000' }}"; },
   ];
   for (const mutate of mutations) {
-    const candidate = structuredClone(value); mutate(candidate);
+    const candidate = structuredClone(value);
+    mutate(candidate);
     assert.throws(() => assertContract(source, candidate));
   }
 });

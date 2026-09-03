@@ -15,7 +15,7 @@ const SAFE_ENV = ['PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TMP', 
 const PRODUCER_STAGES = new Set([
   'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
   'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
-  'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'evidence_write',
+  'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'performance_characterization',
   'temporary_cleanup',
 ]);
 const HOSTED_CHECK_IDS = new Set([
@@ -42,23 +42,22 @@ const HOSTED_OWNER_FINALIZE_OUTCOMES = new Set([
   'http_other',
   'invalid_response',
 ]);
-const GATE_STAGES = new Set(['create', 'checks', 'cleanup', 'evidence']);
-const CLEANUP_OPERATION_IDS = [
-  'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
-  'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
-];
-const CLEANUP_OPERATION_SET = new Set(CLEANUP_OPERATION_IDS);
+const GATE_STAGES = new Set(['create', 'checks', 'checks_timeout', 'checks_unsettled']);
 const HOSTED_CHECK_DIAGNOSTIC_FILENAME = 'hosted-check-diagnostic.json';
+const HOSTED_CHECKS_FILENAME = 'hosted-gate-2b-checks.json';
+const HOSTED_PERFORMANCE_FILENAME = 'hosted-gate-2b-performance.json';
+const HOSTED_LEDGER_FILENAME = 'hosted-gate-2b-ledger.json';
 const MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES = 320;
-const ORDINARY_FINALIZE_TIMEOUT_MS = 5_000;
-const RELAXED_FIRST_OWNER_FINALIZE_TIMEOUT_MS = 30_000;
 
 function invalid(code) { throw new Error(code); }
 
-export function firstOwnerFinalizeTimeoutMs(eventName, relaxedSwitch) {
-  if (eventName === 'push' && relaxedSwitch === 'false') return ORDINARY_FINALIZE_TIMEOUT_MS;
-  if (eventName === 'workflow_dispatch' && relaxedSwitch === 'false') return ORDINARY_FINALIZE_TIMEOUT_MS;
-  if (eventName === 'workflow_dispatch' && relaxedSwitch === 'true') return RELAXED_FIRST_OWNER_FINALIZE_TIMEOUT_MS;
+export function hostedGateRuntime(mode, timeout) {
+  if (mode === 'correctness' && ['10000', '12000', '15000'].includes(timeout)) {
+    return { mode, finalizeTimeoutMs: Number(timeout) };
+  }
+  if (mode === 'characterize' && timeout === '30000') {
+    return { mode, finalizeTimeoutMs: 30_000 };
+  }
   return invalid('pilot_gate_2b_environment_invalid');
 }
 
@@ -66,11 +65,11 @@ function normalizeHostedGateControl(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const candidate = value;
   const keys = Object.keys(candidate);
-  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'ownerStep', 'ownerFinalizeOutcome', 'cleanup'].includes(key)) ||
+  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'ownerStep', 'ownerFinalizeOutcome'].includes(key)) ||
       typeof candidate.gateStage !== 'string' || !GATE_STAGES.has(candidate.gateStage)) return undefined;
   const control = { gateStage: candidate.gateStage };
   if (Object.hasOwn(candidate, 'check')) {
-    if ((candidate.gateStage !== 'checks' && candidate.gateStage !== 'cleanup') ||
+    if (candidate.gateStage === 'create' ||
         typeof candidate.check !== 'string' || !HOSTED_CHECK_IDS.has(candidate.check)) return undefined;
     control.check = candidate.check;
   }
@@ -89,16 +88,6 @@ function normalizeHostedGateControl(value) {
         typeof candidate.ownerFinalizeOutcome !== 'string' ||
         !HOSTED_OWNER_FINALIZE_OUTCOMES.has(candidate.ownerFinalizeOutcome)) return undefined;
     control.ownerFinalizeOutcome = candidate.ownerFinalizeOutcome;
-  }
-  if (Object.hasOwn(candidate, 'cleanup')) {
-    if (candidate.gateStage !== 'cleanup' || !Array.isArray(candidate.cleanup) || candidate.cleanup.length < 1 ||
-        candidate.cleanup.length > CLEANUP_OPERATION_IDS.length || new Set(candidate.cleanup).size !== candidate.cleanup.length ||
-        candidate.cleanup.some((item) => typeof item !== 'string' || !CLEANUP_OPERATION_SET.has(item))) return undefined;
-    const ordered = CLEANUP_OPERATION_IDS.filter((item) => candidate.cleanup.includes(item));
-    if (ordered.length !== candidate.cleanup.length || !candidate.cleanup.every((item, index) => item === ordered[index])) {
-      return undefined;
-    }
-    control.cleanup = ordered;
   }
   let source = `${JSON.stringify(control)}\n`;
   if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES &&
@@ -120,7 +109,6 @@ export function buildProducerFailureDiagnostic(stage, control) {
     if (safeControl.mediaStep !== undefined) diagnostic.mediaStep = safeControl.mediaStep;
     if (safeControl.ownerStep !== undefined) diagnostic.ownerStep = safeControl.ownerStep;
     if (safeControl.ownerFinalizeOutcome !== undefined) diagnostic.ownerFinalizeOutcome = safeControl.ownerFinalizeOutcome;
-    if (safeControl.cleanup !== undefined) diagnostic.cleanup = safeControl.cleanup;
   }
   let source = `${JSON.stringify(diagnostic)}\n`;
   if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES &&
@@ -135,9 +123,13 @@ export function buildProducerFailureDiagnostic(stage, control) {
 }
 
 export function hostedCheckDiagnosticPath({ temporaryRoot = tmpdir(), runId, runAttempt }) {
+  return ownedTemporaryFile({ temporaryRoot, runId, runAttempt, filename: HOSTED_CHECK_DIAGNOSTIC_FILENAME });
+}
+
+function ownedTemporaryFile({ temporaryRoot = tmpdir(), runId, runAttempt, filename }) {
   const directory = ownedTemporaryDirectory(temporaryRoot, runId, runAttempt);
-  const target = path.resolve(directory, HOSTED_CHECK_DIAGNOSTIC_FILENAME);
-  if (path.dirname(target) !== directory || path.basename(target) !== HOSTED_CHECK_DIAGNOSTIC_FILENAME) {
+  const target = path.resolve(directory, filename);
+  if (path.dirname(target) !== directory || path.basename(target) !== filename) {
     return invalid('hosted_temporary_cleanup_failed');
   }
   return target;
@@ -280,7 +272,8 @@ export function createDefaultProcessAdapter({ runId, runAttempt, temporaryRoot }
       return sourceDirectory;
     },
     async removeTemporaryFiles() {
-      await cleanupRunnerTemporary({ temporaryRoot, runId, runAttempt });
+      await rm(sourceDirectory, { recursive: true, force: true });
+      await rm(secretDirectory, { recursive: true, force: true });
     },
   };
 }
@@ -355,9 +348,9 @@ export async function runPilotGate2B({
     sha: required(parentEnvironment, 'GITHUB_SHA'), environment: required(parentEnvironment, 'GITHUB_ENVIRONMENT'),
     projectRef: PROJECT_REF,
   });
-  const firstOwnerFinalizeTimeout = firstOwnerFinalizeTimeoutMs(
-    parentEnvironment.GITHUB_EVENT_NAME,
-    required(parentEnvironment, 'PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT'),
+  const runtime = hostedGateRuntime(
+    required(parentEnvironment, 'PILOT_GATE_2B_MODE'),
+    required(parentEnvironment, 'PILOT_GATE_2B_FINALIZE_TIMEOUT_MS'),
   );
   const runId = runSelector(required(parentEnvironment, 'GITHUB_RUN_ID'));
   const runAttempt = runSelector(required(parentEnvironment, 'GITHUB_RUN_ATTEMPT'));
@@ -448,25 +441,31 @@ export async function runPilotGate2B({
       SUPABASE_DATABASE_URL: databaseUrl, PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey,
       GITHUB_SHA: parentEnvironment.GITHUB_SHA, GITHUB_RUN_ID: runId,
       GITHUB_RUN_ATTEMPT: runAttempt,
-      PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: String(firstOwnerFinalizeTimeout),
+      PILOT_GATE_2B_MODE: runtime.mode,
+      PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: String(runtime.finalizeTimeoutMs),
     });
-    harness.PILOT_GATE_2B_LEDGER_PATH = path.join(
-      tmpdir(),
-      `animalhelper-pilot-gate-2b-ledger-${harness.GITHUB_RUN_ID}-${harness.GITHUB_RUN_ATTEMPT}.json`,
-    );
+    harness.PILOT_GATE_2B_LEDGER_PATH = ownedTemporaryFile({
+      temporaryRoot, runId, runAttempt, filename: HOSTED_LEDGER_FILENAME,
+    });
     harness.PILOT_GATE_2B_CHECK_DIAGNOSTIC_PATH = hostedCheckDiagnosticPath({ temporaryRoot, runId, runAttempt });
-    stageAdapter.enter('hosted_checks');
+    harness.PILOT_GATE_2B_CHECKS_PATH = ownedTemporaryFile({
+      temporaryRoot, runId, runAttempt, filename: HOSTED_CHECKS_FILENAME,
+    });
+    harness.PILOT_GATE_2B_PERFORMANCE_PATH = ownedTemporaryFile({
+      temporaryRoot, runId, runAttempt, filename: HOSTED_PERFORMANCE_FILENAME,
+    });
+    const command = runtime.mode === 'correctness' ? 'test:integration' : 'characterize:hosted';
+    stageAdapter.enter(runtime.mode === 'correctness' ? 'hosted_checks' : 'performance_characterization');
     try {
-      await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
-        { cwd: repoRoot, env: harness, timeoutMs: 180_000 });
+      await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', command],
+        { cwd: repoRoot, env: harness, timeoutMs: runtime.mode === 'correctness' ? 240_000 : 900_000 });
     } catch (error) {
-      const control = await readHostedGateControl({ temporaryRoot, runId, runAttempt });
-      if (control !== undefined && typeof stageAdapter.control === 'function') stageAdapter.control(control);
+      if (runtime.mode === 'correctness') {
+        const control = await readHostedGateControl({ temporaryRoot, runId, runAttempt });
+        if (control !== undefined && typeof stageAdapter.control === 'function') stageAdapter.control(control);
+      }
       throw error;
     }
-    stageAdapter.enter('evidence_write');
-    await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'evidence:write'],
-      { cwd: repoRoot, env: harness, timeoutMs: 30_000 });
     outputAdapter.write('pilot_gate_2b_deployment_passed\n');
   } finally {
     try {

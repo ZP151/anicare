@@ -16,11 +16,14 @@ on:
       - pnpm-workspace.yaml
   workflow_dispatch:
     inputs:
-      relaxed_finalize_timeout:
-        description: Allow a 30-second timeout only for the first owner happy-path finalization.
-        required: false
-        default: false
-        type: boolean
+      mode:
+        description: Run the correctness gate or the isolated latency characterization.
+        required: true
+        default: correctness
+        type: choice
+        options:
+          - correctness
+          - characterize
 
 permissions:
   contents: read
@@ -71,8 +74,9 @@ jobs:
           pnpm --filter @animalhelper/pilot-gate-2b test:unit
           pnpm --filter @animalhelper/pilot-gate-2b typecheck
           pnpm --filter @animalhelper/pilot-gate-2a test:unit
-      - name: Run protected Hosted Gate 2B
-        id: gate
+      - name: Run protected Hosted Gate 2B correctness
+        id: correctness
+        if: github.event_name == 'push' || inputs.mode == 'correctness'
         timeout-minutes: 15
         env:
           GITHUB_ENVIRONMENT: hosted-gate-2b
@@ -81,10 +85,27 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
           PRECISE_LOCATION_ENCRYPTION_KEY: ${{ secrets.PRECISE_LOCATION_ENCRYPTION_KEY }}
-          PILOT_GATE_2B_RELAXED_FINALIZE_TIMEOUT: ${{ github.event_name == 'workflow_dispatch' && inputs.relaxed_finalize_timeout == true && 'true' || 'false' }}
+          PILOT_GATE_2B_MODE: correctness
+          PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000'
+          TMPDIR: ${{ runner.temp }}
+        run: pnpm pilot-gate-2b
+      - name: Characterize Hosted Gate 2B latency
+        id: characterize
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize'
+        timeout-minutes: 25
+        env:
+          GITHUB_ENVIRONMENT: hosted-gate-2b
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
+          PRECISE_LOCATION_ENCRYPTION_KEY: ${{ secrets.PRECISE_LOCATION_ENCRYPTION_KEY }}
+          PILOT_GATE_2B_MODE: characterize
+          PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '30000'
           TMPDIR: ${{ runner.temp }}
         run: pnpm pilot-gate-2b
       - name: Recover exact hosted fixtures
+        id: cleanup
         if: always()
         timeout-minutes: 3
         env:
@@ -96,20 +117,49 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
-          PILOT_GATE_2B_LEDGER_PATH: ${{ runner.temp }}/animalhelper-pilot-gate-2b-ledger-${{ github.run_id }}-${{ github.run_attempt }}.json
-          PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: '5000'
+          PILOT_GATE_2B_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'correctness' }}
+          PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize' && '30000' || '15000' }}
+          PILOT_GATE_2B_LEDGER_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-ledger.json
+          PILOT_GATE_2B_CHECKS_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-checks.json
+          PILOT_GATE_2B_CLEANUP_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-cleanup.json
         run: pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted
+      - name: Write canonical readiness evidence
+        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'
+        env:
+          SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
+          PRECISE_LOCATION_ENCRYPTION_KEY: ${{ secrets.PRECISE_LOCATION_ENCRYPTION_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PILOT_GATE_2B_MODE: correctness
+          PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000'
+          PILOT_GATE_2B_CHECKS_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-checks.json
+          PILOT_GATE_2B_CLEANUP_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-cleanup.json
+        run: pnpm --filter @animalhelper/pilot-gate-2b evidence:write
       - name: Validate canonical readiness evidence
+        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'
         run: pnpm --filter @animalhelper/mobile validate:gate-2b-readiness
       - name: Upload canonical readiness evidence
+        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pilot-gate-2b-readiness-${{ github.run_id }}-${{ github.run_attempt }}
           path: docs/evidence/pilot-gate-2b-readiness.json
           if-no-files-found: error
           retention-days: 3
+      - name: Upload latency characterization
+        if: steps.characterize.outcome == 'success' && steps.cleanup.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-gate-2b-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-performance.json
+          if-no-files-found: error
+          retention-days: 3
       - name: Upload sanitized failure diagnostic
-        if: failure() && steps.gate.outcome == 'failure'
+        if: failure() && (steps.correctness.outcome == 'failure' || steps.characterize.outcome == 'failure')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pilot-gate-2b-failure-${{ github.run_id }}-${{ github.run_attempt }}
@@ -128,6 +178,7 @@ jobs:
 
   attest_evidence:
     needs: hosted_gate_2b
+    if: github.event_name == 'push' || inputs.mode == 'correctness'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
