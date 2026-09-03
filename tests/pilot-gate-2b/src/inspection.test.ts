@@ -297,6 +297,40 @@ describe('hosted inspection and cleanup', () => {
     expect(assertAbsent).toHaveBeenCalledOnce();
   });
 
+  it('copies a stateful sighting recovery array before cleanup selectors use it', async () => {
+    const calls: string[] = [];
+    const cleanupScenario = scenario();
+    const recoveryResult: unknown[] = [];
+    let recoveryReads = 0;
+    Object.defineProperty(recoveryResult, '0', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        recoveryReads += 1;
+        return recoveryReads === 1 ? UUIDS[1]! : Symbol('hostile');
+      },
+    });
+    const assertAbsent = vi.fn(async (tracked: Required<PartialHostedScenario>) => {
+      calls.push('absent');
+      expect(tracked.sightingRecoveryReferences).toEqual(cleanupScenario.sightingRecoveryReferences);
+      return true;
+    });
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),
+      recoverSightingIds: vi.fn(async () => recoveryResult as never),
+      removeObjects: vi.fn(async () => { calls.push('objects'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent, close: vi.fn(async () => { calls.push('close'); }),
+    };
+    await expect(cleanupHostedScenario(env(), cleanupScenario, adapter)).resolves.toBeUndefined();
+    expect(recoveryReads).toBe(1);
+    expect(calls).toEqual([
+      'objects', 'media_upload_jobs', 'media_assets', 'sightings', 'user_profiles', 'auth', 'absent', 'close',
+    ]);
+    expect(assertAbsent).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['returns false', async () => false],
     ['throws', async () => { throw new Error('transient'); }],

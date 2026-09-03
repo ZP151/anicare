@@ -527,13 +527,19 @@ export async function cleanupHostedScenario(
       fail('recover_auth');
     }
     try {
-      recoveredSightingIds = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
-      if (!Array.isArray(recoveredSightingIds) || recoveredSightingIds.length > MAX_TRACKED ||
-          recoveredSightingIds.some((id) => typeof id !== 'string' || !UUID.test(id))) {
-        provisionalSightingRecoveryFailure = true;
-        fail('recover_sighting');
-        recoveredSightingIds = [];
+      const candidate = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
+      if (!Array.isArray(candidate)) throw new Error('invalid_recovery_result');
+      const count = candidate.length;
+      if (!Number.isInteger(count) || count < 0 || count > MAX_TRACKED) {
+        throw new Error('invalid_recovery_result');
       }
+      const sanitized: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const id = candidate[index];
+        if (typeof id !== 'string' || !UUID.test(id)) throw new Error('invalid_recovery_result');
+        sanitized.push(id);
+      }
+      recoveredSightingIds = sanitized;
     } catch {
       provisionalSightingRecoveryFailure = true;
       fail('recover_sighting');
