@@ -52,3 +52,38 @@ pnpm verify                                           # passed
 
 Implementation commit: `69ecddf fix(pilot): classify hosted finalize timeouts`.
 No push or hosted producer rerun was performed.
+
+## Round 1: timeout-text spoofing hardening
+
+Review found that the first implementation classified an error solely by its
+message. An external fetch implementation could therefore reject immediately
+with `new Error('request_timeout')` and incorrectly receive the internal
+deadline outcome.
+
+RED replaced the ordinary non-timeout fixture with that exact external error:
+
+```text
+expected code: network_error
+received code: request_timeout
+```
+
+`network.ts` now brands only the timer-created error in a private `WeakSet`
+and exports `isRequestTimeoutError(error)`. `actors.ts` calls that predicate
+and never reads an exception message. The existing fake-timer deadline test
+still proves the actual 5,000 ms timer yields `request_timeout` with exactly
+one fetch call. Caller cancellation continues to use the fixed non-timeout
+abort path, so it cannot be promoted by a caller-controlled message.
+
+Round 1 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2a test:unit  # 14 files, 100 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit  # 15 files, 175 passed
+pnpm test:pilot-gate-2b-ci                           # 30 passed, 1 Windows symlink capability skip
+pnpm --filter @animalhelper/pilot-gate-2a typecheck
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify                                           # passed
+```
+
+Round 1 implementation commit: `e814abe fix(pilot): brand request timeout failures`.
