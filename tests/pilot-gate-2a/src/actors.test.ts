@@ -428,9 +428,9 @@ describe('owner media actors', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it('keeps a non-timeout finalize network exception in the fixed network class', async () => {
+  it('keeps an external finalize rejection with the timeout text in the fixed network class', async () => {
     const env = localEnvironment();
-    const fetchMock = vi.fn(async () => { throw new Error('hostile network detail'); });
+    const fetchMock = vi.fn(async () => { throw new Error('request_timeout'); });
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(finalizeMedia(actor(), finalizeInput(), env)).resolves.toEqual({

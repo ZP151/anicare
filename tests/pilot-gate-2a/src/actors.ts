@@ -10,7 +10,7 @@ import { isStableMediaId } from '../../../apps/mobile/src/media/media-reference.
 
 import { edgeEndpointUrl } from './edge-endpoints.js';
 import type { SyntheticActor } from './fixtures.js';
-import { fetchWithTimeout } from './network.js';
+import { fetchWithTimeout, isRequestTimeoutError } from './network.js';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_REQUEST_BYTES = 8 * 1024;
@@ -80,7 +80,7 @@ function failure(
 }
 
 function networkFailureCode(error: unknown): 'request_timeout' | 'network_error' {
-  return error instanceof Error && error.message === 'request_timeout' ? 'request_timeout' : 'network_error';
+  return isRequestTimeoutError(error) ? 'request_timeout' : 'network_error';
 }
 
 function exactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {

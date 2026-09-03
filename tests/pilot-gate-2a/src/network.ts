@@ -1,8 +1,20 @@
 // Control-plane JSON (Auth and Edge responses) is intentionally bounded to 64 KiB.
 export const MAX_HARNESS_RESPONSE_BYTES = 64 * 1024;
 
+const requestTimeoutErrors = new WeakSet<Error>();
+
+function requestTimeoutError(): Error {
+  const error = new Error('request_timeout');
+  requestTimeoutErrors.add(error);
+  return error;
+}
+
+export function isRequestTimeoutError(error: unknown): boolean {
+  return error instanceof Error && requestTimeoutErrors.has(error);
+}
+
 function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error && signal.reason.message === 'request_timeout'
+  return isRequestTimeoutError(signal.reason)
     ? signal.reason
     : new Error('request_aborted');
 }
@@ -84,7 +96,7 @@ export async function fetchWithTimeout(
   const abortForCaller = () => controller.abort(new Error('request_aborted'));
   if (callerSignal?.aborted) abortForCaller();
   else callerSignal?.addEventListener('abort', abortForCaller, { once: true });
-  const timeout = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(requestTimeoutError()), timeoutMs);
   try {
     const response = await settleBeforeAbort(
       Promise.resolve(fetchImplementation(input, { ...init, signal: controller.signal })),
