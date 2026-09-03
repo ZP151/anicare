@@ -116,6 +116,7 @@ async function main(): Promise<void> {
         scenario.owner,
         reservationInput(scenario.ownerSightingId, mediaId, jpeg.sha256, jpeg.bytes.byteLength),
         env,
+        { timeoutMs: env.finalizeTimeoutMs },
       );
     } catch {
       outcomes.transport_error += 1;
@@ -124,7 +125,7 @@ async function main(): Promise<void> {
     ledger.createdJobIds.push(reservation.jobId);
     ledger.createdObjectPaths.push(reservation.path);
     await writeCleanupLedger(ledgerPath, ledger);
-    const upload = await putSignedMedia(reservation, jpeg.bytes);
+    const upload = await putSignedMedia(reservation, jpeg.bytes, { timeoutMs: env.finalizeTimeoutMs });
     if (!upload.ok) {
       outcomes[classify(upload)] += 1;
       continue;

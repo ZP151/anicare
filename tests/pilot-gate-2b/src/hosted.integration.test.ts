@@ -60,7 +60,7 @@ async function reserveFailure(
   signal: AbortSignal,
 ) {
   try {
-    await reserveMedia(actor, input, env, { signal });
+    await reserveMedia(actor, input, env, { signal: signal, timeoutMs: env.finalizeTimeoutMs });
     return null;
   } catch (error) {
     return failureClass(error);
@@ -234,13 +234,15 @@ describe('real Hosted Gate 2B', () => {
               scenario.owner,
               reservationInput(scenario.ownerSightingId, confirmedMediaId, jpeg.sha256, jpeg.bytes.byteLength),
               env,
-              { signal },
+              { signal: signal, timeoutMs: env.finalizeTimeoutMs },
             ));
             partial.createdJobIds = [ownerReservation.jobId];
             partial.createdObjectPaths = [ownerReservation.path];
             await atOwnerStep('ledger_reserve', () => writeCleanupLedger(ledgerPath, partial));
             requireOwnerStep('upload', (await atOwnerStep(
-              'upload', () => putSignedMedia(ownerReservation!, jpeg.bytes, { signal }),
+              'upload', () => putSignedMedia(ownerReservation!, jpeg.bytes, {
+                signal: signal, timeoutMs: env.finalizeTimeoutMs,
+              }),
             )).ok);
             const finalized = await atOwnerStep('finalize', () => finalizeMedia(scenario.owner, {
               sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
@@ -281,7 +283,7 @@ describe('real Hosted Gate 2B', () => {
               scenario.stranger,
               reservationInput(scenario.strangerSightingId, mediaId!, jpeg.sha256, jpeg.bytes.byteLength),
               env,
-              { signal },
+              { signal: signal, timeoutMs: env.finalizeTimeoutMs },
             ));
             partial.createdJobIds = [...(tracked.createdJobIds ?? []), strangerReservation.jobId];
             partial.createdObjectPaths = [...(tracked.createdObjectPaths ?? []), strangerReservation.path];
@@ -332,7 +334,7 @@ describe('real Hosted Gate 2B', () => {
               scenario.stranger,
               { sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256 },
               env,
-              { signal, timeoutMs: env.finalizeTimeoutMs },
+              { signal: signal, timeoutMs: env.finalizeTimeoutMs },
             )));
             if (!finalizeActual.unchanged) return false;
             const finalizeProbeMediaId = randomUUID();
@@ -343,16 +345,20 @@ describe('real Hosted Gate 2B', () => {
               scenario.stranger,
               { sightingId: randomUUID(), mediaId: finalizeProbeMediaId, sha256: jpeg.sha256 },
               env,
-              { signal, timeoutMs: env.finalizeTimeoutMs },
+              { signal: signal, timeoutMs: env.finalizeTimeoutMs },
             )), [finalizeProbeMediaId]);
             if (!finalizeUnknown.unchanged || !sameFailure(finalizeActual.result, finalizeUnknown.result)) return false;
 
             const deleteActual = await withoutIsolationMutation(
-              async () => failedResult(await deleteMedia(scenario.stranger, confirmedMediaAssetId, env, { signal })),
+              async () => failedResult(await deleteMedia(scenario.stranger, confirmedMediaAssetId, env, {
+                signal: signal, timeoutMs: env.finalizeTimeoutMs,
+              })),
             );
             if (!deleteActual.unchanged) return false;
             const deleteUnknown = await withoutIsolationMutation(
-              async () => failedResult(await deleteMedia(scenario.stranger, randomUUID(), env, { signal })),
+              async () => failedResult(await deleteMedia(scenario.stranger, randomUUID(), env, {
+                signal: signal, timeoutMs: env.finalizeTimeoutMs,
+              })),
             );
             return deleteUnknown.unchanged && sameFailure(deleteActual.result, deleteUnknown.result) && await unchanged();
           },

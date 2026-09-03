@@ -331,7 +331,7 @@ describe('hosted check coordinator', () => {
     }
   });
 
-  it('uses the same characterized timeout and phase signal for owner finalization and replay', async () => {
+  it('uses the same characterized timeout and phase signal for every hosted actor request', async () => {
     const integrationPath = fileURLToPath(new URL('./hosted.integration.test.ts', import.meta.url));
     const api = new API({ cwd: fileURLToPath(new URL('.', import.meta.url)) });
     const snapshot = api.updateSnapshot({ openFiles: [integrationPath] });
@@ -339,6 +339,18 @@ describe('hosted check coordinator', () => {
       const file = snapshot.getDefaultProjectForFile(integrationPath)?.program.getSourceFile(integrationPath);
       if (!file) throw new Error('hosted integration source was not loaded into the TypeScript program');
       const ownerBody = findOwnerHappyPathBody(file);
+      for (const [name, optionsIndex] of [
+        ['reserveMedia', 3], ['putSignedMedia', 2], ['finalizeMedia', 3], ['deleteMedia', 3],
+      ] as const) {
+        const calls = callsNamed(file, name);
+        expect(calls.length).toBeGreaterThan(0);
+        for (const call of calls) {
+          const options = call.arguments[optionsIndex];
+          expect(isIdentifierNamed(objectPropertyValue(options, 'signal'), 'signal'), `${name} signal`).toBe(true);
+          expect(isPropertyAccessNamed(objectPropertyValue(options, 'timeoutMs'), 'env', 'finalizeTimeoutMs'),
+            `${name} timeout`).toBe(true);
+        }
+      }
       const statements = ownerBody.statements;
       const firstFinalizeStep = exactlyOne(ownerStepCalls(ownerBody, 'finalize'),
         'runOwnerHappyPath must contain one finalize step');
