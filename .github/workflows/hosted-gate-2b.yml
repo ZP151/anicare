@@ -1,0 +1,114 @@
+name: Hosted Gate 2B
+
+on:
+  push:
+    branches: [codex/hosted-gate-2b]
+    paths:
+      - .github/workflows/hosted-gate-2b.yml
+      - scripts/**
+      - tests/pilot-gate-2a/**
+      - tests/pilot-gate-2b/**
+      - supabase/config.toml
+      - supabase/migrations/**
+      - supabase/functions/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hosted_gate_2b:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: hosted-gate-2b
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Require the immutable producer commit
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.23.1
+          cache: pnpm
+      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb
+        with:
+          deno-version: v2.9.5
+      - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
+        with:
+          version: 2.84.2
+      - name: Install frozen workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify pinned tools
+        run: |
+          test "$(node --version)" = 'v22.23.1'
+          test "$(pnpm --version)" = '11.19.0'
+          test "$(deno --version | sed -n '1p')" = 'deno 2.9.5 (stable, release, x86_64-unknown-linux-gnu)'
+          test "$(supabase --version)" = '2.84.2'
+      - name: Run producer policy preflight
+        run: |
+          pnpm test:pilot-gate-2b-ci
+          pnpm --filter @animalhelper/pilot-gate-2b test:unit
+          pnpm --filter @animalhelper/pilot-gate-2b typecheck
+          pnpm --filter @animalhelper/pilot-gate-2a test:unit
+      - name: Run protected Hosted Gate 2B
+        id: gate
+        env:
+          GITHUB_ENVIRONMENT: hosted-gate-2b
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
+          PRECISE_LOCATION_ENCRYPTION_KEY: ${{ secrets.PRECISE_LOCATION_ENCRYPTION_KEY }}
+          TMPDIR: ${{ runner.temp }}
+        run: pnpm pilot-gate-2b
+      - name: Validate canonical readiness evidence
+        run: pnpm --filter @animalhelper/mobile validate:gate-2b-readiness
+      - name: Upload canonical readiness evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-gate-2b-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs/evidence/pilot-gate-2b-readiness.json
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload sanitized failure diagnostic
+        if: failure() && steps.gate.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-gate-2b-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/animalhelper-pilot-gate-2b-failure.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Remove runner-local Gate 2B outputs
+        if: always()
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          pnpm pilot-gate-2b:cleanup-diagnostic
+          rm -f -- docs/evidence/pilot-gate-2b-readiness.json
+
+  attest_evidence:
+    needs: hosted_gate_2b
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pilot-gate-2b-readiness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661
+        with:
+          subject-path: evidence/pilot-gate-2b-readiness.json
