@@ -90,7 +90,13 @@ The hosted environment parser accepts only:
 - exact HTTPS origin `https://fhugdtpjbgiatqhvjioy.supabase.co` with no userinfo, path, query, fragment, redirect, or alternate port;
 - one public publishable/anon key and one distinct privileged service-role/secret key;
 - a canonical 32-byte Base64 location encryption key;
-- `PILOT_GATE_2B=1`, exact source SHA, positive workflow run ID/attempt, and canonical millisecond UTC timestamps.
+- exact source SHA and positive workflow run ID/attempt.
+
+The integration-test configuration separately requires `PILOT_GATE_2B=1`.
+The environment parser and independent durable-ledger cleanup intentionally do
+not require that flag, so recovery remains callable after an early cancellation.
+Canonical millisecond UTC timestamps are generated and validated by the
+evidence writer rather than accepted by the environment parser.
 
 The harness has no general-purpose SQL or shell interface. Privileged inspection and final fixture removal use fixed parameterized statements that accept only the exact in-memory run UUIDs; all other privileged operations use narrowly typed Supabase service operations and exact table/RPC allowlists. Actor operations use only each actor's own access token and the public HTTP surface.
 
