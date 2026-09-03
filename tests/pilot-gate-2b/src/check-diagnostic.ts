@@ -1,12 +1,14 @@
 import { chmod, lstat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { HOSTED_CHECK_IDS, type HostedCheckId } from './checks.js';
+import {
+  HOSTED_CHECK_IDS, HOSTED_MEDIA_STAGING_STEPS, type HostedCheckId, type HostedMediaStagingStep,
+} from './checks.js';
 import { GATE_STAGES, type HostedGateControl } from './execute.js';
 import { CLEANUP_OPERATION_IDS, type CleanupOperationId } from './inspection.js';
 
 const FILENAME = 'hosted-check-diagnostic.json';
-const MAX_CANONICAL_CONTROL_BYTES = 256;
+const MAX_CANONICAL_CONTROL_BYTES = 320;
 
 function invalid(): never { throw new Error('hosted_check_diagnostic_invalid'); }
 
@@ -22,6 +24,11 @@ function checkId(value: unknown): HostedCheckId {
   return value as HostedCheckId;
 }
 
+function mediaStep(value: unknown): HostedMediaStagingStep {
+  if (typeof value !== 'string' || !(HOSTED_MEDIA_STAGING_STEPS as readonly string[]).includes(value)) return invalid();
+  return value as HostedMediaStagingStep;
+}
+
 function cleanup(value: unknown): readonly CleanupOperationId[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.length < 1 || value.length > CLEANUP_OPERATION_IDS.length ||
@@ -35,15 +42,22 @@ function cleanup(value: unknown): readonly CleanupOperationId[] | undefined {
 function control(value: unknown): HostedGateControl {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
   const candidate = value as Record<string, unknown>;
-  const allowedKeys = ['gateStage', 'check', 'cleanup'];
+  const allowedKeys = ['gateStage', 'check', 'mediaStep', 'cleanup'];
   if (!Object.hasOwn(candidate, 'gateStage') || Object.keys(candidate).some((key) => !allowedKeys.includes(key)) ||
       typeof candidate.gateStage !== 'string' || !(GATE_STAGES as readonly string[]).includes(candidate.gateStage)) return invalid();
-  const result: { gateStage: HostedGateControl['gateStage']; check?: HostedCheckId; cleanup?: readonly CleanupOperationId[] } = {
+  const result: {
+    gateStage: HostedGateControl['gateStage']; check?: HostedCheckId; mediaStep?: HostedMediaStagingStep;
+    cleanup?: readonly CleanupOperationId[];
+  } = {
     gateStage: candidate.gateStage as HostedGateControl['gateStage'],
   };
   if (Object.hasOwn(candidate, 'check')) {
     if (result.gateStage !== 'checks' && result.gateStage !== 'cleanup') return invalid();
     result.check = checkId(candidate.check);
+  }
+  if (Object.hasOwn(candidate, 'mediaStep')) {
+    if (result.check !== 'media_staging') return invalid();
+    result.mediaStep = mediaStep(candidate.mediaStep);
   }
   if (Object.hasOwn(candidate, 'cleanup')) {
     if (result.gateStage !== 'cleanup') return invalid();

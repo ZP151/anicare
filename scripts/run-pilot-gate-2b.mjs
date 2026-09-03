@@ -21,6 +21,11 @@ const PRODUCER_STAGES = new Set([
 const HOSTED_CHECK_IDS = new Set([
   'auth_redirect', 'public_origin', 'owner_happy_path', 'media_staging', 'cross_owner_isolation',
 ]);
+const HOSTED_MEDIA_STAGING_STEPS = new Set([
+  'prerequisite_state', 'bucket_configuration', 'stranger_reservation', 'isolation_snapshot',
+  'privacy_read_actual', 'privacy_read_unknown', 'privacy_read_equivalence', 'privacy_list',
+  'isolation_compare', 'owner_unchanged',
+]);
 const GATE_STAGES = new Set(['create', 'checks', 'cleanup', 'evidence']);
 const CLEANUP_OPERATION_IDS = [
   'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
@@ -28,7 +33,7 @@ const CLEANUP_OPERATION_IDS = [
 ];
 const CLEANUP_OPERATION_SET = new Set(CLEANUP_OPERATION_IDS);
 const HOSTED_CHECK_DIAGNOSTIC_FILENAME = 'hosted-check-diagnostic.json';
-const MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES = 256;
+const MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES = 320;
 
 function invalid(code) { throw new Error(code); }
 
@@ -36,13 +41,18 @@ function normalizeHostedGateControl(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const candidate = value;
   const keys = Object.keys(candidate);
-  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'cleanup'].includes(key)) ||
+  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'mediaStep', 'cleanup'].includes(key)) ||
       typeof candidate.gateStage !== 'string' || !GATE_STAGES.has(candidate.gateStage)) return undefined;
   const control = { gateStage: candidate.gateStage };
   if (Object.hasOwn(candidate, 'check')) {
     if ((candidate.gateStage !== 'checks' && candidate.gateStage !== 'cleanup') ||
         typeof candidate.check !== 'string' || !HOSTED_CHECK_IDS.has(candidate.check)) return undefined;
     control.check = candidate.check;
+  }
+  if (Object.hasOwn(candidate, 'mediaStep')) {
+    if (control.check !== 'media_staging' || typeof candidate.mediaStep !== 'string' ||
+        !HOSTED_MEDIA_STAGING_STEPS.has(candidate.mediaStep)) return undefined;
+    control.mediaStep = candidate.mediaStep;
   }
   if (Object.hasOwn(candidate, 'cleanup')) {
     if (candidate.gateStage !== 'cleanup' || !Array.isArray(candidate.cleanup) || candidate.cleanup.length < 1 ||
@@ -64,6 +74,7 @@ export function buildProducerFailureDiagnostic(stage, control) {
   if (safeControl !== undefined) {
     diagnostic.gateStage = safeControl.gateStage;
     if (safeControl.check !== undefined) diagnostic.check = safeControl.check;
+    if (safeControl.mediaStep !== undefined) diagnostic.mediaStep = safeControl.mediaStep;
     if (safeControl.cleanup !== undefined) diagnostic.cleanup = safeControl.cleanup;
   }
   return `${JSON.stringify(diagnostic)}\n`;

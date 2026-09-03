@@ -17,14 +17,28 @@ export const HOSTED_CHECK_IDS = [
 ] as const;
 export type HostedCheckId = typeof HOSTED_CHECK_IDS[number];
 
+export const HOSTED_MEDIA_STAGING_STEPS = [
+  'prerequisite_state', 'bucket_configuration', 'stranger_reservation', 'isolation_snapshot',
+  'privacy_read_actual', 'privacy_read_unknown', 'privacy_read_equivalence', 'privacy_list',
+  'isolation_compare', 'owner_unchanged',
+] as const;
+export type HostedMediaStagingStep = typeof HOSTED_MEDIA_STAGING_STEPS[number];
+
 export class HostedCheckFailure extends Error {
-  constructor(readonly checkId: HostedCheckId) {
+  constructor(readonly checkId: HostedCheckId, readonly mediaStep?: HostedMediaStagingStep) {
     super('hosted_checks_failed');
   }
 }
 
 export function hostedCheckIdFromError(error: unknown): HostedCheckId | undefined {
   return error instanceof HostedCheckFailure ? error.checkId : undefined;
+}
+
+export function hostedMediaStepFromError(error: unknown): HostedMediaStagingStep | undefined {
+  if (!(error instanceof HostedCheckFailure) || error.checkId !== 'media_staging' ||
+      typeof error.mediaStep !== 'string' ||
+      !(HOSTED_MEDIA_STAGING_STEPS as readonly string[]).includes(error.mediaStep)) return undefined;
+  return error.mediaStep;
 }
 
 export type HostedCheckAdapter = Readonly<{
@@ -37,12 +51,14 @@ export type HostedCheckAdapter = Readonly<{
 
 async function requirePassed(checkId: HostedCheckId, operation: () => Promise<boolean>): Promise<void> {
   let passed = false;
+  let mediaStep: HostedMediaStagingStep | undefined;
   try {
     passed = await operation();
-  } catch {
+  } catch (error) {
+    mediaStep = hostedMediaStepFromError(error);
     passed = false;
   }
-  if (!passed) throw new HostedCheckFailure(checkId);
+  if (!passed) throw new HostedCheckFailure(checkId, checkId === 'media_staging' ? mediaStep : undefined);
 }
 
 export async function runHostedChecks(

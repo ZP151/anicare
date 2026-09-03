@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { hostedCheckIdFromError, runHostedChecks, type HostedCheckAdapter } from './checks.js';
+import {
+  HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, runHostedChecks, type HostedCheckAdapter,
+} from './checks.js';
 import type { HostedGateEnvironment } from './environment.js';
 
 function env(): HostedGateEnvironment {
@@ -79,5 +81,20 @@ describe('hosted check coordinator', () => {
       allowedMimeTypes: ['image/jpeg'],
     });
     expect(fake.implementation.verifyPublicKeyOrigin).toHaveBeenCalledWith(env().apiUrl);
+  });
+
+  it('preserves only a fixed media-staging step from a typed adapter failure', async () => {
+    const fake = adapter({
+      verifyMediaStaging: vi.fn(async () => {
+        throw new HostedCheckFailure('media_staging', 'privacy_read_equivalence');
+      }),
+    });
+    try {
+      await runHostedChecks(env(), fake.implementation);
+      throw new Error('expected hosted check failure');
+    } catch (error) {
+      expect(hostedCheckIdFromError(error)).toBe('media_staging');
+      expect(hostedMediaStepFromError(error)).toBe('privacy_read_equivalence');
+    }
   });
 });

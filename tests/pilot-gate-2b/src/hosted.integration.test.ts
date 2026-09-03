@@ -8,7 +8,9 @@ import {
 } from '../../pilot-gate-2a/src/actors.js';
 import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.js';
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
-import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
+import {
+  HostedCheckFailure, runHostedChecks, type HostedCheckAdapter, type HostedMediaStagingStep,
+} from './checks.js';
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
 import { persistCleanupMediaId, removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
 import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
@@ -128,6 +130,16 @@ describe('real Hosted Gate 2B', () => {
         const admin = createClient(env.apiUrl, env.serviceRoleKey, {
           auth: { autoRefreshToken: false, persistSession: false },
         });
+        const atMediaStep = async <T>(step: HostedMediaStagingStep, operation: () => Promise<T>): Promise<T> => {
+          try {
+            return await operation();
+          } catch {
+            throw new HostedCheckFailure('media_staging', step);
+          }
+        };
+        const requireMediaStep = (step: HostedMediaStagingStep, passed: boolean): void => {
+          if (!passed) throw new HostedCheckFailure('media_staging', step);
+        };
         const authHeaders = (accessToken: string | null) => ({
           apikey: env.anonKey,
           Authorization: `Bearer ${accessToken ?? env.anonKey}`,
@@ -168,10 +180,15 @@ describe('real Hosted Gate 2B', () => {
         const withoutIsolationMutation = async <T>(
           operation: () => Promise<T>,
           additionalMediaIds: readonly string[] = [],
+          operationStep?: HostedMediaStagingStep,
         ): Promise<Readonly<{ result: T; unchanged: boolean }>> => {
-          const before = await isolationSnapshot(additionalMediaIds);
-          const result = await operation();
-          const after = await isolationSnapshot(additionalMediaIds);
+          const before = operationStep
+            ? await atMediaStep('isolation_snapshot', () => isolationSnapshot(additionalMediaIds))
+            : await isolationSnapshot(additionalMediaIds);
+          const result = operationStep ? await atMediaStep(operationStep, operation) : await operation();
+          const after = operationStep
+            ? await atMediaStep('isolation_snapshot', () => isolationSnapshot(additionalMediaIds))
+            : await isolationSnapshot(additionalMediaIds);
           return { result, unchanged: sameIsolation(after, before) };
         };
 
@@ -218,25 +235,41 @@ describe('real Hosted Gate 2B', () => {
               await unchanged();
           },
           verifyMediaStaging: async (expected) => {
-            if (!ownerReservation || !ownerBaseline) return false;
-            const { data, error } = await admin.storage.listBuckets();
-            const bucket = data?.find((candidate) => candidate.name === expected.bucket);
-            if (error || bucket?.public !== false || bucket.file_size_limit !== expected.fileSizeLimit ||
-                JSON.stringify(bucket.allowed_mime_types) !== JSON.stringify(expected.allowedMimeTypes)) return false;
-            strangerReservation = await reserveMedia(scenario.stranger, reservationInput(
-              scenario.strangerSightingId, mediaId!, jpeg.sha256, jpeg.bytes.byteLength,
-            ), env);
+            requireMediaStep('prerequisite_state', Boolean(ownerReservation && ownerBaseline));
+            const bucketConfigured = await atMediaStep('bucket_configuration', async () => {
+              const { data, error } = await admin.storage.listBuckets();
+              const bucket = Array.isArray(data)
+                ? data.find((candidate) => candidate.name === expected.bucket)
+                : undefined;
+              return !error && bucket?.public === false && bucket.file_size_limit === expected.fileSizeLimit &&
+                JSON.stringify(bucket.allowed_mime_types) === JSON.stringify(expected.allowedMimeTypes);
+            });
+            requireMediaStep('bucket_configuration', bucketConfigured);
+            strangerReservation = await atMediaStep('stranger_reservation', () => reserveMedia(
+              scenario.stranger,
+              reservationInput(scenario.strangerSightingId, mediaId!, jpeg.sha256, jpeg.bytes.byteLength),
+              env,
+            ));
             partial.createdJobIds = [...(tracked.createdJobIds ?? []), strangerReservation.jobId];
             partial.createdObjectPaths = [...(tracked.createdObjectPaths ?? []), strangerReservation.path];
-            await writeCleanupLedger(ledgerPath, partial);
+            await atMediaStep('stranger_reservation', () => writeCleanupLedger(ledgerPath, partial));
             const unknownPath = `jobs/${randomUUID()}.jpg`;
             for (const token of [null, scenario.owner.accessToken, scenario.stranger.accessToken]) {
-              const actual = await withoutIsolationMutation(() => readFailure(token, ownerReservation!.path));
-              if (!actual.unchanged) return false;
-              const unknown = await withoutIsolationMutation(() => readFailure(token, unknownPath));
-              if (!unknown.unchanged || !sameDeniedStorageFailure(actual.result, unknown.result)) return false;
-              const listed = await withoutIsolationMutation(() => listHides(token, ownerReservation!.path));
-              if (!listed.unchanged || !listed.result || !await unchanged()) return false;
+              const actual = await withoutIsolationMutation(
+                () => readFailure(token, ownerReservation!.path), [], 'privacy_read_actual',
+              );
+              requireMediaStep('isolation_compare', actual.unchanged);
+              const unknown = await withoutIsolationMutation(
+                () => readFailure(token, unknownPath), [], 'privacy_read_unknown',
+              );
+              requireMediaStep('isolation_compare', unknown.unchanged);
+              requireMediaStep('privacy_read_equivalence', sameDeniedStorageFailure(actual.result, unknown.result));
+              const listed = await withoutIsolationMutation(
+                () => listHides(token, ownerReservation!.path), [], 'privacy_list',
+              );
+              requireMediaStep('isolation_compare', listed.unchanged);
+              requireMediaStep('privacy_list', listed.result);
+              requireMediaStep('owner_unchanged', await atMediaStep('owner_unchanged', unchanged));
             }
             return true;
           },

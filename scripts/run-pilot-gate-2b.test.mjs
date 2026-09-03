@@ -254,21 +254,28 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.equal(path.dirname(diagnostic), owned);
   assert.equal(path.relative(owned, diagnostic), 'hosted-check-diagnostic.json');
   await mkdir(owned, { recursive: true });
-  const control = { gateStage: 'cleanup', check: 'media_staging', cleanup: ['storage_remove', 'absence_proof'] };
+  const control = {
+    gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_list',
+    cleanup: ['storage_remove', 'absence_proof'],
+  };
   await writeFile(diagnostic, `${JSON.stringify(control)}\n`, { mode: 0o600 });
   await assert.doesNotReject(async () => access(diagnostic));
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), control);
   const longest = {
-    gateStage: 'cleanup', check: 'cross_owner_isolation', cleanup: [
+    gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_read_equivalence', cleanup: [
       'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
       'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
     ],
   };
   const longestSource = `${JSON.stringify(longest)}\n`;
-  assert.ok(Buffer.byteLength(longestSource) <= 256);
+  assert.ok(Buffer.byteLength(longestSource) > 256 && Buffer.byteLength(longestSource) <= 320);
   await writeFile(diagnostic, longestSource);
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), longest);
-  await writeFile(diagnostic, 'x'.repeat(257));
+  const oversized = `${JSON.stringify({
+    gateStage: 'checks', check: 'media_staging', padding: 'x'.repeat(321),
+  })}\n`;
+  assert.ok(Buffer.byteLength(oversized) > 320);
+  await writeFile(diagnostic, oversized);
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   await writeFile(diagnostic, '{"gateStage":"evidence","check":"media_staging"}\n');
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
@@ -296,7 +303,13 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   }
   assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', control),
-    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"media_staging","cleanup":["storage_remove","absence_proof"]}\n');
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"media_staging","mediaStep":"privacy_list","cleanup":["storage_remove","absence_proof"]}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
+    gateStage: 'checks', check: 'owner_happy_path', mediaStep: 'privacy_list',
+  }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', {
+    gateStage: 'checks', check: 'media_staging', mediaStep: 'Bearer secret',
+  }), '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', { gateStage: 'cleanup', check: 'media_staging\\nBearer secret' }),
     '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', { gateStage: 'evidence', check: 'media_staging' }),
@@ -318,8 +331,9 @@ test('propagates only a canonical owned diagnostic and ignores hostile child out
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
   };
   for (const [contents, expectedControls] of [
-    ['{"gateStage":"cleanup","check":"media_staging","cleanup":["storage_remove","absence_proof"]}\n', [{
-      gateStage: 'cleanup', check: 'media_staging', cleanup: ['storage_remove', 'absence_proof'],
+    ['{"gateStage":"cleanup","check":"media_staging","mediaStep":"privacy_list","cleanup":["storage_remove","absence_proof"]}\n', [{
+      gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_list',
+      cleanup: ['storage_remove', 'absence_proof'],
     }]],
     [undefined, []],
     ['{"gateStage":"cleanup","check":"media_staging","cleanup":["absence_proof","storage_remove"]}\n', []],

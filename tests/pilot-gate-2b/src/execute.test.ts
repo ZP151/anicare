@@ -61,13 +61,18 @@ describe('hosted gate execution', () => {
   });
 
   it('preserves only a typed fixed check ID after cleanup', async () => {
-    const fixture = options({ runChecks: async () => { throw new HostedCheckFailure('media_staging'); } });
+    const fixture = options({
+      runChecks: async () => { throw new HostedCheckFailure('media_staging', 'privacy_read_unknown'); },
+    });
     try {
       await executeHostedGate(fixture.value);
       throw new Error('expected hosted gate failure');
     } catch (error) {
       expect(error).toHaveProperty('message', 'hosted_gate_failed_at_checks');
       expect(hostedCheckIdFromGateError(error)).toBe('media_staging');
+      expect(hostedGateControlFromError(error)).toEqual({
+        gateStage: 'checks', check: 'media_staging', mediaStep: 'privacy_read_unknown',
+      });
     }
     expect(fixture.order).toEqual(['create', 'cleanup']);
   });
@@ -82,7 +87,7 @@ describe('hosted gate execution', () => {
 
   it('retains a typed failed check and ordered cleanup failures when cleanup overrides it', async () => {
     const fixture = options({
-      runChecks: async () => { throw new HostedCheckFailure('media_staging'); },
+      runChecks: async () => { throw new HostedCheckFailure('media_staging', 'privacy_list'); },
       cleanup: async () => { throw new HostedCleanupFailure(['storage_remove', 'absence_proof']); },
     });
     try {
@@ -90,7 +95,8 @@ describe('hosted gate execution', () => {
       throw new Error('expected hosted gate failure');
     } catch (error) {
       expect(hostedGateControlFromError(error)).toEqual({
-        gateStage: 'cleanup', check: 'media_staging', cleanup: ['storage_remove', 'absence_proof'],
+        gateStage: 'cleanup', check: 'media_staging', mediaStep: 'privacy_list',
+        cleanup: ['storage_remove', 'absence_proof'],
       });
     }
   });
