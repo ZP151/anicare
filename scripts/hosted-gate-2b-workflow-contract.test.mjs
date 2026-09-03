@@ -53,7 +53,7 @@ function assertContract(source, value) {
   assert.equal(correctness.if, "github.event_name == 'push' || inputs.mode == 'correctness'");
   assert.equal(correctness.run, 'pnpm pilot-gate-2b');
   assert.equal(correctness.env.PILOT_GATE_2B_MODE, 'correctness');
-  assert.equal(correctness.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '15000');
+  assert.equal(correctness.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '10000');
   const characterize = step(producer, 'Characterize Hosted Gate 2B latency');
   assert.equal(characterize.id, 'characterize');
   assert.equal(characterize.if, "github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize'");
@@ -72,12 +72,15 @@ function assertContract(source, value) {
   assert.match(cleanup.env.PILOT_GATE_2B_CLEANUP_PATH, /hosted-gate-2b-cleanup\.json$/);
   assert.equal(cleanup.env.PILOT_GATE_2B_MODE,
     "${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'correctness' }}");
+  assert.equal(cleanup.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS,
+    "${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize' && '30000' || '10000' }}");
 
   const evidence = step(producer, 'Write canonical readiness evidence');
   const correctnessCondition = "steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'";
   assert.equal(evidence.if, correctnessCondition);
   assert.equal(evidence.run, 'pnpm --filter @animalhelper/pilot-gate-2b evidence:write');
   assert.equal(evidence.env.PILOT_GATE_2B_MODE, 'correctness');
+  assert.equal(evidence.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS, '10000');
   assert.match(evidence.env.PILOT_GATE_2B_CHECKS_PATH, /hosted-gate-2b-checks\.json$/);
   assert.match(evidence.env.PILOT_GATE_2B_CLEANUP_PATH, /hosted-gate-2b-cleanup\.json$/);
 
