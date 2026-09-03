@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   cleanupHostedScenario,
+  cleanupOperationIdsFromError,
   inspectHostedIsolationState,
   inspectHostedMedia,
   type HostedMaintenanceAdapter,
@@ -184,6 +185,34 @@ describe('hosted inspection and cleanup', () => {
       close: vi.fn(async () => { calls.push('close'); }),
     };
     await expect(cleanupHostedScenario(env(), scenario(), adapter)).rejects.toThrow('hosted_cleanup_failed');
+    expect(calls).toEqual([
+      'recover-auth', 'recover-sightings', 'objects', 'media_upload_jobs', 'media_assets',
+      'sightings', 'user_profiles', 'auth', 'absent', 'close',
+    ]);
+  });
+
+  it('returns deduplicated cleanup operation IDs in fixed execution order without raw errors', async () => {
+    const calls: string[] = [];
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(),
+      recoverAuthUserIds: vi.fn(async () => { calls.push('recover-auth'); throw new Error('Bearer secret'); }),
+      recoverSightingIds: vi.fn(async () => { calls.push('recover-sightings'); throw new Error('https://hostile.invalid'); }),
+      removeObjects: vi.fn(async () => { calls.push('objects'); throw new Error('transient'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); if (table !== 'sightings') throw new Error('transient'); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); throw new Error('transient'); }),
+      assertAbsent: vi.fn(async () => { calls.push('absent'); return false; }),
+      close: vi.fn(async () => { calls.push('close'); throw new Error('transient'); }),
+    };
+    try {
+      await cleanupHostedScenario(env(), scenario(), adapter);
+      throw new Error('expected cleanup failure');
+    } catch (error) {
+      expect(cleanupOperationIdsFromError(error)).toEqual([
+        'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+        'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+      ]);
+      expect(String(error)).not.toMatch(/Bearer|https:|secret/);
+    }
     expect(calls).toEqual([
       'recover-auth', 'recover-sightings', 'objects', 'media_upload_jobs', 'media_assets',
       'sightings', 'user_profiles', 'auth', 'absent', 'close',

@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import {
   buildProducerFailureDiagnostic, cleanupRunnerTemporary, configureHostedAuth, hostedCheckDiagnosticPath,
-  readHostedCheckId, createDefaultProcessAdapter,
+  readHostedGateControl, createDefaultProcessAdapter,
   runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
 } from './run-pilot-gate-2b.mjs';
 import { DEPLOYED_FUNCTIONS } from './pilot-gate-2b-inputs.mjs';
@@ -254,15 +254,32 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.equal(path.dirname(diagnostic), owned);
   assert.equal(path.relative(owned, diagnostic), 'hosted-check-diagnostic.json');
   await mkdir(owned, { recursive: true });
-  await writeFile(diagnostic, '{"check":"media_staging"}\n', { mode: 0o600 });
+  const control = { gateStage: 'cleanup', check: 'media_staging', cleanup: ['storage_remove', 'absence_proof'] };
+  await writeFile(diagnostic, `${JSON.stringify(control)}\n`, { mode: 0o600 });
   await assert.doesNotReject(async () => access(diagnostic));
-  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), 'media_staging');
-  await writeFile(diagnostic, '{"check":"media_staging", "extra":true}\n');
-  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
-  await writeFile(diagnostic, '{"check":"media_staging"}');
-  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), control);
+  const longest = {
+    gateStage: 'cleanup', check: 'cross_owner_isolation', cleanup: [
+      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+    ],
+  };
+  const longestSource = `${JSON.stringify(longest)}\n`;
+  assert.ok(Buffer.byteLength(longestSource) <= 256);
+  await writeFile(diagnostic, longestSource);
+  assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), longest);
+  await writeFile(diagnostic, 'x'.repeat(257));
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  await writeFile(diagnostic, '{"gateStage":"evidence","check":"media_staging"}\n');
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  await writeFile(diagnostic, '{"gateStage":"checks","cleanup":["storage_remove"]}\n');
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  await writeFile(diagnostic, '{"gateStage":"cleanup","check":"media_staging","cleanup":["absence_proof","storage_remove"]}\n');
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  await writeFile(diagnostic, '{"gateStage":"cleanup","check":"media_staging"}');
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
   await rm(diagnostic);
-  await writeFile(path.join(owned, 'target'), '{"check":"media_staging"}\n');
+  await writeFile(path.join(owned, 'target'), `${JSON.stringify(control)}\n`);
   try {
     await symlink(path.join(owned, 'target'), diagnostic, 'file');
   } catch (error) {
@@ -277,10 +294,14 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
       return;
     }
   }
-  assert.equal(await readHostedCheckId({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
-  assert.equal(buildProducerFailureDiagnostic('hosted_checks', 'media_staging'),
-    '{"stage":"hosted_checks","code":"hosted_gate_failed","check":"media_staging"}\n');
-  assert.equal(buildProducerFailureDiagnostic('hosted_checks', 'media_staging\\nBearer secret'),
+  assert.equal(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), undefined);
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', control),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"media_staging","cleanup":["storage_remove","absence_proof"]}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', { gateStage: 'cleanup', check: 'media_staging\\nBearer secret' }),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', { gateStage: 'evidence', check: 'media_staging' }),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', { gateStage: 'checks', cleanup: ['storage_remove'] }),
     '{"stage":"hosted_checks","code":"hosted_gate_failed"}\n');
 });
 
@@ -296,12 +317,14 @@ test('propagates only a canonical owned diagnostic and ignores hostile child out
     GITHUB_REF: 'refs/heads/codex/hosted-gate-2b', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
   };
-  for (const [contents, expectedChecks] of [
-    ['{"check":"media_staging"}\n', ['media_staging']],
+  for (const [contents, expectedControls] of [
+    ['{"gateStage":"cleanup","check":"media_staging","cleanup":["storage_remove","absence_proof"]}\n', [{
+      gateStage: 'cleanup', check: 'media_staging', cleanup: ['storage_remove', 'absence_proof'],
+    }]],
     [undefined, []],
-    ['{"check":"media_staging", "extra":true}\n', []],
+    ['{"gateStage":"cleanup","check":"media_staging","cleanup":["absence_proof","storage_remove"]}\n', []],
   ]) {
-    const stages = []; const checks = [];
+    const stages = []; const controls = [];
     const processAdapter = {
       run: async (command, args, options) => {
         if (command === 'git' && args[0] === 'rev-parse') return { stdout: `${'a'.repeat(40)}\n` };
@@ -334,11 +357,11 @@ test('propagates only a canonical owned diagnostic and ignores hostile child out
         site_url: 'animalhelper://', uri_allow_list: 'animalhelper://auth/callback',
       }), { status: 200 }),
       discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }),
-      stageAdapter: { enter: (stage) => stages.push(stage), check: (check) => checks.push(check) },
+      stageAdapter: { enter: (stage) => stages.push(stage), control: (control) => controls.push(control) },
       temporaryRoot: root,
     }), /hosted_process_failed/);
     assert.equal(stages.at(-1), 'hosted_checks');
-    assert.deepEqual(checks, expectedChecks);
+    assert.deepEqual(controls, expectedControls);
   }
 });
 

@@ -2,8 +2,11 @@ import { chmod, lstat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { HOSTED_CHECK_IDS, type HostedCheckId } from './checks.js';
+import { GATE_STAGES, type HostedGateControl } from './execute.js';
+import { CLEANUP_OPERATION_IDS, type CleanupOperationId } from './inspection.js';
 
 const FILENAME = 'hosted-check-diagnostic.json';
+const MAX_CANONICAL_CONTROL_BYTES = 256;
 
 function invalid(): never { throw new Error('hosted_check_diagnostic_invalid'); }
 
@@ -19,11 +22,45 @@ function checkId(value: unknown): HostedCheckId {
   return value as HostedCheckId;
 }
 
+function cleanup(value: unknown): readonly CleanupOperationId[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length < 1 || value.length > CLEANUP_OPERATION_IDS.length ||
+      value.some((item) => typeof item !== 'string' || !(CLEANUP_OPERATION_IDS as readonly string[]).includes(item)) ||
+      new Set(value).size !== value.length) return invalid();
+  const ordered = CLEANUP_OPERATION_IDS.filter((item) => value.includes(item));
+  if (ordered.length !== value.length || !value.every((item, index) => item === ordered[index])) return invalid();
+  return ordered;
+}
+
+function control(value: unknown): HostedGateControl {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
+  const candidate = value as Record<string, unknown>;
+  const allowedKeys = ['gateStage', 'check', 'cleanup'];
+  if (!Object.hasOwn(candidate, 'gateStage') || Object.keys(candidate).some((key) => !allowedKeys.includes(key)) ||
+      typeof candidate.gateStage !== 'string' || !(GATE_STAGES as readonly string[]).includes(candidate.gateStage)) return invalid();
+  const result: { gateStage: HostedGateControl['gateStage']; check?: HostedCheckId; cleanup?: readonly CleanupOperationId[] } = {
+    gateStage: candidate.gateStage as HostedGateControl['gateStage'],
+  };
+  if (Object.hasOwn(candidate, 'check')) {
+    if (result.gateStage !== 'checks' && result.gateStage !== 'cleanup') return invalid();
+    result.check = checkId(candidate.check);
+  }
+  if (Object.hasOwn(candidate, 'cleanup')) {
+    if (result.gateStage !== 'cleanup') return invalid();
+    const cleanupIds = cleanup(candidate.cleanup);
+    if (cleanupIds === undefined) return invalid();
+    result.cleanup = cleanupIds;
+  }
+  return result;
+}
+
 export async function writeHostedCheckDiagnostic(file: string, value: unknown): Promise<void> {
   const target = targetPath(file);
-  const check = checkId(value);
+  const record = control(value);
+  const source = `${JSON.stringify(record)}\n`;
+  if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_CONTROL_BYTES) return invalid();
   try {
-    await writeFile(target, `${JSON.stringify({ check })}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    await writeFile(target, source, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     await chmod(target, 0o600);
     const metadata = await lstat(target);
     if (!metadata.isFile() || metadata.isSymbolicLink() ||

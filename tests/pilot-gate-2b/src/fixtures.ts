@@ -71,7 +71,12 @@ function publicClient(env: HostedGateEnvironment) {
   });
 }
 
-function defaultAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
+function alreadyAbsentAuthUser(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' &&
+    (error as Record<string, unknown>).status === 404 && (error as Record<string, unknown>).code === 'user_not_found');
+}
+
+export function createHostedFixtureAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
   const admin = adminClient(env);
   return {
     async createAuthUser(input) {
@@ -151,7 +156,7 @@ function defaultAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
       let failed = false;
       for (const id of ids) {
         const { error } = await admin.auth.admin.deleteUser(id).catch(() => ({ error: new Error('delete_failed') }));
-        if (error) failed = true;
+        if (error && !alreadyAbsentAuthUser(error)) failed = true;
       }
       if (failed) throw new Error('auth_cleanup_failed');
     },
@@ -197,7 +202,7 @@ async function cleanupPartial(
 
 export async function createHostedScenario(
   env: HostedGateEnvironment,
-  adapter: HostedFixtureAdapter = defaultAdapter(env),
+  adapter: HostedFixtureAdapter = createHostedFixtureAdapter(env),
   onProgress: (progress: HostedFixtureProgress) => Promise<void> = async () => undefined,
 ): Promise<HostedScenario> {
   const userIds: string[] = [];

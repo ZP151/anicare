@@ -10,6 +10,25 @@ const OBJECT_PATH = /^jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 const MAX_TRACKED = 8;
 const MAX_ISOLATION_ROWS = 16;
 
+export const CLEANUP_OPERATION_IDS = [
+  'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+  'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+] as const;
+export type CleanupOperationId = typeof CLEANUP_OPERATION_IDS[number];
+
+export class HostedCleanupFailure extends Error {
+  readonly operationIds: readonly CleanupOperationId[];
+
+  constructor(operationIds: readonly CleanupOperationId[]) {
+    super('hosted_cleanup_failed');
+    this.operationIds = CLEANUP_OPERATION_IDS.filter((operation) => operationIds.includes(operation));
+  }
+}
+
+export function cleanupOperationIdsFromError(error: unknown): readonly CleanupOperationId[] | undefined {
+  return error instanceof HostedCleanupFailure ? error.operationIds : undefined;
+}
+
 export type HostedInspectionInput = Readonly<{
   ownerId: string;
   sightingId: string;
@@ -220,7 +239,12 @@ function normalizeScenario(value: PartialHostedScenario): Required<PartialHosted
   };
 }
 
-function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & HostedIsolationAdapter {
+function alreadyAbsentAuthUser(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' &&
+    (error as Record<string, unknown>).status === 404 && (error as Record<string, unknown>).code === 'user_not_found');
+}
+
+export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & HostedIsolationAdapter {
   const sql = postgres(env.databaseUrl, {
     max: 1,
     connect_timeout: 5,
@@ -356,7 +380,7 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & H
       let failed = false;
       for (const id of ids) {
         const { error } = await admin.auth.admin.deleteUser(id).catch(() => ({ error: new Error('delete_failed') }));
-        if (error) failed = true;
+        if (error && !alreadyAbsentAuthUser(error)) failed = true;
       }
       if (failed) throw new Error('auth_cleanup_failed');
     },
@@ -398,7 +422,7 @@ export async function inspectHostedMedia(
   providedAdapter?: Pick<HostedMaintenanceAdapter, 'inspect'>,
 ): Promise<HostedInspection> {
   if (!validInspectionInput(input)) throw new Error('hosted_inspection_failed');
-  const adapter = providedAdapter ?? createAdapter(env);
+  const adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
   try {
     const result = await adapter.inspect(input);
     if (!validInspection(result)) throw new Error('invalid');
@@ -418,7 +442,7 @@ export async function inspectHostedIsolationState(
   providedAdapter?: HostedIsolationAdapter,
 ): Promise<HostedIsolationInspection> {
   if (!validIsolationInput(input)) throw new Error('hosted_inspection_failed');
-  const adapter = providedAdapter ?? createAdapter(env);
+  const adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
   try {
     const result = await adapter.inspectIsolation(input);
     if (!validIsolationInspection(result, input.observedObjectPaths.length)) throw new Error('invalid');
@@ -438,26 +462,25 @@ export async function cleanupHostedScenario(
   providedAdapter?: HostedMaintenanceAdapter,
 ): Promise<void> {
   let adapter: HostedMaintenanceAdapter | undefined;
-  let failed = false;
+  const failed = new Set<CleanupOperationId>();
+  const fail = (operation: CleanupOperationId) => { failed.add(operation); };
   try {
     const tracked = normalizeScenario(scenario);
-    adapter = providedAdapter ?? createAdapter(env);
+    adapter = providedAdapter ?? createHostedMaintenanceAdapter(env);
     let recoveredUserIds: readonly string[] = [];
     let recoveredSightingIds: readonly string[] = [];
     try {
       recoveredUserIds = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
     } catch {
-      failed = true;
+      fail('recover_auth');
     }
     try {
       recoveredSightingIds = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
     } catch {
-      failed = true;
+      fail('recover_sighting');
     }
-    if (recoveredUserIds.length > MAX_TRACKED || recoveredSightingIds.length > MAX_TRACKED ||
-        recoveredUserIds.some((id) => !UUID.test(id)) || recoveredSightingIds.some((id) => !UUID.test(id))) {
-      failed = true;
-    }
+    if (recoveredUserIds.length > MAX_TRACKED || recoveredUserIds.some((id) => !UUID.test(id))) fail('recover_auth');
+    if (recoveredSightingIds.length > MAX_TRACKED || recoveredSightingIds.some((id) => !UUID.test(id))) fail('recover_sighting');
     const userIds = [...new Set([
       ...tracked.createdUserIds,
       ...recoveredUserIds.filter((id) => UUID.test(id)),
@@ -467,36 +490,38 @@ export async function cleanupHostedScenario(
       ...recoveredSightingIds.filter((id) => UUID.test(id)),
     ])].slice(0, MAX_TRACKED);
     const recovered = { ...tracked, createdUserIds: userIds, createdSightingIds: sightingIds };
-    const attempt = async (operation: () => Promise<unknown>) => {
+    const attempt = async (operationId: CleanupOperationId, operation: () => Promise<unknown>) => {
       try {
         await operation();
       } catch {
-        failed = true;
+        fail(operationId);
       }
     };
-    await attempt(() => adapter!.removeObjects(recovered.createdObjectPaths));
-    await attempt(() => adapter!.deleteRows(
+    await attempt('storage_remove', () => adapter!.removeObjects(recovered.createdObjectPaths));
+    await attempt('jobs_delete', () => adapter!.deleteRows(
       'media_upload_jobs', recovered.createdJobIds, recovered.createdMediaIds, recovered.createdUserIds,
     ));
-    await attempt(() => adapter!.deleteRows(
+    await attempt('assets_delete', () => adapter!.deleteRows(
       'media_assets', recovered.createdAssetIds, recovered.createdMediaIds, recovered.createdUserIds,
     ));
-    await attempt(() => adapter!.deleteRows('sightings', recovered.createdSightingIds));
-    await attempt(() => adapter!.deleteRows('user_profiles', recovered.createdUserIds));
-    await attempt(() => adapter!.deleteAuthUsers(recovered.createdUserIds));
+    await attempt('sightings_delete', () => adapter!.deleteRows('sightings', recovered.createdSightingIds));
+    await attempt('profiles_delete', () => adapter!.deleteRows('user_profiles', recovered.createdUserIds));
+    await attempt('auth_delete', () => adapter!.deleteAuthUsers(recovered.createdUserIds));
     try {
-      if (!await adapter.assertAbsent(recovered)) failed = true;
+      if (!await adapter.assertAbsent(recovered)) fail('absence_proof');
     } catch {
-      failed = true;
+      fail('absence_proof');
     }
   } catch {
-    failed = true;
+    fail('setup');
   } finally {
     try {
       await adapter?.close();
     } catch {
-      failed = true;
+      fail('connection_close');
     }
   }
-  if (failed) throw new Error('hosted_cleanup_failed');
+  if (failed.size > 0) {
+    throw new HostedCleanupFailure(CLEANUP_OPERATION_IDS.filter((operation) => failed.has(operation)));
+  }
 }

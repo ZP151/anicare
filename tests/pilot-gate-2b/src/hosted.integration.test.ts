@@ -12,7 +12,7 @@ import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
 import { persistCleanupMediaId, removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
 import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
-import { executeHostedGate, hostedCheckIdFromGateError, type MutableHostedScenario } from './execute.js';
+import { executeHostedGate, hostedGateControlFromError, type MutableHostedScenario } from './execute.js';
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
 import {
   cleanupHostedScenario, inspectHostedIsolationState, inspectHostedMedia,
@@ -300,10 +300,10 @@ describe('real Hosted Gate 2B', () => {
       emitEvidence: async () => { await removeCleanupLedger(ledgerPath); },
       });
     } catch (error) {
-      const checkId = hostedCheckIdFromGateError(error);
+      const control = hostedGateControlFromError(error);
       const diagnosticPath = process.env.PILOT_GATE_2B_CHECK_DIAGNOSTIC_PATH;
-      if (checkId !== undefined && typeof diagnosticPath === 'string') {
-        await writeHostedCheckDiagnostic(diagnosticPath, checkId).catch(() => undefined);
+      if (control !== undefined && typeof diagnosticPath === 'string') {
+        await writeHostedCheckDiagnostic(diagnosticPath, control).catch(() => undefined);
       }
       throw error;
     }

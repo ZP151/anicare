@@ -21,18 +21,51 @@ const PRODUCER_STAGES = new Set([
 const HOSTED_CHECK_IDS = new Set([
   'auth_redirect', 'public_origin', 'owner_happy_path', 'media_staging', 'cross_owner_isolation',
 ]);
+const GATE_STAGES = new Set(['create', 'checks', 'cleanup', 'evidence']);
+const CLEANUP_OPERATION_IDS = [
+  'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+  'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+];
+const CLEANUP_OPERATION_SET = new Set(CLEANUP_OPERATION_IDS);
 const HOSTED_CHECK_DIAGNOSTIC_FILENAME = 'hosted-check-diagnostic.json';
+const MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES = 256;
 
 function invalid(code) { throw new Error(code); }
 
-export function buildProducerFailureDiagnostic(stage, check) {
+function normalizeHostedGateControl(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const candidate = value;
+  const keys = Object.keys(candidate);
+  if (!Object.hasOwn(candidate, 'gateStage') || keys.some((key) => !['gateStage', 'check', 'cleanup'].includes(key)) ||
+      typeof candidate.gateStage !== 'string' || !GATE_STAGES.has(candidate.gateStage)) return undefined;
+  const control = { gateStage: candidate.gateStage };
+  if (Object.hasOwn(candidate, 'check')) {
+    if ((candidate.gateStage !== 'checks' && candidate.gateStage !== 'cleanup') ||
+        typeof candidate.check !== 'string' || !HOSTED_CHECK_IDS.has(candidate.check)) return undefined;
+    control.check = candidate.check;
+  }
+  if (Object.hasOwn(candidate, 'cleanup')) {
+    if (candidate.gateStage !== 'cleanup' || !Array.isArray(candidate.cleanup) || candidate.cleanup.length < 1 ||
+        candidate.cleanup.length > CLEANUP_OPERATION_IDS.length || new Set(candidate.cleanup).size !== candidate.cleanup.length ||
+        candidate.cleanup.some((item) => typeof item !== 'string' || !CLEANUP_OPERATION_SET.has(item))) return undefined;
+    const ordered = CLEANUP_OPERATION_IDS.filter((item) => candidate.cleanup.includes(item));
+    if (ordered.length !== candidate.cleanup.length || !candidate.cleanup.every((item, index) => item === ordered[index])) {
+      return undefined;
+    }
+    control.cleanup = ordered;
+  }
+  return control;
+}
+
+export function buildProducerFailureDiagnostic(stage, control) {
   const safeStage = typeof stage === 'string' && PRODUCER_STAGES.has(stage) ? stage : 'unknown';
-  const safeCheck = safeStage === 'hosted_checks' && typeof check === 'string' && HOSTED_CHECK_IDS.has(check)
-    ? check
-    : undefined;
-  const diagnostic = safeCheck === undefined
-    ? { stage: safeStage, code: 'hosted_gate_failed' }
-    : { stage: safeStage, code: 'hosted_gate_failed', check: safeCheck };
+  const safeControl = safeStage === 'hosted_checks' ? normalizeHostedGateControl(control) : undefined;
+  const diagnostic = { stage: safeStage, code: 'hosted_gate_failed' };
+  if (safeControl !== undefined) {
+    diagnostic.gateStage = safeControl.gateStage;
+    if (safeControl.check !== undefined) diagnostic.check = safeControl.check;
+    if (safeControl.cleanup !== undefined) diagnostic.cleanup = safeControl.cleanup;
+  }
   return `${JSON.stringify(diagnostic)}\n`;
 }
 
@@ -45,19 +78,17 @@ export function hostedCheckDiagnosticPath({ temporaryRoot = tmpdir(), runId, run
   return target;
 }
 
-export async function readHostedCheckId({ temporaryRoot = tmpdir(), runId, runAttempt }) {
+export async function readHostedGateControl({ temporaryRoot = tmpdir(), runId, runAttempt }) {
   const target = hostedCheckDiagnosticPath({ temporaryRoot, runId, runAttempt });
   const metadata = await lstat(target).catch(() => undefined);
-  if (!metadata || !metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 1 || metadata.size > 128) return undefined;
+  if (!metadata || !metadata.isFile() || metadata.isSymbolicLink() || metadata.size < 1 ||
+      metadata.size > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES) return undefined;
   const source = await readFile(target, 'utf8').catch(() => undefined);
   if (typeof source !== 'string') return undefined;
   let value;
   try { value = JSON.parse(source); } catch { return undefined; }
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 1 ||
-      !Object.hasOwn(value, 'check') || typeof value.check !== 'string' || !HOSTED_CHECK_IDS.has(value.check)) {
-    return undefined;
-  }
-  return source === `${JSON.stringify({ check: value.check })}\n` ? value.check : undefined;
+  const control = normalizeHostedGateControl(value);
+  return control !== undefined && source === `${JSON.stringify(control)}\n` ? control : undefined;
 }
 
 async function boundedFetch(fetchAdapter, url, init, timeoutMs = 10_000) {
@@ -359,8 +390,8 @@ export async function runPilotGate2B({
       await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
         { cwd: repoRoot, env: harness, timeoutMs: 180_000 });
     } catch (error) {
-      const check = await readHostedCheckId({ temporaryRoot, runId, runAttempt });
-      if (check !== undefined && typeof stageAdapter.check === 'function') stageAdapter.check(check);
+      const control = await readHostedGateControl({ temporaryRoot, runId, runAttempt });
+      if (control !== undefined && typeof stageAdapter.control === 'function') stageAdapter.control(control);
       throw error;
     }
     stageAdapter.enter('evidence_write');
@@ -393,15 +424,15 @@ if (entry === fileURLToPath(import.meta.url)) {
     }
   } else {
     let diagnosticStage = 'unknown';
-    let diagnosticCheck;
+    let diagnosticControl;
     runPilotGate2B({
       repoRoot,
       stageAdapter: {
         enter: (stage) => { diagnosticStage = PRODUCER_STAGES.has(stage) ? stage : 'unknown'; },
-        check: (check) => { diagnosticCheck = HOSTED_CHECK_IDS.has(check) ? check : undefined; },
+        control: (control) => { diagnosticControl = normalizeHostedGateControl(control); },
       },
     }).catch(async () => {
-      await writeFile(DIAGNOSTIC_PATH, buildProducerFailureDiagnostic(diagnosticStage, diagnosticCheck), { mode: 0o600 })
+      await writeFile(DIAGNOSTIC_PATH, buildProducerFailureDiagnostic(diagnosticStage, diagnosticControl), { mode: 0o600 })
         .catch(() => undefined);
       process.stderr.write('pilot_gate_2b_failed\n');
       process.exitCode = 1;

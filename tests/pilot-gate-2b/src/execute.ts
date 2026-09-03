@@ -1,5 +1,6 @@
 import type { ReadinessChecks } from './evidence.js';
 import { hostedCheckIdFromError, type HostedCheckId } from './checks.js';
+import { cleanupOperationIdsFromError, type CleanupOperationId } from './inspection.js';
 
 export type MutableHostedScenario = Record<string, unknown>;
 
@@ -17,7 +18,13 @@ export type HostedGateResult = Readonly<{
   cleanupPassed: true;
 }>;
 
-type Stage = 'create' | 'checks' | 'cleanup' | 'evidence';
+export const GATE_STAGES = ['create', 'checks', 'cleanup', 'evidence'] as const;
+export type GateStage = typeof GATE_STAGES[number];
+export type HostedGateControl = Readonly<{
+  gateStage: GateStage;
+  check?: HostedCheckId;
+  cleanup?: readonly CleanupOperationId[];
+}>;
 
 class UnsettledOperationError extends Error {}
 
@@ -57,17 +64,24 @@ async function bounded<T>(
 }
 
 class HostedGateFailure extends Error {
-  constructor(stage: Stage, readonly checkId?: HostedCheckId) {
-    super(`hosted_gate_failed_at_${stage}`);
+  constructor(readonly control: HostedGateControl) {
+    super(`hosted_gate_failed_at_${control.gateStage}`);
   }
 }
 
-function failure(stage: Stage, checkId?: HostedCheckId): HostedGateFailure {
-  return new HostedGateFailure(stage, stage === 'checks' ? checkId : undefined);
+function failure(gateStage: GateStage, check?: HostedCheckId, cleanup?: readonly CleanupOperationId[]): HostedGateFailure {
+  const control: { gateStage: GateStage; check?: HostedCheckId; cleanup?: readonly CleanupOperationId[] } = { gateStage };
+  if (check !== undefined) control.check = check;
+  if (cleanup !== undefined && cleanup.length > 0) control.cleanup = cleanup;
+  return new HostedGateFailure(control);
 }
 
 export function hostedCheckIdFromGateError(error: unknown): HostedCheckId | undefined {
-  return error instanceof HostedGateFailure ? error.checkId : undefined;
+  return error instanceof HostedGateFailure ? error.control.check : undefined;
+}
+
+export function hostedGateControlFromError(error: unknown): HostedGateControl | undefined {
+  return error instanceof HostedGateFailure ? error.control : undefined;
 }
 
 export async function executeHostedGate(options: ExecuteHostedGateOptions): Promise<HostedGateResult> {
@@ -107,12 +121,12 @@ export async function executeHostedGate(options: ExecuteHostedGateOptions): Prom
   // An uncooperative operation may still be mutating hosted state. The parent
   // process must terminate this harness before the workflow's independent
   // durable-ledger cleanup process runs.
-  if (unsettled) throw failure('cleanup');
+  if (unsettled) throw failure('cleanup', failedCheckId);
 
   try {
     await runBefore(deadline, (signal) => options.cleanup(scenario, signal));
-  } catch {
-    throw failure('cleanup');
+  } catch (error) {
+    throw failure('cleanup', failedCheckId, cleanupOperationIdsFromError(error));
   }
 
   if (failedStage !== undefined || checks === undefined) throw failure(failedStage ?? 'checks', failedCheckId);

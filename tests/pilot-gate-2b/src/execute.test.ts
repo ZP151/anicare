@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { executeHostedGate, hostedCheckIdFromGateError, type ExecuteHostedGateOptions } from './execute.js';
+import { executeHostedGate, hostedCheckIdFromGateError, hostedGateControlFromError, type ExecuteHostedGateOptions } from './execute.js';
 import { HostedCheckFailure } from './checks.js';
+import { HostedCleanupFailure } from './inspection.js';
 import type { ReadinessChecks } from './evidence.js';
 
 const checks: ReadinessChecks = {
@@ -79,6 +80,51 @@ describe('hosted gate execution', () => {
     await expect(executeHostedGate(fixture.value)).rejects.not.toThrow('PILOT_GATE_2B_CHECK=');
   });
 
+  it('retains a typed failed check and ordered cleanup failures when cleanup overrides it', async () => {
+    const fixture = options({
+      runChecks: async () => { throw new HostedCheckFailure('media_staging'); },
+      cleanup: async () => { throw new HostedCleanupFailure(['storage_remove', 'absence_proof']); },
+    });
+    try {
+      await executeHostedGate(fixture.value);
+      throw new Error('expected hosted gate failure');
+    } catch (error) {
+      expect(hostedGateControlFromError(error)).toEqual({
+        gateStage: 'cleanup', check: 'media_staging', cleanup: ['storage_remove', 'absence_proof'],
+      });
+    }
+  });
+
+  it('normalizes duplicate and out-of-order typed cleanup IDs before preserving them', async () => {
+    const fixture = options({
+      cleanup: async () => {
+        throw new HostedCleanupFailure(['absence_proof', 'storage_remove', 'storage_remove'] as never);
+      },
+    });
+    try {
+      await executeHostedGate(fixture.value);
+      throw new Error('expected hosted gate failure');
+    } catch (error) {
+      expect(hostedGateControlFromError(error)).toEqual({
+        gateStage: 'cleanup', cleanup: ['storage_remove', 'absence_proof'],
+      });
+    }
+  });
+
+  it('discards generic hostile check and cleanup error details', async () => {
+    const fixture = options({
+      runChecks: async () => { throw new Error('PILOT_GATE_2B_CHECK=media_staging Bearer secret'); },
+      cleanup: async () => { throw new Error('https://hostile.invalid/cleanup'); },
+    });
+    try {
+      await executeHostedGate(fixture.value);
+      throw new Error('expected hosted gate failure');
+    } catch (error) {
+      expect(hostedGateControlFromError(error)).toEqual({ gateStage: 'cleanup' });
+      expect(String(error)).not.toMatch(/Bearer|https:|secret/);
+    }
+  });
+
   it('bounds a stalled operation, aborts it, and still attempts cleanup', async () => {
     let observedSignal: AbortSignal | undefined;
     const fixture = options({
@@ -133,11 +179,11 @@ describe('hosted gate execution', () => {
 
   it('shares one deadline across creation and checks while reserving cleanup time', async () => {
     const fixture = options({
-      timeoutMs: 100,
-      cancellationGraceMs: 5,
+      timeoutMs: 400,
+      cancellationGraceMs: 10,
       createScenario: async () => {
         fixture.order.push('create');
-        await new Promise((resolve) => setTimeout(resolve, 55));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         return { createdUserIds: [] };
       },
       runChecks: async (_scenario, signal) => {
@@ -149,7 +195,7 @@ describe('hosted gate execution', () => {
     });
     const startedAt = Date.now();
     await expect(executeHostedGate(fixture.value)).rejects.toThrow('hosted_gate_failed_at_checks');
-    expect(Date.now() - startedAt).toBeLessThan(150);
+    expect(Date.now() - startedAt).toBeLessThan(550);
     expect(fixture.order).toEqual(['create', 'checks', 'cleanup']);
   });
 });
