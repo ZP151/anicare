@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boundary = vi.hoisted(() => {
+  const responses = new Map<string, unknown>();
   const sql = Object.assign(async () => [], { end: vi.fn(async () => undefined) });
-  return { exists: vi.fn(), sql };
+  const exists = vi.fn(async (path: string) => {
+    if (!responses.has(path)) throw new Error('unexpected_storage_path');
+    return responses.get(path);
+  });
+  return { exists, responses, sql };
 });
 
 vi.mock('postgres', () => ({ default: () => boundary.sql }));
@@ -31,6 +36,7 @@ const isolationInput = {
     'jobs/77777777-7777-4777-8777-777777777777.jpg',
   ],
 };
+const [ownerObjectPath, strangerObjectPath] = isolationInput.observedObjectPaths;
 
 function storageUnknownError(status: number): Error & { __isStorageError: true; originalError: { status: number } } {
   return Object.assign(new Error('Storage request failed'), {
@@ -42,20 +48,44 @@ function storageUnknownError(status: number): Error & { __isStorageError: true; 
 
 const absentObjectError = storageUnknownError(404);
 
+function setObjectResults(ownerResult: unknown, strangerResult: unknown = { data: true, error: null }) {
+  boundary.responses.set(ownerObjectPath!, ownerResult);
+  boundary.responses.set(strangerObjectPath!, strangerResult);
+}
+
 beforeEach(() => {
-  boundary.exists.mockReset();
+  boundary.responses.clear();
+  boundary.exists.mockClear();
   boundary.sql.end.mockClear();
 });
 
 describe('maintenance adapter isolation object inspection', () => {
   it('normalizes an absent object result to false in observed-path order', async () => {
-    boundary.exists
-      .mockResolvedValueOnce({ data: true, error: null })
-      .mockResolvedValueOnce({ data: false, error: absentObjectError });
+    setObjectResults(
+      { data: true, error: null },
+      { data: false, error: absentObjectError },
+    );
     const adapter = createHostedMaintenanceAdapter(environment);
 
     await expect(adapter.inspectIsolation(isolationInput)).resolves.toEqual({
       jobs: [], assets: [], objectExists: [true, false],
+    });
+    expect(boundary.exists).toHaveBeenCalledTimes(2);
+    expect(boundary.exists).toHaveBeenNthCalledWith(1, ownerObjectPath);
+    expect(boundary.exists).toHaveBeenNthCalledWith(2, strangerObjectPath);
+
+    await adapter.close();
+  });
+
+  it('normalizes a 400 absent object result to false', async () => {
+    setObjectResults(
+      { data: false, error: storageUnknownError(400) },
+      { data: true, error: null },
+    );
+    const adapter = createHostedMaintenanceAdapter(environment);
+
+    await expect(adapter.inspectIsolation(isolationInput)).resolves.toEqual({
+      jobs: [], assets: [], objectExists: [false, true],
     });
 
     await adapter.close();
@@ -69,10 +99,24 @@ describe('maintenance adapter isolation object inspection', () => {
     ['a false result paired with a non-absence Storage error', {
       data: false, error: storageUnknownError(500),
     }],
+    ['a false 404 result with a wrong Storage marker', {
+      data: false, error: {
+        __isStorageError: false, name: 'StorageUnknownError', originalError: { status: 404 },
+      },
+    }],
+    ['a false 404 result with a missing Storage marker', {
+      data: false, error: { name: 'StorageUnknownError', originalError: { status: 404 } },
+    }],
+    ['a false 404 result with a wrong error name', {
+      data: false, error: {
+        __isStorageError: true, name: 'StorageApiError', originalError: { status: 404 },
+      },
+    }],
+    ['a false 404 result with a missing error name', {
+      data: false, error: { __isStorageError: true, originalError: { status: 404 } },
+    }],
   ])('fails closed for %s', async (_label, response) => {
-    boundary.exists
-      .mockResolvedValueOnce(response)
-      .mockResolvedValueOnce({ data: true, error: null });
+    setObjectResults(response);
     const adapter = createHostedMaintenanceAdapter(environment);
 
     await expect(adapter.inspectIsolation(isolationInput)).rejects.toMatchObject({
