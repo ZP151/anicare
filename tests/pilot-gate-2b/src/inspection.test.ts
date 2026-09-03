@@ -234,6 +234,80 @@ describe('hosted inspection and cleanup', () => {
     ]);
   });
 
+  it('accepts authoritative absence after a provisional sighting recovery exception', async () => {
+    const calls: string[] = [];
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),
+      recoverSightingIds: vi.fn(async () => { calls.push('recover-sightings'); throw new Error('transient'); }),
+      removeObjects: vi.fn(async () => { calls.push('objects'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent: vi.fn(async () => { calls.push('absent'); return true; }),
+      close: vi.fn(async () => { calls.push('close'); }),
+    };
+    await expect(cleanupHostedScenario(env(), scenario(), adapter)).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      'recover-sightings', 'objects', 'media_upload_jobs', 'media_assets', 'sightings',
+      'user_profiles', 'auth', 'absent', 'close',
+    ]);
+  });
+
+  it('accepts authoritative absence after an invalid provisional sighting recovery result', async () => {
+    const calls: string[] = [];
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),
+      recoverSightingIds: vi.fn(async () => ['not-a-uuid']),
+      removeObjects: vi.fn(async () => { calls.push('objects'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent: vi.fn(async () => { calls.push('absent'); return true; }),
+      close: vi.fn(async () => { calls.push('close'); }),
+    };
+    await expect(cleanupHostedScenario(env(), scenario(), adapter)).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      'objects', 'media_upload_jobs', 'media_assets', 'sightings', 'user_profiles', 'auth', 'absent', 'close',
+    ]);
+  });
+
+  it.each([
+    ['returns false', async () => false],
+    ['throws', async () => { throw new Error('transient'); }],
+  ])('retains provisional sighting recovery failure when absence proof %s', async (_label, assertAbsent) => {
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),
+      recoverSightingIds: vi.fn(async () => { throw new Error('transient'); }),
+      removeObjects: vi.fn(), deleteRows: vi.fn(), deleteAuthUsers: vi.fn(), assertAbsent,
+      close: vi.fn(),
+    };
+    try {
+      await cleanupHostedScenario(env(), scenario(), adapter);
+      throw new Error('expected cleanup failure');
+    } catch (error) {
+      expect(cleanupOperationIdsFromError(error)).toEqual(['recover_sighting', 'absence_proof']);
+      expect(String(error)).not.toMatch(/transient/);
+    }
+  });
+
+  it('does not suppress Auth, deletion, or close failures after a successful absence proof', async () => {
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(),
+      recoverAuthUserIds: vi.fn(async () => { throw new Error('transient'); }),
+      recoverSightingIds: vi.fn(async () => []),
+      removeObjects: vi.fn(async () => { throw new Error('transient'); }),
+      deleteRows: vi.fn(), deleteAuthUsers: vi.fn(), assertAbsent: vi.fn(async () => true),
+      close: vi.fn(async () => { throw new Error('transient'); }),
+    };
+    try {
+      await cleanupHostedScenario(env(), scenario(), adapter);
+      throw new Error('expected cleanup failure');
+    } catch (error) {
+      expect(cleanupOperationIdsFromError(error)).toEqual([
+        'recover_auth', 'storage_remove', 'connection_close',
+      ]);
+      expect(String(error)).not.toMatch(/transient/);
+    }
+  });
+
   it('best-effort attempts every cleanup category and absence proof after transient failures', async () => {
     const calls: string[] = [];
     const adapter: HostedMaintenanceAdapter = {

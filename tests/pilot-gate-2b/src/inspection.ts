@@ -520,6 +520,7 @@ export async function cleanupHostedScenario(
     adapter ??= createHostedMaintenanceAdapter(env);
     let recoveredUserIds: readonly string[] = [];
     let recoveredSightingIds: readonly string[] = [];
+    let provisionalSightingRecoveryFailure = false;
     try {
       recoveredUserIds = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
     } catch {
@@ -527,11 +528,17 @@ export async function cleanupHostedScenario(
     }
     try {
       recoveredSightingIds = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
+      if (!Array.isArray(recoveredSightingIds) || recoveredSightingIds.length > MAX_TRACKED ||
+          recoveredSightingIds.some((id) => !UUID.test(id))) {
+        provisionalSightingRecoveryFailure = true;
+        fail('recover_sighting');
+        recoveredSightingIds = [];
+      }
     } catch {
+      provisionalSightingRecoveryFailure = true;
       fail('recover_sighting');
     }
     if (recoveredUserIds.length > MAX_TRACKED || recoveredUserIds.some((id) => !UUID.test(id))) fail('recover_auth');
-    if (recoveredSightingIds.length > MAX_TRACKED || recoveredSightingIds.some((id) => !UUID.test(id))) fail('recover_sighting');
     const userIds = [...new Set([
       ...tracked.createdUserIds,
       ...recoveredUserIds.filter((id) => UUID.test(id)),
@@ -559,7 +566,11 @@ export async function cleanupHostedScenario(
     await attempt('profiles_delete', () => adapter!.deleteRows('user_profiles', recovered.createdUserIds));
     await attempt('auth_delete', () => adapter!.deleteAuthUsers(recovered.createdUserIds));
     try {
-      if (!await adapter.assertAbsent(recovered)) fail('absence_proof');
+      if (await adapter.assertAbsent(recovered)) {
+        if (provisionalSightingRecoveryFailure) failed.delete('recover_sighting');
+      } else {
+        fail('absence_proof');
+      }
     } catch {
       fail('absence_proof');
     }
