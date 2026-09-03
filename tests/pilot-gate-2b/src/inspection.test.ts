@@ -211,6 +211,13 @@ describe('hosted inspection and cleanup', () => {
 
   it('recovers hard-cancelled Auth and sighting IDs from durable pre-request markers', async () => {
     const deleted: string[] = [];
+    const sightingRecoveryReferences = [{
+      reporterId: UUIDS[0]!, clientDedupeKey: 'pilot-gate-2b-owner-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    }];
+    const assertAbsent = vi.fn(async (tracked: Required<PartialHostedScenario>) =>
+      tracked.createdAuthRecoveryIds.length === 1 &&
+      tracked.sightingRecoveryReferences.length === 1,
+    );
     const adapter: HostedMaintenanceAdapter = {
       inspect: vi.fn(),
       recoverAuthUserIds: vi.fn(async () => [UUIDS[0]!]),
@@ -218,16 +225,14 @@ describe('hosted inspection and cleanup', () => {
       removeObjects: vi.fn(),
       deleteRows: vi.fn(async (table, ids) => { deleted.push(`${table}:${ids.join(',')}`); }),
       deleteAuthUsers: vi.fn(async (ids) => { deleted.push(`auth:${ids.join(',')}`); }),
-      assertAbsent: vi.fn(async (tracked) => tracked.createdAuthRecoveryIds.length === 1 &&
-        tracked.sightingRecoveryReferences.length === 1),
+      assertAbsent,
       close: vi.fn(async () => undefined),
     };
     await cleanupHostedScenario(env(), {
       createdAuthRecoveryIds: [UUIDS[7]!],
-      sightingRecoveryReferences: [{
-        reporterId: UUIDS[0]!, clientDedupeKey: 'pilot-gate-2b-owner-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      }],
+      sightingRecoveryReferences,
     }, adapter);
+    expect(assertAbsent).toHaveBeenCalledWith(expect.objectContaining({ sightingRecoveryReferences }));
     expect(deleted).toEqual([
       'media_upload_jobs:', 'media_assets:', `sightings:${UUIDS[1]}`,
       `user_profiles:${UUIDS[0]}`, `auth:${UUIDS[0]}`,
@@ -267,6 +272,29 @@ describe('hosted inspection and cleanup', () => {
     expect(calls).toEqual([
       'objects', 'media_upload_jobs', 'media_assets', 'sightings', 'user_profiles', 'auth', 'absent', 'close',
     ]);
+  });
+
+  it('accepts authoritative absence after a hostile malformed sighting recovery array', async () => {
+    const calls: string[] = [];
+    const cleanupScenario = scenario();
+    const assertAbsent = vi.fn(async (tracked: Required<PartialHostedScenario>) => {
+      calls.push('absent');
+      expect(tracked.sightingRecoveryReferences).toEqual(cleanupScenario.sightingRecoveryReferences);
+      return true;
+    });
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []),
+      recoverSightingIds: vi.fn(async () => [Symbol('hostile')] as never),
+      removeObjects: vi.fn(async () => { calls.push('objects'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent, close: vi.fn(async () => { calls.push('close'); }),
+    };
+    await expect(cleanupHostedScenario(env(), cleanupScenario, adapter)).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      'objects', 'media_upload_jobs', 'media_assets', 'sightings', 'user_profiles', 'auth', 'absent', 'close',
+    ]);
+    expect(assertAbsent).toHaveBeenCalledOnce();
   });
 
   it.each([
