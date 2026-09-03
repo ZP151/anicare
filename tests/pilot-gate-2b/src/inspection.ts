@@ -386,7 +386,9 @@ export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): Host
         const results: boolean[] = [];
         for (const objectPath of input.observedObjectPaths) {
           const { data, error } = await admin.storage.from('media-staging').exists(objectPath);
-          if (error || typeof data !== 'boolean') throw new Error('inspect_failed');
+          if (typeof data !== 'boolean' || (data ? error !== null : error === null)) {
+            throw new Error('inspect_failed');
+          }
           results.push(data);
         }
         return results;
