@@ -90,6 +90,20 @@ describe('hosted synthetic fixtures', () => {
     expect(fake.implementation.createAuthUser).not.toHaveBeenCalled();
   });
 
+  it('emits sighting recovery keys in the cleanup-ledger canonical format', async () => {
+    const fake = adapter();
+    const keys: string[] = [];
+    await createHostedScenario(env(), fake.implementation, async (progress) => {
+      if (progress.kind === 'sighting-reference') keys.push(progress.clientDedupeKey);
+    });
+
+    expect(keys).toHaveLength(2);
+    expect(keys).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^pilot-gate-2b-owner-[a-f0-9]{32}$/),
+      expect.stringMatching(/^pilot-gate-2b-stranger-[a-f0-9]{32}$/),
+    ]));
+  });
+
   it('cleans every exact fixture after a partial owner profile failure', async () => {
     const fake = adapter('profile:owner');
     await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');

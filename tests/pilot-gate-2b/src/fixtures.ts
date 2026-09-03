@@ -231,7 +231,7 @@ export async function createHostedScenario(
     }
     if (actors.owner.accessToken === actors.stranger.accessToken) throw new Error('invalid_isolation');
     const createTrackedSighting = async (role: Role, actor: SyntheticActor, latitude: number, longitude: number) => {
-      const clientDedupeKey = `pilot-gate-2b-${role}-${randomUUID()}`;
+      const clientDedupeKey = `pilot-gate-2b-${role}-${randomUUID().replaceAll('-', '')}`;
       sightingReferences.push({ reporterId: actor.id, clientDedupeKey });
       await onProgress({ kind: 'sighting-reference', reporterId: actor.id, clientDedupeKey });
       const id = await adapter.createSighting({ role, actor, latitude, longitude, synthetic: true, clientDedupeKey });
