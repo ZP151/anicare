@@ -12,7 +12,7 @@ import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
 import { removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
 import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
 import { executeHostedGate, type MutableHostedScenario } from './execute.js';
-import { createHostedScenario, type HostedScenario } from './fixtures.js';
+import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
 import {
   cleanupHostedScenario, inspectHostedMedia, type HostedInspection, type HostedInspectionInput,
   type PartialHostedScenario,
@@ -23,7 +23,9 @@ const DENIED = new Set([400, 401, 403, 404, 406]);
 const REQUEST_TIMEOUT_MS = 8_000;
 
 type CleanupLedger = MutableHostedScenario & {
-  createdUserIds: string[]; createdSightingIds: string[]; createdMediaIds: string[];
+  createdAuthRecoveryIds: string[]; createdUserIds: string[];
+  sightingRecoveryReferences: Array<{ reporterId: string; clientDedupeKey: string }>;
+  createdSightingIds: string[]; createdMediaIds: string[];
   createdJobIds: string[]; createdAssetIds: string[]; createdObjectPaths: string[];
 };
 type RuntimeScenario = Readonly<{ fixture: HostedScenario; tracked: CleanupLedger }>;
@@ -76,7 +78,8 @@ describe('real Hosted Gate 2B', () => {
     const ledgerPath = process.env.PILOT_GATE_2B_LEDGER_PATH;
     if (!ledgerPath) throw new Error('cleanup_ledger_invalid');
     const partial: CleanupLedger = {
-      createdUserIds: [], createdSightingIds: [], createdMediaIds: [],
+      createdAuthRecoveryIds: [], createdUserIds: [], sightingRecoveryReferences: [],
+      createdSightingIds: [], createdMediaIds: [],
       createdJobIds: [], createdAssetIds: [], createdObjectPaths: [],
     };
 
@@ -86,7 +89,18 @@ describe('real Hosted Gate 2B', () => {
         if (signal.aborted) throw new Error('aborted');
         Object.assign(ledger, partial);
         await writeCleanupLedger(ledgerPath, partial);
-        const fixture = await createHostedScenario(env);
+        const persistFixtureProgress = async (progress: HostedFixtureProgress) => {
+          if (progress.kind === 'auth-reference') partial.createdAuthRecoveryIds.push(progress.recoveryId);
+          else if (progress.kind === 'user') partial.createdUserIds.push(progress.id);
+          else if (progress.kind === 'sighting-reference') {
+            partial.sightingRecoveryReferences.push({
+              reporterId: progress.reporterId, clientDedupeKey: progress.clientDedupeKey,
+            });
+          } else partial.createdSightingIds.push(progress.id);
+          Object.assign(ledger, partial);
+          await writeCleanupLedger(ledgerPath, partial);
+        };
+        const fixture = await createHostedScenario(env, undefined, persistFixtureProgress);
         partial.createdUserIds = [...fixture.createdUserIds];
         partial.createdSightingIds = [fixture.ownerSightingId, fixture.strangerSightingId];
         Object.assign(ledger, partial);

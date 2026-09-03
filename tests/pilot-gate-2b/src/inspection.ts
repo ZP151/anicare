@@ -30,7 +30,9 @@ export type HostedInspection = Readonly<{
 }>;
 
 export type PartialHostedScenario = Readonly<{
+  createdAuthRecoveryIds?: readonly string[];
   createdUserIds?: readonly string[];
+  sightingRecoveryReferences?: readonly Readonly<{ reporterId: string; clientDedupeKey: string }>[];
   createdSightingIds?: readonly string[];
   createdMediaIds?: readonly string[];
   createdJobIds?: readonly string[];
@@ -42,6 +44,9 @@ type CleanupTable = 'media_upload_jobs' | 'media_assets' | 'sightings' | 'user_p
 
 export type HostedMaintenanceAdapter = Readonly<{
   inspect(input: HostedInspectionInput): Promise<unknown>;
+  recoverAuthUserIds(recoveryIds: readonly string[]): Promise<readonly string[]>;
+  recoverSightingIds(references: readonly Readonly<{ reporterId: string; clientDedupeKey: string }>[])
+    : Promise<readonly string[]>;
   removeObjects(paths: readonly string[]): Promise<void>;
   deleteRows(
     table: CleanupTable,
@@ -89,7 +94,8 @@ function validInspection(value: unknown): value is HostedInspection {
 function normalizeScenario(value: PartialHostedScenario): Required<PartialHostedScenario> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('hosted_cleanup_failed');
   const allowed = new Set([
-    'createdUserIds', 'createdSightingIds', 'createdMediaIds',
+    'createdAuthRecoveryIds', 'createdUserIds', 'sightingRecoveryReferences',
+    'createdSightingIds', 'createdMediaIds',
     'createdJobIds', 'createdAssetIds', 'createdObjectPaths',
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error('hosted_cleanup_failed');
@@ -102,8 +108,17 @@ function normalizeScenario(value: PartialHostedScenario): Required<PartialHosted
   const paths = value.createdObjectPaths ?? [];
   if (!Array.isArray(paths) || paths.length > MAX_TRACKED || paths.some((item) => typeof item !== 'string' || !OBJECT_PATH.test(item)) ||
       new Set(paths).size !== paths.length) throw new Error('hosted_cleanup_failed');
+  const references = value.sightingRecoveryReferences ?? [];
+  if (!Array.isArray(references) || references.length > MAX_TRACKED || references.some((item) =>
+    !item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).length !== 2 ||
+    !UUID.test(item.reporterId) || !/^pilot-gate-2b-(?:owner|stranger)-[a-f0-9]{32}$/i.test(item.clientDedupeKey)) ||
+    new Set(references.map((item) => `${item.reporterId}:${item.clientDedupeKey}`)).size !== references.length) {
+    throw new Error('hosted_cleanup_failed');
+  }
   return {
+    createdAuthRecoveryIds: uuidList(value.createdAuthRecoveryIds),
     createdUserIds: uuidList(value.createdUserIds),
+    sightingRecoveryReferences: references.map((item) => ({ ...item })),
     createdSightingIds: uuidList(value.createdSightingIds),
     createdMediaIds: uuidList(value.createdMediaIds),
     createdJobIds: uuidList(value.createdJobIds),
@@ -130,6 +145,28 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
   });
 
   return {
+    async recoverAuthUserIds(recoveryIds) {
+      if (recoveryIds.length === 0) return [];
+      const rows = await sql<Array<{ id: string }>>`
+        select id::text as id from auth.users
+        where raw_user_meta_data ->> 'pilot_gate_2b_recovery_id' = any(${recoveryIds}::text[])
+        order by id
+      `;
+      return rows.map((row) => row.id);
+    },
+    async recoverSightingIds(references) {
+      if (references.length === 0) return [];
+      const rows = await sql<Array<{ id: string }>>`
+        select sighting.id::text as id
+        from public.sightings as sighting
+        join jsonb_to_recordset(${JSON.stringify(references)}::jsonb)
+          as recovery("reporterId" text, "clientDedupeKey" text)
+          on sighting.reporter_id = recovery."reporterId"::uuid
+         and sighting.client_dedupe_key = recovery."clientDedupeKey"
+        order by sighting.id
+      `;
+      return rows.map((row) => row.id);
+    },
     async inspect(input) {
       const rows = await sql<Array<{
         job_count: number; matching_finalized_job_count: number;
@@ -208,10 +245,19 @@ function createAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter {
             or (client_media_id = any(${scenario.createdMediaIds}::text[]) and uploader_id = any(${scenario.createdUserIds}::uuid[]))) +
           (select count(*) from public.sightings where id = any(${scenario.createdSightingIds}::uuid[])) +
           (select count(*) from public.user_profiles where id = any(${scenario.createdUserIds}::uuid[])) +
-          (select count(*) from auth.users where id = any(${scenario.createdUserIds}::uuid[]))
+          (select count(*) from auth.users where id = any(${scenario.createdUserIds}::uuid[])
+            or raw_user_meta_data ->> 'pilot_gate_2b_recovery_id' = any(${scenario.createdAuthRecoveryIds}::text[]))
         )::integer as tracked_count
       `;
       if (rows.length !== 1 || rows[0]?.tracked_count !== 0) return false;
+      for (const reference of scenario.sightingRecoveryReferences) {
+        const sightings = await sql<Array<{ tracked_count: number }>>`
+          select count(*)::integer as tracked_count from public.sightings
+          where reporter_id = ${reference.reporterId}::uuid
+            and client_dedupe_key = ${reference.clientDedupeKey}
+        `;
+        if (sightings.length !== 1 || sightings[0]?.tracked_count !== 0) return false;
+      }
       for (const path of scenario.createdObjectPaths) {
         const { data, error } = await admin.storage.from('media-staging').exists(path);
         if (error || data !== false) return false;
@@ -253,13 +299,20 @@ export async function cleanupHostedScenario(
   try {
     const tracked = normalizeScenario(scenario);
     adapter = providedAdapter ?? createAdapter(env);
-    await adapter.removeObjects(tracked.createdObjectPaths);
-    await adapter.deleteRows('media_upload_jobs', tracked.createdJobIds, tracked.createdMediaIds, tracked.createdUserIds);
-    await adapter.deleteRows('media_assets', tracked.createdAssetIds, tracked.createdMediaIds, tracked.createdUserIds);
-    await adapter.deleteRows('sightings', tracked.createdSightingIds);
-    await adapter.deleteRows('user_profiles', tracked.createdUserIds);
-    await adapter.deleteAuthUsers(tracked.createdUserIds);
-    if (!await adapter.assertAbsent(tracked)) throw new Error('absence_not_proven');
+    const recoveredUserIds = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
+    const recoveredSightingIds = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
+    const userIds = [...new Set([...tracked.createdUserIds, ...recoveredUserIds])];
+    const sightingIds = [...new Set([...tracked.createdSightingIds, ...recoveredSightingIds])];
+    if (userIds.length > MAX_TRACKED || sightingIds.length > MAX_TRACKED ||
+        userIds.some((id) => !UUID.test(id)) || sightingIds.some((id) => !UUID.test(id))) throw new Error('recovery_failed');
+    const recovered = { ...tracked, createdUserIds: userIds, createdSightingIds: sightingIds };
+    await adapter.removeObjects(recovered.createdObjectPaths);
+    await adapter.deleteRows('media_upload_jobs', recovered.createdJobIds, recovered.createdMediaIds, recovered.createdUserIds);
+    await adapter.deleteRows('media_assets', recovered.createdAssetIds, recovered.createdMediaIds, recovered.createdUserIds);
+    await adapter.deleteRows('sightings', recovered.createdSightingIds);
+    await adapter.deleteRows('user_profiles', recovered.createdUserIds);
+    await adapter.deleteAuthUsers(recovered.createdUserIds);
+    if (!await adapter.assertAbsent(recovered)) throw new Error('absence_not_proven');
   } catch {
     throw new Error('hosted_cleanup_failed');
   } finally {

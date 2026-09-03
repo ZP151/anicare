@@ -25,7 +25,8 @@ function adapter(failAt?: string) {
   const calls: string[] = [];
   const implementation: HostedFixtureAdapter = {
     createAuthUser: vi.fn(async (input) => {
-      calls.push(`auth:${input.role}:${input.email.endsWith('@example.invalid')}:${input.password.length >= 32}`);
+      calls.push(`auth:${input.role}:${input.email.endsWith('@example.invalid')}:${input.password.length >= 32}:${
+        /^[0-9a-f-]{36}$/i.test(input.recoveryId)}`);
       if (failAt === `auth:${input.role}`) throw new Error('secret detail');
       return IDS[authIndex++]!;
     }),
@@ -60,7 +61,9 @@ function adapter(failAt?: string) {
 describe('hosted synthetic fixtures', () => {
   it('creates two distinct confirmed adult actors and Singapore synthetic sightings', async () => {
     const fake = adapter();
-    const scenario = await createHostedScenario(env(), fake.implementation);
+    const scenario = await createHostedScenario(env(), fake.implementation, async (progress) => {
+      fake.calls.push(`progress:${progress.kind}`);
+    });
     expect(scenario).toEqual({
       owner: { id: IDS[0], accessToken: 'access-owner' },
       stranger: { id: IDS[1], accessToken: 'access-stranger' },
@@ -68,11 +71,23 @@ describe('hosted synthetic fixtures', () => {
       createdUserIds: [IDS[0], IDS[1]], createdObjectPaths: [],
     });
     expect(fake.calls).toEqual(expect.arrayContaining([
-      'auth:owner:true:true', 'auth:stranger:true:true',
+      'auth:owner:true:true:true', 'auth:stranger:true:true:true',
       'profile:owner:true', 'profile:stranger:true',
       'sighting:owner:1.3001:103.8001:true',
       'sighting:stranger:1.3002:103.8002:true',
     ]));
+    expect(fake.calls.indexOf('progress:auth-reference')).toBeLessThan(fake.calls.indexOf('auth:owner:true:true:true'));
+    expect(fake.calls.indexOf('progress:sighting-reference')).toBeLessThan(
+      fake.calls.indexOf('sighting:owner:1.3001:103.8001:true'),
+    );
+  });
+
+  it('does not start an Auth side effect until the durable pre-request marker callback resolves', async () => {
+    const fake = adapter();
+    await expect(createHostedScenario(env(), fake.implementation, async (progress) => {
+      if (progress.kind === 'auth-reference') throw new Error('ledger unavailable');
+    })).rejects.toThrow('hosted_fixture_failed');
+    expect(fake.implementation.createAuthUser).not.toHaveBeenCalled();
   });
 
   it('cleans every exact fixture after a partial owner profile failure', async () => {

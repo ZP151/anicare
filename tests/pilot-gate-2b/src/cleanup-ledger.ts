@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { PartialHostedScenario } from './inspection.js';
 
 const KEYS = [
-  'createdUserIds', 'createdSightingIds', 'createdMediaIds',
+  'createdAuthRecoveryIds', 'createdUserIds', 'sightingRecoveryReferences', 'createdSightingIds', 'createdMediaIds',
   'createdJobIds', 'createdAssetIds', 'createdObjectPaths',
 ] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -32,7 +32,19 @@ function normalize(value: unknown): CleanupLedger {
     return invalid();
   }
   return {
-    createdUserIds: ids('createdUserIds'), createdSightingIds: ids('createdSightingIds'),
+    createdAuthRecoveryIds: ids('createdAuthRecoveryIds'),
+    createdUserIds: ids('createdUserIds'),
+    sightingRecoveryReferences: (() => {
+      const references = record.sightingRecoveryReferences;
+      if (!Array.isArray(references) || references.length > 8 || references.some((item) =>
+        !item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).length !== 2 ||
+        !UUID.test(item.reporterId) || !/^pilot-gate-2b-(?:owner|stranger)-[a-f0-9]{32}$/i.test(item.clientDedupeKey)) ||
+        new Set(references.map((item) => `${item.reporterId}:${item.clientDedupeKey}`)).size !== references.length) {
+        return invalid();
+      }
+      return references.map((item) => ({ reporterId: item.reporterId, clientDedupeKey: item.clientDedupeKey }));
+    })(),
+    createdSightingIds: ids('createdSightingIds'),
     createdMediaIds: ids('createdMediaIds'), createdJobIds: ids('createdJobIds'),
     createdAssetIds: ids('createdAssetIds'), createdObjectPaths: [...paths],
   };

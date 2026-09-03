@@ -22,7 +22,9 @@ export type HostedScenario = Readonly<{
 type Role = 'owner' | 'stranger';
 
 export type HostedFixtureAdapter = Readonly<{
-  createAuthUser(input: Readonly<{ role: Role; email: string; password: string; emailConfirmed: true }>): Promise<string>;
+  createAuthUser(input: Readonly<{
+    role: Role; email: string; password: string; emailConfirmed: true; recoveryId: string;
+  }>): Promise<string>;
   signIn(input: Readonly<{ role: Role; email: string; password: string }>): Promise<SyntheticActor>;
   createAdultProfile(input: Readonly<{
     role: Role; userId: string; publicName: string; adultConfirmedAt: string;
@@ -40,6 +42,12 @@ export type HostedFixtureAdapter = Readonly<{
     sightingIds: readonly string[]; profileIds: readonly string[]; userIds: readonly string[];
   }>): Promise<boolean>;
 }>;
+
+export type HostedFixtureProgress =
+  | Readonly<{ kind: 'auth-reference'; recoveryId: string }>
+  | Readonly<{ kind: 'user'; id: string }>
+  | Readonly<{ kind: 'sighting-reference'; reporterId: string; clientDedupeKey: string }>
+  | Readonly<{ kind: 'sighting'; id: string }>;
 
 function credentials(role: Role): Readonly<{ email: string; password: string }> {
   const suffix = randomUUID().replaceAll('-', '');
@@ -69,6 +77,7 @@ function defaultAdapter(env: HostedGateEnvironment): HostedFixtureAdapter {
     async createAuthUser(input) {
       const { data, error } = await admin.auth.admin.createUser({
         email: input.email, password: input.password, email_confirm: input.emailConfirmed,
+        user_metadata: { pilot_gate_2b_recovery_id: input.recoveryId },
       });
       if (error || !data.user?.id || !UUID.test(data.user.id)) throw new Error('create_failed');
       return data.user.id;
@@ -189,6 +198,7 @@ async function cleanupPartial(
 export async function createHostedScenario(
   env: HostedGateEnvironment,
   adapter: HostedFixtureAdapter = defaultAdapter(env),
+  onProgress: (progress: HostedFixtureProgress) => Promise<void> = async () => undefined,
 ): Promise<HostedScenario> {
   const userIds: string[] = [];
   const profileIds: string[] = [];
@@ -198,9 +208,12 @@ export async function createHostedScenario(
     const actors = {} as Record<Role, SyntheticActor>;
     for (const role of ['owner', 'stranger'] as const) {
       const secret = credentials(role);
-      const id = await adapter.createAuthUser({ ...secret, role, emailConfirmed: true });
+      const recoveryId = randomUUID();
+      await onProgress({ kind: 'auth-reference', recoveryId });
+      const id = await adapter.createAuthUser({ ...secret, role, emailConfirmed: true, recoveryId });
       if (!UUID.test(id) || userIds.includes(id)) throw new Error('invalid_actor');
       userIds.push(id);
+      await onProgress({ kind: 'user', id });
       const actor = await adapter.signIn({ ...secret, role });
       if (actor.id !== id || actor.accessToken.length === 0 || /[\s]/.test(actor.accessToken)) {
         throw new Error('invalid_session');
@@ -215,8 +228,10 @@ export async function createHostedScenario(
     const createTrackedSighting = async (role: Role, actor: SyntheticActor, latitude: number, longitude: number) => {
       const clientDedupeKey = `pilot-gate-2b-${role}-${randomUUID()}`;
       sightingReferences.push({ reporterId: actor.id, clientDedupeKey });
+      await onProgress({ kind: 'sighting-reference', reporterId: actor.id, clientDedupeKey });
       const id = await adapter.createSighting({ role, actor, latitude, longitude, synthetic: true, clientDedupeKey });
       sightingIds.push(id);
+      await onProgress({ kind: 'sighting', id });
       return id;
     };
     const ownerSightingId = await createTrackedSighting('owner', actors.owner, 1.3001, 103.8001);

@@ -12,7 +12,8 @@ describe('durable hosted cleanup ledger', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'gate-2b-ledger-'));
     const file = path.join(root, 'animalhelper-pilot-gate-2b-ledger-123-1.json');
     const value = {
-      createdUserIds: [ID], createdSightingIds: [], createdMediaIds: [ID],
+      createdAuthRecoveryIds: [ID], createdUserIds: [ID], sightingRecoveryReferences: [],
+      createdSightingIds: [], createdMediaIds: [ID],
       createdJobIds: [], createdAssetIds: [], createdObjectPaths: [`jobs/${ID}.jpg`],
     };
     try {
