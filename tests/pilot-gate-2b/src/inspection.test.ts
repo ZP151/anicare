@@ -331,6 +331,40 @@ describe('hosted inspection and cleanup', () => {
     expect(assertAbsent).toHaveBeenCalledOnce();
   });
 
+  it('contains a stateful Auth recovery array without suppressing recover_auth', async () => {
+    const calls: string[] = [];
+    const authResult: unknown[] = [];
+    let authReads = 0;
+    Object.defineProperty(authResult, '0', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        authReads += 1;
+        return authReads === 1 ? Symbol('hostile') : UUIDS[0]!;
+      },
+    });
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => authResult as never),
+      recoverSightingIds: vi.fn(async () => []),
+      removeObjects: vi.fn(async () => { calls.push('objects'); }),
+      deleteRows: vi.fn(async (table) => { calls.push(table); }),
+      deleteAuthUsers: vi.fn(async () => { calls.push('auth'); }),
+      assertAbsent: vi.fn(async () => { calls.push('absent'); return true; }),
+      close: vi.fn(async () => { calls.push('close'); }),
+    };
+    try {
+      await cleanupHostedScenario(env(), scenario(), adapter);
+      throw new Error('expected cleanup failure');
+    } catch (error) {
+      expect(cleanupOperationIdsFromError(error)).toEqual(['recover_auth']);
+      expect(String(error)).not.toMatch(/hostile/);
+    }
+    expect(authReads).toBe(1);
+    expect(calls).toEqual([
+      'objects', 'media_upload_jobs', 'media_assets', 'sightings', 'user_profiles', 'auth', 'absent', 'close',
+    ]);
+  });
+
   it.each([
     ['returns false', async () => false],
     ['throws', async () => { throw new Error('transient'); }],

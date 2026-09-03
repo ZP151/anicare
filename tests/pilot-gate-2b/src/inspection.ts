@@ -522,9 +522,22 @@ export async function cleanupHostedScenario(
     let recoveredSightingIds: readonly string[] = [];
     let provisionalSightingRecoveryFailure = false;
     try {
-      recoveredUserIds = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
+      const candidate = await adapter.recoverAuthUserIds(tracked.createdAuthRecoveryIds);
+      if (!Array.isArray(candidate)) throw new Error('invalid_recovery_result');
+      const count = candidate.length;
+      if (!Number.isInteger(count) || count < 0 || count > MAX_TRACKED) {
+        throw new Error('invalid_recovery_result');
+      }
+      const sanitized: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const id = candidate[index];
+        if (typeof id !== 'string' || !UUID.test(id)) throw new Error('invalid_recovery_result');
+        sanitized.push(id);
+      }
+      recoveredUserIds = sanitized;
     } catch {
       fail('recover_auth');
+      recoveredUserIds = [];
     }
     try {
       const candidate = await adapter.recoverSightingIds(tracked.sightingRecoveryReferences);
@@ -545,7 +558,6 @@ export async function cleanupHostedScenario(
       fail('recover_sighting');
       recoveredSightingIds = [];
     }
-    if (recoveredUserIds.length > MAX_TRACKED || recoveredUserIds.some((id) => !UUID.test(id))) fail('recover_auth');
     const userIds = [...new Set([
       ...tracked.createdUserIds,
       ...recoveredUserIds.filter((id) => UUID.test(id)),
