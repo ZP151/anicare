@@ -13,6 +13,13 @@ function env(): HostedGateEnvironment {
 }
 
 describe('remote hosted deployment state', () => {
+  it('requires the consolidated finalization preflight migration at the remote head', () => {
+    expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
+      version: '202609030001',
+      name: 'finalize_media_preflight',
+    });
+  });
+
   it('requires the exact ordered migration version and name inventory', async () => {
     const query = vi.fn(async () => EXPECTED_REMOTE_MIGRATIONS.map((item) => ({ ...item })));
     const close = vi.fn(async () => undefined);
