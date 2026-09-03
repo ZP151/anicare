@@ -28,6 +28,12 @@ substrings: it could miss a double-quoted preempting assertion or pass on an
 unrelated decoy string. It is now a TypeScript compiler-AST contract over the
 actual `runOwnerHappyPath` implementation and its first-finalize flow.
 
+Round 5 review found that the AST contract still chose the first variable
+named `finalized`; an unprotected true finalization under another identifier
+could therefore be hidden by a decoy binding and seam. The contract now starts
+at the concrete `finalizeMedia` call nested under `atOwnerStep('finalize',
+...)`, while preserving and distinguishing the legitimate replay call.
+
 ## Files changed
 
 - `tests/pilot-gate-2b/src/checks.ts` maps bounded finalization results and
@@ -51,6 +57,9 @@ actual `runOwnerHappyPath` implementation and its first-finalize flow.
   `ownerFinalizedMediaAssetId(finalized)` seam, and preempting literal
   `requireOwnerStep('finalize', ...)` or `requireOwnerStep("finalize", ...)`
   calls.
+- Round 5 binds that contract to the unique concrete first-finalize actor call
+  and its awaited result rather than a variable name; runtime code remains
+  unchanged.
 
 ## RED/GREEN evidence
 
@@ -147,6 +156,38 @@ git diff --check  # passed
 pnpm verify  # passed
 ```
 
+### Round 5 concrete first-finalize binding
+
+The AST contract now requires exactly one `atOwnerStep('finalize', ...)` and
+one distinct `atOwnerStep('replay', ...)` within `runOwnerHappyPath`. Each
+must directly invoke exactly one `finalizeMedia`; together those are the only
+two `finalizeMedia` calls in that function. The first-finalize call must use
+`scenario.owner` and the confirmed owner payload
+(`scenario.ownerSightingId`, `confirmedMediaId`, and `jpeg.sha256`). Its
+awaited binding—regardless of identifier name—must be consumed immediately by
+`ownerFinalizedMediaAssetId` before any literal finalize assertion can
+preempt it.
+
+TDD/mutation RED evidence: adding an earlier true finalize under a different
+identifier while retaining the later `finalized` decoy/seam failed the unique
+finalize-step requirement; changing the first call from `scenario.owner` to
+`scenario.stranger` failed its concrete argument assertion; and inserting
+`requireOwnerStep("finalize", ...)` before the seam failed the immediate-flow
+assertion. Each source mutation was restored before GREEN. No production
+runtime code changed.
+
+Round 5 GREEN focused verification:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test -- src/checks.test.ts src/check-diagnostic.test.ts src/execute.test.ts  # 47 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit  # 15 files, 161 passed
+pnpm test:pilot-gate-2b-ci  # 29 passed, 1 Windows symlink capability skip
+pnpm --filter @animalhelper/pilot-gate-2b typecheck  # passed
+pnpm typecheck  # 8 tasks passed
+git diff --check  # passed
+pnpm verify  # passed
+```
+
 ## Verification
 
 ```text
@@ -170,6 +211,7 @@ Round 1 corrective implementation HEAD: `58debc578d9c1b52ca6662d15323f25f9c8059d
 Round 2 coverage implementation HEAD: `15c3eff22aa6703b6d6d5fed9dbdbe67dbd7d941`.
 Round 3 producer-cap implementation HEAD: `b57ca42336912c6958e3b192c8e933814a49553b`.
 Round 4 AST call-site contract implementation HEAD: `c74eeb56c182561973265d7707f98168d21433d9`.
+Round 5 concrete first-finalize contract implementation HEAD: `02640ba678efa9c0e0216c82a0cccd3f5abb4e36`.
 
 Self-review confirmed that the first failed finalization `ActorResult` now
 reaches the typed failure before generic owner-step validation; a successful
@@ -183,6 +225,8 @@ The complete producer diagnostic, not only the child control, is bounded to
 while oversized base controls fail closed to the fixed producer record.
 The call-site contract is structural rather than textual, so a quoted
 preempting assertion or a decoy source string cannot satisfy it.
+It also binds the seam to the actual owner finalize actor call and inputs, so
+a differently named or extra finalization cannot hide behind a decoy binding.
 
 ## Concerns
 
