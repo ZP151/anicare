@@ -95,6 +95,46 @@ git diff --check
 pnpm verify
 ```
 
+## Round 2 adversarial-array copy hardening
+
+Recovery output is now copied and validated inside the existing guarded
+block using one bounded length read and indexed element reads into a new
+plain `string[]`. The original runtime array is not retained or used by
+later cleanup selector construction. Length, indexed getter, and value
+validation failures are all contained as provisional `recover_sighting`
+failures with an empty sanitized recovery list.
+
+RED was recorded with an array whose element getter returned one valid
+UUID for the initial validation read and a hostile `Symbol` on a later
+read:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts
+
+23 tests: 22 passed, 1 failed
+- copies a stateful sighting recovery array before cleanup selectors use it
+
+The observed failure was hosted_cleanup_failed with operationIds:
+[setup].
+```
+
+The green regression confirms the untrusted element is read once, all
+deletion stages and the durable absence proof run, and the final
+authoritative result succeeds.
+
+Round 2 verification completed successfully:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test:unit -- inspection.test.ts  # 23 passed
+pnpm --filter @animalhelper/pilot-gate-2b test:unit                       # 168 passed
+pnpm test:pilot-gate-2b-ci                                                # 29 passed, 1 Windows symlink skip
+pnpm test:hosted-gate-2b-workflow                                         # 2 passed
+pnpm test:root-contracts                                                  # 3 passed
+pnpm --filter @animalhelper/pilot-gate-2b typecheck
+git diff --check
+pnpm verify
+```
+
 ## Commits
 
 - `5ce28d5 fix(pilot): honor authoritative sighting absence proof`
