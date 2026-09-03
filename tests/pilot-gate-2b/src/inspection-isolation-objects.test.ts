@@ -10,7 +10,7 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({ storage: { from: () => ({ exists: boundary.exists }) } }),
 }));
 
-import { createHostedMaintenanceAdapter, hostedIsolationStepFromError } from './inspection.js';
+import { createHostedMaintenanceAdapter } from './inspection.js';
 import type { HostedGateEnvironment } from './environment.js';
 
 const environment: HostedGateEnvironment = {
@@ -32,12 +32,15 @@ const isolationInput = {
   ],
 };
 
-const absentObjectError = {
-  __isStorageError: true,
-  name: 'StorageUnknownError',
-  message: 'The resource was not found',
-  originalError: { status: 404 },
-};
+function storageUnknownError(status: number): Error & { __isStorageError: true; originalError: { status: number } } {
+  return Object.assign(new Error('Storage request failed'), {
+    __isStorageError: true as const,
+    name: 'StorageUnknownError',
+    originalError: { status },
+  });
+}
+
+const absentObjectError = storageUnknownError(404);
 
 beforeEach(() => {
   boundary.exists.mockReset();
@@ -62,16 +65,19 @@ describe('maintenance adapter isolation object inspection', () => {
     ['a present object paired with an error', { data: true, error: absentObjectError }],
     ['a malformed object result', { data: 'false', error: null }],
     ['a false result without the SDK absence error', { data: false, error: null }],
+    ['a false result paired with a generic error', { data: false, error: new Error('network failure') }],
+    ['a false result paired with a non-absence Storage error', {
+      data: false, error: storageUnknownError(500),
+    }],
   ])('fails closed for %s', async (_label, response) => {
-    boundary.exists.mockResolvedValueOnce(response);
+    boundary.exists
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce({ data: true, error: null });
     const adapter = createHostedMaintenanceAdapter(environment);
 
-    try {
-      await adapter.inspectIsolation(isolationInput);
-      throw new Error('expected isolation object failure');
-    } catch (error) {
-      expect(hostedIsolationStepFromError(error)).toBe('isolation_objects');
-    }
+    await expect(adapter.inspectIsolation(isolationInput)).rejects.toMatchObject({
+      isolationStep: 'isolation_objects',
+    });
 
     await adapter.close();
   });
@@ -80,12 +86,9 @@ describe('maintenance adapter isolation object inspection', () => {
     boundary.exists.mockRejectedValueOnce(new Error('network failure'));
     const adapter = createHostedMaintenanceAdapter(environment);
 
-    try {
-      await adapter.inspectIsolation(isolationInput);
-      throw new Error('expected isolation object failure');
-    } catch (error) {
-      expect(hostedIsolationStepFromError(error)).toBe('isolation_objects');
-    }
+    await expect(adapter.inspectIsolation(isolationInput)).rejects.toMatchObject({
+      isolationStep: 'isolation_objects',
+    });
 
     await adapter.close();
   });

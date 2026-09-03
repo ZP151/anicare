@@ -278,6 +278,16 @@ function alreadyAbsentAuthUser(error: unknown): boolean {
     (error as Record<string, unknown>).status === 404 && (error as Record<string, unknown>).code === 'user_not_found');
 }
 
+function isStorageObjectAbsence(data: unknown, error: unknown): boolean {
+  if (data !== false || !error || typeof error !== 'object' || Array.isArray(error)) return false;
+  const storageError = error as Record<string, unknown>;
+  if (storageError.__isStorageError !== true || storageError.name !== 'StorageUnknownError') return false;
+  const originalError = storageError.originalError;
+  if (!originalError || typeof originalError !== 'object' || Array.isArray(originalError)) return false;
+  const status = (originalError as Record<string, unknown>).status;
+  return status === 400 || status === 404;
+}
+
 export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): HostedMaintenanceAdapter & HostedIsolationAdapter {
   const sql = postgres(env.databaseUrl, {
     max: 1,
@@ -386,10 +396,9 @@ export function createHostedMaintenanceAdapter(env: HostedGateEnvironment): Host
         const results: boolean[] = [];
         for (const objectPath of input.observedObjectPaths) {
           const { data, error } = await admin.storage.from('media-staging').exists(objectPath);
-          if (typeof data !== 'boolean' || (data ? error !== null : error === null)) {
-            throw new Error('inspect_failed');
-          }
-          results.push(data);
+          if (data === true && error === null) results.push(true);
+          else if (isStorageObjectAbsence(data, error)) results.push(false);
+          else throw new Error('inspect_failed');
         }
         return results;
       });
