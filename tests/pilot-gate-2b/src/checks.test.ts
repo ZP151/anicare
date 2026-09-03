@@ -121,10 +121,13 @@ describe('hosted check coordinator', () => {
   it.each([
     [{ ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error' }, 'network'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 401, code: 'authentication_required' }, 'http_401_authentication_required'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 401, code: 'Bearer secret' }, 'http_other'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 403, code: 'media_not_found_or_forbidden' }, 'http_403_media_not_found_or_forbidden'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 403, code: 'media_transport_failed' }, 'http_403_unclassified'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 409, code: 'media_finalization_conflict' }, 'http_409_media_finalization_conflict'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 409, code: 'https://hostile.invalid' }, 'http_other'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 503, code: 'service_unavailable' }, 'http_503_service_unavailable'],
+    [{ ok: false, stage: 'finalize', kind: 'http', status: 503, code: 'unexpected_failure' }, 'http_other'],
     [{ ok: false, stage: 'finalize', kind: 'http', status: 500, code: 'media_transport_failed' }, 'http_other'],
     [{ ok: false, stage: 'finalize', kind: 'invalid_response', status: null, code: 'invalid_response' }, 'invalid_response'],
   ] as const)('maps the bounded first finalization result %# to %s', (result, outcome) => {
