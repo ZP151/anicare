@@ -21,7 +21,7 @@ function env(): HostedGateEnvironment {
     apiUrl: 'https://fhugdtpjbgiatqhvjioy.supabase.co', anonKey: 'sb_publishable_test',
     serviceRoleKey: 'sb_secret_test', databaseUrl: 'postgresql://unused',
     preciseLocationEncryptionKey: Buffer.alloc(32).toString('base64'), sourceCommit: 'a'.repeat(40),
-    workflowRunId: 1, workflowRunAttempt: 1, firstOwnerFinalizeTimeoutMs: 5_000,
+    workflowRunId: 1, workflowRunAttempt: 1, mode: 'correctness', finalizeTimeoutMs: 10_000,
   };
 }
 
@@ -102,14 +102,15 @@ function objectPropertyValue(node: Node | undefined, name: string): Expression |
   return undefined;
 }
 
-function assertFirstFinalizeArguments(call: CallExpression): void {
-  const [owner, payload, environment, timeoutMs] = call.arguments;
+function assertOwnerFinalizeArguments(call: CallExpression): void {
+  const [owner, payload, environment, options] = call.arguments;
   if (!isPropertyAccessNamed(owner, 'scenario', 'owner') ||
       !isPropertyAccessNamed(objectPropertyValue(payload, 'sightingId'), 'scenario', 'ownerSightingId') ||
       !isIdentifierNamed(objectPropertyValue(payload, 'mediaId'), 'confirmedMediaId') ||
       !isPropertyAccessNamed(objectPropertyValue(payload, 'sha256'), 'jpeg', 'sha256') ||
-      !isIdentifierNamed(environment, 'env') || !isPropertyAccessNamed(timeoutMs, 'env', 'firstOwnerFinalizeTimeoutMs')) {
-    throw new Error('first finalizeMedia call must use the owner scenario, confirmed media input, and the derived timeout');
+      !isIdentifierNamed(environment, 'env') || !isIdentifierNamed(objectPropertyValue(options, 'signal'), 'signal') ||
+      !isPropertyAccessNamed(objectPropertyValue(options, 'timeoutMs'), 'env', 'finalizeTimeoutMs')) {
+    throw new Error('owner finalizeMedia calls must use the owner scenario, confirmed media input, phase signal, and characterized timeout');
   }
 }
 
@@ -330,7 +331,7 @@ describe('hosted check coordinator', () => {
     }
   });
 
-  it('protects the uniquely identified first finalize call and preserves the separate replay call', async () => {
+  it('uses the same characterized timeout and phase signal for owner finalization and replay', async () => {
     const integrationPath = fileURLToPath(new URL('./hosted.integration.test.ts', import.meta.url));
     const api = new API({ cwd: fileURLToPath(new URL('.', import.meta.url)) });
     const snapshot = api.updateSnapshot({ openFiles: [integrationPath] });
@@ -350,13 +351,8 @@ describe('hosted check coordinator', () => {
           !allFinalizeCalls.some((call) => sameSyntaxNode(call, replayFinalizeCall))) {
         throw new Error('runOwnerHappyPath must contain only the distinct finalize and replay finalizeMedia calls');
       }
-      assertFirstFinalizeArguments(firstFinalizeCall);
-      const allHostedFinalizeCalls = callsNamed(file, 'finalizeMedia');
-      if (allHostedFinalizeCalls.filter((call) => call.arguments.length === 4).length !== 1 ||
-          !allHostedFinalizeCalls.some((call) => call.arguments.length === 4 && sameSyntaxNode(call, firstFinalizeCall)) ||
-          replayFinalizeCall.arguments.length !== 3) {
-        throw new Error('only the first owner finalizeMedia call may receive the derived timeout');
-      }
+      assertOwnerFinalizeArguments(firstFinalizeCall);
+      assertOwnerFinalizeArguments(replayFinalizeCall);
       const firstFinalizeBinding = awaitedCallBinding(statements, firstFinalizeStep);
       const replayBinding = awaitedCallBinding(statements, replayStep);
       if (firstFinalizeCall.pos >= replayFinalizeCall.pos || firstFinalizeBinding.index >= replayBinding.index) {

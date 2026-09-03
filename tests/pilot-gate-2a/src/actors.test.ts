@@ -411,6 +411,32 @@ describe('owner media actors', () => {
     });
   });
 
+  it('propagates caller cancellation through finalization before the local deadline', async () => {
+    const env = localEnvironment();
+    const owner = actor();
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = finalizeMedia(owner, finalizeInput(), env, {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    controller.abort();
+
+    await expect(result).resolves.toEqual({
+      ok: false, stage: 'finalize', kind: 'network', status: null, code: 'network_error',
+    });
+    expect(requestSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('times out a 6,000 ms finalization response under the ordinary 5,000 ms budget', async () => {
     vi.useFakeTimers();
     const env = localEnvironment();
@@ -444,7 +470,7 @@ describe('owner media actors', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = finalizeMedia(owner, finalizeInput(), env, 30_000);
+    const result = finalizeMedia(owner, finalizeInput(), env, { timeoutMs: 30_000 });
     await vi.advanceTimersByTimeAsync(6_000);
 
     await expect(result).resolves.toEqual({ ok: true, status: 200, mediaAssetId: UUID_ASSET });
@@ -465,7 +491,7 @@ describe('owner media actors', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = finalizeMedia(owner, finalizeInput(), env, 30_000);
+    const result = finalizeMedia(owner, finalizeInput(), env, { timeoutMs: 30_000 });
     await vi.advanceTimersByTimeAsync(30_000);
 
     await expect(result).resolves.toEqual({

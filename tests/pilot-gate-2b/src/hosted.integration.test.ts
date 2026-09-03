@@ -52,9 +52,14 @@ function failedResult(result: ActorResult): FailureClass | null {
   return result.ok ? null : { stage: result.stage, status: result.status, code: result.code };
 }
 
-async function reserveFailure(actor: HostedScenario['owner'], input: ReserveInput, env: HostedGateEnvironment) {
+async function reserveFailure(
+  actor: HostedScenario['owner'],
+  input: ReserveInput,
+  env: HostedGateEnvironment,
+  signal: AbortSignal,
+) {
   try {
-    await reserveMedia(actor, input, env);
+    await reserveMedia(actor, input, env, { signal });
     return null;
   } catch (error) {
     return failureClass(error);
@@ -225,16 +230,17 @@ describe('real Hosted Gate 2B', () => {
               scenario.owner,
               reservationInput(scenario.ownerSightingId, confirmedMediaId, jpeg.sha256, jpeg.bytes.byteLength),
               env,
+              { signal },
             ));
             partial.createdJobIds = [ownerReservation.jobId];
             partial.createdObjectPaths = [ownerReservation.path];
             await atOwnerStep('ledger_reserve', () => writeCleanupLedger(ledgerPath, partial));
             requireOwnerStep('upload', (await atOwnerStep(
-              'upload', () => putSignedMedia(ownerReservation!, jpeg.bytes),
+              'upload', () => putSignedMedia(ownerReservation!, jpeg.bytes, { signal }),
             )).ok);
             const finalized = await atOwnerStep('finalize', () => finalizeMedia(scenario.owner, {
               sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
-            }, env, env.firstOwnerFinalizeTimeoutMs));
+            }, env, { signal: signal, timeoutMs: env.finalizeTimeoutMs }));
             const confirmedMediaAssetId = ownerFinalizedMediaAssetId(finalized);
             mediaAssetId = confirmedMediaAssetId;
             partial.createdAssetIds = [confirmedMediaAssetId];
@@ -251,7 +257,7 @@ describe('real Hosted Gate 2B', () => {
               ownerBaseline.stagingObjectExists);
             const repeated = await atOwnerStep('replay', () => finalizeMedia(scenario.owner, {
               sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
-            }, env));
+            }, env, { signal: signal, timeoutMs: env.finalizeTimeoutMs }));
             requireOwnerStep('replay', repeated.ok && repeated.mediaAssetId === confirmedMediaAssetId);
             requireOwnerStep('verify', await atOwnerStep('verify', unchanged));
             return true;
@@ -271,6 +277,7 @@ describe('real Hosted Gate 2B', () => {
               scenario.stranger,
               reservationInput(scenario.strangerSightingId, mediaId!, jpeg.sha256, jpeg.bytes.byteLength),
               env,
+              { signal },
             ));
             partial.createdJobIds = [...(tracked.createdJobIds ?? []), strangerReservation.jobId];
             partial.createdObjectPaths = [...(tracked.createdObjectPaths ?? []), strangerReservation.path];
@@ -305,7 +312,7 @@ describe('real Hosted Gate 2B', () => {
               scenario.ownerSightingId, confirmedMediaId, jpeg.sha256, jpeg.bytes.byteLength,
             );
             const reserveActual = await withoutIsolationMutation(
-              () => reserveFailure(scenario.stranger, strangerAgainstOwner, env),
+              () => reserveFailure(scenario.stranger, strangerAgainstOwner, env, signal),
             );
             if (!reserveActual.unchanged) return false;
             const reserveProbeMediaId = randomUUID();
@@ -314,13 +321,14 @@ describe('real Hosted Gate 2B', () => {
             )).createdMediaIds];
             const reserveUnknown = await withoutIsolationMutation(() => reserveFailure(scenario.stranger, {
               ...strangerAgainstOwner, sightingId: randomUUID(), mediaId: reserveProbeMediaId,
-            }, env), [reserveProbeMediaId]);
+            }, env, signal), [reserveProbeMediaId]);
             if (!reserveUnknown.unchanged || !sameFailure(reserveActual.result, reserveUnknown.result)) return false;
 
             const finalizeActual = await withoutIsolationMutation(async () => failedResult(await finalizeMedia(
               scenario.stranger,
               { sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256 },
               env,
+              { signal, timeoutMs: env.finalizeTimeoutMs },
             )));
             if (!finalizeActual.unchanged) return false;
             const finalizeProbeMediaId = randomUUID();
@@ -331,15 +339,16 @@ describe('real Hosted Gate 2B', () => {
               scenario.stranger,
               { sightingId: randomUUID(), mediaId: finalizeProbeMediaId, sha256: jpeg.sha256 },
               env,
+              { signal, timeoutMs: env.finalizeTimeoutMs },
             )), [finalizeProbeMediaId]);
             if (!finalizeUnknown.unchanged || !sameFailure(finalizeActual.result, finalizeUnknown.result)) return false;
 
             const deleteActual = await withoutIsolationMutation(
-              async () => failedResult(await deleteMedia(scenario.stranger, confirmedMediaAssetId, env)),
+              async () => failedResult(await deleteMedia(scenario.stranger, confirmedMediaAssetId, env, { signal })),
             );
             if (!deleteActual.unchanged) return false;
             const deleteUnknown = await withoutIsolationMutation(
-              async () => failedResult(await deleteMedia(scenario.stranger, randomUUID(), env)),
+              async () => failedResult(await deleteMedia(scenario.stranger, randomUUID(), env, { signal })),
             );
             return deleteUnknown.unchanged && sameFailure(deleteActual.result, deleteUnknown.result) && await unchanged();
           },

@@ -16,7 +16,8 @@ function hostedEnvironment(): NodeJS.ProcessEnv {
     GITHUB_SHA: 'a'.repeat(40),
     GITHUB_RUN_ID: '123456789',
     GITHUB_RUN_ATTEMPT: '1',
-    PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: '5000',
+    PILOT_GATE_2B_MODE: 'correctness',
+    PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '10000',
   };
 }
 
@@ -27,7 +28,8 @@ describe('hosted Gate 2B environment', () => {
       sourceCommit: 'a'.repeat(40),
       workflowRunId: 123456789,
       workflowRunAttempt: 1,
-      firstOwnerFinalizeTimeoutMs: 5_000,
+      mode: 'correctness',
+      finalizeTimeoutMs: 10_000,
     });
     expect(() => readHostedGateEnvironment({
       ...hostedEnvironment(),
@@ -35,11 +37,19 @@ describe('hosted Gate 2B environment', () => {
     })).toThrow('hosted_environment_invalid');
   });
 
-  it('accepts only the producer-derived canonical first-owner finalize budgets', () => {
+  it.each(['10000', '12000', '15000'])('accepts correctness timeout %s', (timeout) => {
     expect(readHostedGateEnvironment({
       ...hostedEnvironment(),
-      PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: '30000',
-    }).firstOwnerFinalizeTimeoutMs).toBe(30_000);
+      PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: timeout,
+    }).finalizeTimeoutMs).toBe(Number(timeout));
+  });
+
+  it('accepts the 30-second ceiling only for characterization', () => {
+    expect(readHostedGateEnvironment({
+      ...hostedEnvironment(),
+      PILOT_GATE_2B_MODE: 'characterize',
+      PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '30000',
+    })).toMatchObject({ mode: 'characterize', finalizeTimeoutMs: 30_000 });
   });
 
   it.each([
@@ -51,7 +61,8 @@ describe('hosted Gate 2B environment', () => {
     'GITHUB_SHA',
     'GITHUB_RUN_ID',
     'GITHUB_RUN_ATTEMPT',
-    'PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS',
+    'PILOT_GATE_2B_MODE',
+    'PILOT_GATE_2B_FINALIZE_TIMEOUT_MS',
   ])('rejects missing or empty %s', (name) => {
     const missing = hostedEnvironment();
     delete missing[name];
@@ -134,11 +145,27 @@ describe('hosted Gate 2B environment', () => {
       .toThrow('hosted_environment_invalid');
   });
 
-  it.each(['5000 ', '030000', '30000.0', 'true', '6000', '15000'])
-    ('rejects a noncanonical first-owner finalize timeout %s', (value) => {
+  it.each(['5000', '9999', '10001', '030000', '30000.0', 'true'])
+    ('rejects a non-production correctness timeout %s', (value) => {
       expect(() => readHostedGateEnvironment({
         ...hostedEnvironment(),
-        PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS: value,
+        PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: value,
       })).toThrow('hosted_environment_invalid');
     });
+
+  it.each(['10000', '12000', '15000'])
+    ('rejects correctness timeout %s in characterization mode', (value) => {
+      expect(() => readHostedGateEnvironment({
+        ...hostedEnvironment(),
+        PILOT_GATE_2B_MODE: 'characterize',
+        PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: value,
+      })).toThrow('hosted_environment_invalid');
+    });
+
+  it('rejects the characterization ceiling in correctness mode', () => {
+    expect(() => readHostedGateEnvironment({
+      ...hostedEnvironment(),
+      PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '30000',
+    })).toThrow('hosted_environment_invalid');
+  });
 });

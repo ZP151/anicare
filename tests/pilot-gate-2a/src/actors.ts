@@ -13,7 +13,6 @@ import type { SyntheticActor } from './fixtures.js';
 import { fetchWithTimeout } from './network.js';
 
 const REQUEST_TIMEOUT_MS = 5_000;
-const RELAXED_FIRST_OWNER_FINALIZE_TIMEOUT_MS = 30_000;
 const MAX_REQUEST_BYTES = 8 * 1024;
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
@@ -31,6 +30,11 @@ const EDGE_ERROR_CODES = new Set([
 ]);
 
 export type MediaActorEnvironment = Readonly<{ apiUrl: string }>;
+
+export type ActorRequestOptions = Readonly<{
+  signal?: AbortSignal;
+  timeoutMs?: 5_000 | 10_000 | 12_000 | 15_000 | 30_000;
+}>;
 
 type DetectorVersions = Readonly<{
   cats: 'unavailable';
@@ -156,7 +160,7 @@ async function actorPost(
   endpoint: string,
   actor: SyntheticActor,
   serializedBody: string,
-  timeoutMs: number = REQUEST_TIMEOUT_MS,
+  options: ActorRequestOptions = {},
 ): Promise<Response | ActorFailure> {
   if (!validActor(actor)) return failure(stage, 'invalid_response', null, 'invalid_response');
   const timeoutResult = Symbol();
@@ -165,12 +169,13 @@ async function actorPost(
       method: 'POST',
       redirect: 'error',
       cache: 'no-store',
+      ...(options.signal ? { signal: options.signal } : {}),
       headers: {
         Authorization: `Bearer ${actor.accessToken}`,
         'Content-Type': 'application/json',
       },
       body: serializedBody,
-    }, timeoutMs, globalThis.fetch, timeoutResult);
+    }, options.timeoutMs ?? REQUEST_TIMEOUT_MS, globalThis.fetch, timeoutResult);
   } catch (error) {
     return failure(stage, 'network', null, error === timeoutResult ? 'request_timeout' : 'network_error');
   }
@@ -184,11 +189,12 @@ export async function reserveMedia(
   actor: SyntheticActor,
   input: ReserveInput,
   env: MediaActorEnvironment,
+  options: ActorRequestOptions = {},
 ): Promise<Reservation> {
   const serializedBody = reservationRequest(input);
   if (serializedBody === null) throw failure('reserve', 'invalid_response', null, 'invalid_response');
   const response = await actorPost(
-    'reserve', edgeEndpointUrl(env.apiUrl, 'reserveMediaUpload'), actor, serializedBody,
+    'reserve', edgeEndpointUrl(env.apiUrl, 'reserveMediaUpload'), actor, serializedBody, options,
   );
   if (!(response instanceof Response)) throw response;
   if (!response.ok) throw await httpFailure('reserve', response);
@@ -232,7 +238,11 @@ function canonicalUploadUrl(reservation: Reservation): string | null {
   }
 }
 
-export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array): Promise<ActorResult> {
+export async function putSignedMedia(
+  reservation: Reservation,
+  bytes: Uint8Array,
+  options: ActorRequestOptions = {},
+): Promise<ActorResult> {
   const uploadUrl = canonicalUploadUrl(reservation);
   if (uploadUrl === null || bytes.byteLength < 1 || bytes.byteLength > MAX_MEDIA_BYTES ||
       bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
@@ -244,13 +254,14 @@ export async function putSignedMedia(reservation: Reservation, bytes: Uint8Array
       method: 'PUT',
       redirect: 'error',
       cache: 'no-store',
+      ...(options.signal ? { signal: options.signal } : {}),
       headers: {
         'Content-Type': 'image/jpeg',
         'x-upsert': 'false',
         'Cache-Control': 'no-cache',
       },
       body: bytes.buffer as ArrayBuffer,
-    }, REQUEST_TIMEOUT_MS);
+    }, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   } catch (error) {
     return { ok: false, ...failure('upload', 'network', null, 'network_error') };
   }
@@ -277,14 +288,14 @@ export async function finalizeMedia(
   actor: SyntheticActor,
   input: FinalizeInput,
   env: MediaActorEnvironment,
-  timeoutMs: typeof REQUEST_TIMEOUT_MS | typeof RELAXED_FIRST_OWNER_FINALIZE_TIMEOUT_MS = REQUEST_TIMEOUT_MS,
+  options: ActorRequestOptions = {},
 ): Promise<ActorResult> {
   const serializedBody = finalizationRequest(input);
   if (serializedBody === null) {
     return { ok: false, ...failure('finalize', 'invalid_response', null, 'invalid_response') };
   }
   const response = await actorPost(
-    'finalize', edgeEndpointUrl(env.apiUrl, 'finalizeMediaUpload'), actor, serializedBody, timeoutMs,
+    'finalize', edgeEndpointUrl(env.apiUrl, 'finalizeMediaUpload'), actor, serializedBody, options,
   );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('finalize', response) };
@@ -301,13 +312,14 @@ export async function deleteMedia(
   actor: SyntheticActor,
   mediaAssetId: string,
   env: MediaActorEnvironment,
+  options: ActorRequestOptions = {},
 ): Promise<ActorResult> {
   const serializedBody = deletionRequest(mediaAssetId);
   if (serializedBody === null) {
     return { ok: false, ...failure('delete', 'invalid_response', null, 'invalid_response') };
   }
   const response = await actorPost(
-    'delete', edgeEndpointUrl(env.apiUrl, 'deleteMedia'), actor, serializedBody,
+    'delete', edgeEndpointUrl(env.apiUrl, 'deleteMedia'), actor, serializedBody, options,
   );
   if (!(response instanceof Response)) return { ok: false, ...response };
   if (!response.ok) return { ok: false, ...await httpFailure('delete', response) };

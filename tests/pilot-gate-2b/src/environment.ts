@@ -1,6 +1,8 @@
 export const HOSTED_PROJECT_REF = 'fhugdtpjbgiatqhvjioy' as const;
 export const HOSTED_PROJECT_ORIGIN = 'https://fhugdtpjbgiatqhvjioy.supabase.co' as const;
 export const HOSTED_POOLER_HOST = 'aws-0-ap-southeast-1.pooler.supabase.com' as const;
+export type HostedGateMode = 'correctness' | 'characterize';
+export type HostedFinalizeTimeoutMs = 10_000 | 12_000 | 15_000 | 30_000;
 
 export type HostedGateEnvironment = Readonly<{
   apiUrl: typeof HOSTED_PROJECT_ORIGIN;
@@ -11,7 +13,8 @@ export type HostedGateEnvironment = Readonly<{
   sourceCommit: string;
   workflowRunId: number;
   workflowRunAttempt: number;
-  firstOwnerFinalizeTimeoutMs: 5_000 | 30_000;
+  mode: HostedGateMode;
+  finalizeTimeoutMs: HostedFinalizeTimeoutMs;
 }>;
 
 const INVALID = 'hosted_environment_invalid';
@@ -90,9 +93,16 @@ function positiveInteger(value: string): number {
   return parsed;
 }
 
-function firstOwnerFinalizeTimeoutMs(value: string): 5_000 | 30_000 {
-  if (value === '5000') return 5_000;
-  if (value === '30000') return 30_000;
+function mode(value: string): HostedGateMode {
+  if (value === 'correctness' || value === 'characterize') return value;
+  return invalid();
+}
+
+function finalizeTimeoutMs(value: string, gateMode: HostedGateMode): HostedFinalizeTimeoutMs {
+  if (gateMode === 'characterize') return value === '30000' ? 30_000 : invalid();
+  if (value === '10000') return 10_000;
+  if (value === '12000') return 12_000;
+  if (value === '15000') return 15_000;
   return invalid();
 }
 
@@ -105,6 +115,7 @@ export function readHostedGateEnvironment(source: NodeJS.ProcessEnv): HostedGate
 
   const sourceCommit = required(source, 'GITHUB_SHA');
   if (!COMMIT.test(sourceCommit)) return invalid();
+  const gateMode = mode(required(source, 'PILOT_GATE_2B_MODE'));
 
   return {
     apiUrl,
@@ -115,8 +126,7 @@ export function readHostedGateEnvironment(source: NodeJS.ProcessEnv): HostedGate
     sourceCommit,
     workflowRunId: positiveInteger(required(source, 'GITHUB_RUN_ID')),
     workflowRunAttempt: positiveInteger(required(source, 'GITHUB_RUN_ATTEMPT')),
-    firstOwnerFinalizeTimeoutMs: firstOwnerFinalizeTimeoutMs(
-      required(source, 'PILOT_GATE_2B_FIRST_OWNER_FINALIZE_TIMEOUT_MS'),
-    ),
+    mode: gateMode,
+    finalizeTimeoutMs: finalizeTimeoutMs(required(source, 'PILOT_GATE_2B_FINALIZE_TIMEOUT_MS'), gateMode),
   };
 }
