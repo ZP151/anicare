@@ -91,7 +91,13 @@ function control(value: unknown): HostedGateControl {
 export async function writeHostedCheckDiagnostic(file: string, value: unknown): Promise<void> {
   const target = targetPath(file);
   const record = control(value);
-  const source = `${JSON.stringify(record)}\n`;
+  let canonical = record;
+  let source = `${JSON.stringify(canonical)}\n`;
+  if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_CONTROL_BYTES && canonical.ownerFinalizeOutcome !== undefined) {
+    const { ownerFinalizeOutcome: _outcome, ...withoutOutcome } = canonical;
+    canonical = withoutOutcome;
+    source = `${JSON.stringify(canonical)}\n`;
+  }
   if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_CONTROL_BYTES) return invalid();
   try {
     await writeFile(target, source, { encoding: 'utf8', mode: 0o600, flag: 'wx' });

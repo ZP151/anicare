@@ -76,7 +76,11 @@ export function hostedOwnerStepFromError(error: unknown): HostedOwnerHappyPathSt
 export function ownerFinalizeOutcomeFromActorResult(result: ActorResult | unknown): HostedOwnerFinalizeOutcome | undefined {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return undefined;
   const candidate = result as Record<string, unknown>;
-  if (candidate.ok === true) return undefined;
+  if (candidate.ok === true) {
+    return typeof candidate.mediaAssetId === 'string' && candidate.mediaAssetId.length > 0
+      ? undefined
+      : 'invalid_response';
+  }
   if (candidate.ok !== false || candidate.stage !== 'finalize' || typeof candidate.kind !== 'string' ||
       typeof candidate.code !== 'string') return undefined;
   if (candidate.kind === 'network') {
@@ -98,6 +102,15 @@ export function ownerFinalizeOutcomeFromActorResult(result: ActorResult | unknow
   }
   if (candidate.status === 503 && candidate.code === 'service_unavailable') return 'http_503_service_unavailable';
   return 'http_other';
+}
+
+export function ownerFinalizedMediaAssetId(result: ActorResult): string {
+  if (result.ok && typeof result.mediaAssetId === 'string' && result.mediaAssetId.length > 0) {
+    return result.mediaAssetId;
+  }
+  throw new HostedCheckFailure(
+    'owner_happy_path', undefined, 'finalize', ownerFinalizeOutcomeFromActorResult(result),
+  );
 }
 
 export function hostedOwnerFinalizeOutcomeFromError(error: unknown): HostedOwnerFinalizeOutcome | undefined {

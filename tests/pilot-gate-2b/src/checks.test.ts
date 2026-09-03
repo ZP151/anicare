@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   HostedCheckFailure, hostedCheckIdFromError, hostedMediaStepFromError, hostedOwnerFinalizeOutcomeFromError,
-  hostedOwnerStepFromError, ownerFinalizeOutcomeFromActorResult, runHostedChecks,
+  hostedOwnerStepFromError, ownerFinalizeOutcomeFromActorResult, ownerFinalizedMediaAssetId, runHostedChecks,
   type HostedCheckAdapter,
 } from './checks.js';
 import type { ActorResult } from '../../pilot-gate-2a/src/actors.js';
@@ -131,11 +131,33 @@ describe('hosted check coordinator', () => {
     expect(ownerFinalizeOutcomeFromActorResult(result as ActorResult)).toBe(outcome);
   });
 
-  it('suppresses malformed or successful finalization results without exposing their details', () => {
+  it('suppresses successful finalization results with an asset and malformed inputs without exposing their details', () => {
     expect(ownerFinalizeOutcomeFromActorResult({ ok: true, status: 200, mediaAssetId: 'asset' })).toBeUndefined();
     expect(ownerFinalizeOutcomeFromActorResult({
       ok: false, stage: 'finalize', kind: 'http', status: 'Bearer secret', code: 'https://hostile.invalid',
     } as never)).toBeUndefined();
+  });
+
+  it('carries a failed first owner finalization ActorResult into its typed diagnostic failure', () => {
+    try {
+      ownerFinalizedMediaAssetId({
+        ok: false, stage: 'finalize', kind: 'http', status: 409, code: 'media_finalization_conflict',
+      });
+      throw new Error('expected owner finalize failure');
+    } catch (error) {
+      expect(hostedOwnerStepFromError(error)).toBe('finalize');
+      expect(hostedOwnerFinalizeOutcomeFromError(error)).toBe('http_409_media_finalization_conflict');
+    }
+  });
+
+  it('classifies a successful first finalization without a media asset as invalid_response', () => {
+    try {
+      ownerFinalizedMediaAssetId({ ok: true, status: 200 });
+      throw new Error('expected owner finalize failure');
+    } catch (error) {
+      expect(hostedOwnerStepFromError(error)).toBe('finalize');
+      expect(hostedOwnerFinalizeOutcomeFromError(error)).toBe('invalid_response');
+    }
   });
 
   it('propagates a fixed finalization outcome only from a typed owner-finalize failure', async () => {

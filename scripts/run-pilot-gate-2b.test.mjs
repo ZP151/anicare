@@ -293,6 +293,16 @@ test('reads only a canonical regular hosted-check diagnostic inside the owned ru
   assert.deepEqual(await readHostedGateControl({ temporaryRoot: root, runId: '123', runAttempt: '1' }), finalizeControl);
   assert.equal(buildProducerFailureDiagnostic('hosted_checks', finalizeControl),
     '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","ownerFinalizeOutcome":"http_409_media_finalization_conflict","cleanup":["recover_sighting"]}\n');
+  const maximalFinalizeControl = {
+    gateStage: 'cleanup', check: 'owner_happy_path', ownerStep: 'finalize',
+    ownerFinalizeOutcome: 'http_403_media_not_found_or_forbidden', cleanup: [
+      'setup', 'recover_auth', 'recover_sighting', 'storage_remove', 'jobs_delete', 'assets_delete',
+      'sightings_delete', 'profiles_delete', 'auth_delete', 'absence_proof', 'connection_close',
+    ],
+  };
+  assert.ok(Buffer.byteLength(`${JSON.stringify(maximalFinalizeControl)}\n`) > 320);
+  assert.equal(buildProducerFailureDiagnostic('hosted_checks', maximalFinalizeControl),
+    '{"stage":"hosted_checks","code":"hosted_gate_failed","gateStage":"cleanup","check":"owner_happy_path","ownerStep":"finalize","cleanup":["setup","recover_auth","recover_sighting","storage_remove","jobs_delete","assets_delete","sightings_delete","profiles_delete","auth_delete","absence_proof","connection_close"]}\n');
   for (const invalidOutcomeControl of [
     { gateStage: 'checks', check: 'owner_happy_path', ownerStep: 'replay', ownerFinalizeOutcome: 'network' },
     { gateStage: 'checks', check: 'media_staging', mediaStep: 'privacy_list', ownerFinalizeOutcome: 'network' },

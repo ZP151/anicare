@@ -90,6 +90,13 @@ function normalizeHostedGateControl(value) {
     }
     control.cleanup = ordered;
   }
+  let source = `${JSON.stringify(control)}\n`;
+  if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES &&
+      control.ownerFinalizeOutcome !== undefined) {
+    delete control.ownerFinalizeOutcome;
+    source = `${JSON.stringify(control)}\n`;
+  }
+  if (Buffer.byteLength(source, 'utf8') > MAX_CANONICAL_HOSTED_GATE_CONTROL_BYTES) return undefined;
   return control;
 }
 

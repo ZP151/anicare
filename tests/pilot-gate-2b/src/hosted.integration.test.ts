@@ -9,7 +9,7 @@ import {
 import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.js';
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
 import {
-  HostedCheckFailure, ownerFinalizeOutcomeFromActorResult, runHostedChecks, type HostedCheckAdapter, type HostedMediaStagingStep,
+  HostedCheckFailure, ownerFinalizedMediaAssetId, runHostedChecks, type HostedCheckAdapter, type HostedMediaStagingStep,
   type HostedOwnerHappyPathStep,
 } from './checks.js';
 import { writeHostedCheckDiagnostic } from './check-diagnostic.js';
@@ -235,11 +235,7 @@ describe('real Hosted Gate 2B', () => {
             const finalized = await atOwnerStep('finalize', () => finalizeMedia(scenario.owner, {
               sightingId: scenario.ownerSightingId, mediaId: confirmedMediaId, sha256: jpeg.sha256,
             }, env));
-            requireOwnerStep('finalize', finalized.ok && Boolean(finalized.mediaAssetId));
-            if (!finalized.ok || !finalized.mediaAssetId) throw new HostedCheckFailure(
-              'owner_happy_path', undefined, 'finalize', ownerFinalizeOutcomeFromActorResult(finalized),
-            );
-            const confirmedMediaAssetId = finalized.mediaAssetId;
+            const confirmedMediaAssetId = ownerFinalizedMediaAssetId(finalized);
             mediaAssetId = confirmedMediaAssetId;
             partial.createdAssetIds = [confirmedMediaAssetId];
             await atOwnerStep('ledger_asset', () => writeCleanupLedger(ledgerPath, partial));
