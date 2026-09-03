@@ -119,7 +119,7 @@ describe('owner media actors', () => {
       usableUntil: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
       origin: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
     };
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       Key: `media-staging/jobs/${UUID_JOB}.jpg`,
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
