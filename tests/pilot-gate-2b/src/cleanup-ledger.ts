@@ -69,6 +69,23 @@ export async function writeCleanupLedger(file: string, value: unknown): Promise<
   }
 }
 
+export async function persistCleanupMediaId(
+  file: string,
+  value: unknown,
+  mediaId: string,
+): Promise<CleanupLedger> {
+  const tracked = normalize(value);
+  if (!UUID.test(mediaId) || tracked.createdMediaIds.includes(mediaId) || tracked.createdMediaIds.length >= 8) {
+    return invalid();
+  }
+  const updated = normalize({
+    ...tracked,
+    createdMediaIds: [...tracked.createdMediaIds, mediaId],
+  });
+  await writeCleanupLedger(file, updated);
+  return updated;
+}
+
 export async function readCleanupLedger(file: string): Promise<CleanupLedger> {
   const target = validatePath(file);
   const info = await lstat(target).catch(() => invalid());

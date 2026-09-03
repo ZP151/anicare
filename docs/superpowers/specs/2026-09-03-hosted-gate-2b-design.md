@@ -144,7 +144,10 @@ Every fixture carries a random run marker stored only in fields already intended
   known Storage paths. Database rows, soft-delete state, and object existence
   must remain byte-for-byte equivalent. Storage read denials must also match on
   both HTTP status and an allowlisted normalized error code; unknown, malformed,
-  redirected, successful, or oversized responses fail closed.
+  redirected, successful, or oversized responses fail closed. Every random
+  negative-probe media ID is atomically appended to the durable cleanup ledger
+  before its request, so a reject-with-side-effect regression remains exactly
+  removable and covered by the final absence proof.
 
 All five readiness values are `passed` only after cleanup also succeeds. Otherwise no passing evidence is emitted.
 

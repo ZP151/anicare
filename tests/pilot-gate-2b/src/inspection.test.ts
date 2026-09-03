@@ -190,6 +190,28 @@ describe('hosted inspection and cleanup', () => {
     ]);
   });
 
+  it('passes every durable denial-probe media ID to row cleanup and absence proof', async () => {
+    const probe = UUIDS[7]!;
+    const observed: string[][] = [];
+    const adapter: HostedMaintenanceAdapter = {
+      inspect: vi.fn(), recoverAuthUserIds: vi.fn(async () => []), recoverSightingIds: vi.fn(async () => []),
+      removeObjects: vi.fn(),
+      deleteRows: vi.fn(async (table, _ids, mediaIds = []) => {
+        if (table === 'media_upload_jobs' || table === 'media_assets') observed.push([...mediaIds]);
+      }),
+      deleteAuthUsers: vi.fn(),
+      assertAbsent: vi.fn(async (tracked) => {
+        observed.push([...tracked.createdMediaIds]);
+        return tracked.createdMediaIds.includes(probe);
+      }),
+      close: vi.fn(),
+    };
+    await cleanupHostedScenario(env(), { ...scenario(), createdMediaIds: [UUIDS[2]!, probe] }, adapter);
+    expect(observed).toEqual([
+      [UUIDS[2]!, probe], [UUIDS[2]!, probe], [UUIDS[2]!, probe],
+    ]);
+  });
+
   it.each([
     { createdUserIds: ['not-a-uuid'] },
     { createdObjectPaths: ['*'] },

@@ -9,7 +9,7 @@ import {
 import { deterministicJpegFixture } from '../../pilot-gate-2a/src/jpeg-fixture.js';
 import { fetchWithTimeout } from '../../pilot-gate-2a/src/network.js';
 import { runHostedChecks, type HostedCheckAdapter } from './checks.js';
-import { removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
+import { persistCleanupMediaId, removeCleanupLedger, writeCleanupLedger } from './cleanup-ledger.js';
 import { readHostedGateEnvironment, type HostedGateEnvironment } from './environment.js';
 import { executeHostedGate, type MutableHostedScenario } from './execute.js';
 import { createHostedScenario, type HostedFixtureProgress, type HostedScenario } from './fixtures.js';
@@ -251,6 +251,9 @@ describe('real Hosted Gate 2B', () => {
             );
             if (!reserveActual.unchanged) return false;
             const reserveProbeMediaId = randomUUID();
+            partial.createdMediaIds = [...(await persistCleanupMediaId(
+              ledgerPath, partial, reserveProbeMediaId,
+            )).createdMediaIds];
             const reserveUnknown = await withoutIsolationMutation(() => reserveFailure(scenario.stranger, {
               ...strangerAgainstOwner, sightingId: randomUUID(), mediaId: reserveProbeMediaId,
             }, env), [reserveProbeMediaId]);
@@ -263,6 +266,9 @@ describe('real Hosted Gate 2B', () => {
             )));
             if (!finalizeActual.unchanged) return false;
             const finalizeProbeMediaId = randomUUID();
+            partial.createdMediaIds = [...(await persistCleanupMediaId(
+              ledgerPath, partial, finalizeProbeMediaId,
+            )).createdMediaIds];
             const finalizeUnknown = await withoutIsolationMutation(async () => failedResult(await finalizeMedia(
               scenario.stranger,
               { sightingId: randomUUID(), mediaId: finalizeProbeMediaId, sha256: jpeg.sha256 },
