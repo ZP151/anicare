@@ -110,6 +110,29 @@ afterEach(() => {
 });
 
 describe('owner media actors', () => {
+  it('accepts a signed upload only from the fixed hosted project origin', async () => {
+    const hosted: Reservation = {
+      jobId: UUID_JOB,
+      mediaId: UUID_MEDIA,
+      path: `jobs/${UUID_JOB}.jpg`,
+      token: 'signed-hosted-token',
+      usableUntil: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+      origin: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      Key: `media-staging/jobs/${UUID_JOB}.jpg`,
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(putSignedMedia(hosted, new Uint8Array([0xff, 0xd8, 0xff, 0xd9])))
+      .resolves.toEqual({ ok: true, status: 200 });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/^https:\/\/fhugdtpjbgiatqhvjioy\.supabase\.co\//);
+
+    await expect(putSignedMedia({ ...hosted, origin: 'https://attacker.example' }, new Uint8Array([1])))
+      .resolves.toMatchObject({ ok: false, stage: 'upload', code: 'invalid_response' });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('trusts the validated Supabase API origin when the unrelated CORS origin differs', async () => {
     const env = localEnvironment();
     const owner = actor();

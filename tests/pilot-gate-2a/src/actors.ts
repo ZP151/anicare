@@ -18,6 +18,7 @@ const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const UPLOAD_CREDENTIAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACTOR_TOKEN = /^\S{1,8192}$/;
+const HOSTED_MEDIA_ORIGIN = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 const EDGE_ERROR_CODES = new Set([
   'authentication_required',
   'invalid_request',
@@ -219,7 +220,8 @@ function canonicalUploadUrl(reservation: Reservation): string | null {
   try {
     const origin = parseTrustedSupabaseOrigin(reservation.origin, [reservation.origin]);
     const parsedOrigin = new URL(origin);
-    if (parsedOrigin.protocol !== 'http:' || parsedOrigin.hostname !== '127.0.0.1') return null;
+    const localOrigin = parsedOrigin.protocol === 'http:' && parsedOrigin.hostname === '127.0.0.1';
+    if (!localOrigin && origin !== HOSTED_MEDIA_ORIGIN) return null;
     return `${origin}/storage/v1/object/upload/sign/media-staging/${reservation.path}` +
       `?token=${encodeURIComponent(reservation.token)}`;
   } catch {

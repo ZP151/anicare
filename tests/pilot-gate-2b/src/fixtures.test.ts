@@ -1,0 +1,87 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { createHostedScenario, type HostedFixtureAdapter } from './fixtures.js';
+import type { HostedGateEnvironment } from './environment.js';
+
+const IDS = [
+  '11111111-1111-4111-8111-111111111111',
+  '22222222-2222-4222-8222-222222222222',
+  '33333333-3333-4333-8333-333333333333',
+  '44444444-4444-4444-8444-444444444444',
+] as const;
+
+function env(): HostedGateEnvironment {
+  return {
+    apiUrl: 'https://fhugdtpjbgiatqhvjioy.supabase.co',
+    anonKey: 'sb_publishable_test', serviceRoleKey: 'sb_secret_test',
+    databaseUrl: 'postgresql://unused', preciseLocationEncryptionKey: Buffer.alloc(32).toString('base64'),
+    sourceCommit: 'a'.repeat(40), workflowRunId: 1, workflowRunAttempt: 1,
+  };
+}
+
+function adapter(failAt?: string) {
+  let authIndex = 0;
+  let sightingIndex = 2;
+  const calls: string[] = [];
+  const implementation: HostedFixtureAdapter = {
+    createAuthUser: vi.fn(async (input) => {
+      calls.push(`auth:${input.role}:${input.email.endsWith('@example.invalid')}:${input.password.length >= 32}`);
+      if (failAt === `auth:${input.role}`) throw new Error('secret detail');
+      return IDS[authIndex++]!;
+    }),
+    signIn: vi.fn(async (input) => {
+      calls.push(`sign-in:${input.role}`);
+      return { id: IDS[input.role === 'owner' ? 0 : 1], accessToken: `access-${input.role}` };
+    }),
+    createAdultProfile: vi.fn(async (input) => {
+      calls.push(`profile:${input.role}:${input.adultConfirmedAt.endsWith('Z')}`);
+      if (failAt === `profile:${input.role}`) throw new Error('secret detail');
+    }),
+    createSighting: vi.fn(async (input) => {
+      calls.push(`sighting:${input.role}:${input.latitude}:${input.longitude}:${input.synthetic}`);
+      if (failAt === `sighting:${input.role}`) throw new Error('secret detail');
+      return IDS[sightingIndex++]!;
+    }),
+    deleteProfiles: vi.fn(async (ids) => { calls.push(`delete-profiles:${ids.join(',')}`); }),
+    deleteAuthUsers: vi.fn(async (ids) => { calls.push(`delete-auth:${ids.join(',')}`); }),
+  };
+  return { implementation, calls };
+}
+
+describe('hosted synthetic fixtures', () => {
+  it('creates two distinct confirmed adult actors and Singapore synthetic sightings', async () => {
+    const fake = adapter();
+    const scenario = await createHostedScenario(env(), fake.implementation);
+    expect(scenario).toEqual({
+      owner: { id: IDS[0], accessToken: 'access-owner' },
+      stranger: { id: IDS[1], accessToken: 'access-stranger' },
+      ownerSightingId: IDS[2], strangerSightingId: IDS[3],
+      createdUserIds: [IDS[0], IDS[1]], createdObjectPaths: [],
+    });
+    expect(fake.calls).toEqual(expect.arrayContaining([
+      'auth:owner:true:true', 'auth:stranger:true:true',
+      'profile:owner:true', 'profile:stranger:true',
+      'sighting:owner:1.3001:103.8001:true',
+      'sighting:stranger:1.3002:103.8002:true',
+    ]));
+  });
+
+  it('cleans every exact fixture after a partial owner profile failure', async () => {
+    const fake = adapter('profile:owner');
+    await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');
+    expect(fake.calls.slice(-2)).toEqual([
+      `delete-profiles:${IDS[0]}`,
+      `delete-auth:${IDS[0]}`,
+    ]);
+    expect(fake.calls.join('\n')).not.toMatch(/\*|@example\.invalid|secret detail/);
+  });
+
+  it.each(['auth:stranger', 'profile:stranger', 'sighting:owner', 'sighting:stranger'])
+    ('cleans only exact tracked IDs after failure at %s', async (boundary) => {
+      const fake = adapter(boundary);
+      await expect(createHostedScenario(env(), fake.implementation)).rejects.toThrow('hosted_fixture_failed');
+      const cleanup = fake.calls.filter((call) => call.startsWith('delete-'));
+      expect(cleanup).toHaveLength(2);
+      expect(cleanup.join('\n')).not.toMatch(/\*|example\.invalid|before|after|domain/i);
+    });
+});
