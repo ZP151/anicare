@@ -133,3 +133,55 @@ the real adapter with only PostgreSQL and Storage boundaries replaced. It now
 proves ordered 404 absence handling and fail-closed behavior for a generic
 error, status-500 Storage error, present-with-error, malformed data, false
 without the SDK error, and thrown inspection calls.
+
+## Fix round 2: mutation-resistant SDK and path tests
+
+### Scope
+
+This was a test-only wave. Production behavior was retained unchanged.
+
+### Test strengthening
+
+- Replaced sequential Storage results with an exact-path response map.
+- Added exact first/second `exists()` assertions for the owner then stranger
+  paths, in addition to asserting `[true, false]` result order.
+- Added a positive 400 absence result, so the allowed 400/404 pair is covered.
+- Added status-404 negative fixtures for wrong and missing
+  `__isStorageError`, and wrong and missing `StorageUnknownError` name.
+
+### Explicit mutation checks
+
+After adding the tests, the following temporary production mutations were
+applied only for validation and then restored without a commit:
+
+| Temporary mutation | Focused command result | Evidence |
+| --- | --- | --- |
+| Weakened marker/name discrimination while retaining status validation | 1 file failed; 4 failed, 8 passed | Each new status-404 wrong/missing marker/name case resolved `[false, true]` instead of rejecting. |
+| Reversed `observedObjectPaths` traversal | 1 file failed; 2 failed, 10 passed | Both positive 404 and 400 tests returned reversed object arrays. |
+
+Mutation command in both cases:
+
+```text
+pnpm --filter @animalhelper/pilot-gate-2b test -- src/inspection-isolation-objects.test.ts
+```
+
+After restoring the original production code, the focused command passed: 1
+file, 12 tests passed.
+
+### Full verification
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @animalhelper/pilot-gate-2b test -- src/inspection-isolation-objects.test.ts` | 1 file, 12 tests passed |
+| `pnpm --filter @animalhelper/pilot-gate-2b test:unit` | 15 files, 143 tests passed |
+| `pnpm --filter @animalhelper/pilot-gate-2b typecheck` | passed (`tsc --noEmit`) |
+| `git diff --check` | passed; no whitespace errors |
+| `git diff -- tests/pilot-gate-2b/src/inspection.ts` | empty; production code unchanged in this round |
+
+### Files and self-review
+
+Only `tests/pilot-gate-2b/src/inspection-isolation-objects.test.ts` and this
+report changed. The path-sensitive fixture prevents an unconfigured or
+reversed lookup from satisfying the test, and the temporary mutations show the
+new identity and ordering checks catch their intended regressions. The round
+commit is `e15c19f4d1bbf5cae532085ff0c96af1a85719ae`.
