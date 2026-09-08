@@ -1,5 +1,11 @@
 import { changeFollow, listFollowedCats, listDiscoveredCats } from './follows';
+import {REPORT_AREAS} from '../maps/report-areas';
 const animal='00000000-0000-4000-8000-000000007001';const request='00000000-0000-4000-8000-000000007002';
+it('allows discovery in every area offered by the Singapore picker',async()=>{
+ const rpc=jest.fn().mockResolvedValue({data:[],error:null});
+ for(const [publicCellId] of REPORT_AREAS)await listDiscoveredCats({publicCellId},{rpc});
+ expect(rpc).toHaveBeenCalledTimes(REPORT_AREAS.length);
+});
 it('rejects extra private fields, malformed rows and mismatched command outcomes',async()=>{
  const rpc=jest.fn().mockResolvedValue({data:[{animalId:animal,following:true,followedAt:null,actorId:request}],error:null});
  await expect(changeFollow(animal,true,request,{rpc})).rejects.toThrow();

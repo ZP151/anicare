@@ -1,10 +1,10 @@
 import { getSupabaseClient } from './supabase';
+import {REPORT_AREAS} from '../maps/report-areas';
 import type { NarrowRpcClient } from './feed';
 import type { PublicCatSummary } from './cats';
 export const FOLLOW_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type CatListItem = PublicCatSummary & Readonly<{cursor:string}>;
 export type CatPage = Readonly<{items:readonly CatListItem[];nextCursor:string|null}>;
-const cells=['896520ca163ffff','89652636d87ffff','896526add03ffff'];
 function exact(value:unknown,keys:string[]): value is Record<string,unknown> {
  return !!value && typeof value==='object' && !Array.isArray(value) && Object.keys(value).length===keys.length && keys.every(k=>Object.hasOwn(value,k));
 }
@@ -39,6 +39,6 @@ async function list(name:string,input:PageInput,filters:Record<string,unknown>,c
 }
 export function listFollowedCats(input:PageInput={},client?:NarrowRpcClient){return list('list_my_followed_cats',input,{},client);}
 export function listDiscoveredCats(input:PageInput&Readonly<{publicCellId?:string|null;confirmed?:boolean}>={},client?:NarrowRpcClient){
- if(input.publicCellId!=null&&!cells.includes(input.publicCellId))return Promise.reject(new Error('invalid_discovery_filter'));
+ if(input.publicCellId!=null&&!REPORT_AREAS.some(([cell])=>cell===input.publicCellId))return Promise.reject(new Error('invalid_discovery_filter'));
  return list('list_public_cat_discovery',input,{p_public_cell_id:input.publicCellId??null,p_verifications:input.confirmed?['community_confirmed','partner_confirmed']:null},client);
 }

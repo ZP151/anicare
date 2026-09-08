@@ -34,6 +34,7 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202609080008_cat_presentations.sql',
   '202609090009_sighting_places.sql',
   '202609090010_community_discussions.sql',
+  '202609090011_singapore_discovery_areas.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([

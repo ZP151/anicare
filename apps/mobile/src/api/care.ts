@@ -1,9 +1,11 @@
 import { getSupabaseClient } from './supabase';
+import {REPORT_AREAS} from '../maps/report-areas';
 
 export const CARE_AREAS = [
   { cell: '896520ca163ffff', en: 'Jurong', zh: '裕廊' },
   { cell: '89652636d87ffff', en: 'MacRitchie', zh: '麦里芝' },
   { cell: '896526add03ffff', en: 'Tampines', zh: '淡滨尼' },
+  ...REPORT_AREAS.slice(3).map(([cell,en,zh])=>({cell,en,zh})),
 ] as const;
 export const CARE_ACTIVITIES = ['feed', 'water', 'cleanup', 'observe', 'companionship'] as const;
 export type CareActivity = typeof CARE_ACTIVITIES[number];

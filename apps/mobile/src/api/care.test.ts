@@ -1,5 +1,9 @@
 import { buildRecordCareArgs, recordCompletedCare, correctCareEvent, listMyCareEvents } from './care';
+import {REPORT_AREAS} from '../maps/report-areas';
 const id='00000000-0000-4000-8000-000000000101'; const request='00000000-0000-4000-8000-000000000102';
+it('allows care in every area offered by the Singapore picker',()=>{
+ for(const [publicCell] of REPORT_AREAS)expect(buildRecordCareArgs({animalId:id,activity:'water',completedAt:'2026-09-09T00:00:00Z',publicCell,requestId:request}).p_public_cell).toBe(publicCell);
+});
 describe('care API',()=>{
  it('uses the same complete payload and request id for a lost-response retry',async()=>{const rpc=jest.fn(async()=>({data:[{careEventId:id,visibleAt:null,status:'recorded'}],error:null}));const input={animalId:id,activity:'feed' as const,completedAt:'2026-09-07T10:00:00.000Z',publicCell:'89652636d87ffff',requestId:request};await recordCompletedCare(input,{rpc});await recordCompletedCare(input,{rpc});expect(rpc).toHaveBeenNthCalledWith(2,'record_completed_care',buildRecordCareArgs(input));});
  it('rejects a client-selected unsupported area before RPC',()=>expect(()=>buildRecordCareArgs({animalId:id,activity:'feed',completedAt:'2026-09-07T10:00:00.000Z',publicCell:'89652636d8fffff',requestId:request})).toThrow('invalid_care_input'));
