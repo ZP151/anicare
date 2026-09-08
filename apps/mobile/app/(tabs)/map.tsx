@@ -11,7 +11,9 @@ import { readSessionSubjectStrict } from '../../src/auth/session-subject';
 import { CoarseAreaDetailSheet } from '../../src/components/CoarseAreaDetailSheet';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
-import { colors, radii } from '../../src/design/theme';
+import { radii } from '../../src/design/theme';
+import { GlassSurface } from '../../src/design/GlassSurface';
+import { useNativeColors } from '../../src/design/native-colors';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { getCommunityMapCopy } from '../../src/i18n/catalog';
 import { NearbyMap } from '../../src/maps/NearbyMap';
@@ -30,6 +32,8 @@ function getActionMinHeight(): number {
 }
 
 export default function MapScreen() {
+  const colors = useNativeColors();
+  const styles = makeStyles(colors);
   const { locale, t } = useLocale();
   const router = useRouter();
   const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
@@ -185,6 +189,7 @@ function getStatusCopy(
 }
 
 function SegmentButton({ active, label, onPress }: Readonly<{ active: boolean; label: string; onPress: () => void }>) {
+  const styles = makeStyles(useNativeColors());
   return (
     <Pressable
       accessibilityLabel={label}
@@ -211,6 +216,8 @@ function ActionButton({
   onPress: () => void;
   secondary?: boolean;
 }>) {
+  const colors = useNativeColors();
+  const styles = makeStyles(colors);
   return (
     <Pressable
       accessibilityLabel={label}
@@ -223,13 +230,16 @@ function ActionButton({
         pressed && styles.pressed,
       ]}
     >
-      <MaterialCommunityIcons color={secondary ? colors.actionSecondary : colors.actionPrimary} name={icon} size={20} />
-      <Text numberOfLines={1} style={[styles.actionText, secondary && styles.actionTextSecondary]}>{label}</Text>
+      <GlassSurface interactive style={[styles.actionGlass, secondary && styles.actionGlassSecondary]}>
+        <MaterialCommunityIcons color={secondary ? colors.actionSecondary : colors.actionPrimary} name={icon} size={20} />
+        <Text numberOfLines={1} style={[styles.actionText, secondary && styles.actionTextSecondary]}>{label}</Text>
+      </GlassSurface>
     </Pressable>
   );
 }
 
 function StatusBadge({ announce, text, unavailable }: Readonly<{ announce: boolean; text: string; unavailable?: boolean }>) {
+  const styles = makeStyles(useNativeColors());
   return (
     <View
       accessibilityLiveRegion={announce ? 'polite' : undefined}
@@ -240,7 +250,7 @@ function StatusBadge({ announce, text, unavailable }: Readonly<{ announce: boole
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.paper },
   content: { paddingBottom: tabVisualContract.barHeight + 24 },
   topBar: {
@@ -291,7 +301,7 @@ const styles = StyleSheet.create({
   listHeader: { minHeight: getActionMinHeight(), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   listTitle: { flex: 1, color: colors.mineral, fontSize: 16, lineHeight: 21, fontWeight: '800' },
   statusBadge: { alignSelf: 'flex-start', marginHorizontal: 20, marginTop: 14, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radii.small, backgroundColor: colors.paper },
-  statusBadgeUnavailable: { backgroundColor: '#FFF4EF' },
+  statusBadgeUnavailable: { backgroundColor: colors.surface },
   statusText: { color: colors.mineral, fontSize: 12, lineHeight: 16, fontWeight: '700' },
   statusTextUnavailable: { color: colors.danger },
   areaRow: {
@@ -330,10 +340,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 7,
     borderRadius: radii.small,
-    backgroundColor: colors.surface,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(18,59,70,0.2)',
   },
+  actionGlass: { minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  actionGlassSecondary: { backgroundColor: 'transparent' },
   actionButtonCompact: { paddingHorizontal: 10 },
   actionButtonSecondary: { marginHorizontal: 20, marginTop: 10, backgroundColor: colors.paper, borderColor: 'rgba(226,79,17,0.28)' },
   actionText: { color: colors.actionPrimary, fontSize: 14, lineHeight: 18, fontWeight: '800' },

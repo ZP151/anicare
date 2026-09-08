@@ -3,7 +3,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { buildOAuthOptions, extractAuthCode, normalizeContributionEmail } from '../../src/api/auth';
 import { resumeValidatedReportDraft, validatedReturnDraftId } from '../../src/auth/profile-report-return';
@@ -242,7 +242,8 @@ export default function ProfileScreen() {
           <Text style={styles.primaryText}>{t('profile.reportReturnAction')}</Text>
         </Pressable>
       </View> : null}
-      {auth.owner === null && showSignIn ? <View style={styles.card}>
+      <Modal visible={auth.owner === null && showSignIn} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setShowSignIn(false); setEmail(''); setStatus(null); }}><ScreenScaffold title={cn?'登录':'Sign in'} nativeAppearance>
+      <View style={styles.card}>
         <View style={styles.formHeading}><Text style={styles.label}>{cn?'欢迎回来':'Welcome back'}</Text><Pressable accessibilityRole="button" accessibilityLabel={cn ? '关闭登录' : 'Close sign-in'} onPress={() => { setShowSignIn(false); setEmail(''); setStatus(null); }} style={styles.close}><AppIcon name="close" color={colors.muted} size={18} /></Pressable></View>
         <Text style={styles.value}>{cn?'浏览无需登录，贡献时再登录。':'Browsing stays anonymous. Sign in only when you want to contribute.'}</Text>
         <TextInput
@@ -270,32 +271,35 @@ export default function ProfileScreen() {
             <Text style={styles.providerText}>{cn?'使用 Google 登录':'Continue with Google'}</Text>
           </Pressable>
         </View>
-      </View> : null}
+        {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
+      </View></ScreenScaffold></Modal>
       <SettingsGroup title={cn ? '我的记录' : 'Your activity'}>
         <SettingsRow title={cn?'我的报告与草稿':'My reports and drafts'} icon="reports" onPress={() => router.push('/report' as never)} />
         <SettingsRow title={cn?'我的照护记录':'My care records'} icon="care" last onPress={() => router.push('/care/my-care' as never)} />
       </SettingsGroup>
       <SettingsGroup title={cn ? '偏好与隐私' : 'Preferences & privacy'}>
         <SettingsRow title={cn?'语言':'Language'} icon="language" value={cn ? '简体中文' : 'English'} onPress={() => setShowLanguage(!showLanguage)} />
-        {showLanguage ? <View style={styles.languageChoices}>{(['en', 'zh-CN'] as const).map(language => <Pressable key={language} accessibilityRole="radio" accessibilityState={{ checked: locale === language }} onPress={() => { setLocale(language); setShowLanguage(false); }} style={styles.languageChoice}><Text style={styles.choiceText}>{language === 'en' ? 'English' : '简体中文'}</Text>{locale === language ? <AppIcon name="check" color={colors.actionPrimary} size={18} /> : null}</Pressable>)}</View> : null}
+        <Modal visible={showLanguage} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowLanguage(false)}><ScreenScaffold title={cn?'语言':'Language'} nativeAppearance><Pressable accessibilityRole="button" accessibilityLabel={cn?'关闭':'Close'} onPress={()=>setShowLanguage(false)} style={styles.sheetClose}><Text style={styles.linkText}>{cn?'关闭':'Close'}</Text></Pressable><View style={styles.languageChoices}>{(['en', 'zh-CN'] as const).map(language => <Pressable key={language} accessibilityRole="radio" accessibilityState={{ checked: locale === language }} onPress={() => { setLocale(language); setShowLanguage(false); }} style={styles.languageChoice}><Text style={styles.choiceText}>{language === 'en' ? 'English' : '简体中文'}</Text>{locale === language ? <AppIcon name="check" color={colors.actionPrimary} size={18} /> : null}</Pressable>)}</View></ScreenScaffold></Modal>
         <SettingsRow title={cn?'隐私与请求':'Privacy and requests'} icon="privacy" last onPress={() => router.push('/privacy' as never)} />
       </SettingsGroup>
       {auth.owner && adult === false ? <View style={styles.card}>
         <Text style={styles.value}>{cn?'贡献前需确认年满 18 岁，不收集出生日期。':'Contributing requires confirmation that you are at least 18. Date of birth is not collected.'}</Text>
         <Pressable accessibilityRole="button" disabled={!auth.owner} onPress={confirmAdultContributor} style={styles.choice}>
-          <Text>{cn?'我确认已年满 18 岁':'I confirm I am 18 or older'}</Text>
+          <Text style={styles.choiceText}>{cn?'我确认已年满 18 岁':'I confirm I am 18 or older'}</Text>
         </Pressable>
       </View> : null}
       {auth.owner ? <SettingsGroup title={cn ? '账户' : 'Account'}>
         <SettingsRow title={cn ? '昵称' : 'Display name'} icon="account" value={!editingName && nameValue ? nameValue : undefined} onPress={() => { void editName(); }} />
-        {editingName ? <View style={styles.nameForm}>
+        {editingName ? <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditingName(false)}><ScreenScaffold title={cn?'编辑个人资料':'Edit profile'} nativeAppearance><View style={styles.nameForm}>
+          <Pressable accessibilityRole="button" accessibilityLabel={cn?'关闭编辑':'Close edit'} onPress={() => setEditingName(false)} style={styles.close}><AppIcon name="close" color={colors.muted} size={18} /></Pressable>
           <TextInput accessibilityLabel={cn ? '公开昵称' : 'Public display name'} value={nameValue} onChangeText={setNameValue} editable={!nameLoading && !savingName} maxLength={120} style={styles.input} placeholder={cn ? '你的公开昵称' : 'Your public display name'} placeholderTextColor={colors.muted} />
           <Text style={styles.value}>{cn ? '这是公开昵称，请勿填写手机号或住址。' : 'This name may be public. Leave out contact details.'}</Text>
           <Pressable accessibilityRole="button" disabled={nameLoading || savingName} onPress={() => { void saveName(); }} style={styles.primary}><Text style={styles.primaryText}>{nameLoading ? (cn ? '正在读取…' : 'Loading…') : savingName ? (cn ? '正在保存…' : 'Saving…') : (cn ? '保存昵称' : 'Save name')}</Text></Pressable>
-        </View> : null}
+          {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
+        </View></ScreenScaffold></Modal> : null}
         <SettingsRow title={cn?'退出登录':'Sign out'} icon="signout" destructive last disabled={loggingOut} onPress={() => { void signOut(); }} />
       </SettingsGroup> : null}
-      {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
+      {status && !showSignIn && !editingName ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </ScreenScaffold>
   );
 }
@@ -309,6 +313,7 @@ const makeStyles = (colors: InterfaceColors) => StyleSheet.create({
   value: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   formHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   close: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  sheetClose: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 10 },
   signIn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, alignSelf: 'flex-start' },
   linkText: { color: colors.actionPrimary, fontSize: 17, fontWeight: '600' },
   languageChoices: { paddingLeft: 52, paddingRight: 16 },
@@ -320,7 +325,7 @@ const makeStyles = (colors: InterfaceColors) => StyleSheet.create({
   selected: { backgroundColor: colors.leafSoft, borderColor: colors.leaf },
   input: { minHeight: 48, paddingHorizontal: 14, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line, color: colors.ink },
   primary: { minHeight: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },
-  primaryText: { color: '#FFFFFF', fontWeight: '800' },
+  primaryText: { color: colors.onAction, fontWeight: '800' },
   provider: { flexGrow: 1, flexDirection: 'row', gap: 8, minHeight: 48, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1C1C1E', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   providerText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   status: { color: colors.muted, lineHeight: 20, textAlign: 'center' },

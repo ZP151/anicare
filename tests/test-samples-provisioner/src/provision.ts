@@ -6,7 +6,6 @@ import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 
 const project = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
-const assets = ['orange.jpg', 'white.jpg', 'tabby.jpg', 'tuxedo.jpg'] as const;
 const samples = [
   ['ios26-s01','00000000-0000-4000-8000-00000000a101','阿橘','orange.jpg','896520ca163ffff'],
   ['ios26-s02','00000000-0000-4000-8000-00000000a102','小白','white.jpg','896520ca163ffff'],
@@ -23,7 +22,7 @@ function validDatabaseTarget(value: string) {
   try {
     const parsed = new URL(value);
     const ref = 'fhugdtpjbgiatqhvjioy';
-    return parsed.protocol.startsWith('postgres') && (
+    return ['postgres:', 'postgresql:'].includes(parsed.protocol) && (
       (parsed.hostname === `db.${ref}.supabase.co` && parsed.username === 'postgres') ||
       (parsed.hostname.endsWith('.pooler.supabase.com') && parsed.username === `postgres.${ref}`)
     );
@@ -34,6 +33,11 @@ async function main() {
   if (url !== project || process.env.CONFIRM_IOS26_TEST_SAMPLES !== 'yes') throw new Error('test_sample_target_refused');
   const databaseUrl = required('SUPABASE_DATABASE_URL');
   if (!validDatabaseTarget(databaseUrl)) throw new Error('test_sample_database_refused');
+  const provenance = JSON.parse(await readFile(resolve(import.meta.dirname, '../../../docs/test-samples/ios-v1/asset-provenance.json'), 'utf8')) as {assets: Array<{file:string;source:string;sha256:string}>};
+  for (const filename of new Set(samples.flatMap(sample => sample[3] ? [sample[3]] : []))) {
+    const approved = provenance.assets.find(asset => asset.file === `assets/${filename}` && asset.source === 'synthetic_test');
+    if (!approved || sha256(await readFile(assetPath(filename))) !== approved.sha256) throw new Error('test_sample_asset_not_approved');
+  }
   const db = postgres(databaseUrl, { max: 1, ssl: 'require', prepare: false, debug: false, onnotice: () => undefined });
   const storage = createClient(url, required('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
   const anonymous = createClient(url, required('SUPABASE_PUBLIC_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
@@ -55,6 +59,8 @@ async function main() {
           if (downloaded.data) {
             if (sha256(new Uint8Array(await downloaded.data.arrayBuffer())) !== sha) throw new Error('test_sample_portrait_collision');
           } else {
+            const storageError = downloaded.error as {statusCode?:string|number;status?:number;message?:string}|null;
+            if (String(storageError?.statusCode ?? storageError?.status) !== '404' && storageError?.message !== 'Object not found') throw new Error('test_sample_portrait_download_failed');
             const uploaded = await storage.storage.from('cat-portraits').upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
             if (uploaded.error) throw new Error('test_sample_portrait_upload_failed');
           }
@@ -72,11 +78,15 @@ async function main() {
     if (presentations.error || !Array.isArray(presentations.data) || presentations.data.length !== 6) throw new Error('test_sample_public_read_failed');
     const rows = presentations.data as Array<{ animalId: string; portraitPath: string | null; sampleLabel: string }>;
     if (new Set(rows.map((row) => row.animalId)).size !== 6 || new Set(rows.map((row) => row.sampleLabel)).size !== 6) throw new Error('test_sample_public_projection_invalid');
-    for (const row of rows.filter((row) => row.portraitPath !== null)) {
+    const portraitRows = rows.filter(row => row.portraitPath !== null);
+    if (portraitRows.length !== 4 || ids.some(id => !rows.some(row => row.animalId === id))) throw new Error('test_sample_public_projection_invalid');
+    for (const row of portraitRows) {
       const signed = await anonymous.storage.from('cat-portraits').createSignedUrl(row.portraitPath!, 60);
       const response = signed.data?.signedUrl ? await fetch(signed.data.signedUrl) : null;
-      const expected = await readFile(assetPath(assets[rows.filter((item) => item.portraitPath !== null).indexOf(row)]!));
-      if (signed.error || !response?.ok || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_signed_portrait_failed');
+      const filename = samples.find(sample => sample[1] === row.animalId)?.[3];
+      if (!filename || row.portraitPath !== `synthetic-test/${row.animalId}/portrait.jpg`) throw new Error('test_sample_public_projection_invalid');
+      const expected = await readFile(assetPath(filename));
+      if (signed.error || !response?.ok || !response.headers.get('content-type')?.startsWith('image/jpeg') || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_signed_portrait_failed');
     }
     for (const id of ids) {
       const summary = await anonymous.rpc('get_public_cat_summary', { p_animal_id: id });
@@ -84,12 +94,12 @@ async function main() {
       if (summary.error || !Array.isArray(summary.data) || summary.data.length !== 1 || care.error || !Array.isArray(care.data) || care.data.length < 1) throw new Error('test_sample_public_journey_failed');
     }
     for (const cell of new Set(samples.map(([, , , , cell]) => cell))) {
-      const discovery = await anonymous.rpc('list_public_cat_discovery', { p_public_cell: cell, p_verifications: null, p_cursor: null, p_limit: 50 });
+      const discovery = await anonymous.rpc('list_public_cat_discovery', { p_public_cell_id: cell, p_verifications: null, p_cursor: null, p_limit: 50 });
       if (discovery.error || !Array.isArray(discovery.data) || discovery.data.length < 1) throw new Error('test_sample_discovery_failed');
     }
-    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: assets.length };
+    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length };
     await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
     process.stdout.write('ios26_test_samples_provisioned\n');
   } finally { await db.end({ timeout: 5 }); }
 }
-main().catch(() => { process.stderr.write('test_sample_provision_failed\n'); process.exitCode = 1; });
+main().catch(error => { const code = error instanceof Error && /^test_sample_[a-z_]+$/.test(error.message) ? error.message : 'test_sample_provision_failed'; process.stderr.write(`${code}\n`); process.exitCode = 1; });

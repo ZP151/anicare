@@ -55,8 +55,11 @@ export async function getCatPresentations(animalIds: readonly string[], client: 
     const rows = parseRows(reply.data, new Set(ids));
     if (rows === null) return new Map();
     const paths = rows.flatMap((row) => row.portraitPath === null ? [] : [row.portraitPath]);
-    const signed = paths.length === 0 ? null : await client.storage.from('cat-portraits').createSignedUrls(paths, MAX_SIGNED_URL_TTL_SECONDS);
-    if (signed?.error) return new Map();
+    const labels = new Map(rows.map((row) => [row.animalId, row.sampleLabel === undefined ? {} : { sampleLabel: row.sampleLabel }]));
+    let signed;
+    try { signed = paths.length === 0 ? null : await client.storage.from('cat-portraits').createSignedUrls(paths, MAX_SIGNED_URL_TTL_SECONDS); }
+    catch { return labels; }
+    if (signed?.error) return labels;
     const signedData = signed === null ? [] : signed.data;
     if (!Array.isArray(signedData)) return new Map(rows.map((row) => [row.animalId, row.sampleLabel === undefined ? {} : { sampleLabel: row.sampleLabel }]));
     const urls = new Map<string, string>();

@@ -67,6 +67,7 @@ it('does not show the mail service error text', async () => {
   await fireEvent.changeText(view.getByLabelText('Email address'), 'person@example.test');
   await fireEvent.press(view.getByRole('button', { name: 'Send magic link' }));
   await waitFor(() => expect(mockOtp).toHaveBeenCalledTimes(1));
+  expect(view.getByText('We could not send a sign-in link. Please try again.')).toBeTruthy();
   expect(JSON.stringify(view.toJSON())).not.toContain('private mail service trace');
 });
 

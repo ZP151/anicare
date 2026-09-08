@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CARE_ACTIVITIES, CARE_AREAS, type CareActivity, type CareInput, type MyCareEvent } from '../api/care';
 import { colors, radii } from '../design/theme';
+import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 
 export function careActivityLabel(locale: Locale, value: CareActivity): string {
@@ -24,6 +25,7 @@ type Props = Readonly<{
   onSubmit(input: CareInput): Promise<void>; createId(): string;
 }>;
 export function CareEntry({ animalId, locale, signedIn, initial, onSubmit, createId }: Props) {
+  const styles = useCareStyles();
   const cn = locale === 'zh-CN';
   const [selected, setSelected] = useState<CareActivity | null>(initial?.activity ?? null);
   const [area, setArea] = useState<string | null>(initial?.publicCellId ?? null);
@@ -46,10 +48,10 @@ export function CareEntry({ animalId, locale, signedIn, initial, onSubmit, creat
   return <View style={styles.box}>
     <Text style={styles.title}>{initial ? (cn ? '更正完成记录' : 'Correct completed care') : (cn ? '记录已完成的照护' : 'Record completed care')}</Text>
     <Text style={styles.note}>{cn ? '仅支持下方三个手选区域；请记录实际完成的照护，不是预约或求助。' : 'Choose one of the three supported areas. Record care already completed, not a booking or request for help.'}</Text>
-    {!signedIn ? <Text>{cn ? '登录并确认成年后可记录照护。' : 'Sign in and confirm you are 18 or older to record care.'}</Text> : <>
-      <View style={styles.wrap}>{CARE_ACTIVITIES.map(item => <Pressable key={item} accessibilityRole="button" disabled={frozen} accessibilityState={{ selected: selected === item, disabled: frozen }} onPress={() => setSelected(item)} style={[styles.choice, selected === item && styles.selected]}><Text>{careActivityLabel(locale, item)}</Text></Pressable>)}</View>
+    {!signedIn ? <Text style={styles.note}>{cn ? '登录并确认成年后可记录照护。' : 'Sign in and confirm you are 18 or older to record care.'}</Text> : <>
+      <View style={styles.wrap}>{CARE_ACTIVITIES.map(item => <Pressable key={item} accessibilityRole="button" disabled={frozen} accessibilityState={{ selected: selected === item, disabled: frozen }} onPress={() => setSelected(item)} style={[styles.choice, selected === item && styles.selected]}><Text style={styles.choiceText}>{careActivityLabel(locale, item)}</Text></Pressable>)}</View>
       <Text style={styles.label}>{cn ? '本次照护的大致区域' : 'Area of this care activity'}</Text>
-      <View style={styles.wrap}>{CARE_AREAS.map(item => <Pressable key={item.cell} accessibilityRole="button" disabled={frozen} accessibilityState={{ selected: area === item.cell, disabled: frozen }} onPress={() => setArea(item.cell)} style={[styles.choice, area === item.cell && styles.selected]}><Text>{cn ? item.zh : item.en}</Text></Pressable>)}</View>
+      <View style={styles.wrap}>{CARE_AREAS.map(item => <Pressable key={item.cell} accessibilityRole="button" disabled={frozen} accessibilityState={{ selected: area === item.cell, disabled: frozen }} onPress={() => setArea(item.cell)} style={[styles.choice, area === item.cell && styles.selected]}><Text style={styles.choiceText}>{cn ? item.zh : item.en}</Text></Pressable>)}</View>
       <Text style={styles.label}>{cn ? '完成日期与时间（设备当地时间）' : 'Completed date and time (device local time)'}</Text>
       <TextInput accessibilityLabel={cn ? '完成日期' : 'Completed date'} value={parts.day} placeholder="YYYY-MM-DD" editable={!frozen} onChangeText={day => setParts(value => ({ ...value, day }))} style={styles.input} />
       <TextInput accessibilityLabel={cn ? '完成时间' : 'Completed time'} value={parts.time} placeholder="HH:mm" editable={!frozen} onChangeText={time => setParts(value => ({ ...value, time }))} style={styles.input} />
@@ -70,3 +72,9 @@ export const careStyles = StyleSheet.create({
   error: { color: colors.danger, fontSize: 14, lineHeight: 21 },
 });
 const styles = careStyles;
+export function useCareStyles() {
+  const palette = useNativeColors();
+  return StyleSheet.create({
+    box:{gap:12,padding:18,borderRadius:16,backgroundColor:palette.surface},title:{fontSize:20,fontWeight:'700',color:palette.ink},note:{fontSize:14,lineHeight:21,color:palette.muted},label:{fontSize:14,fontWeight:'700',color:palette.ink},wrap:{flexDirection:'row',flexWrap:'wrap',gap:8},choice:{minHeight:44,paddingHorizontal:13,justifyContent:'center',borderWidth:1,borderColor:palette.line,borderRadius:22},choiceText:{color:palette.ink,fontSize:15},selected:{borderColor:palette.actionPrimary,backgroundColor:palette.leafSoft},input:{minHeight:48,padding:12,borderColor:palette.line,borderWidth:1,borderRadius:12,color:palette.ink,backgroundColor:palette.surface},submit:{minHeight:52,justifyContent:'center',alignItems:'center',borderRadius:26,backgroundColor:palette.actionPrimary},disabled:{opacity:.45},submitText:{fontSize:16,fontWeight:'700',color:palette.onAction},error:{color:palette.danger,fontSize:14,lineHeight:21},
+  });
+}

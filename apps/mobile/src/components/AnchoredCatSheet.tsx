@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
@@ -9,6 +10,10 @@ export type SelectedCatSummary = Readonly<{
   primaryAlias: string;
   verificationLabel: string;
   timeLabel: string;
+  /** Optional presentation-only URI. The feed contract never supplies this directly. */
+  portraitUri?: string | null;
+  /** Discloses an explicitly synthetic test image when one is supplied. */
+  sampleLabel?: string | null;
 }>;
 
 type AnchoredCatSheetProps = Readonly<{
@@ -23,25 +28,18 @@ export function getActionMinHeight(platform: string): number {
 }
 
 export function AnchoredCatSheet({ cat, fixture, onReportSighting, onViewCat }: AnchoredCatSheetProps) {
+  const [portraitFailed, setPortraitFailed] = useState(false);
+  const portraitAvailable = Boolean(cat.portraitUri) && !portraitFailed;
   return (
     <View accessibilityLabel={`Selected cat: ${cat.primaryAlias}`} style={styles.sheet}>
       <View style={styles.handle} />
       {fixture ? <Text style={styles.fixtureLabel}>Preview data</Text> : null}
       <View style={styles.content}>
         <View style={styles.portraitFrame}>
-          {fixture ? (
-            <Image
-              accessibilityLabel="Preview portrait of an orange community cat"
-              resizeMode="cover"
-              source={require('../../assets/plates/cat-portrait.png')}
-              style={styles.portrait}
-            />
-          ) : (
-            <View accessibilityLabel="Public portrait unavailable" style={styles.portraitPlaceholder}>
+          {portraitAvailable ? <Image accessibilityLabel={cat.sampleLabel ?? `Public portrait of ${cat.primaryAlias}`} resizeMode="cover" source={{ uri: cat.portraitUri! }} style={styles.portrait} onError={() => setPortraitFailed(true)} /> : <View accessibilityLabel="Public portrait unavailable" style={styles.portraitPlaceholder}>
               <MaterialCommunityIcons color={colors.aquaDeep} name="cat" size={42} />
               <Text style={styles.portraitPlaceholderText}>Portrait protected</Text>
-            </View>
-          )}
+          </View>}
         </View>
 
         <View style={styles.summary}>
@@ -98,7 +96,7 @@ const styles = StyleSheet.create({
   handle: { width: 38, height: 4, borderRadius: 2, backgroundColor: colors.line, alignSelf: 'center' },
   content: { flex: 1, flexDirection: 'row', gap: 18, paddingTop: 14 },
   portraitFrame: { width: 135, height: 199, alignSelf: 'flex-start', overflow: 'hidden', borderRadius: radii.medium, backgroundColor: colors.aquaSoft },
-  portrait: { position: 'absolute', left: '-9%', top: '-12%', width: '118%', height: '118%' },
+  portrait: { width: '100%', height: '100%' },
   portraitPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12 },
   portraitPlaceholderText: { color: colors.aquaDeep, textAlign: 'center', fontSize: 12, fontWeight: '700' },
   summary: { flex: 1, minWidth: 0 },

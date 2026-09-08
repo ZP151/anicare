@@ -4,6 +4,8 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { PublicAreaSummary } from '../maps/public-map-policy';
 import { colors, radii } from '../design/theme';
+import { useNativeColors } from '../design/native-colors';
+import { GlassSurface } from '../design/GlassSurface';
 import { getCommunityMapCopy, type Locale } from '../i18n/catalog';
 import { getReportCopy } from '../report/report-copy';
 
@@ -19,6 +21,7 @@ export function getAreaActionMinHeight(platform: string): number {
 }
 
 export function CoarseAreaDetailSheet({ area, locale, onReportFromArea, onViewCat }: CoarseAreaDetailSheetProps) {
+  const styles = makeStyles(useNativeColors());
   const copy = getCommunityMapCopy(locale);
   const reportCopy = getReportCopy(locale);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export function CoarseAreaDetailSheet({ area, locale, onReportFromArea, onViewCa
   }
 
   return (
-    <View accessibilityLabel={copy.areaDetailLabel(area.label)} style={styles.sheet}>
+    <GlassSurface accessibilityLabel={copy.areaDetailLabel(area.label)} style={styles.sheet}>
       <View style={styles.handle} />
       <View style={styles.header}>
         <View style={styles.titleBlock}>
@@ -104,18 +107,17 @@ export function CoarseAreaDetailSheet({ area, locale, onReportFromArea, onViewCa
           <Text style={styles.followReason}>{copy.followDisabledReason}</Text>
         </View>
       </View>
-    </View>
+    </GlassSurface>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
   sheet: {
     paddingTop: 10,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderTopLeftRadius: radii.large,
     borderTopRightRadius: radii.large,
-    backgroundColor: colors.surface,
     boxShadow: '0px -8px 24px rgba(18,59,70,0.10)',
     elevation: 16,
   },

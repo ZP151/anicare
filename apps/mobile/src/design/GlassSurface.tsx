@@ -5,16 +5,16 @@ import {
   isLiquidGlassAvailable,
 } from 'expo-glass-effect';
 import { PropsWithChildren, useEffect, useState } from 'react';
-import { AccessibilityInfo, Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { AccessibilityInfo, Platform, StyleProp, StyleSheet, useColorScheme, View, ViewProps, ViewStyle } from 'react-native';
 
 import { getGlassMode, supportsReduceTransparencyApi } from './glass-policy';
 
 type GlassSurfaceProps = PropsWithChildren<{
   style?: StyleProp<ViewStyle>;
   interactive?: boolean;
-}>;
+}> & Pick<ViewProps, 'accessibilityLabel'>;
 
-export function GlassSurface({ children, style, interactive = false }: GlassSurfaceProps) {
+export function GlassSurface({ children, style, interactive = false, accessibilityLabel }: GlassSurfaceProps) {
   const [reduceTransparency, setReduceTransparency] = useState(false);
 
   useEffect(() => {
@@ -34,10 +34,14 @@ export function GlassSurface({ children, style, interactive = false }: GlassSurf
     liquidGlassAvailable,
     reduceTransparency,
   });
+  const dark = useColorScheme() === 'dark';
+  // Callers may use layout styles but must not paint an opaque rectangle over
+  // native material. A material surface owns its background colour.
+  const materialStyle = [styles.material, style, styles.clearBackground];
 
   if (mode === 'liquid') {
     return (
-      <GlassView glassEffectStyle="regular" isInteractive={interactive} style={style}>
+      <GlassView accessibilityLabel={accessibilityLabel} glassEffectStyle="regular" isInteractive={interactive} style={materialStyle}>
         {children}
       </GlassView>
     );
@@ -45,17 +49,20 @@ export function GlassSurface({ children, style, interactive = false }: GlassSurf
 
   if (mode === 'blur') {
     return (
-      <BlurView intensity={55} tint="systemMaterial" style={style}>
+      <BlurView accessibilityLabel={accessibilityLabel} intensity={55} tint={dark ? 'systemChromeMaterialDark' : 'systemMaterial'} style={materialStyle}>
         {children}
       </BlurView>
     );
   }
 
-  return <View style={[styles.solid, style]}>{children}</View>;
+  return <View accessibilityLabel={accessibilityLabel} style={[style, styles.solid, dark && styles.solidDark]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   solid: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: '#FFFFFF',
   },
+  solidDark: { backgroundColor: '#1C211C' },
+  material: { overflow: 'hidden' },
+  clearBackground: { backgroundColor: 'transparent' },
 });

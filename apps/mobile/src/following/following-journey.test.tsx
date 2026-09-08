@@ -45,6 +45,7 @@ it('rejects a stale follow response and clears private list on account change',a
 it('uses server filters, pages and de-duplicates discovery; refresh resets cursor',async()=>{
  mockRpc.mockImplementation(async(name:string,args:Record<string,unknown>)=>({data:name==='list_public_cat_discovery'?(args.p_cursor?[cat,{...cat,animalId:'00000000-0000-4000-8000-000000007009',primaryAlias:'Older cat',cursor:'00000000-0000-4000-8000-000000007009'}]:Array.from({length:20},(_,i)=>({...cat,animalId:`00000000-0000-4000-8000-${String(7200+i).padStart(12,'0')}`,primaryAlias:`Cat ${i}`,cursor:`00000000-0000-4000-8000-${String(7200+i).padStart(12,'0')}`}))):true,error:null}));
  const view=await render(<DiscoveryList/>);await fireEvent.press(await view.findByRole('button',{name:'Load more cats'}));await view.findByText('Older cat');
+ await fireEvent.press(view.getByRole('button',{name:'Filter cats'}));
  await fireEvent.press(view.getByRole('button',{name:'MacRitchie'}));await waitFor(()=>expect(mockRpc).toHaveBeenCalledWith('list_public_cat_discovery',expect.objectContaining({p_public_cell_id:'89652636d87ffff',p_cursor:null})));
  await fireEvent.press(view.getByRole('button',{name:'Confirmed'}));await waitFor(()=>expect(mockRpc).toHaveBeenCalledWith('list_public_cat_discovery',expect.objectContaining({p_verifications:['community_confirmed','partner_confirmed'],p_cursor:null})));
  expect(view.queryByText('Older cat')).toBeNull();

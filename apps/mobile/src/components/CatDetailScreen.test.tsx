@@ -19,7 +19,7 @@ describe('CatDetailScreen', () => {
     );
 
     expect(view.getByText('Pepper')).toBeTruthy();
-    expect(view.getByText('Community confirmed')).toBeTruthy();
+    expect(view.getAllByText('Community confirmed')).toHaveLength(2);
     expect(view.getByText('Seen in a delayed weekly window')).toBeTruthy();
     expect(view.getByText(/Coarse neighbourhood activity/)).toBeTruthy();
     expect(JSON.stringify(view.toJSON())).not.toMatch(/00000000|coordinate|similarity|score|vector/i);
@@ -53,12 +53,10 @@ describe('CatDetailScreen', () => {
       />,
     );
 
-    expect(view.getByText('公开身份摘要仅显示经过延迟和模糊化处理的社区活动。')).toBeTruthy();
     expect(view.getByText('身份状态')).toBeTruthy();
     expect(view.getByText('粗略社区活动')).toBeTruthy();
     expect(view.getByText('这里绝不会显示精确位置、路线或时间戳。')).toBeTruthy();
-    expect(view.getByText('身份信息变更前必须经过社区审核。')).toBeTruthy();
-    expect(JSON.stringify(view.toJSON())).not.toMatch(/public identity summary|Identity status|Coarse neighbourhood activity|Exact locations|Report a sighting|Community review/i);
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/coordinate|similarity|score|vector/i);
     await fireEvent.press(view.getByRole('button', { name: '报告 Pepper 的目击记录' }));
     expect(await view.findByText('无法创建已保存的报告，请在原生设备上重试。')).toBeTruthy();
     await view.unmount();

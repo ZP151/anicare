@@ -5,6 +5,7 @@ import { AppState, Platform, Pressable, StyleSheet, Text, TextInput, View } from
 import type { SightingRisk } from '../api/sightings';
 import { ScreenScaffold } from '../components/ScreenScaffold';
 import { colors, radii } from '../design/theme';
+import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
 import { earliestIncompleteStep, reportTraits, validateReportForSubmission } from './report-flow';
@@ -63,6 +64,8 @@ export function ReportWizard({
   captureAvailable?: boolean;
   locale?: Locale;
 }>) {
+  const palette = useNativeColors();
+  const styles = makeStyles(palette);
   const copy = getReportCopy(locale);
   const [draft, setDraft] = useState<StoredDraft | null>(null);
   const [stage, setStage] = useState<ReportDraftStep | null>(null);
@@ -310,10 +313,11 @@ export function ReportWizard({
         accessibilityLabel={copy.wizardStagesLabel}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 1, now: stages.indexOf(stage) + 1, max: stages.length, text: copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage)) }}
-        style={styles.stages}
+        style={styles.progressTrack}
       >
-        {stages.map((item) => <Text key={item} style={item === stage ? styles.currentStage : styles.stage}>{copy.stepLabel(item)}</Text>)}
+        {stages.map((item, index) => <View key={item} style={[styles.progressSegment, index <= stages.indexOf(stage) && styles.progressSegmentActive]} />)}
       </View>
+      <Text style={styles.stageCounter}>{copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage))}</Text>
       <Text accessibilityRole="header" style={styles.sectionTitle}>{copy.stepLabel(stage)}</Text>
 
       {stage === 'photo' ? <View style={styles.group}>
@@ -330,7 +334,7 @@ export function ReportWizard({
         <Text accessibilityRole="header" style={styles.traitTitle}>{copy.wizardMarkingsTitle}</Text>
         <View style={styles.traitGrid}>{markingValues.map((value) => <Pressable key={value} accessibilityLabel={copy.wizardMarkingLabel(value)} accessibilityRole="button" accessibilityState={{ selected: draft.report!.markings.includes(value) }} onPress={() => toggleTrait('markings', value)} style={[styles.trait, draft.report!.markings.includes(value) && styles.optionSelected]}><Text style={styles.optionText}>{copy.wizardMarkingLabel(value)}</Text></Pressable>)}</View>
         {(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityLabel={conditionLabels[condition]} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={[styles.option, draft.report!.condition === condition && styles.optionSelected]}><Text style={styles.optionText}>{conditionLabels[condition]}</Text>{draft.report!.condition === condition ? <MaterialCommunityIcons accessibilityElementsHidden color={colors.actionPrimary} name="check-circle" size={20} /> : null}</Pressable>)}
-        <TextInput accessibilityLabel={copy.wizardNotesLabel} multiline onChangeText={(notes) => setDraft({ ...draft, notes })} placeholder={copy.wizardNotesPlaceholder} style={styles.notes} value={draft.notes} />
+        <TextInput accessibilityLabel={copy.wizardNotesLabel} multiline onChangeText={(notes) => setDraft({ ...draft, notes })} placeholder={copy.wizardNotesPlaceholder} placeholderTextColor={palette.muted} style={styles.notes} value={draft.notes} />
         <Pressable accessibilityLabel={copy.wizardContinueToSafety} accessibilityRole="button" disabled={!draft.report.condition} onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable>
       </View> : null}
 
@@ -372,17 +376,18 @@ export function ReportWizard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
   exit: { minHeight: Platform.OS === 'android' ? 48 : 44, justifyContent: 'center', paddingHorizontal: 6 },
   exitText: { color: colors.actionPrimary, fontWeight: '700' },
-  stages: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  stage: { color: colors.muted, fontSize: 13 },
-  currentStage: { color: colors.leaf, fontSize: 13, fontWeight: '800' },
+  progressTrack: { flexDirection: 'row', gap: 8 },
+  progressSegment: { flex: 1, height: 5, borderRadius: 3, backgroundColor: colors.line },
+  progressSegmentActive: { backgroundColor: colors.actionPrimary },
+  stageCounter: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   sectionTitle: { color: colors.ink, fontSize: 22, lineHeight: 28, fontWeight: '800' },
   group: { gap: 12 },
   copy: { color: colors.muted, fontSize: 16, lineHeight: 23 },
-  primary: { minHeight: 50, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.actionPrimary },
-  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  primary: { minHeight: 50, paddingHorizontal: 16, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.actionPrimary },
+  primaryText: { color: colors.onAction, fontSize: 16, fontWeight: '800' },
   disabled: { opacity: 0.45 },
   secondary: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.actionPrimary },
   secondaryText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' },

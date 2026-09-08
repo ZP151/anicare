@@ -1,151 +1,30 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useState, type ReactNode } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, radii } from '../design/theme';
+import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 import { getReportCopy } from '../report/report-copy';
-import { ScreenScaffold } from './ScreenScaffold';
+import { AppIcon } from './AppIcon';
+import { GlassSurface } from '../design/GlassSurface';
 import type { SelectedCatSummary } from './AnchoredCatSheet';
 
-type CatDetailScreenProps = Readonly<{
-  children?: ReactNode;
-  cat: SelectedCatSummary;
-  fixture: boolean;
-  locale?: Locale;
-  onReportSighting: (animalId: string) => void | Promise<void>;
-  onRecordCare?: (animalId: string) => void | Promise<void>;
-}>;
+type Props = Readonly<{ children?: ReactNode; heroActions?: ReactNode; cat: SelectedCatSummary; fixture: boolean; locale?: Locale; onBack?: () => void; onReportSighting: (id: string) => void | Promise<void>; onRecordCare?: (id: string) => void | Promise<void> }>;
 
-function getCatDetailCopy(locale: Locale, alias: string) {
-  if (locale === 'zh-CN') {
-    return {
-      preview: '预览数据',
-      subtitle: '公开身份摘要仅显示经过延迟和模糊化处理的社区活动。',
-      previewPortrait: '社区猫预览照片',
-      portraitUnavailable: '公开照片不可用',
-      portraitProtected: '照片受到保护',
-      identityStatus: '身份状态',
-      coarseActivity: '粗略社区活动',
-      locationProtection: '这里绝不会显示精确位置、路线或时间戳。',
-      reportLabel: `报告 ${alias} 的目击记录`,
-      reportAction: '报告目击记录',
-      governance: '身份信息变更前必须经过社区审核。',
-      careLabel: `记录 ${alias} 的已完成照护`, careAction: '记录已完成照护',
-    } as const;
-  }
-  return {
-    preview: 'Preview data',
-    subtitle: 'A public identity summary with delayed, coarse community activity.',
-    previewPortrait: 'Preview portrait of an orange community cat',
-    portraitUnavailable: 'Public portrait unavailable',
-    portraitProtected: 'Portrait protected',
-    identityStatus: 'Identity status',
-    coarseActivity: 'Coarse neighbourhood activity',
-    locationProtection: 'Exact locations, routes and timestamps are never shown here.',
-    reportLabel: `Report a sighting of ${alias}`,
-    reportAction: 'Report a sighting',
-    governance: 'Community review is required before identity information changes.',
-    careLabel: `Record completed care for ${alias}`, careAction: 'Record completed care',
-  } as const;
+export function CatDetailScreen({ cat, locale = 'en', onBack, onReportSighting, onRecordCare, children, heroActions }: Props) {
+  const colors = useNativeColors(); const styles = makeStyles(colors); const cn = locale === 'zh-CN'; const reportCopy = getReportCopy(locale);
+  const [starting, setStarting] = useState(false); const [error, setError] = useState<string | null>(null); const [portraitFailed, setPortraitFailed] = useState(false);
+  const portrait = Boolean(cat.portraitUri) && !portraitFailed;
+  useEffect(()=>setPortraitFailed(false),[cat.portraitUri]);
+  const report = async () => { setStarting(true); setError(null); try { await onReportSighting(cat.animalId); } catch { setError(reportCopy.startFailed); } finally { setStarting(false); } };
+  return <SafeAreaView edges={['left','right']} style={styles.screen}>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.hero}>{portrait ? <Image accessibilityLabel={cat.sampleLabel ?? `${cat.primaryAlias} public portrait`} resizeMode="cover" source={{uri:cat.portraitUri!}} style={styles.heroImage} onError={()=>setPortraitFailed(true)}/> : <View accessibilityLabel={cn?'公开照片不可用':'Public portrait unavailable'} style={styles.heroFallback}><AppIcon name="cat" size={64} color={colors.actionPrimary}/><Text style={styles.fallback}>{cn?'暂无公开照片':'No public photo yet'}</Text></View>}{onBack?<GlassSurface interactive style={styles.back}><Pressable accessibilityRole="button" accessibilityLabel={cn?'返回':'Back'} onPress={onBack} style={styles.backPress}><AppIcon name="back" size={24} color={colors.ink}/></Pressable></GlassSurface>:null}{heroActions?<View style={styles.heroActions}>{heroActions}</View>:null}</View>
+      <View style={styles.body}><View style={styles.identity}><View style={styles.copy}><Text accessibilityRole="header" style={styles.name}>{cat.primaryAlias}</Text><Text style={styles.verified}>{cat.verificationLabel}</Text></View></View>
+        <View style={styles.facts}><Fact label={cn?'身份状态':'Identity status'} value={cat.verificationLabel} styles={styles}/><Fact label={cn?'粗略社区活动':'Coarse neighbourhood activity'} value={cat.timeLabel} styles={styles}/></View><Text style={styles.protected}>{cn?'这里绝不会显示精确位置、路线或时间戳。':'Exact locations, routes and timestamps stay protected.'}</Text>
+        <View style={styles.group}><Pressable accessibilityRole="button" accessibilityLabel={cn?`记录 ${cat.primaryAlias} 的已完成照护`:`Record completed care for ${cat.primaryAlias}`} disabled={!onRecordCare} onPress={()=>{void onRecordCare?.(cat.animalId);}} style={styles.row}><AppIcon name="care" size={23} color={colors.actionPrimary}/><View style={styles.copy}><Text style={styles.rowTitle}>{cn?'照护记录':'Care records'}</Text><Text style={styles.rowNote}>{cn?'查看已完成的照护':'View completed care'}</Text></View><AppIcon name="chevron" size={18} color={colors.muted}/></Pressable></View>{children}{error?<Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>:null}</View>
+    </ScrollView><View style={styles.dock}><Pressable accessibilityRole="button" accessibilityLabel={cn?`报告 ${cat.primaryAlias} 的目击记录`:`Report a sighting of ${cat.primaryAlias}`} disabled={starting} onPress={()=>{void report();}} style={styles.report}><AppIcon name="camera" size={22} color={colors.onAction}/><Text style={styles.reportText}>{cn?'记录目击':'Report a sighting'}</Text></Pressable></View>
+  </SafeAreaView>;
 }
-
-export function CatDetailScreen({ cat, fixture, locale = 'en', onReportSighting, onRecordCare, children }: CatDetailScreenProps) {
-  const reportCopy = getReportCopy(locale);
-  const copy = getCatDetailCopy(locale, cat.primaryAlias);
-  const [startingReport, setStartingReport] = useState(false);
-  const [reportError, setReportError] = useState<string | null>(null);
-
-  async function startReport() {
-    setStartingReport(true);
-    setReportError(null);
-    try {
-      await onReportSighting(cat.animalId);
-    } catch {
-      setReportError(reportCopy.startFailed);
-    } finally {
-      setStartingReport(false);
-    }
-  }
-
-  return (
-    <ScreenScaffold
-      eyebrow={fixture ? copy.preview : undefined}
-      subtitle={copy.subtitle}
-      title={cat.primaryAlias}
-    >
-      <View style={styles.portraitFrame}>
-        {fixture ? (
-          <Image
-            accessibilityLabel={copy.previewPortrait}
-            resizeMode="cover"
-            source={require('../../assets/plates/cat-portrait.png')}
-            style={styles.portrait}
-          />
-        ) : (
-          <View accessibilityLabel={copy.portraitUnavailable} style={styles.placeholder}>
-            <MaterialCommunityIcons color={colors.aquaDeep} name="cat" size={58} />
-            <Text style={styles.placeholderText}>{copy.portraitProtected}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.identityPanel}>
-        <View style={styles.row}>
-          <MaterialCommunityIcons color={colors.community} name="check-decagram-outline" size={21} />
-          <View style={styles.copy}>
-            <Text style={styles.label}>{copy.identityStatus}</Text>
-            <Text style={styles.value}>{cat.verificationLabel}</Text>
-          </View>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.row}>
-          <MaterialCommunityIcons color={colors.aquaDeep} name="map-marker-radius-outline" size={21} />
-          <View style={styles.copy}>
-            <Text style={styles.label}>{copy.coarseActivity}</Text>
-            <Text style={styles.value}>{cat.timeLabel}</Text>
-            <Text style={styles.support}>{copy.locationProtection}</Text>
-          </View>
-        </View>
-      </View>
-
-      <Pressable
-        accessibilityLabel={copy.reportLabel}
-        accessibilityRole="button"
-        disabled={startingReport}
-        onPress={() => { void startReport(); }}
-        style={({ pressed }) => [styles.reportButton, (pressed || startingReport) && styles.pressed]}
-      >
-        <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
-        <Text style={styles.reportButtonText}>{copy.reportAction}</Text>
-      </Pressable>
-      {reportError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{reportError}</Text> : null}
-      {onRecordCare ? <Pressable accessibilityLabel={copy.careLabel} accessibilityRole="button" onPress={() => { void onRecordCare(cat.animalId); }} style={styles.careButton}>
-        <MaterialCommunityIcons color={colors.community} name="heart-plus-outline" size={20} /><Text style={styles.careButtonText}>{copy.careAction}</Text>
-      </Pressable> : null}
-      {children}
-      <Text style={styles.governanceNote}>{copy.governance}</Text>
-    </ScreenScaffold>
-  );
-}
-
-const styles = StyleSheet.create({
-  portraitFrame: { height: 310, overflow: 'hidden', borderRadius: radii.large, backgroundColor: colors.aquaSoft },
-  portrait: { width: '100%', height: '100%' },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  placeholderText: { color: colors.aquaDeep, fontSize: 14, fontWeight: '700' },
-  identityPanel: { padding: 18, borderRadius: radii.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, gap: 16 },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  copy: { flex: 1, gap: 4 },
-  label: { color: colors.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
-  value: { color: colors.mineral, fontSize: 17, lineHeight: 23, fontWeight: '800' },
-  support: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 2 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
-  reportButton: { minHeight: 52, borderRadius: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: colors.community },
-  reportButtonText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
-  careButton: { minHeight: 52, borderRadius: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderColor: colors.community, borderWidth: 1 },
-  careButtonText: { color: colors.community, fontSize: 16, fontWeight: '800' },
-  governanceNote: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-  pressed: { opacity: 0.74 },
-});
+function Fact({label,value,styles}:{label:string;value:string;styles:ReturnType<typeof makeStyles>}){return <View style={styles.fact}><Text style={styles.factLabel}>{label}</Text><Text style={styles.factValue}>{value}</Text></View>;}
+const makeStyles=(colors:ReturnType<typeof useNativeColors>)=>StyleSheet.create({screen:{flex:1,backgroundColor:colors.canvas},content:{paddingBottom:112},hero:{height:356,backgroundColor:colors.leafSoft,overflow:'hidden'},heroImage:{width:'100%',height:'100%'},heroFallback:{flex:1,alignItems:'center',justifyContent:'center',gap:12},fallback:{color:colors.muted,fontSize:15},back:{position:'absolute',top:52,left:20,width:48,height:48,borderRadius:24,overflow:'hidden'},backPress:{width:48,height:48,alignItems:'center',justifyContent:'center'},heroActions:{position:'absolute',top:52,right:20},body:{padding:24,gap:20},identity:{flexDirection:'row',justifyContent:'space-between',alignItems:'flex-start'},copy:{flex:1,gap:3},name:{color:colors.ink,fontSize:34,lineHeight:41,fontWeight:'700',letterSpacing:-.5},verified:{color:colors.actionPrimary,fontSize:16,lineHeight:22,fontWeight:'600'},facts:{flexDirection:'row',gap:36},fact:{flex:1,gap:6},factLabel:{color:colors.muted,fontSize:14,lineHeight:19},factValue:{color:colors.ink,fontSize:20,lineHeight:26,fontWeight:'700'},protected:{color:colors.muted,fontSize:14,lineHeight:20},group:{borderRadius:16,backgroundColor:colors.surface,overflow:'hidden'},row:{minHeight:78,paddingHorizontal:18,flexDirection:'row',alignItems:'center',gap:14},rowTitle:{color:colors.ink,fontSize:17,lineHeight:23,fontWeight:'600'},rowNote:{color:colors.muted,fontSize:14,lineHeight:19},divider:{height:StyleSheet.hairlineWidth,marginLeft:55,backgroundColor:colors.line},error:{color:colors.danger,textAlign:'center'},dock:{paddingHorizontal:20,paddingTop:12,paddingBottom:24,backgroundColor:colors.canvas,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:colors.line},report:{minHeight:54,borderRadius:27,backgroundColor:colors.actionPrimary,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10},reportText:{color:colors.onAction,fontSize:17,fontWeight:'700'}});

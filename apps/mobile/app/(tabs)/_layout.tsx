@@ -4,7 +4,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Platform, StyleSheet } from 'react-native';
 
 import { GlassSurface } from '../../src/design/GlassSurface';
-import { colors } from '../../src/design/theme';
+import { useNativeColors } from '../../src/design/native-colors';
 import { getTabDefinitions, TabRoute } from '../../src/i18n/catalog';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { getTabIconName } from '../../src/navigation/tab-icons';
@@ -20,6 +20,7 @@ const nativeIcons = {
 
 export default function TabLayout() {
   const { locale } = useLocale();
+  const colors = useNativeColors();
   const tabs = getTabDefinitions(locale);
 
   if (Platform.OS === 'ios') {

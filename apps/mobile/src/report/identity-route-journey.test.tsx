@@ -19,6 +19,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, replace: m
 jest.mock('expo-crypto', () => ({ randomUUID: () => mockIds() }));
 jest.mock('../api/supabase', () => ({ getSupabaseClient: () => ({ rpc: mockRpc, auth: { getSession: async () => ({ data: { session: { user: { id: mockOwner }, access_token: 'test-token' } } }) } }) }));
 jest.mock('../auth/session-subject', () => ({ readSessionSubjectStrict: async () => mockOwner, subscribeSessionSubject: () => () => {} }));
+jest.mock('../api/cat-presentation', () => ({getCatPresentations: async () => new Map()}));
 jest.mock('../api/cats', () => ({ getPublicCatSummary: async () => ({ animalId: mockAnimal, primaryAlias: 'Pepper', verification: 'reported', timeBucket: 'today' }) }));
 jest.mock('../api/feed', () => ({ listPublicSightings: async () => ({ items: [{ animalId: mockAnimal, sightingId: mockSighting, primaryAlias: 'Pepper', verification: 'reported', timeBucket: 'today', publicCellId: '89652636d87ffff', coverMediaId: null, cursor: mockSighting }], nextCursor: null }) }));
 jest.mock('../api/sightings', () => ({ recoverSightingSubmission: async () => ({ kind: 'not_found' }), submitSighting: (...args: unknown[]) => mockCreateSighting(...args) }));

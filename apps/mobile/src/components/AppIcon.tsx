@@ -6,7 +6,7 @@ import { ColorValue, Platform, View } from 'react-native';
 const symbols = {
   account: ['person.crop.circle', 'account-circle-outline'],
   reports: ['doc.text', 'text-box-outline'],
-  care: ['heart.text.clipboard', 'clipboard-heart-outline'],
+  care: ['heart.text.clipboard', 'heart-outline'],
   privacy: ['hand.raised', 'hand-back-right-outline'],
   language: ['globe', 'web'],
   chevron: ['chevron.right', 'chevron-right'],
@@ -14,6 +14,14 @@ const symbols = {
   signout: ['rectangle.portrait.and.arrow.right', 'logout'],
   apple: ['apple.logo', 'apple'],
   google: ['g.circle', 'google'],
+  cat: ['pawprint', 'paw'],
+  back: ['chevron.left', 'chevron-left'],
+  more: ['ellipsis', 'dots-horizontal'],
+  filters: ['line.3.horizontal.decrease', 'tune-variant'],
+  location: ['location', 'map-marker-outline'],
+  activity: ['clock', 'clock-outline'],
+  camera: ['camera', 'camera-outline'],
+  heart: ['heart', 'heart-outline'],
   mail: ['envelope', 'email-outline'],
   close: ['xmark', 'close'],
 } as const;

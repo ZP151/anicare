@@ -82,8 +82,8 @@ jest.mock('../components/ScreenScaffold', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
   return {
-    ScreenScaffold: ({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) =>
-      React.createElement(View, null, React.createElement(Text, null, title), React.createElement(Text, null, subtitle), children),
+    ScreenScaffold: ({ title, subtitle, children, trailing }: { title: string; subtitle: string; children: React.ReactNode; trailing?: React.ReactNode }) =>
+      React.createElement(View, null, React.createElement(Text, null, title), React.createElement(Text, null, subtitle), children, trailing),
   };
 });
 
@@ -117,27 +117,17 @@ describe('fail-closed feed screens', () => {
     mockReactStateValues.length = 0;
   });
 
-  it('keeps the privacy-safe map available in demo mode without exposing H3-like values', async () => {
+  it('keeps the privacy-safe map available without presenting fixture cats as public data', async () => {
     mockGetSupabaseClient.mockReturnValue(null);
 
     const nearby = await render(<NearbyScreen />);
-    expect(await nearby.findByText('Preview data')).toBeTruthy();
-    expect(nearby.getByText('Coarse neighbourhood view.')).toBeTruthy();
-    expect(nearby.getByText('Exact locations are protected.')).toBeTruthy();
-    await fireEvent.press(nearby.getByRole('button', { name: 'View Mochi' }));
-    await fireEvent.press(nearby.getByRole('button', { name: 'Report a sighting of Mochi' }));
-    expect(mockPush).toHaveBeenNthCalledWith(1, '/cat/demo-cat');
-    await waitFor(() => expect(mockPush).toHaveBeenNthCalledWith(2, {
-      pathname: '/report/new',
-      params: { draftId: reportDraftId },
-    }));
-    expect(mockSaveOfflineDraft).toHaveBeenCalledWith(expect.objectContaining({
-      id: reportDraftId,
-      notes: '',
-      risk: 'normal',
-    }));
-    await fireEvent.press(nearby.getByRole('button', { name: 'How locations are protected' }));
-    expect(nearby.getByText('No user location is requested. Cat locations, routes and timestamps remain hidden.')).toBeTruthy();
+    expect(await nearby.findByText('Delayed public community-cat activity')).toBeTruthy();
+    expect(nearby.queryByText('Preview data')).toBeNull();
+    expect(nearby.queryByRole('button', { name: 'View Mochi' })).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockSaveOfflineDraft).not.toHaveBeenCalled();
+    await fireEvent.press(nearby.getByRole('button', { name: 'Open map' }));
+    expect(mockPush).toHaveBeenCalledWith('/map');
     await nearby.unmount();
 
     const map = await render(<MapScreen />);

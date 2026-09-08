@@ -1,7 +1,8 @@
 import { Pressable, Text, View } from 'react-native';
 import type { Locale } from '../i18n/catalog';
-import { careStyles as styles } from './CareEntry';
+import { useCareStyles } from './CareEntry';
 export function PendingCareNotice({ locale, busy, failed, retry, stop }: Readonly<{ locale: Locale; busy: boolean; failed: boolean; retry(): void; stop(): void }>) {
+  const styles = useCareStyles();
   const cn = locale === 'zh-CN';
   return <View style={styles.box}>
     <Text style={styles.note}>{cn ? '有一笔照护操作等待确认。重试会使用同一笔请求。' : 'A care operation is awaiting confirmation. Retrying uses the same request.'}</Text>

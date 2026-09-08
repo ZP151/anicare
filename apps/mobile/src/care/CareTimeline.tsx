@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { CARE_AREAS, type MyCareEvent, type PublicCareEvent } from '../api/care';
 import type { Locale } from '../i18n/catalog';
-import { careActivityLabel, careStyles as styles } from './CareEntry';
+import { careActivityLabel, useCareStyles } from './CareEntry';
 
 type Props = Readonly<{
   locale: Locale; items: readonly (MyCareEvent | PublicCareEvent)[]; loading: boolean; failed: boolean;
@@ -9,6 +9,7 @@ type Props = Readonly<{
   withdraw?(event: MyCareEvent): void; correct?(event: MyCareEvent): void;
 }>;
 export function CareTimeline({ locale, items, loading, failed, hasMore, refresh, more, busy, withdraw, correct }: Props) {
+  const styles = useCareStyles();
   const cn = locale === 'zh-CN';
   return <View style={{ gap: 12 }}>
     {loading ? <Text accessibilityLiveRegion="polite" style={styles.note}>{cn ? '正在读取照护记录…' : 'Loading care records…'}</Text> : null}
