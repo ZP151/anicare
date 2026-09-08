@@ -228,7 +228,7 @@ require_command find
 require_command lipo
 require_command node
 require_command otool
-require_command pod
+require_command bundle
 require_command pnpm
 require_command ruby
 require_command shasum
@@ -261,11 +261,12 @@ pnpm validate:generated-ios-device-lab-podfile-lock
 source_lock_sha256="$(shasum -a 256 "$LOCKFILE_SOURCE" | awk '{print $1}')"
 generated_lock_sha256="$(shasum -a 256 "$IOS_DIR/Podfile.lock" | awk '{print $1}')"
 [[ "$source_lock_sha256" == "$generated_lock_sha256" ]] || fail "generated_podfile_lock_invalid"
-pod_version="$(pod _1.17.0_ --version)"
+[[ "$(bundle exec ruby -e 'print RUBY_VERSION')" == '3.3.12' ]] || fail "ruby_version_invalid"
+pod_version="$(bundle exec pod --version)"
 [[ "$pod_version" == '1.17.0' ]] || fail "cocoapods_version_invalid"
 (
   cd -- "$IOS_DIR"
-  pod _1.17.0_ install --deployment
+  bundle exec pod install --deployment
 )
 
 workspaces=()

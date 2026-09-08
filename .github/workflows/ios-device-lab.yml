@@ -52,7 +52,8 @@ jobs:
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
           ruby-version: 3.3.12
-          bundler: none
+          bundler: 2.6.9
+          bundler-cache: true
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify the pinned native toolchain
@@ -63,7 +64,9 @@ jobs:
           test "$(node --version)" = 'v22.23.1'
           test "$(pnpm --version)" = '11.19.0'
           test "$(ruby --version | awk '{print $2}')" = '3.3.12'
-          pod _1.17.0_ --version
+          test "$(bundle exec ruby -e 'print RUBY_VERSION')" = '3.3.12'
+          bundle exec ruby -rrbconfig -e 'puts RbConfig.ruby; puts Gem.dir; puts Gem.bin_path("cocoapods", "pod", "1.17.0")'
+          test "$(bundle exec pod --version)" = '1.17.0'
       - name: Validate repository policy contracts
         run: |
           pnpm validate:pilot-policies
@@ -83,7 +86,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           cd ios
-          pod _1.17.0_ install
+          bundle exec pod install
       - name: Validate the generated Pod lock
         run: pnpm --filter @animalhelper/mobile validate:generated-ios-device-lab-podfile-lock
       - name: Upload the generated Pod lock for review
@@ -116,7 +119,8 @@ jobs:
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
           ruby-version: 3.3.12
-          bundler: none
+          bundler: 2.6.9
+          bundler-cache: true
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify the pinned native toolchain
@@ -127,7 +131,9 @@ jobs:
           test "$(node --version)" = 'v22.23.1'
           test "$(pnpm --version)" = '11.19.0'
           test "$(ruby --version | awk '{print $2}')" = '3.3.12'
-          pod _1.17.0_ --version
+          test "$(bundle exec ruby -e 'print RUBY_VERSION')" = '3.3.12'
+          bundle exec ruby -rrbconfig -e 'puts RbConfig.ruby; puts Gem.dir; puts Gem.bin_path("cocoapods", "pod", "1.17.0")'
+          test "$(bundle exec pod --version)" = '1.17.0'
       - name: Validate repository policy contracts
         run: |
           pnpm validate:pilot-policies
@@ -178,7 +184,8 @@ jobs:
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
           ruby-version: 3.3.12
-          bundler: none
+          bundler: 2.6.9
+          bundler-cache: true
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify the pinned native toolchain
@@ -189,7 +196,9 @@ jobs:
           test "$(node --version)" = 'v22.23.1'
           test "$(pnpm --version)" = '11.19.0'
           test "$(ruby --version | awk '{print $2}')" = '3.3.12'
-          pod _1.17.0_ --version
+          test "$(bundle exec ruby -e 'print RUBY_VERSION')" = '3.3.12'
+          bundle exec ruby -rrbconfig -e 'puts RbConfig.ruby; puts Gem.dir; puts Gem.bin_path("cocoapods", "pod", "1.17.0")'
+          test "$(bundle exec pod --version)" = '1.17.0'
       - name: Validate repository policy contracts
         run: |
           pnpm validate:pilot-policies
