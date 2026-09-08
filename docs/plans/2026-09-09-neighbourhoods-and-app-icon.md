@@ -39,3 +39,7 @@ No migration, sample re-provisioning or backend deployment is needed for this in
 ## Verification before native build
 
 `pnpm verify` passed on 9 September 2026, including 956 mobile tests, 23 domain tests, workspace type checks and production exports. Three updated web fallback screenshots were rendered at 804 × 1748 and inspected with no page errors. Local Python required the declared Pillow development dependency; an unrelated hosted-test timeout passed when run without parallel resource contention. Final full verification passed. The interior-point regression first reproduced 12 out-of-bound markers, then passed for all 332 after correction. Native artifact verification follows the macOS build.
+
+## Delivered native candidate
+
+0.2.1 (5), source `57b76d15312e6f0d1e46a1f6d783b1e4c7821dc7`, [iOS run 34264041204](https://github.com/ZP151/anicare/actions/runs/34264041204), [full CI 34264046087](https://github.com/ZP151/anicare/actions/runs/34264046087): all successful. IPA 21,355,648 bytes, SHA256 `2cd5f9f31f1a1eeb70b18d1aa5b75dcee1777245d4589033ab4172140f555f0e`. Provenance, exact manifest, three-file delivery, hashes, both immutable-source lockfiles, bundle/version and three permission purpose strings verified. Native AppIcon resources and Assets.car are present. The previous iPhone icon decoded to a single all-white color; the new icon has 2,639 opaque colors. Device rendering and product use remain pending acceptance. [Install and test](../ios-next-device-test.md).
