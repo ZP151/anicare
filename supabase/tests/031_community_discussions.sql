@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(34);
 
 set local session_replication_role = replica;
 insert into auth.users(id,email,created_at,updated_at) values ('00000000-0000-4000-8000-000000003101','author-community@example.test',now(),now());
@@ -112,6 +112,7 @@ select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003101',true);
 select lives_ok($$select * from public.request_account_erasure('00000000-0000-4000-8000-000000003211')$$,'author can request account erasure');
 select throws_ok($$select public.create_community_post('After erasure request',null,'harbor-cats','00000000-0000-4000-8000-000000003212')$$,'42501','adult_contributor_required','pending erasure blocks new community posts');
+select throws_ok($$select public.block_community_author('community_post',current_setting('test.post_id')::uuid,'00000000-0000-4000-8000-000000003213')$$,'42501','account_erasure_pending','pending erasure blocks new community blocks');
 reset role;
 
 select * from finish();

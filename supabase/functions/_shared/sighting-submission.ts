@@ -2,12 +2,21 @@ import { z } from 'zod';
 
 export const MAX_SIGHTING_SUBMISSION_BYTES = 64 * 1024;
 
+const publicPlaceSchema=z.object({
+  residenceType:z.enum(['hdb','condo','other']),
+  name:z.string().trim().min(1).max(100).refine(value=>!/[\x00-\x1f\x7f]/.test(value)),
+}).strict();
+const traitsSchema=z.record(z.string(),z.unknown()).refine(value=>
+  value.public_place===undefined || publicPlaceSchema.safeParse(value.public_place).success,
+  'invalid_public_place',
+).default({});
+
 const deviceOnceSubmissionSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   occurredAt: z.iso.datetime({ offset: true }),
   risk: z.enum(['normal', 'sensitive', 'critical']).default('normal'),
-  traits: z.record(z.string(), z.unknown()).default({}),
+  traits: traitsSchema,
   notes: z.string().trim().max(2000).nullable().default(null),
   clientDedupeKey: z.string().min(8).max(160),
 }).strict();
@@ -16,7 +25,7 @@ const manualAreaSubmissionSchema = z.object({
   manualPublicCellId: z.string().min(1).max(64),
   occurredAt: z.iso.datetime({ offset: true }),
   risk: z.enum(['normal', 'sensitive', 'critical']).default('normal'),
-  traits: z.record(z.string(), z.unknown()).default({}),
+  traits: traitsSchema,
   notes: z.string().trim().max(2000).nullable().default(null),
   clientDedupeKey: z.string().min(8).max(160),
 }).strict();

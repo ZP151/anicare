@@ -8,7 +8,7 @@ import { AppIcon } from '../components/AppIcon';
 import { ScreenScaffold } from '../components/ScreenScaffold';
 import { CatList } from './CatList';
 import { useCatPage } from './use-cat-page';
-const areas=[['896520ca163ffff','Jurong','裕廊'],['89652636d87ffff','MacRitchie','麦里芝'],['896526add03ffff','Tampines','淡滨尼']] as const;
+import { REPORT_AREAS as areas } from '../maps/report-areas';
 export function DiscoveryList(){
  const {locale}=useLocale();const cn=locale==='zh-CN';const auth=useAccountSession();
  const colors=useNativeColors(); const styles=makeStyles(colors);

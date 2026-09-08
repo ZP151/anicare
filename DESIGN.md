@@ -1,5 +1,7 @@
 # Whisker Commons · iOS 26 design baseline
 
+2026-09-09：根据首轮真机反馈继续实施新加坡地图、报告恢复、默认头像与社区讨论。[v3 增量设计稿](docs/design/ios26-review-v3/index.html)归档本轮 8 个变化页面；v2 的 87 张稿保持原样。[本轮实施计划](docs/plans/2026-09-09-singapore-community-v3.md)记录功能、回归和产品目标。公开楼栋 / 住宅项目名称由用户明确选择；名称是报告者提供的地点上下文，猫活动继续延迟显示。
+
 2026-09-08：用户确认按现有逐页案例持续实施，直到下一次真机测试。视觉基准是 [iOS 26 v2](docs/design/ios26-review-v2/index.html)，不是旧安装包。
 
 - [87 张逐页 PNG 与路由索引](docs/design/ios26-review-v2/screen-manifest.json)

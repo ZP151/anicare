@@ -5,7 +5,7 @@
   "scripts": {
     "provision": "tsx src/provision.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/portrait.test.ts"
+    "test": "tsx --test src/portrait.test.ts src/fixtures.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.98.0",

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "M01",
+    "title": "全岛地图",
+    "route": "/map",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "M02",
+    "title": "社区详情",
+    "route": "/map",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "M03",
+    "title": "区域列表",
+    "route": "/map",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "C01",
+    "title": "社区讨论",
+    "route": "/community",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "C02",
+    "title": "讨论详情",
+    "route": "/community/[id]",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "R01",
+    "title": "报告地点与建筑",
+    "route": "/report/new",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "P01",
+    "title": "个人资料",
+    "route": "/profile",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  },
+  {
+    "id": "P02",
+    "title": "默认头像",
+    "route": "/profile",
+    "width": 804,
+    "height": 1748,
+    "kind": "design-reference",
+    "syntheticData": true
+  }
+]

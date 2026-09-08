@@ -1,354 +1,74 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import * as Crypto from 'expo-crypto';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { SingaporeRegion } from '@animalhelper/domain';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { listPublicSightings, type NarrowRpcClient } from '../../src/api/feed';
+import { listPublicSightings, type PublicSighting, type NarrowRpcClient } from '../../src/api/feed';
+import { getSightingPlaces, type SightingPlace } from '../../src/api/sighting-places';
 import { getSupabaseClient } from '../../src/api/supabase';
-import { readSessionSubjectStrict } from '../../src/auth/session-subject';
-import { CoarseAreaDetailSheet } from '../../src/components/CoarseAreaDetailSheet';
-import { saveOfflineDraft } from '../../src/offline/draft-store';
-import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
-import { radii } from '../../src/design/theme';
+import { readSessionSubjectStrict, subscribeSessionSubject } from '../../src/auth/session-subject';
+import { AppIcon } from '../../src/components/AppIcon';
 import { GlassSurface } from '../../src/design/GlassSurface';
 import { useNativeColors } from '../../src/design/native-colors';
 import { useLocale } from '../../src/i18n/LocaleContext';
-import { getCommunityMapCopy } from '../../src/i18n/catalog';
 import { NearbyMap } from '../../src/maps/NearbyMap';
-import {
-  buildPublicAreaSummaries,
-  createDemoPublicAreaSummaries,
-  type PublicAreaSummary,
-} from '../../src/maps/public-map-policy';
-import { tabVisualContract } from '../../src/navigation/tab-style';
+import { buildSingaporeAreas, filterSingaporeAreas, SG_COMMUNITIES, SG_REGIONS, type SingaporeArea } from '../../src/maps/singapore-communities';
 
-type FeedStatus = 'demo' | 'loading' | 'live' | 'unavailable';
-type JourneyLayer = 'map' | 'list';
-
-function getActionMinHeight(): number {
-  return Platform.OS === 'android' ? 48 : 44;
+export default function MapScreen(){
+ const {locale}=useLocale(); const cn=locale==='zh-CN'; const router=useRouter(); const colors=useNativeColors(); const styles=makeStyles(colors);
+ const params=useLocalSearchParams<{communityId?:string}>();
+ const desiredCommunity=SG_COMMUNITIES.some(area=>area.id===params.communityId)?params.communityId!:null;
+ const client=getSupabaseClient() as unknown as NarrowRpcClient|null;
+ const [areas,setAreas]=useState<readonly SingaporeArea[]>(()=>buildSingaporeAreas([],new Map(),locale));
+ const [region,setRegion]=useState<SingaporeRegion|'all'>('all'); const [query,setQuery]=useState('');
+ const [selectedId,setSelectedId]=useState<string|null>(null); const [listOnly,setListOnly]=useState(false);
+ const [loading,setLoading]=useState(false); const [error,setError]=useState(false); const [hasMore,setHasMore]=useState(false); const [mapKey,setMapKey]=useState(0);
+ const rows=useRef<PublicSighting[]>([]); const places=useRef(new Map<string,SightingPlace>()); const cursor=useRef<string|null>(null); const generation=useRef(0); const busy=useRef(false);
+ const load=useCallback(async(reset=true)=>{
+   if(busy.current&&!reset)return;
+   const ticket=++generation.current; busy.current=true;setLoading(true);setError(false);
+   if(reset){rows.current=[];places.current=new Map();cursor.current=null;setHasMore(false);setSelectedId(desiredCommunity);setAreas(buildSingaporeAreas([],new Map(),locale));}
+   try{
+     if(!client)throw new Error('unconfigured');
+     const owner=await readSessionSubjectStrict();
+     const page=await listPublicSightings({limit:50,cursor:reset?null:cursor.current},client);
+     const metadata=await getSightingPlaces(page.items.map(item=>item.sightingId),client);
+     if(ticket!==generation.current || owner!==await readSessionSubjectStrict())return;
+     rows.current=[...rows.current,...page.items]; for(const [id,place] of metadata)places.current.set(id,place);
+     cursor.current=page.nextCursor;setHasMore(page.items.length===50);setAreas(buildSingaporeAreas(rows.current,places.current,locale));
+   }catch{if(ticket===generation.current)setError(true);}
+   finally{if(ticket===generation.current){busy.current=false;setLoading(false);}}
+ },[client,locale,desiredCommunity]);
+ useEffect(()=>{void load();const unsubscribe=subscribeSessionSubject(()=>{void load();});return()=>{generation.current++;unsubscribe();};},[load]);
+ const filtered=filterSingaporeAreas(areas,region,query); const selected=filtered.find(area=>area.id===selectedId);
+ const catCount=new Set(filtered.flatMap(area=>area.cats.map(cat=>cat.animalId))).size;
+ const openCommunity=(area?:SingaporeArea)=>router.push((area?`/community?communitySlug=${area.id}`:'/community') as never);
+ return <View style={styles.screen}>
+   {!listOnly&&<View style={StyleSheet.absoluteFill}><NearbyMap key={mapKey} areas={filtered} selectedAreaId={selectedId} onSelectArea={setSelectedId} fallbackLabel={cn?'地图暂不可用，下方仍可浏览社区。':'Map unavailable. Browse communities below.'}/></View>}
+   <SafeAreaView edges={['top']} style={styles.overlay} pointerEvents="box-none">
+     <GlassSurface style={styles.header}>
+       <View style={styles.heading}><View style={{flex:1}}><Text style={styles.kicker}>SINGAPORE</Text><Text style={styles.title}>{cn?'社区猫地图':'Community cats'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={cn?'社区讨论':'Community discussions'} onPress={()=>openCommunity()} style={styles.icon}><AppIcon name="mail" color={colors.actionPrimary}/></Pressable></View>
+       <View style={styles.search}><AppIcon name="location" size={19} color={colors.muted}/><TextInput accessibilityLabel={cn?'搜索社区、猫或楼栋':'Search community, cat or building'} placeholder={cn?'社区、猫名、HDB / Condo':'Community, cat, HDB / Condo'} placeholderTextColor={colors.muted} value={query} onChangeText={value=>{setQuery(value);setSelectedId(null);}} style={styles.input}/></View>
+       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{[{id:'all' as const,en:'All',zh:'全岛'},...SG_REGIONS].map(item=><Pressable key={item.id} accessibilityRole="button" accessibilityState={{selected:region===item.id}} onPress={()=>{setRegion(item.id);setSelectedId(null);}} style={[styles.chip,region===item.id&&styles.activeChip]}><Text style={[styles.chipText,region===item.id&&styles.activeText]}>{cn?item.zh:item.en}</Text></Pressable>)}</ScrollView>
+     </GlassSurface>
+     <View style={styles.space} pointerEvents="box-none"><View style={styles.controls}><GlassSurface style={styles.round}><Pressable accessibilityRole="button" accessibilityLabel={cn?'显示全岛':'Show all Singapore'} onPress={()=>{setSelectedId(null);setRegion('all');setQuery('');setMapKey(k=>k+1);}} style={styles.icon}><AppIcon name="location" color={colors.actionPrimary}/></Pressable></GlassSurface><GlassSurface style={styles.round}><Pressable accessibilityRole="button" accessibilityLabel={cn?'切换地图与列表':'Toggle map and list'} onPress={()=>setListOnly(value=>!value)} style={styles.icon}><AppIcon name="reports" color={colors.actionPrimary}/></Pressable></GlassSurface></View></View>
+     <View style={[styles.panel,listOnly&&styles.expanded]}>
+       <View style={styles.heading}>{selected?<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回社区列表':'Back to communities'} onPress={()=>setSelectedId(null)} style={styles.icon}><AppIcon name="back" color={colors.actionPrimary}/></Pressable>:null}<View style={{flex:1}}><Text style={styles.panelTitle}>{selected?.name??(cn?'探索社区':'Explore communities')}</Text><Text style={styles.meta}>{selected?(cn?`${selected.cats.length} 只猫 · 延迟公开活动`:`${selected.cats.length} cats · delayed activity`):(cn?`${catCount} 只猫 · ${filtered.length} 个规划区`:`${catCount} cats · ${filtered.length} planning areas`)}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={cn?'刷新':'Refresh'} onPress={()=>void load()} style={styles.icon}><AppIcon name="activity" color={colors.actionPrimary}/></Pressable></View>
+       {loading?<ActivityIndicator accessibilityLabel={cn?'加载社区活动':'Loading community activity'} color={colors.actionPrimary}/>:null}
+       {error?<Pressable accessibilityRole="button" onPress={()=>void load()}><Text style={styles.error}>{cn?'活动暂未载入，点此重试':'Activity could not load. Tap to retry.'}</Text></Pressable>:null}
+       <ScrollView contentContainerStyle={styles.rows} showsVerticalScrollIndicator={false}>
+         {selected?<>
+           <Text style={styles.meta}>{cn?'楼栋 / 项目名称由报告者提供，不代表固定住址。':'Building / project names are reported context, not a fixed home.'}</Text>
+           {selected.cats.map(cat=><Pressable accessibilityRole="button" key={cat.animalId} onPress={()=>router.push(`/cat/${cat.animalId}` as never)} style={styles.row}><View style={styles.avatar}><AppIcon name="cat" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{cat.alias}</Text><Text style={styles.meta}>{cat.residenceType?`${cat.residenceType==='hdb'?'HDB':cat.residenceType==='condo'?'Condo':cn?'其他':'Other'} · ${cat.residenceName}`:cn?'楼栋信息未提供':'Building not provided'}</Text><Text style={styles.meta}>{cat.timeLabel}</Text></View><AppIcon name="chevron" color={colors.muted} size={16}/></Pressable>)}
+           {!selected.cats.length&&!loading?<Text style={styles.meta}>{cn?'这里尚无已公开的猫记录。可报告目击，或发起社区讨论。':'No public cat records here yet. Report a sighting or start a discussion.'}</Text>:null}
+           <View style={styles.actions}><Pressable accessibilityRole="button" onPress={()=>router.push('/report' as never)} style={styles.primary}><Text style={styles.primaryText}>{cn?'报告目击':'Report sighting'}</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>openCommunity(selected)} style={styles.secondary}><Text style={styles.chipText}>{cn?'社区讨论':'Discuss'}</Text></Pressable></View>
+         </>:filtered.map(area=><Pressable accessibilityRole="button" accessibilityLabel={`${area.name}, ${area.cats.length} ${cn?'只猫':'cats'}`} key={area.id} onPress={()=>setSelectedId(area.id)} style={styles.row}><View style={styles.avatar}><AppIcon name="location" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{area.name}</Text><Text style={styles.meta}>{SG_REGIONS.find(item=>item.id===area.region)?.[cn?'zh':'en']}</Text></View><Text style={styles.count}>{area.cats.length}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>)}
+         {!filtered.length?<Text style={styles.meta}>{cn?'没有匹配的社区、猫或楼栋。':'No matching community, cat or building.'}</Text>:null}
+         {hasMore?<Pressable accessibilityRole="button" disabled={loading} onPress={()=>void load(false)} style={styles.secondary}><Text style={styles.chipText}>{cn?'载入更多活动':'Load more activity'}</Text></Pressable>:null}
+         <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://data.gov.sg/datasets/d_2cc750190544007400b2cfd5d7f53209/view')}><Text style={styles.credit}>URA Master Plan 2025 · Singapore Open Data Licence</Text></Pressable>
+       </ScrollView>
+     </View>
+   </SafeAreaView>
+ </View>;
 }
-
-export default function MapScreen() {
-  const colors = useNativeColors();
-  const styles = makeStyles(colors);
-  const { locale, t } = useLocale();
-  const router = useRouter();
-  const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
-  const mapCopy = getCommunityMapCopy(locale);
-  const [status, setStatus] = useState<FeedStatus>(client ? 'loading' : 'demo');
-  const [areas, setAreas] = useState<readonly PublicAreaSummary[]>(() => (
-    client ? [] : createDemoPublicAreaSummaries(locale)
-  ));
-  const [layer, setLayer] = useState<JourneyLayer>('map');
-  const [mapResetKey, setMapResetKey] = useState(0);
-  const [selectedArea, setSelectedArea] = useState<PublicAreaSummary | null>(null);
-
-  useEffect(() => {
-    if (!client) {
-      setStatus('demo');
-      setAreas(createDemoPublicAreaSummaries(locale));
-      setSelectedArea(null);
-      return;
-    }
-    let active = true;
-    setStatus('loading');
-    setAreas([]);
-    setSelectedArea(null);
-    void listPublicSightings({ limit: 20 }, client)
-      .then((page) => {
-        if (!active) return;
-        setAreas(buildPublicAreaSummaries(page.items, locale));
-        setStatus('live');
-      })
-      .catch(() => {
-        if (!active) return;
-        setAreas([]);
-        setStatus('unavailable');
-      });
-    return () => { active = false; };
-  }, [client, locale]);
-
-  const statusCopy = getStatusCopy(status, areas.length, t);
-
-  function showAreaList() {
-    setLayer('list');
-  }
-
-  function showMap() {
-    setLayer('map');
-  }
-
-  function resetBroadMapView() {
-    setMapResetKey((key) => key + 1);
-  }
-
-  function openArea(area: PublicAreaSummary) {
-    setSelectedArea(area);
-  }
-
-  return (
-    <SafeAreaView edges={['top']} style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <Text style={styles.title}>{t('map.title')}</Text>
-        </View>
-
-        <View accessibilityLabel={t('map.title')} style={styles.segmentedControl}>
-          <SegmentButton active={layer === 'map'} label={t('map.mapTab')} onPress={showMap} />
-          <SegmentButton active={layer === 'list'} label={t('map.listTab')} onPress={showAreaList} />
-        </View>
-
-        <View style={styles.contextBar}>
-          <View style={styles.contextCopy}>
-            <Text style={styles.contextTitle}>{t('map.delayedActivity')}</Text>
-            <Text style={styles.legend}>{t('map.legend')}</Text>
-          </View>
-          <MaterialCommunityIcons color={colors.community} name="shield-check-outline" size={24} />
-        </View>
-
-        {layer === 'map' ? (
-          <View style={styles.mapStage}>
-            <NearbyMap fallbackLabel={t('map.mapUnavailable')} key={mapResetKey} />
-            {statusCopy ? (
-              <StatusBadge announce={status !== 'demo'} text={statusCopy} unavailable={status === 'unavailable'} />
-            ) : null}
-            <View style={styles.mapActions}>
-              <ActionButton icon="refresh" label={t('map.resetBroadView')} onPress={resetBroadMapView} />
-              <ActionButton icon="format-list-bulleted" label={t('map.showAreaList')} onPress={showAreaList} />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.listStage}>
-            {statusCopy ? (
-              <StatusBadge announce={status !== 'demo'} text={statusCopy} unavailable={status === 'unavailable'} />
-            ) : null}
-            <View style={styles.listHeader}>
-              <Text style={styles.listTitle}>{t('map.delayedActivity')}</Text>
-              <ActionButton icon="map-outline" label={t('map.showMap')} onPress={showMap} compact />
-            </View>
-            {areas.map((area) => (
-              <Pressable
-                key={area.areaKey}
-                accessibilityLabel={mapCopy.openAreaLabel(area.label)}
-                accessibilityRole="button"
-                onPress={() => openArea(area)}
-                style={({ pressed }) => [styles.areaRow, pressed && styles.pressed]}
-              >
-                <View style={styles.areaText}>
-                  <Text style={styles.areaLabel}>{area.label}</Text>
-                  <Text style={styles.areaMeta}>{area.activityLabel}</Text>
-                </View>
-                <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={24} />
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.manualAreaNotice}>
-          <MaterialCommunityIcons color={colors.aquaDeep} name="map-marker-radius-outline" size={21} />
-          <Text style={styles.manualAreaCopy}>{t('map.manualAreaExplanation')}</Text>
-        </View>
-        <ActionButton icon="map-search-outline" label={t('map.chooseAreaManually')} onPress={showAreaList} secondary />
-
-        {selectedArea ? (
-          <CoarseAreaDetailSheet
-            area={selectedArea}
-            locale={locale}
-            onReportFromArea={async ({ startAt }) => {
-              const draftId = await createOwnerAwareReportDraft({
-                readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
-                saveDraft: saveOfflineDraft,
-                createId: Crypto.randomUUID,
-                now: () => new Date(),
-              }, {
-                step: startAt,
-                areaSelectionMode: 'manual_required',
-              });
-              router.push({ pathname: '/report/new', params: { draftId } } as never);
-            }}
-            onViewCat={(animalId) => router.push(`/cat/${animalId}` as never)}
-          />
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-function getStatusCopy(
-  status: FeedStatus,
-  areaCount: number,
-  t: (key: 'map.demoStatus' | 'map.loadingStatus' | 'map.emptyStatus' | 'map.unavailableStatus') => string,
-): string | null {
-  if (status === 'demo') return t('map.demoStatus');
-  if (status === 'loading') return t('map.loadingStatus');
-  if (status === 'unavailable') return t('map.unavailableStatus');
-  return areaCount === 0 ? t('map.emptyStatus') : null;
-}
-
-function SegmentButton({ active, label, onPress }: Readonly<{ active: boolean; label: string; onPress: () => void }>) {
-  const styles = makeStyles(useNativeColors());
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [styles.segmentButton, active && styles.segmentButtonActive, pressed && styles.pressed]}
-    >
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ActionButton({
-  compact = false,
-  icon,
-  label,
-  onPress,
-  secondary = false,
-}: Readonly<{
-  compact?: boolean;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  label: string;
-  onPress: () => void;
-  secondary?: boolean;
-}>) {
-  const colors = useNativeColors();
-  const styles = makeStyles(colors);
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        compact && styles.actionButtonCompact,
-        secondary && styles.actionButtonSecondary,
-        pressed && styles.pressed,
-      ]}
-    >
-      <GlassSurface interactive style={[styles.actionGlass, secondary && styles.actionGlassSecondary]}>
-        <MaterialCommunityIcons color={secondary ? colors.actionSecondary : colors.actionPrimary} name={icon} size={20} />
-        <Text numberOfLines={1} style={[styles.actionText, secondary && styles.actionTextSecondary]}>{label}</Text>
-      </GlassSurface>
-    </Pressable>
-  );
-}
-
-function StatusBadge({ announce, text, unavailable }: Readonly<{ announce: boolean; text: string; unavailable?: boolean }>) {
-  const styles = makeStyles(useNativeColors());
-  return (
-    <View
-      accessibilityLiveRegion={announce ? 'polite' : undefined}
-      style={[styles.statusBadge, unavailable && styles.statusBadgeUnavailable]}
-    >
-      <Text style={[styles.statusText, unavailable && styles.statusTextUnavailable]}>{text}</Text>
-    </View>
-  );
-}
-
-const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper },
-  content: { paddingBottom: tabVisualContract.barHeight + 24 },
-  topBar: {
-    minHeight: 64,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-    backgroundColor: colors.surface,
-  },
-  title: { color: colors.actionPrimary, fontSize: 19, lineHeight: 24, fontWeight: '800', letterSpacing: -0.25 },
-  segmentedControl: {
-    minHeight: getActionMinHeight(),
-    marginHorizontal: 20,
-    marginTop: 14,
-    padding: 3,
-    flexDirection: 'row',
-    borderRadius: radii.small,
-    backgroundColor: colors.leafSoft,
-  },
-  segmentButton: { minHeight: getActionMinHeight(), flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
-  segmentButtonActive: { backgroundColor: colors.surface, boxShadow: '0px 1px 3px rgba(18,59,70,0.15)', elevation: 2 },
-  segmentText: { color: colors.muted, fontSize: 14, lineHeight: 18, fontWeight: '700' },
-  segmentTextActive: { color: colors.actionPrimary },
-  contextBar: {
-    minHeight: 66,
-    marginHorizontal: 20,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  contextCopy: { flex: 1 },
-  contextTitle: { color: colors.mineral, fontSize: 15, lineHeight: 19, fontWeight: '800' },
-  legend: { marginTop: 2, color: colors.muted, fontSize: 13, lineHeight: 18 },
-  mapStage: { height: 330, overflow: 'hidden', backgroundColor: colors.leafSoft },
-  mapActions: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    left: 14,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  listStage: { minHeight: 220, paddingHorizontal: 20, paddingBottom: 10, gap: 9 },
-  listHeader: { minHeight: getActionMinHeight(), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  listTitle: { flex: 1, color: colors.mineral, fontSize: 16, lineHeight: 21, fontWeight: '800' },
-  statusBadge: { alignSelf: 'flex-start', marginHorizontal: 20, marginTop: 14, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radii.small, backgroundColor: colors.paper },
-  statusBadgeUnavailable: { backgroundColor: colors.surface },
-  statusText: { color: colors.mineral, fontSize: 12, lineHeight: 16, fontWeight: '700' },
-  statusTextUnavailable: { color: colors.danger },
-  areaRow: {
-    minHeight: 68,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radii.medium,
-    backgroundColor: colors.surface,
-  },
-  areaText: { flex: 1 },
-  areaLabel: { color: colors.ink, fontSize: 16, lineHeight: 20, fontWeight: '800' },
-  areaMeta: { marginTop: 2, color: colors.muted, fontSize: 13, lineHeight: 18 },
-  manualAreaNotice: {
-    minHeight: 60,
-    marginHorizontal: 20,
-    marginTop: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.line,
-  },
-  manualAreaCopy: { flex: 1, color: colors.mineral, fontSize: 13, lineHeight: 18 },
-  actionButton: {
-    minHeight: getActionMinHeight(),
-    paddingHorizontal: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    borderRadius: radii.small,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(18,59,70,0.2)',
-  },
-  actionGlass: { minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
-  actionGlassSecondary: { backgroundColor: 'transparent' },
-  actionButtonCompact: { paddingHorizontal: 10 },
-  actionButtonSecondary: { marginHorizontal: 20, marginTop: 10, backgroundColor: colors.paper, borderColor: 'rgba(226,79,17,0.28)' },
-  actionText: { color: colors.actionPrimary, fontSize: 14, lineHeight: 18, fontWeight: '800' },
-  actionTextSecondary: { color: colors.actionSecondary },
-  pressed: { opacity: 0.78 },
-});
+const makeStyles=(c:ReturnType<typeof useNativeColors>)=>StyleSheet.create({screen:{flex:1,backgroundColor:c.canvas},overlay:{flex:1,paddingHorizontal:16,paddingBottom:10,gap:12},header:{borderRadius:28,padding:16,gap:12},heading:{flexDirection:'row',alignItems:'center',gap:8},kicker:{color:c.actionPrimary,fontWeight:'700',fontSize:10,letterSpacing:2},title:{color:c.ink,fontSize:27,fontWeight:'700',letterSpacing:-.7},search:{flexDirection:'row',alignItems:'center',gap:8,borderRadius:16,paddingHorizontal:12,backgroundColor:c.surface,minHeight:44},input:{flex:1,color:c.ink,fontSize:15,paddingVertical:10},chips:{gap:6},chip:{minHeight:44,paddingHorizontal:14,borderRadius:22,justifyContent:'center',backgroundColor:c.surface},chipText:{fontSize:14,fontWeight:'600',color:c.actionPrimary},activeChip:{backgroundColor:c.actionPrimary},activeText:{color:c.onAction},space:{flex:1,minHeight:40},controls:{alignSelf:'flex-end',gap:8},round:{borderRadius:24},icon:{width:44,minHeight:44,alignItems:'center',justifyContent:'center'},panel:{maxHeight:'48%',padding:18,gap:12,backgroundColor:c.surface,borderRadius:28,shadowColor:'#173A32',shadowOpacity:.10,shadowRadius:18,shadowOffset:{width:0,height:4}},expanded:{maxHeight:'76%',flex:1},panelTitle:{fontSize:22,fontWeight:'700',color:c.ink},meta:{fontSize:13,lineHeight:19,color:c.muted},rows:{gap:2,paddingBottom:8},row:{flexDirection:'row',alignItems:'center',gap:12,paddingVertical:14,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:c.line},avatar:{width:44,height:44,borderRadius:16,backgroundColor:c.leafSoft,alignItems:'center',justifyContent:'center'},name:{fontSize:16,fontWeight:'600',color:c.ink},count:{fontSize:20,fontWeight:'700',color:c.actionPrimary},actions:{flexDirection:'row',gap:8,marginVertical:16},primary:{flex:1,minHeight:46,borderRadius:23,alignItems:'center',justifyContent:'center',backgroundColor:c.actionPrimary},primaryText:{fontSize:15,fontWeight:'600',color:c.onAction},secondary:{minHeight:46,paddingHorizontal:20,alignItems:'center',justifyContent:'center',borderRadius:23,backgroundColor:c.leafSoft},credit:{fontSize:10,lineHeight:16,color:c.muted,marginTop:14},error:{fontSize:13,lineHeight:19,color:c.actionPrimary}});

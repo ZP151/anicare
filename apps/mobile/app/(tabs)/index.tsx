@@ -11,6 +11,7 @@ import { useLocale } from '../../src/i18n/LocaleContext';
 export default function NearbyScreen() {
   const { locale } = useLocale(); const cn = locale === 'zh-CN'; const router = useRouter(); const colors = useNativeColors(); const styles = makeStyles(colors);
   return <ScreenScaffold title={cn?'附近':'Nearby'} subtitle={cn?'延迟公开的社区猫活动':'Delayed public community-cat activity'} trailing={<Pressable accessibilityRole="button" accessibilityLabel={cn?'打开地图':'Open map'} onPress={()=>router.push('/map' as never)} style={styles.map}><AppIcon name="location" size={20} color={colors.actionPrimary}/><Text style={styles.mapText}>{cn?'地图':'Map'}</Text></Pressable>}>
+    <Pressable accessibilityRole="button" accessibilityLabel={cn?'打开社区讨论':'Open community discussions'} onPress={()=>router.push('/community' as never)} style={styles.map}><AppIcon name="community" size={20} color={colors.actionPrimary}/><Text style={styles.mapText}>{cn?'邻里讨论':'Community conversations'}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>
     <DiscoveryList />
   </ScreenScaffold>;
 }

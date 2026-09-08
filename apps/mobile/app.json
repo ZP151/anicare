@@ -8,14 +8,14 @@
         "projectId": "f9b84744-77c7-4b2b-8631-f107a8b98af8"
       }
     },
-    "version": "0.1.2",
+    "version": "0.2.0",
     "orientation": "portrait",
     "scheme": "animalhelper",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "3",
+      "buildNumber": "4",
       "bundleIdentifier": "sg.animalhelper.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choose a cat photo to create a private reviewed copy. Selected source media is never uploaded.",

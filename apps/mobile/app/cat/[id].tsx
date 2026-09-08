@@ -15,6 +15,7 @@ import { useLocale } from '../../src/i18n/LocaleContext';
 import { getCommunityMapCopy } from '../../src/i18n/catalog';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
+import { CatCommunityContext } from '../../src/maps/CatCommunityContext';
 
 const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,7 +72,7 @@ export default function CatRoute() {
         }, opaqueAnimalId.test(selectedAnimalId)
           ? { identityIntent: { kind: 'existing', animalId: selectedAnimalId } } : {});
         router.push({ pathname: '/report/new', params: { draftId } } as never);
-      }} onRecordCare={(selectedAnimalId) => { router.push({ pathname: '/care/[id]', params: { id: selectedAnimalId } } as never); }} ><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>router.push(`/safety/${cat.animalId}` as never)}><Text style={{color:colors.ink}}>{locale==='zh-CN'?'内容安全与身份纠错':'Content safety and identity correction'}</Text></Pressable></CatDetailScreen>;
+      }} onRecordCare={(selectedAnimalId) => { router.push({ pathname: '/care/[id]', params: { id: selectedAnimalId } } as never); }} ><CatCommunityContext animalId={cat.animalId} locale={locale}/><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>router.push(`/safety/${cat.animalId}` as never)}><Text style={{color:colors.ink}}>{locale==='zh-CN'?'内容安全与身份纠错':'Content safety and identity correction'}</Text></Pressable></CatDetailScreen>;
   }
   return <ScreenScaffold
     subtitle={locale === 'zh-CN' ? '公开档案仅显示可公开的身份摘要与粗略活动。' : 'Public profiles show eligible identity summaries and coarse activity.'}

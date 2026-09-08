@@ -20,6 +20,12 @@ const createSubmission = {
 } as const;
 
 describe('sighting submission contract', () => {
+  it('accepts a bounded opt-in building name and rejects injected coordinates or invalid categories',()=>{
+    expect(parseSightingSubmission({...createSubmission,traits:{public_place:{residenceType:'hdb',name:'Block 123'}}})).toMatchObject({traits:{public_place:{name:'Block 123'}}});
+    for(const public_place of [{residenceType:'hdb',name:''},{residenceType:'hotel',name:'Test'},{residenceType:'condo',name:'Test',latitude:1.3},{residenceType:'hdb',name:'bad\nname'}]){
+      expect(()=>parseSightingSubmission({...createSubmission,traits:{public_place}})).toThrow();
+    }
+  });
   it('accepts the exact coordinate-free recovery shape', () => {
     expect(parseSightingSubmission({
       clientDedupeKey: 'draft-12345678',

@@ -8,16 +8,13 @@ import { colors, radii } from '../design/theme';
 import type { Locale } from '../i18n/catalog';
 import { PUBLIC_GOOGLE_MAP_STYLE, PUBLIC_MAP_REGION } from '../maps/public-map-policy';
 import { getReportCopy } from './report-copy';
+import { REPORT_AREAS } from '../maps/report-areas';
 
 export type ReportAreaSelection = Readonly<{ publicCellId: string }>;
 
 type AreaMapBoundaryProps = Readonly<{ onPress(event: MapPressEvent): void; onReady?(): void }>;
 const MAP_READINESS_TIMEOUT_MS = 8_000;
-const FALLBACK_AREAS = Object.freeze([
-  { label: { en: 'Jurong West Street 62 vicinity', 'zh-CN': '裕廊西 62 街附近' }, publicCellId: '896520ca163ffff' },
-  { label: { en: 'MacRitchie Nature Trail vicinity', 'zh-CN': '麦里芝自然步道附近' }, publicCellId: '89652636d87ffff' },
-  { label: { en: 'Tampines Avenue 5 vicinity', 'zh-CN': '淡滨尼 5 道附近' }, publicCellId: '896526add03ffff' },
-]);
+const FALLBACK_AREAS = REPORT_AREAS.map(([publicCellId,en,zh])=>({publicCellId,label:{en,'zh-CN':zh}}));
 
 const SINGAPORE_BOUNDS = Object.freeze({
   minLatitude: 1.1,

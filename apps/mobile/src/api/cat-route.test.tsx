@@ -3,6 +3,7 @@ const mockId = '00000000-0000-4000-8000-000000002599';
 let mockParams = { id: mockId };
 const mockRpc = jest.fn();
 const mockPresentations = jest.fn();
+jest.mock('../maps/CatCommunityContext',()=>({CatCommunityContext:()=>null}));
 jest.mock('./cat-presentation', () => ({getCatPresentations: (...args: unknown[]) => mockPresentations(...args)}));
 const mockAuthListeners = new Set<() => void>();
 const mockAuthListener = () => mockAuthListeners.forEach(listener => listener());

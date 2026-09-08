@@ -57,10 +57,10 @@ export async function createCommunityReply(postId: string, body: string, client?
   const { data, error } = await rpc.rpc('create_community_reply', { p_post_id: postId, p_body: body.trim(), p_request_id: pendingRequestId });
   if (error || !uuid(data)) throw new Error('community_write_failed'); return data;
 }
-export async function blockCommunityAuthor(contentType: 'community_post' | 'community_reply', contentId: string, client?: CommunityRpcClient): Promise<void> {
+export async function blockCommunityAuthor(contentType: 'community_post' | 'community_reply', contentId: string, client?: CommunityRpcClient, pendingRequestId = requestId()): Promise<void> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
   if (!rpc || !uuid(contentId)) throw new Error('invalid_community_block');
-  const { error } = await rpc.rpc('block_community_author', { p_content_type: contentType, p_content_id: contentId, p_request_id: requestId() }); if (error) throw new Error('community_block_failed');
+  const { error } = await rpc.rpc('block_community_author', { p_content_type: contentType, p_content_id: contentId, p_request_id: pendingRequestId }); if (error) throw new Error('community_block_failed');
 }
 export async function deleteCommunityContent(contentType: 'community_post' | 'community_reply', contentId: string, client?: CommunityRpcClient, pendingRequestId = requestId()): Promise<void> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
@@ -68,16 +68,16 @@ export async function deleteCommunityContent(contentType: 'community_post' | 'co
   const { error } = await rpc.rpc('delete_community_content', { p_content_type: contentType, p_content_id: contentId, p_request_id: pendingRequestId }); if (error) throw new Error('community_delete_failed');
 }
 export const deleteCommunityPost = (postId: string, client?: CommunityRpcClient, pendingRequestId?: string) => deleteCommunityContent('community_post', postId, client, pendingRequestId);
-export async function reportCommunityContent(contentType: 'community_post' | 'community_reply', contentId: string, reason: string, client?: CommunityRpcClient): Promise<void> {
+export async function reportCommunityContent(contentType: 'community_post' | 'community_reply', contentId: string, reason: string, client?: CommunityRpcClient, pendingRequestId = requestId()): Promise<void> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
   if (!rpc || !uuid(contentId) || !['spam', 'harassment', 'animal_welfare', 'unsafe_location', 'precise_location_exposure'].includes(reason)) throw new Error('invalid_community_report');
-  const { error } = await rpc.rpc('create_community_moderation_report', { p_content_type: contentType, p_content_id: contentId, p_reason_code: reason, p_detail: null, p_request_id: requestId() }); if (error) throw new Error('community_report_failed');
+  const { error } = await rpc.rpc('create_community_moderation_report', { p_content_type: contentType, p_content_id: contentId, p_reason_code: reason, p_detail: null, p_request_id: pendingRequestId }); if (error) throw new Error('community_report_failed');
 }
 export type CommunityReply = Readonly<{ replyId: string; body: string; createdAt: string; author: Readonly<{ name: string; avatarKey: string }>; canDelete: boolean; cursor: string }>;
 export async function listCommunityReplies(postId: string, cursor: string | null = null, client?: CommunityRpcClient): Promise<Readonly<{ items: readonly CommunityReply[]; nextCursor: string | null }>> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
-  if (!rpc || !uuid(postId)) throw new Error('invalid_community_reply');
+  if (!rpc || !uuid(postId) || (cursor!==null&&!uuid(cursor))) throw new Error('invalid_community_reply');
   const { data, error } = await rpc.rpc('list_public_community_replies', { p_post_id: postId, p_cursor: cursor, p_limit: 30 });
-  if (error || !Array.isArray(data)) throw new Error('community_unavailable');
-  const items=data.map((value) => { if (!record(value) || !uuid(value.replyId) || typeof value.body !== 'string' || !timestamp(value.createdAt) || !record(value.author) || typeof value.author.name !== 'string' || typeof value.author.avatarKey !== 'string' || typeof value.canDelete !== 'boolean' || !uuid(value.cursor)) throw new Error('invalid_community_reply'); return value as CommunityReply; }); return {items,nextCursor:items.at(-1)?.cursor??null};
+  if (error || !Array.isArray(data)||data.length>30) throw new Error('community_unavailable');
+  const items=data.map((value) => { if (!record(value) || Object.keys(value).length!==6 || !uuid(value.replyId) || typeof value.body !== 'string' || value.body.length<1||value.body.length>2000|| !timestamp(value.createdAt) || !record(value.author) || Object.keys(value.author).length!==2 || typeof value.author.name !== 'string' ||value.author.name.length<1||value.author.name.length>60|| typeof value.author.avatarKey !== 'string' ||!AVATARS.has(value.author.avatarKey)|| typeof value.canDelete !== 'boolean' || !uuid(value.cursor)) throw new Error('invalid_community_reply'); return value as CommunityReply; }); return {items,nextCursor:items.length===30?items.at(-1)!.cursor:null};
 }

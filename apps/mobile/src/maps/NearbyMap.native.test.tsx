@@ -34,7 +34,7 @@ describe('NearbyMap native privacy contract', () => {
     jest.useRealTimers();
   });
 
-  it('uses Apple Maps on iOS without a Google key, with no location or marker layer', async () => {
+  it('uses Apple Maps without a Google key and never shows device location', async () => {
     const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
     expect(view.getByTestId('native-map')).toBeTruthy();
 
@@ -43,7 +43,7 @@ describe('NearbyMap native privacy contract', () => {
     expect(props.showsUserLocation).toBe(false);
     expect(props.showsMyLocationButton).toBe(false);
     expect(props.maxZoomLevel).toBe(14);
-    expect(props.children).toBeUndefined();
+    expect(props.showsBuildings).toBe(true);
     await view.unmount();
   });
 
