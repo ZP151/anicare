@@ -42,6 +42,8 @@
 
 ## 当前执行看板
 
+**手机首次反馈：**用户已完成 Sideloadly 安装并打开 0.1.0（1）；尚未测试功能，视觉验收不通过。下一批 0.1.1（2）优先修正原生导航、Profile 分组、系统图标与昵称管理，见 [实施范围和短验收](reviews/2026-09-08-ios-ui-revision.md)。原“待安装”记录为此前状态，不能据安装成功勾选 G1–G5 或产品效果。
+
 | ID | 下一可执行工作 | 当前状态 | 完成凭据 / 未完成边界 |
 | --- | --- | --- | --- |
 | M0 | 快捷回归入口、CI 同 job 去重 | 已合入；本地与 CI 通过 | package.json 的 test:product-core；快捷 24 + 7 个文件；root/workflow/source-inventory 契约及独立 diff review。完整检查见本次交付记录；合入 main 后 CI 通过 |

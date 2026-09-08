@@ -1,6 +1,6 @@
 # iPhone 内部安装候选：2026-09-08
 
-状态：**IPA 已生成并在 Windows 验证；手机安装与功能验收待用户操作。**
+状态：**用户已确认用 Sideloadly 安装并打开 0.1.0（1）；功能未测，首次视觉验收未通过。** [UI 修正与下一测试](../reviews/2026-09-08-ios-ui-revision.md)。
 
 - 版本：WhiskerCommons 0.1.0（1），最低 iOS 16.4；iOS 使用 Apple Maps。
 - 源码：`267acc5fade67726059dcc346b09be153745053a`，包含 M1–M4/A0 工具与 Apple Maps 适配。

@@ -59,12 +59,62 @@ it('uses a fixed localized message for remote confirmation errors', async () => 
 });
 
 it('does not show the mail service error text', async () => {
+  mockSubject = null;
   mockOtp.mockResolvedValue({ error: { message: 'private mail service trace' } });
   const view = await render(<Profile />);
+  await view.findByText('Browsing anonymously');
+  await fireEvent.press(view.getByRole('button', { name: 'Sign in' }));
   await fireEvent.changeText(view.getByLabelText('Email address'), 'person@example.test');
   await fireEvent.press(view.getByRole('button', { name: 'Send magic link' }));
   await waitFor(() => expect(mockOtp).toHaveBeenCalledTimes(1));
   expect(JSON.stringify(view.toJSON())).not.toContain('private mail service trace');
+});
+
+it('keeps the signed-in profile focused on account actions instead of another login form', async () => {
+  const view = await render(<Profile />);
+  await view.findByText('Signed in');
+  expect(view.queryByLabelText('Email address')).toBeNull();
+  expect(view.queryByText('Continue with Apple')).toBeNull();
+  expect(view.queryByText('AI training consent')).toBeNull();
+  expect(view.getByRole('button', { name: 'My care records' })).toBeTruthy();
+});
+
+it('edits only the current account public name and shows the saved value', async () => {
+  const view = await render(<Profile />);
+  await view.findByText('Signed in');
+  await fireEvent.press(view.getByRole('button', { name: 'Display name' }));
+  await waitFor(() => expect(view.getByLabelText('Public display name').props.value).toBe('Chosen name'));
+  await fireEvent.changeText(view.getByLabelText('Public display name'), 'Neighbour');
+  await fireEvent.press(view.getByRole('button', { name: 'Save name' }));
+  await view.findByText('Name saved.');
+  expect(mockUpdate).toHaveBeenCalledWith({ public_name: 'Neighbour' });
+  expect(mockEq).toHaveBeenCalledWith('id', mockOwner);
+});
+
+it('discards an account name response after signing out', async () => {
+  let finish!: (value: unknown) => void;
+  mockLookup.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const view = await render(<Profile />);
+  await view.findByText('Signed in');
+  await fireEvent.press(view.getByRole('button', { name: 'Display name' }));
+  await waitFor(() => expect(mockLookup).toHaveBeenCalled());
+  await act(async () => { mockSubject = null; mockListener(); finish({data:{public_name:'Previous private name'},error:null}); });
+  await view.findByText('Browsing anonymously');
+  expect(JSON.stringify(view.toJSON())).not.toContain('Previous private name');
+  expect(view.queryByLabelText('Public display name')).toBeNull();
+});
+
+it('reveals email sign-in on request and clears it when the account changes', async () => {
+  mockSubject = null;
+  const view = await render(<Profile />);
+  await view.findByText('Browsing anonymously');
+  expect(view.queryByLabelText('Email address')).toBeNull();
+  await fireEvent.press(view.getByRole('button', { name: 'Sign in' }));
+  await fireEvent.changeText(view.getByLabelText('Email address'), 'person@example.test');
+  await act(async () => { mockSubject = mockOwner; mockListener(); });
+  await view.findByText('Signed in');
+  expect(view.queryByLabelText('Email address')).toBeNull();
+  expect(JSON.stringify(view.toJSON())).not.toContain('person@example.test');
 });
 
 it('shows truthful session/adult state, keeps login on failed logout and clears after successful logout',async()=>{

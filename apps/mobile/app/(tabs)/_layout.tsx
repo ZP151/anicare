@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Platform, StyleSheet } from 'react-native';
 
@@ -9,9 +10,27 @@ import { useLocale } from '../../src/i18n/LocaleContext';
 import { getTabIconName } from '../../src/navigation/tab-icons';
 import { tabVisualContract } from '../../src/navigation/tab-style';
 
+const nativeIcons = {
+  index: { default: 'location', selected: 'location.fill' },
+  map: { default: 'map', selected: 'map.fill' },
+  report: { default: 'square.and.pencil', selected: 'square.and.pencil' },
+  following: { default: 'heart', selected: 'heart.fill' },
+  profile: { default: 'person.crop.circle', selected: 'person.crop.circle.fill' },
+} as const;
+
 export default function TabLayout() {
   const { locale } = useLocale();
   const tabs = getTabDefinitions(locale);
+
+  if (Platform.OS === 'ios') {
+    return <NativeTabs tintColor={colors.actionPrimary} minimizeBehavior="never">
+      {tabs.map(tab => <NativeTabs.Trigger key={tab.route} name={tab.route}
+        accessibilityLabel={tab.accessibilityLabel}>
+        <NativeTabs.Trigger.Icon sf={nativeIcons[tab.route]} />
+        <NativeTabs.Trigger.Label>{tab.label}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>)}
+    </NativeTabs>;
+  }
 
   return (
     <Tabs
@@ -56,7 +75,7 @@ const styles = StyleSheet.create({
     paddingTop: tabVisualContract.topPadding,
     paddingBottom: tabVisualContract.bottomPadding,
   },
-  tabBarBackground: { backgroundColor: 'rgba(237,237,228,0.94)' },
+  tabBarBackground: { backgroundColor: 'transparent' },
   tabLabel: {
     fontSize: Platform.select({ ios: 11, android: 12, default: tabVisualContract.labelFontSize }),
     lineHeight: Platform.select({ ios: 14, android: 15, default: tabVisualContract.labelLineHeight }),
