@@ -33,7 +33,7 @@ export default function CommunityScreen(){
    finally{if(screenContext===context.current){busy.current=false;if(alive.current)setWriting(false);}}
  };
  const communityName=singaporeCommunities.find(area=>area.id===communitySlug)?.name;
- return <ScreenScaffold title={zh?'邻里讨论':'Community'} subtitle={communityName??(catId?(zh?'围绕这只猫的讨论':'Conversations about this cat'):(zh?'分享发现，一起照顾社区猫。':'Share discoveries and care for community cats.'))}>
+ return <ScreenScaffold trailing={<Pressable accessibilityRole="button" accessibilityLabel={zh?'返回':'Back'} onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="close" color={c.actionPrimary}/></Pressable>} title={zh?'邻里讨论':'Community'} subtitle={communityName??(catId?(zh?'围绕这只猫的讨论':'Conversations about this cat'):(zh?'分享发现，一起照顾社区猫。':'Share discoveries and care for community cats.'))}>
    {auth.failed?<Pressable accessibilityRole="button" onPress={()=>void auth.reload()} style={s.touch}><Text style={s.link}>{zh?'重试账户连接':'Retry account connection'}</Text></Pressable>:null}
    {auth.owner?<GlassSurface style={s.composer}>
      {!catId&&!communitySlug?<Pressable accessibilityRole="button" disabled={writing} onPress={()=>setPicker(true)} style={s.scope}><AppIcon name="location" size={18} color={c.actionPrimary}/><Text style={s.link}>{singaporeCommunities.find(area=>area.id===scope)?.name??(zh?'选择社区':'Choose community')}</Text><AppIcon name="chevron" size={16} color={c.muted}/></Pressable>:null}

@@ -32,7 +32,7 @@ export default function CommunityDetailScreen(){
    finally{if(scope===context.current){busy.current=false;if(alive.current)setWriting(false);}}
  };
  const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><View style={s.avatar}><AppIcon name={profileAvatarKey(item.author.avatarKey)} color={c.actionPrimary}/></View><View style={{flex:1}}><Text style={s.author}>{item.author.name}</Text><Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
- return <ScreenScaffold title={zh?'讨论':'Conversation'}>
+ return <ScreenScaffold trailing={<Pressable accessibilityRole="button" accessibilityLabel={zh?'返回':'Back'} onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="close" color={c.actionPrimary}/></Pressable>} title={zh?'讨论':'Conversation'}>
    {auth.failed?<Pressable accessibilityRole="button" onPress={()=>void auth.reload()} style={s.touch}><Text style={s.link}>{zh?'重试账户连接':'Retry account connection'}</Text></Pressable>:null}
    {loading&&!post?<ActivityIndicator color={c.actionPrimary}/>:null}
    {failed?<Pressable accessibilityRole="button" onPress={()=>void load()} style={s.touch}><Text style={s.link}>{zh?'讨论暂不可用，点此重试':'Conversation unavailable. Tap to retry.'}</Text></Pressable>:null}

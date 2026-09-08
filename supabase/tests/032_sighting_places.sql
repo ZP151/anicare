@@ -11,12 +11,12 @@ insert into public.animals(id,primary_alias,visibility,verification,identity_ori
  ('00000000-0000-4000-8000-000000003210','Place cat','public','reported',false),
  ('00000000-0000-4000-8000-000000003211','Critical cat','public','reported',false);
 insert into public.sightings(id,animal_id,reporter_id,occurred_at,public_cell_id,time_bucket,risk,visibility,visible_at,traits,client_dedupe_key)
-select ('00000000-0000-4000-8000-'||lpad((3230+n)::text,12,'0'))::uuid,case when n=3 then '00000000-0000-4000-8000-000000003211' else '00000000-0000-4000-8000-000000003210' end::uuid,'00000000-0000-4000-8000-000000003201',now()-interval '3 hours','896526add03ffff','morning',
+select sighting_id::uuid,case when n=3 then '00000000-0000-4000-8000-000000003211' else '00000000-0000-4000-8000-000000003210' end::uuid,'00000000-0000-4000-8000-000000003201',now()-interval '3 hours','896526add03ffff','morning',
  case when n=3 then 'critical' else 'normal' end::public.risk_tier,
  case when n in (2,3) then 'hidden' else 'public' end::public.record_visibility,
  case when n=3 then null when n=1 then now()+interval '1 hour' else now()-interval '1 hour' end,
  '{"public_place":{"residenceType":"hdb","name":"Block 123 Test Street","latitude":1.3},"private_note":"never project"}'::jsonb,'sg-place-'||n
-from generate_series(0,3) n;
+from (values(0,'00000000-0000-4000-8000-000000003230'),(1,'00000000-0000-4000-8000-000000003231'),(2,'00000000-0000-4000-8000-000000003232'),(3,'00000000-0000-4000-8000-000000003233')) fixture(n,sighting_id);
 set local role anon;
 select is((select count(*) from public.get_public_sighting_places(array['00000000-0000-4000-8000-000000003230','00000000-0000-4000-8000-000000003231','00000000-0000-4000-8000-000000003232','00000000-0000-4000-8000-000000003233']::uuid[])),1::bigint,'only delayed visible noncritical context is returned');
 select is((select "residenceName" from public.get_public_sighting_places(array['00000000-0000-4000-8000-000000003230']::uuid[])),'Block 123 Test Street','the building name is retained');
