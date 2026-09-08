@@ -12,7 +12,7 @@ const generatedMapsLine = '  rn_maps_path = File.dirname(`node --print "require.
 const normalizedMapsLine = "  rn_maps_path = '../node_modules/react-native-maps'";
 const podfile = `platform :ios, '15.1'
 ${generatedMapsLine}
-  pod 'react-native-maps/Google', :path => rn_maps_path
+  pod 'react-native-maps', :path => rn_maps_path
 `;
 
 const enabledProperties = JSON.stringify({
@@ -52,11 +52,12 @@ describe('iOS Device Lab generated Podfile preparation', () => {
     ['a duplicate Maps path line', `${podfile}${generatedMapsLine}\n`],
     ['an unexpected Maps path line', podfile.replace(generatedMapsLine, "  rn_maps_path = '../other-package'")],
     ['an absolute Maps path line', podfile.replace(generatedMapsLine, "  rn_maps_path = '/Users/runner/work/anicare/anicare/node_modules/react-native-maps'")],
-  ])('rejects %s', (_description, candidate) => {
+    ['a generated Google provider pod', podfile.replace("  pod 'react-native-maps', :path => rn_maps_path", "  pod 'react-native-maps/Google', :path => rn_maps_path"), 'rn_maps_google_pod_not_allowed'],
+  ])('rejects %s', (_description, candidate, code = 'rn_maps_path_invalid') => {
     expect(() => prepareIosDeviceLabPodfile({
       podfile: candidate,
       podfileProperties: enabledProperties,
-    })).toThrow('rn_maps_path_invalid');
+    })).toThrow(code);
   });
 
   it('prepares only regular files under an isolated app root', () => {

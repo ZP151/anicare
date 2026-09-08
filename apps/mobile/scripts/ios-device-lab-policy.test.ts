@@ -12,14 +12,12 @@ import {
 
 const hostedOrigin = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 const compileProbe = {
-  googleMapsIosApiKey: 'compile-probe-google-maps-ios-key',
   supabaseUrl: 'https://compile-probe.invalid',
   supabasePublicKey: 'compile-probe-supabase-public-key',
 } as const;
 const validManualInput = {
   eventName: 'workflow_dispatch',
   ref: 'refs/heads/main',
-  googleMapsIosApiKey: 'AIzaSyD-device-lab-test-key',
   supabaseUrl: hostedOrigin,
   supabasePublicKey: 'sb_publishable_device_lab_test_key',
 } as const;
@@ -87,9 +85,6 @@ describe('iOS Device Lab input policy', () => {
       ...validManualInput, eventName: 'pull_request', ref: 'refs/pull/42/merge',
     }, 'compile_probe_placeholder_invalid'],
     ['a manual ref other than main', { ...validManualInput, ref: 'refs/heads/feature/device-lab' }, 'manual_ref_invalid'],
-    ['a missing maps key', { ...validManualInput, googleMapsIosApiKey: undefined }, 'maps_ios_key_missing'],
-    ['a whitespace maps key', { ...validManualInput, googleMapsIosApiKey: 'a maps key' }, 'maps_ios_key_whitespace'],
-    ['a known placeholder maps key', { ...validManualInput, googleMapsIosApiKey: 'YOUR_GOOGLE_MAPS_IOS_API_KEY' }, 'maps_ios_key_placeholder'],
     ['a missing Supabase URL', { ...validManualInput, supabaseUrl: undefined }, 'supabase_url_missing'],
     ['a whitespace Supabase URL', { ...validManualInput, supabaseUrl: `${hostedOrigin} ` }, 'supabase_url_whitespace'],
     ['an HTTP Supabase URL', { ...validManualInput, supabaseUrl: 'http://fhugdtpjbgiatqhvjioy.supabase.co' }, 'supabase_url_invalid'],
@@ -113,7 +108,6 @@ describe('iOS Device Lab input policy', () => {
     expect(result).toEqual(expect.objectContaining({ ok: false }));
     if (result.ok) throw new Error('expected a rejected Device Lab input');
     expect(result.codes).toContain(code as DeviceLabInputCode);
-    expect(JSON.stringify(result.codes)).not.toContain('AIzaSyD-device-lab-test-key');
     expect(JSON.stringify(result.codes)).not.toContain('sb_secret_do_not_accept');
     expect(result.codes.every((value) => /^[a-z0-9_]+$/.test(value))).toBe(true);
   });
@@ -126,7 +120,6 @@ describe('iOS Device Lab input policy', () => {
         ...process.env,
         GITHUB_EVENT_NAME: 'workflow_dispatch',
         GITHUB_REF: 'refs/heads/main',
-        GOOGLE_MAPS_IOS_API_KEY: 'AIzaSyD-device-lab-test-key',
         EXPO_PUBLIC_SUPABASE_URL: hostedOrigin,
         EXPO_PUBLIC_SUPABASE_ANON_KEY: 'sb_secret_do_not_accept',
       },

@@ -1,8 +1,9 @@
 # iOS free-account physical-device test handoff
 
-**Status: NOT READY TO EXECUTE.** This runbook is a local-owner handoff only.
-Do not begin until a protected `device_candidate` run has produced verified
-candidate evidence. The placeholders below intentionally fail closed: do not
+**Status: IPA INSTALLATION PENDING CANDIDATE.** Windows prerequisites and AltStore
+can be prepared now. Import the application IPA only after a protected
+`device_candidate` run has produced verified candidate evidence. This is a
+local-owner handoff. The placeholders below intentionally fail closed: do not
 replace them with guesses, a PR compile run, a lock-bootstrap run, or a
 locally invented hash.
 
@@ -131,11 +132,9 @@ required observations, not optional fields.
 Remove or do not copy UDID, serial number, ECID, Wi-Fi pairing data, account
 data, full device listings, raw logs, and exact locations.
 
-If the effective bundle ID differs from `sg.animalhelper.app`, add that exact
-effective ID to the **same restricted Google Maps iOS key** before testing the
-map. Keep the key limited to Maps SDK for iOS and its application restrictions;
-never make it unrestricted. This does not authorize a rebuild merely because
-the embedded key is unchanged.
+The iOS candidate uses Apple Maps through MapKit. It requires no Google Cloud
+account or Google Maps iOS key. Record any effective bundle ID change made by
+AltStore for troubleshooting; no Google key restriction needs updating.
 
 ## 4. Synthetic-only physical test matrix
 
@@ -149,7 +148,7 @@ sanitized observation.
 | --- | --- |
 | Install and launch | Install outcome, first launch, and recovery after local re-signing. |
 | Glass and accessibility | Liquid-glass capability/fallback plus Dynamic Type smoke check. |
-| Maps and privacy | Google Maps render and coarse-area/privacy behavior; no exact location is recorded. |
+| Maps and privacy | Apple Maps render and coarse-area/privacy behavior; no exact location is recorded. |
 | Camera and photos | Camera and photo-library denial and allow flows. |
 | Reviewed media | Reviewed-copy creation, bystander masking, and source cleanup. |
 | SQLCipher | Draft persistence across process kill and restart. |

@@ -14,13 +14,11 @@ const sha = {
   attest: 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a',
 };
 const fixedInputs = {
-  GOOGLE_MAPS_IOS_API_KEY: 'compile-probe-google-maps-ios-key',
   EXPO_PUBLIC_SUPABASE_URL: 'https://compile-probe.invalid',
   EXPO_PUBLIC_SUPABASE_ANON_KEY: 'compile-probe-supabase-public-key',
 };
 const bashExecutable = process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
 const candidateSecrets = {
-  GOOGLE_MAPS_IOS_API_KEY: '${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}',
   EXPO_PUBLIC_SUPABASE_URL: '${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}',
   EXPO_PUBLIC_SUPABASE_ANON_KEY: '${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}',
 };

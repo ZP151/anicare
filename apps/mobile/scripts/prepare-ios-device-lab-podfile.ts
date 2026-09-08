@@ -19,6 +19,9 @@ export function prepareIosDeviceLabPodfile(input: Readonly<{
   if (mapsLineIndexes.length !== 1 || lines[mapsLineIndexes[0]] !== generatedMapsLine) {
     throw new Error('rn_maps_path_invalid');
   }
+  if (lines.some((line) => /^\s*pod ['"](?:Google[A-Za-z0-9_-]*|react-native-maps\/Google)['"]/.test(line))) {
+    throw new Error('rn_maps_google_pod_not_allowed');
+  }
 
   lines[mapsLineIndexes[0]] = normalizedMapsLine;
   return lines.join('\n');

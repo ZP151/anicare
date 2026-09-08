@@ -76,7 +76,6 @@ jobs:
       - name: Generate the missing Pod lock inputs
         working-directory: apps/mobile
         env:
-          GOOGLE_MAPS_IOS_API_KEY: compile-probe-google-maps-ios-key
           EXPO_PUBLIC_SUPABASE_URL: https://compile-probe.invalid
           EXPO_PUBLIC_SUPABASE_ANON_KEY: compile-probe-supabase-public-key
         run: pnpm exec expo prebuild --clean --platform ios --no-install
@@ -143,7 +142,6 @@ jobs:
           pnpm test:ios-device-lab-policy
       - name: Validate and build the non-installable compile probe
         env:
-          GOOGLE_MAPS_IOS_API_KEY: compile-probe-google-maps-ios-key
           EXPO_PUBLIC_SUPABASE_URL: https://compile-probe.invalid
           EXPO_PUBLIC_SUPABASE_ANON_KEY: compile-probe-supabase-public-key
         run: |
@@ -209,7 +207,6 @@ jobs:
           pnpm test:ios-device-lab-policy
       - name: Validate the protected runtime inputs
         env:
-          GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm validate:ios-device-lab
@@ -225,7 +222,6 @@ jobs:
         run: pnpm --filter @animalhelper/domain build
       - name: Build the protected unsigned candidate
         env:
-          GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm --filter @animalhelper/mobile build:unsigned-ios

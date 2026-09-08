@@ -108,11 +108,6 @@ PODS:
   - ExpoWebBrowser (57.0.2):
     - ExpoModulesCore
   - FBLazyVector (0.86.3)
-  - Google-Maps-iOS-Utils (6.1.0):
-    - GoogleMaps (~> 9.0)
-  - GoogleMaps (9.4.0):
-    - GoogleMaps/Maps (= 9.4.0)
-  - GoogleMaps/Maps (9.4.0)
   - hermes-engine (250829098.0.17):
     - hermes-engine/Pre-built (= 250829098.0.17)
   - hermes-engine/Pre-built (250829098.0.17)
@@ -1539,6 +1534,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-maps (1.27.2):
+    - react-native-maps/Maps (= 1.27.2)
   - react-native-maps/Generated (1.27.2):
     - hermes-engine
     - RCTRequired
@@ -1551,32 +1548,6 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - react-native-maps/Google (1.27.2):
-    - Google-Maps-iOS-Utils (= 6.1.0)
-    - GoogleMaps (= 9.4.0)
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - react-native-maps/Generated
-    - react-native-maps/Maps
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -2431,7 +2402,7 @@ DEPENDENCIES:
   - "React-Mapbuffer (from `../../../node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@react-native+jest-preset@_292478378266a36e55b1f2262faf1c24/node_modules/react-native/ReactCommon`)"
   - "React-microtasksnativemodule (from `../../../node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@react-native+jest-preset@_292478378266a36e55b1f2262faf1c24/node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)"
   - "React-mutationobservernativemodule (from `../../../node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@react-native+jest-preset@_292478378266a36e55b1f2262faf1c24/node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)"
-  - react-native-maps/Google (from `../node_modules/react-native-maps`)
+  - "react-native-maps (from `../../../node_modules/.pnpm/react-native-maps@1.27.2_react-native-web@0.21.2_react-dom@19.2.3_react@19.2.3__react@1_e4bdb883c2fecf93e6f43fe0806cf658/node_modules/react-native-maps`)"
   - "react-native-safe-area-context (from `../../../node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.7_supports-co_63a5cb5facfacb281aaf1339136542ab/node_modules/react-native-safe-area-context`)"
   - "react-native-skia (from `../../../node_modules/.pnpm/@shopify+react-native-skia@2.6.2_a7d9ced29fb689a812193726f6b70807/node_modules/@shopify/react-native-skia`)"
   - "React-NativeModulesApple (from `../../../node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@react-native+jest-preset@_292478378266a36e55b1f2262faf1c24/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)"
@@ -2475,11 +2446,6 @@ DEPENDENCIES:
   - "RNScreens (from `../../../node_modules/.pnpm/react-native-screens@4.26.2_react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1_4f26510b1d0e38333b19667fc5ca66d7/node_modules/react-native-screens`)"
   - "RNWorklets (from `../../../node_modules/.pnpm/react-native-worklets@0.10.1_@babel+core@7.29.7_supports-color@8.1.1__@react-native+met_9a3fefef466001c4e5fd1fcffa2c0348/node_modules/react-native-worklets`)"
   - "Yoga (from `../../../node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@react-native+jest-preset@_292478378266a36e55b1f2262faf1c24/node_modules/react-native/ReactCommon/yoga`)"
-
-SPEC REPOS:
-  trunk:
-    - Google-Maps-iOS-Utils
-    - GoogleMaps
 
 EXTERNAL SOURCES:
   EXApplication:
@@ -2616,7 +2582,7 @@ EXTERNAL SOURCES:
   React-mutationobservernativemodule:
     :path: "../../../node_modules/.pnpm/react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@react-native+jest-preset@_292478378266a36e55b1f2262faf1c24/node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver"
   react-native-maps:
-    :path: "../node_modules/react-native-maps"
+    :path: "../../../node_modules/.pnpm/react-native-maps@1.27.2_react-native-web@0.21.2_react-dom@19.2.3_react@19.2.3__react@1_e4bdb883c2fecf93e6f43fe0806cf658/node_modules/react-native-maps"
   react-native-safe-area-context:
     :path: "../../../node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.7_supports-co_63a5cb5facfacb281aaf1339136542ab/node_modules/react-native-safe-area-context"
   react-native-skia:
@@ -2733,8 +2699,6 @@ SPEC CHECKSUMS:
   ExpoUI: 6867422a567a251dcc25444c706b53f479e457ae
   ExpoWebBrowser: 9b98d939d5f1c5dd8f523f0a0683056fb1204434
   FBLazyVector: 2138c6c2ab66c31bf5754dc18097fbc498a49c7f
-  Google-Maps-iOS-Utils: 0a484b05ed21d88c9f9ebbacb007956edd508a96
-  GoogleMaps: 0608099d4870cac8754bdba9b6953db543432438
   hermes-engine: f950618e994e43d007f013c66a7666906b11ed29
   RCTDeprecation: 96f68ebf33f8762466b01d57d6e873c4f30efb07
   RCTRequired: 166eed8ad6d8440e73e56d09a9090366609823d2
@@ -2818,6 +2782,6 @@ SPEC CHECKSUMS:
   RNWorklets: 10643b299634ed1d2d02d0848e0f8be8803272fb
   Yoga: 18b74b3ade30bebc1904004dfaceae1dd02a330a
 
-PODFILE CHECKSUM: 3630943ebc04409bcc03982b32db6c886b19ebfc
+PODFILE CHECKSUM: 929b5a0967ae5dbc6c0db662b3ee836068d5723a
 
 COCOAPODS: 1.17.0

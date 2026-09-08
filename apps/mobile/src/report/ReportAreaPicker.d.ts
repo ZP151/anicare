@@ -5,6 +5,6 @@ export type ReportAreaSelection = Readonly<{ publicCellId: string }>;
 
 export const ReportAreaPicker: ComponentType<Readonly<{
   locale?: Locale;
-  googleMapsConfigured?: boolean;
+  androidGoogleMapsConfigured?: boolean;
   onSelect(selection: ReportAreaSelection): void;
 }>>;

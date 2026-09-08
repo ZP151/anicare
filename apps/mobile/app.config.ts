@@ -2,36 +2,31 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 import appJson from './app.json';
 
-export function getGoogleMapsBuildConfig(env: Readonly<{
-  GOOGLE_MAPS_IOS_API_KEY?: string;
+export function getAndroidGoogleMapsBuildConfig(env: Readonly<{
   GOOGLE_MAPS_ANDROID_API_KEY?: string;
 }>): Readonly<{
   configured: boolean;
   plugin: 'react-native-maps' | readonly [
     'react-native-maps',
-    Readonly<{ iosGoogleMapsApiKey: string; androidGoogleMapsApiKey?: string }>,
+    Readonly<{ androidGoogleMapsApiKey: string }>,
   ];
 }> {
-  const iosGoogleMapsApiKey = env.GOOGLE_MAPS_IOS_API_KEY?.trim();
   const androidGoogleMapsApiKey = env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
-  if (!iosGoogleMapsApiKey) {
+  if (!androidGoogleMapsApiKey) {
     return { configured: false, plugin: 'react-native-maps' };
   }
   return {
     configured: true,
     plugin: [
       'react-native-maps',
-      androidGoogleMapsApiKey
-        ? { iosGoogleMapsApiKey, androidGoogleMapsApiKey }
-        : { iosGoogleMapsApiKey },
+      { androidGoogleMapsApiKey },
     ],
   };
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const base = appJson.expo as ExpoConfig;
-  const maps = getGoogleMapsBuildConfig({
-    GOOGLE_MAPS_IOS_API_KEY: process.env.GOOGLE_MAPS_IOS_API_KEY,
+  const maps = getAndroidGoogleMapsBuildConfig({
     GOOGLE_MAPS_ANDROID_API_KEY: process.env.GOOGLE_MAPS_ANDROID_API_KEY,
   });
   const plugins = (base.plugins ?? []).filter((plugin) => {
@@ -45,7 +40,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [...plugins, maps.plugin as NonNullable<ExpoConfig['plugins']>[number]],
     extra: {
       ...base.extra,
-      googleMapsConfigured: maps.configured,
+      androidGoogleMapsConfigured: maps.configured,
     },
   };
 };

@@ -4,9 +4,6 @@ export type DeviceLabInputCode =
   | 'event_not_allowed'
   | 'compile_probe_placeholder_invalid'
   | 'manual_ref_invalid'
-  | 'maps_ios_key_missing'
-  | 'maps_ios_key_whitespace'
-  | 'maps_ios_key_placeholder'
   | 'supabase_url_missing'
   | 'supabase_url_whitespace'
   | 'supabase_url_invalid'
@@ -32,15 +29,11 @@ export type Gate2BReadinessCode =
 const hostedProjectRef = 'fhugdtpjbgiatqhvjioy';
 const hostedOrigin = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 const compileProbe = {
-  googleMapsIosApiKey: 'compile-probe-google-maps-ios-key',
   supabaseUrl: 'https://compile-probe.invalid',
   supabasePublicKey: 'compile-probe-supabase-public-key',
 } as const;
 const knownPlaceholders = new Set([
-  compileProbe.googleMapsIosApiKey,
   compileProbe.supabasePublicKey,
-  'YOUR_GOOGLE_MAPS_IOS_API_KEY',
-  'GOOGLE_MAPS_IOS_API_KEY',
   'YOUR_SUPABASE_ANON_KEY',
   'EXPO_PUBLIC_SUPABASE_ANON_KEY',
 ]);
@@ -95,7 +88,6 @@ type Gate2BEvidence = Readonly<{
 export function evaluateDeviceLabInputs(input: Readonly<{
   eventName: string;
   ref: string;
-  googleMapsIosApiKey?: string;
   supabaseUrl?: string;
   supabasePublicKey?: string;
 }>): Readonly<{ ok: true; mode: DeviceLabMode }> | Readonly<{
@@ -104,7 +96,6 @@ export function evaluateDeviceLabInputs(input: Readonly<{
 }> {
   if (input.eventName === 'pull_request') {
     const hasRepositoryPlaceholders =
-      input.googleMapsIosApiKey === compileProbe.googleMapsIosApiKey &&
       input.supabaseUrl === compileProbe.supabaseUrl &&
       input.supabasePublicKey === compileProbe.supabasePublicKey;
     return hasRepositoryPlaceholders
@@ -120,23 +111,12 @@ export function evaluateDeviceLabInputs(input: Readonly<{
   if (input.ref !== 'refs/heads/main') {
     codes.push('manual_ref_invalid');
   }
-  addMapsKeyCode(codes, input.googleMapsIosApiKey);
   addSupabaseUrlCode(codes, input.supabaseUrl);
   addSupabasePublicKeyCode(codes, input.supabasePublicKey);
 
   return codes.length === 0
     ? { ok: true, mode: 'device_candidate' }
     : { ok: false, codes };
-}
-
-function addMapsKeyCode(codes: DeviceLabInputCode[], value: string | undefined): void {
-  if (value === undefined || value.length === 0) {
-    codes.push('maps_ios_key_missing');
-  } else if (/\s/.test(value)) {
-    codes.push('maps_ios_key_whitespace');
-  } else if (knownPlaceholders.has(value)) {
-    codes.push('maps_ios_key_placeholder');
-  }
 }
 
 function addSupabaseUrlCode(codes: DeviceLabInputCode[], value: string | undefined): void {

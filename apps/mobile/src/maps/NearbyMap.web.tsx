@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colors } from '../design/theme';
 import type { NearbyMapProps } from './NearbyMap.types';
 
-const defaultFallbackLabel = 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.';
+const defaultFallbackLabel = 'The map is unavailable. Switch to the area list to browse delayed community activity.';
 
 export function NearbyMap({ fallbackLabel = defaultFallbackLabel }: NearbyMapProps) {
   return (

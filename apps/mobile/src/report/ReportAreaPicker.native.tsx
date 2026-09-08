@@ -2,7 +2,7 @@ import { isSingaporePublicCell, toPublicLocationCell } from '@animalhelper/domai
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
 import MapView, { PROVIDER_GOOGLE, type MapPressEvent } from 'react-native-maps';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
 import type { Locale } from '../i18n/catalog';
@@ -41,7 +41,9 @@ function NativeAreaMap({ onPress, onReady, locale = 'en' }: AreaMapBoundaryProps
         <MapView
           accessibilityLabel={copy.wizardAreaMapLabel}
           accessibilityRole="button"
-          customMapStyle={PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({ ...entry, stylers: entry.stylers.map((styler) => ({ ...styler })) }))}
+          customMapStyle={Platform.OS === 'android'
+            ? PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({ ...entry, stylers: entry.stylers.map((styler) => ({ ...styler })) }))
+            : undefined}
           initialRegion={PUBLIC_MAP_REGION}
           maxZoomLevel={14}
           minZoomLevel={10}
@@ -49,7 +51,7 @@ function NativeAreaMap({ onPress, onReady, locale = 'en' }: AreaMapBoundaryProps
           onMapLoaded={onReady}
           onMapReady={onReady}
           pitchEnabled={false}
-          provider={PROVIDER_GOOGLE}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           rotateEnabled={false}
           showsBuildings={false}
           showsCompass={false}
@@ -70,32 +72,33 @@ export function ReportAreaPicker({
   onSelect,
   MapBoundary = NativeAreaMap,
   locale = 'en',
-  googleMapsConfigured = Constants.expoConfig?.extra?.googleMapsConfigured === true,
+  androidGoogleMapsConfigured = Constants.expoConfig?.extra?.androidGoogleMapsConfigured === true,
 }: Readonly<{
   onSelect(selection: ReportAreaSelection): void;
   MapBoundary?: ComponentType<AreaMapBoundaryProps & Readonly<{ locale?: Locale }>>;
   locale?: Locale;
-  googleMapsConfigured?: boolean;
+  androidGoogleMapsConfigured?: boolean;
 }>) {
   const [outsideSingapore, setOutsideSingapore] = useState(false);
   const [providerUnavailable, setProviderUnavailable] = useState(false);
   const readyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapEnabled = Platform.OS === 'ios' || androidGoogleMapsConfigured;
   const markReady = useCallback(() => {
     readyRef.current = true;
     if (timerRef.current !== null) clearTimeout(timerRef.current);
     timerRef.current = null;
   }, []);
   useEffect(() => {
-    if (!googleMapsConfigured) return undefined;
+    if (!mapEnabled) return undefined;
     setProviderUnavailable(false);
     if (readyRef.current) return () => { readyRef.current = false; };
     timerRef.current = setTimeout(() => { timerRef.current = null; setProviderUnavailable(true); }, MAP_READINESS_TIMEOUT_MS);
     return () => { if (timerRef.current !== null) clearTimeout(timerRef.current); timerRef.current = null; readyRef.current = false; };
-  }, [googleMapsConfigured]);
-  if (!googleMapsConfigured || providerUnavailable) {
+  }, [mapEnabled]);
+  if (!mapEnabled || providerUnavailable) {
     return <View style={styles.frame}>
-      <Text accessibilityLiveRegion="polite" style={styles.copy}>{locale === 'zh-CN' ? 'Google 地图暂不可用。请选择与实际 H3-9 网格对应的社区位置。' : 'Google Maps is unavailable. Choose a community location that corresponds to one actual H3-9 cell.'}</Text>
+      <Text accessibilityLiveRegion="polite" style={styles.copy}>{locale === 'zh-CN' ? '地图暂不可用。请选择与实际 H3-9 网格对应的社区位置。' : 'The map is unavailable. Choose a community location that corresponds to one actual H3-9 cell.'}</Text>
       {FALLBACK_AREAS.map((area) => <Pressable
         accessibilityLabel={area.label[locale]}
         accessibilityRole="button"
