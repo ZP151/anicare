@@ -13,13 +13,13 @@ export type ReportTimelineItem = Readonly<{
   occurredAt: string;
   reportState: MyReportSummary['reportState'] | 'draft' | 'submitted';
   mediaState: MyReportSummary['mediaState'] | 'needs_user';
-  identityState: MyReportSummary['identityState'];
+  identityState: MyReportSummary['identityState'] | 'pending_submission';
 }>;
 
 export type ReportReceiptStatus = Readonly<{
   reportState: MyReportSummary['reportState'] | 'draft' | 'submitted';
   mediaState: MyReportSummary['mediaState'] | 'needs_user';
-  identityState: MyReportSummary['identityState'];
+  identityState: MyReportSummary['identityState'] | 'pending_submission';
 }>;
 
 export function earliestIncompleteStep(draft: StoredDraft): ReportDraftStep {
@@ -78,7 +78,7 @@ function committedTimelineItem(summary: MyReportSummary, local: StoredDraft | nu
     occurredAt: summary.occurredAt,
     reportState: summary.reportState,
     mediaState: local && localMediaState(local) === 'needs_user' ? 'needs_user' : summary.mediaState,
-    identityState: summary.identityState,
+    identityState: summary.identityState === 'not_requested' && local?.identityContinuation ? 'pending_submission' : summary.identityState,
   });
 }
 
@@ -92,7 +92,7 @@ function recoveryTimelineItem(draft: StoredDraft): ReportTimelineItem | null {
     occurredAt: draft.report?.occurredAt ?? draft.textReceiptCommittedAt!,
     reportState: draft.sightingId && !hasMediaBoundary(draft) ? 'submitted' : 'draft',
     mediaState: localMediaState(draft),
-    identityState: 'not_requested',
+    identityState: draft.identityContinuation ? 'pending_submission' : 'not_requested',
   });
 }
 
@@ -120,7 +120,8 @@ export function mergeReceiptStatus(remote: MyReportSummary | null, local: Stored
     const mediaState = localState === 'needs_user'
       ? localState
       : remote.mediaState;
-    return Object.freeze({ reportState: remote.reportState, mediaState, identityState: remote.identityState });
+    const identityState = remote.identityState === 'not_requested' && local?.identityContinuation ? 'pending_submission' : remote.identityState;
+    return Object.freeze({ reportState: remote.reportState, mediaState, identityState });
   }
   const recovery = local ? recoveryTimelineItem(local) : null;
   return recovery ? Object.freeze({ reportState: recovery.reportState, mediaState: recovery.mediaState, identityState: recovery.identityState }) : null;

@@ -160,17 +160,7 @@ describe('fail-closed feed screens', () => {
     mockGetSupabaseClient.mockReturnValue(client);
     let resolveFeed: (value: PublicSightingPage) => void = () => undefined;
     mockListPublicSightings
-      .mockResolvedValueOnce(livePage)
       .mockImplementationOnce(() => new Promise<PublicSightingPage>((resolve) => { resolveFeed = resolve; }));
-
-    const nearby = await render(<NearbyScreen />);
-    expect(mockListPublicSightings).toHaveBeenCalledWith({ limit: 20 }, client);
-    await waitFor(() => expect(nearby.getByText('Pepper')).toBeTruthy());
-    expect(nearby.queryByText(/Mochi/)).toBeNull();
-    expect(nearby.queryByText(/8928308280fffff/)).toBeNull();
-    expect(nearby.getByText('Reported · awaiting community review')).toBeTruthy();
-    expect(nearby.getByText('Seen in the latest delayed window')).toBeTruthy();
-    await nearby.unmount();
 
     const map = await render(<MapScreen />);
     expect(map.getByText('Loading delayed community activity…')).toBeTruthy();

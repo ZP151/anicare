@@ -87,12 +87,14 @@ export async function acquireVerifiedPilotGate2BArtifact({
       'run', 'download', String(runId), '--repo', 'ZP151/anicare', '--name',
       artifactName, '--dir', directory,
     ], options);
-    await canonicalEvidenceFile(file);
+    const { value } = await canonicalEvidenceFile(file);
+    if (value.sourceCommit !== sourceDigest || value.workflowRunId !== runId ||
+        value.workflowRunAttempt !== runAttempt) return invalid();
     const verification = await processAdapter('gh', [
       'attestation', 'verify', file, '--repo', 'ZP151/anicare',
       '--signer-workflow', 'ZP151/anicare/.github/workflows/hosted-gate-2b.yml',
       '--signer-digest', sourceDigest, '--source-digest', sourceDigest, '--source-ref', sourceRef,
-      '--predicate-type', 'https://slsa.dev/provenance/v1', '--deny-self-hosted-runners', '--no-public-good',
+      '--predicate-type', 'https://slsa.dev/provenance/v1', '--deny-self-hosted-runners',
       '--format', 'json',
     ], options);
     let parsed;

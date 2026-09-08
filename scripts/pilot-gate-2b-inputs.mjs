@@ -24,6 +24,13 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202608310009_report_manual_area_submission.sql',
   '202608310010_my_reports_projection.sql',
   '202609030001_finalize_media_preflight.sql',
+  '202609080001_m1_1_identity_continuation.sql',
+  '202609080002_identity_profile_completion.sql',
+  '202609080003_identity_review_workbench.sql',
+  '202609080004_public_cat_summary.sql',
+  '202609080005_completed_care.sql',
+  '202609080006_following_discovery.sql',
+  '202609080007_user_rights.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([

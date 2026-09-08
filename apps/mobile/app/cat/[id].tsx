@@ -1,27 +1,24 @@
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { listPublicSightings, type NarrowRpcClient } from '../../src/api/feed';
-import { getSupabaseClient } from '../../src/api/supabase';
-import { readSessionSubjectStrict } from '../../src/auth/session-subject';
+import { FollowControl } from '../../src/following/FollowControl';
+import { getPublicCatSummary } from '../../src/api/cats';
+import { readSessionSubjectStrict, subscribeSessionSubject } from '../../src/auth/session-subject';
 import { CatDetailScreen } from '../../src/components/CatDetailScreen';
 import type { SelectedCatSummary } from '../../src/components/AnchoredCatSheet';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
 import { colors } from '../../src/design/theme';
 import { useLocale } from '../../src/i18n/LocaleContext';
-import { toPublicMapPresentation } from '../../src/maps/public-map-policy';
+import { getCommunityMapCopy } from '../../src/i18n/catalog';
 import { saveOfflineDraft } from '../../src/offline/draft-store';
 import { createOwnerAwareReportDraft } from '../../src/report/report-draft-factory';
 
 const previewCat: SelectedCatSummary = {
-  animalId: 'demo-cat',
-  primaryAlias: 'Mochi',
-  verificationLabel: 'Community confirmed',
-  timeLabel: 'Seen this afternoon',
+  animalId: 'demo-cat', primaryAlias: 'Mochi',
+  verificationLabel: 'Community confirmed', timeLabel: 'Seen this afternoon',
 };
-
 const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function CatRoute() {
@@ -32,70 +29,52 @@ export default function CatRoute() {
   const fixture = animalId === previewCat.animalId;
   const [cat, setCat] = useState<SelectedCatSummary | null>(fixture ? previewCat : null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(fixture ? 'ready' : 'loading');
-
+  const [authEpoch, setAuthEpoch] = useState(0);
+  useEffect(() => subscribeSessionSubject(() => {
+    setCat(null);
+    setStatus('loading');
+    setAuthEpoch((epoch) => epoch + 1);
+  }), []);
   useEffect(() => {
-    if (fixture) return;
-    const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
-    if (!client || !animalId) {
-      setStatus('unavailable');
-      return;
-    }
+    if (fixture) { setCat(previewCat); setStatus('ready'); return; }
+    setCat(null);
+    setStatus('loading');
+    if (!animalId || !opaqueAnimalId.test(animalId)) { setStatus('unavailable'); return; }
     let active = true;
-    void listPublicSightings({ limit: 50 }, client)
-      .then((page) => {
+    void getPublicCatSummary(animalId)
+      .then((row) => {
         if (!active) return;
-        const row = page.items.find((item) => item.animalId === animalId);
-        if (!row) {
-          setStatus('unavailable');
-          return;
-        }
-        const safe = toPublicMapPresentation(row);
+        if (!row) { setStatus('unavailable'); return; }
+        const copy = getCommunityMapCopy(locale);
         setCat({
-          animalId: safe.animalId,
-          primaryAlias: safe.alias,
-          verificationLabel: safe.verificationLabel,
-          timeLabel: safe.timeLabel,
+          animalId: row.animalId, primaryAlias: row.primaryAlias,
+          verificationLabel: copy.verificationLabel(row.verification),
+          timeLabel: row.timeBucket ? copy.timeLabel(row.timeBucket)
+            : locale === 'zh-CN' ? '暂无公开活动' : 'No public activity yet',
         });
         setStatus('ready');
       })
-      .catch(() => {
-        if (active) setStatus('unavailable');
-      });
+      .catch(() => { if (active) setStatus('unavailable'); });
     return () => { active = false; };
-  }, [animalId, fixture]);
+  }, [animalId, fixture, locale, authEpoch]);
 
   if (status === 'ready' && cat) {
-    return (
-      <CatDetailScreen
-        cat={cat}
-        fixture={fixture}
-        locale={locale}
-        onReportSighting={async (selectedAnimalId) => {
-          const draftId = await createOwnerAwareReportDraft({
-            readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
-            saveDraft: saveOfflineDraft,
-            createId: Crypto.randomUUID,
-            now: () => new Date(),
-          });
-          const params = opaqueAnimalId.test(selectedAnimalId) ? { draftId, animalId: selectedAnimalId } : { draftId };
-          router.push({ pathname: '/report/new', params } as never);
-        }}
-      />
-    );
+    return <CatDetailScreen cat={cat} fixture={fixture} locale={locale}
+      onReportSighting={async (selectedAnimalId) => {
+        const draftId = await createOwnerAwareReportDraft({
+          readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
+          saveDraft: saveOfflineDraft, createId: Crypto.randomUUID, now: () => new Date(),
+        }, opaqueAnimalId.test(selectedAnimalId)
+          ? { identityIntent: { kind: 'existing', animalId: selectedAnimalId } } : {});
+        router.push({ pathname: '/report/new', params: { draftId } } as never);
+      }} onRecordCare={fixture ? undefined : (selectedAnimalId) => { router.push({ pathname: '/care/[id]', params: { id: selectedAnimalId } } as never); }} >{!fixture ? <><FollowControl key={cat.animalId} animalId={cat.animalId} /><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>router.push(`/safety/${cat.animalId}` as never)}><Text>{locale==='zh-CN'?'内容安全与身份纠错':'Content safety and identity correction'}</Text></Pressable></> : null}</CatDetailScreen>;
   }
-
-  return (
-    <ScreenScaffold
-      subtitle="Public identity details are loaded only from the delayed community feed."
-      title={status === 'loading' ? 'Loading cat profile' : 'Cat profile unavailable'}
-    >
-      <Text accessibilityLiveRegion="polite" style={styles.status}>
-        {status === 'loading'
-          ? 'Checking the privacy-safe public identity feed…'
-          : 'This profile is not available in the current public window.'}
-      </Text>
-    </ScreenScaffold>
-  );
+  return <ScreenScaffold
+    subtitle={locale === 'zh-CN' ? '公开档案仅显示可公开的身份摘要与粗略活动。' : 'Public profiles show eligible identity summaries and coarse activity.'}
+    title={status === 'loading' ? (locale === 'zh-CN' ? '正在加载猫档案' : 'Loading cat profile') : (locale === 'zh-CN' ? '猫档案不可用' : 'Cat profile unavailable')}
+  ><Text accessibilityLiveRegion="polite" style={styles.status}>
+    {status === 'loading' ? (locale === 'zh-CN' ? '正在读取公开档案…' : 'Loading the public profile…')
+      : (locale === 'zh-CN' ? '该档案当前不可公开访问。' : 'This profile is currently unavailable.')}
+  </Text></ScreenScaffold>;
 }
-
 const styles = StyleSheet.create({ status: { color: colors.muted, fontSize: 14, lineHeight: 21 } });

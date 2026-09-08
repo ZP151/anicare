@@ -124,22 +124,24 @@ insert into public.role_grants (user_id, role, provisional_until, revoked_at) va
   ('00000000-0000-4000-8000-000000001106', 'platform_admin', null, null);
 
 insert into public.animals (id, primary_alias, profile_created_by, visibility) values
-  ('00000000-0000-4000-8000-000000001200', 'Existing Cat', '00000000-0000-4000-8000-000000001103', 'limited'),
+  ('00000000-0000-4000-8000-000000001200', 'Existing Cat', '00000000-0000-4000-8000-000000001103', 'public'),
   ('00000000-0000-4000-8000-000000001201', 'Already Linked Cat', '00000000-0000-4000-8000-000000001101', 'limited'),
-  ('00000000-0000-4000-8000-000000001202', 'Deletion Target Cat', '00000000-0000-4000-8000-000000001101', 'limited');
+  ('00000000-0000-4000-8000-000000001202', 'Deletion Target Cat', '00000000-0000-4000-8000-000000001101', 'public');
 
 insert into public.sightings (
   id, animal_id, reporter_id, occurred_at, public_cell_id, time_bucket,
-  risk, visibility, client_dedupe_key
+  risk, visibility, visible_at, client_dedupe_key
 ) values
-  ('00000000-0000-4000-8000-000000001300', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1300'),
-  ('00000000-0000-4000-8000-000000001301', null, '00000000-0000-4000-8000-000000001102', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1301'),
-  ('00000000-0000-4000-8000-000000001302', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1302'),
-  ('00000000-0000-4000-8000-000000001303', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1303'),
-  ('00000000-0000-4000-8000-000000001304', '00000000-0000-4000-8000-000000001201', '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1304'),
-  ('00000000-0000-4000-8000-000000001305', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1305'),
-  ('00000000-0000-4000-8000-000000001306', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1306'),
-  ('00000000-0000-4000-8000-000000001307', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', 'identity-1307');
+  ('00000000-0000-4000-8000-000000001300', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1300'),
+  ('00000000-0000-4000-8000-000000001301', null, '00000000-0000-4000-8000-000000001102', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1301'),
+  ('00000000-0000-4000-8000-000000001302', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1302'),
+  ('00000000-0000-4000-8000-000000001303', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1303'),
+  ('00000000-0000-4000-8000-000000001304', '00000000-0000-4000-8000-000000001201', '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1304'),
+  ('00000000-0000-4000-8000-000000001305', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1305'),
+  ('00000000-0000-4000-8000-000000001306', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1306'),
+  ('00000000-0000-4000-8000-000000001307', null, '00000000-0000-4000-8000-000000001100', now(), '8928308280fffff', 'morning', 'normal', 'limited', null, 'identity-1307'),
+  ('00000000-0000-4000-8000-000000001308', '00000000-0000-4000-8000-000000001200', '00000000-0000-4000-8000-000000001103', now(), '8928308280fffff', 'morning', 'normal', 'public', now() - interval '1 hour', 'identity-visible-1200'),
+  ('00000000-0000-4000-8000-000000001309', '00000000-0000-4000-8000-000000001202', '00000000-0000-4000-8000-000000001101', now(), '8928308280fffff', 'morning', 'normal', 'public', now() - interval '1 hour', 'identity-visible-1202');
 
 set local role anon;
 select set_config('request.jwt.claim.role', 'anon', true);

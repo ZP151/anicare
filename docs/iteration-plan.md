@@ -1,5 +1,10 @@
 # Iteration and launch plan
 
+> **2026-09-05：以下 Sprint 记录保留为历史计划，不再代表当前执行优先级或验收状态。**
+> 当前路线已升级为 [Iteration roadmap v3](iteration-roadmap-v3.md)，验收依据见
+> [全项目功能评审](reviews/2026-09-07-product-delivery-review.md)。Hosted producer 历史上已通过，
+> 但证据消费与 iOS 编译仍有阻塞；不能按下文旧的“尚未执行”继续安排工作。
+
 This sequence deliberately proves safety and identity quality before community growth.
 
 ## Sprint 0–1 — foundation (implemented baseline)

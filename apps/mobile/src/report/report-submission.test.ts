@@ -146,6 +146,48 @@ describe('report submission lifecycle', () => {
     expect(second.result.sightingId).toBe(sightingIds[1]);
     expect(second.calls).not.toContain(`attach:${sightingIds[0]}`);
   });
+
+  it('commits text once and retains a failed identity proposal for the same sighting retry', async () => {
+    const proposed: Array<[string, string, string]> = [];
+    const run = harness({
+      current: {
+        id: 'draft-12345678', notes: 'tabby', risk: 'normal',
+        report: {
+          version: 1, step: 'review', areaSelectionMode: 'either', occurredAt: '2026-08-27T00:00:00.000Z',
+          coat: [], markings: [], condition: 'appears_well', manualPublicCellId: '89652636d87ffff',
+          identityIntent: { kind: 'existing', animalId: '87654321-1234-1234-1234-123456789abc' },
+          identityRequestId: 'abcdef12-1234-1234-1234-123456789abc', updatedAt: '2026-08-27T00:00:00.000Z',
+        },
+      },
+      submitIdentityProposal: async (sightingId: string, intent: any, requestId: string) => {
+        proposed.push([sightingId, intent.animalId, requestId]);
+        throw new Error('network');
+      },
+    });
+
+    const result = await submitReportWithMedia(submission({
+      location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
+    }), run.dependencies);
+
+    expect(result).toMatchObject({ sightingId: response.sightingId, state: 'submitted_text_only', identityState: 'pending_submission' });
+    expect(proposed).toEqual([[response.sightingId, '87654321-1234-1234-1234-123456789abc', 'abcdef12-1234-1234-1234-123456789abc']]);
+    expect(run.dependencies.createSighting).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a reviewed retry as pending identity review', async () => {
+    const run = harness({
+      current: {
+        id: 'draft-12345678', notes: 'tabby', risk: 'normal', identityContinuation: {
+          intent: { kind: 'new' }, requestId: 'abcdef12-1234-1234-1234-123456789abc',
+        },
+      },
+      submitIdentityProposal: async () => ({ status: 'confirmed' as const }),
+    });
+    const result = await submitReportWithMedia(submission({
+      location: { kind: 'manual_area', publicCellId: '89652636d87ffff' },
+    }), run.dependencies);
+    expect(result).toMatchObject({ sightingId: response.sightingId, identityState: 'closed' });
+  });
   it('persists the visible notes and risk before entering private media review', async () => {
     const calls: string[] = [];
     await persistReportDraftBeforeReview({ draftId: 'draft-12345678', notes: 'ear tip', risk: 'critical' }, {

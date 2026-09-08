@@ -15,9 +15,11 @@ select results_eq(
        and event_manipulation = 'DELETE'
      order by trigger_name collate "C"$$,
   $$values
+      ('aaa_capture_erasure_staging'::text collate "C"),
       ('user_profiles_account_erasure'::text collate "C"),
-      ('user_profiles_legacy_media_deletion_outbox'::text collate "C")$$,
-  'profile deletion retains exactly the two established non-internal erasure triggers'
+      ('user_profiles_legacy_media_deletion_outbox'::text collate "C"),
+      ('zzz_capture_erasure_legacy'::text collate "C")$$,
+  'profile deletion retains the established erasure triggers and the two M4 cleanup receipt link triggers'
 );
 with expected(role_name) as (
   values ('public'), ('anon'), ('authenticated'), ('service_role')

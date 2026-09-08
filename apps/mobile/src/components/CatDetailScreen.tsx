@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii } from '../design/theme';
@@ -9,10 +9,12 @@ import { ScreenScaffold } from './ScreenScaffold';
 import type { SelectedCatSummary } from './AnchoredCatSheet';
 
 type CatDetailScreenProps = Readonly<{
+  children?: ReactNode;
   cat: SelectedCatSummary;
   fixture: boolean;
   locale?: Locale;
   onReportSighting: (animalId: string) => void | Promise<void>;
+  onRecordCare?: (animalId: string) => void | Promise<void>;
 }>;
 
 function getCatDetailCopy(locale: Locale, alias: string) {
@@ -29,6 +31,7 @@ function getCatDetailCopy(locale: Locale, alias: string) {
       reportLabel: `报告 ${alias} 的目击记录`,
       reportAction: '报告目击记录',
       governance: '身份信息变更前必须经过社区审核。',
+      careLabel: `记录 ${alias} 的已完成照护`, careAction: '记录已完成照护',
     } as const;
   }
   return {
@@ -43,10 +46,11 @@ function getCatDetailCopy(locale: Locale, alias: string) {
     reportLabel: `Report a sighting of ${alias}`,
     reportAction: 'Report a sighting',
     governance: 'Community review is required before identity information changes.',
+    careLabel: `Record completed care for ${alias}`, careAction: 'Record completed care',
   } as const;
 }
 
-export function CatDetailScreen({ cat, fixture, locale = 'en', onReportSighting }: CatDetailScreenProps) {
+export function CatDetailScreen({ cat, fixture, locale = 'en', onReportSighting, onRecordCare, children }: CatDetailScreenProps) {
   const reportCopy = getReportCopy(locale);
   const copy = getCatDetailCopy(locale, cat.primaryAlias);
   const [startingReport, setStartingReport] = useState(false);
@@ -116,6 +120,10 @@ export function CatDetailScreen({ cat, fixture, locale = 'en', onReportSighting 
         <Text style={styles.reportButtonText}>{copy.reportAction}</Text>
       </Pressable>
       {reportError ? <Text accessibilityLiveRegion="polite" style={styles.error}>{reportError}</Text> : null}
+      {onRecordCare ? <Pressable accessibilityLabel={copy.careLabel} accessibilityRole="button" onPress={() => { void onRecordCare(cat.animalId); }} style={styles.careButton}>
+        <MaterialCommunityIcons color={colors.community} name="heart-plus-outline" size={20} /><Text style={styles.careButtonText}>{copy.careAction}</Text>
+      </Pressable> : null}
+      {children}
       <Text style={styles.governanceNote}>{copy.governance}</Text>
     </ScreenScaffold>
   );
@@ -135,6 +143,8 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
   reportButton: { minHeight: 52, borderRadius: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: colors.community },
   reportButtonText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
+  careButton: { minHeight: 52, borderRadius: 26, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderColor: colors.community, borderWidth: 1 },
+  careButtonText: { color: colors.community, fontSize: 16, fontWeight: '800' },
   governanceNote: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   error: { color: colors.danger, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   pressed: { opacity: 0.74 },

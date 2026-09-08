@@ -108,3 +108,33 @@ attestation, and never merge from a characterization-only result.
 The separate unconditional cleanup process intentionally does not require that
 flag: it must be able to replay the durable ledger after the test process is
 cancelled before integration configuration is reached.
+
+
+## Read-only artifact consumer smoke
+
+The consumer uses GitHub CLI's supported trusted issuers, including Sigstore
+public good; it no longer passes `--no-public-good`. Exact repository,
+signer workflow, signer/source SHA, source ref, SLSA provenance and the ban on
+self-hosted runners remain required. The downloaded canonical JSON must also
+match the requested source SHA, run ID and attempt. See the
+[official verify options](https://cli.github.com/manual/gh_attestation_verify).
+
+Before promotion, a retained artifact can be checked without writing evidence:
+
+```powershell
+node scripts/smoke-pilot-gate-2b-artifact.mjs RUN_ID ATTEMPT SHA REF
+```
+
+Use the actual successful correctness run's identifiers. Success prints only
+`gate_2b_artifact_verified` after verification and temporary-file cleanup;
+failure prints `gate_2b_artifact_verification_failed` and exits nonzero.
+This checks acquisition/signature/source identity, not readiness freshness,
+current migration/Edge hashes or installation eligibility. Promotion must still
+validate these at the real consumption time. Do not add this network smoke to
+the normal unit-test command.
+
+On 2026-09-08, run 33784288981 was still the latest successful bootstrap push
+run, but its artifact reported `expired: true`. The corrected consumer and
+negative cases passed local tests; a real acquisition/signature smoke remains
+pending a retained artifact from a new authorized correctness run. No evidence
+was promoted and the historical 72-hour readiness is not current.

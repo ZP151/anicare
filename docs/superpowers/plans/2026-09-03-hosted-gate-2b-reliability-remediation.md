@@ -1,5 +1,11 @@
 # Hosted Gate 2B Reliability Remediation Implementation Plan
 
+> Status review 2026-09-05: the implementation and successful hosted run exist,
+> but this historical checkbox list is not a completion ledger. See the
+> [acceptance review](../../reviews/2026-09-05-project-acceptance.md) for verified
+> results, remaining consumer/cleanup/performance deviations, and the
+> [closure plan](2026-09-05-release-evidence-closure.md) for the next implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Hosted Gate 2B reliably prove production correctness and remote cleanup while measuring finalization latency separately and deriving a bounded production timeout from real samples.

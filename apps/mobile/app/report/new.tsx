@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { developmentInsecureOrigins } from '../../src/api/development-origin';
 import { recoverSightingSubmission, submitSighting } from '../../src/api/sightings';
+import { submitIdentityProposal } from '../../src/api/identity';
 import { getSupabaseClient } from '../../src/api/supabase';
 import { subscribeSessionSubject } from '../../src/auth/session-subject';
 import { uploadDraftMediaNow } from '../../src/media/media-upload-runtime';
@@ -88,6 +89,7 @@ export default function NewReportRoute() {
             }
           },
           deleteDraft: deleteOfflineDraft,
+          submitIdentityProposal: async (sightingId, intent, requestId) => submitIdentityProposal({ sightingId, intent, requestId }),
         });
         return { sightingId: result.sightingId, state: result.state };
       },

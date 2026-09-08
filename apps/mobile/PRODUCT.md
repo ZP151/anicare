@@ -99,7 +99,10 @@ choice and independent review.
 
 - Existing implementation and product contracts under `apps/mobile/`,
   `packages/domain/`, `supabase/` and `services/ai/`.
-- Approved iteration and launch gates in `docs/iteration-plan.md`.
+- Current functional sequence in `docs/iteration-roadmap-v3.md`, outcomes in
+  `docs/product-goals.md`, and regression rules in `docs/regression-playbook.md`.
+  `docs/iteration-plan.md` is historical; applicable launch checks remain in
+  `docs/singapore-launch-checklist.md`.
 - Approved AI identity provenance specification in
   `docs/superpowers/specs/2026-08-29-ai-identity-assistance-provenance-design.md`.
 - Five-tab mobile audit captures and findings at

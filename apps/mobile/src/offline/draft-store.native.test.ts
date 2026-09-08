@@ -1,6 +1,8 @@
+import { spawnSync } from 'node:child_process';
 import {
   ATTACH_SIGHTING_TO_DRAFT_SQL,
   CLEAR_PENDING_MEDIA_CLEANUP_SQL,
+  CLEAR_IDENTITY_CONTINUATION_SQL,
   PENDING_MEDIA_CLEANUP_LIST_SQL,
   REPORT_PAYLOAD_COLUMN,
   QUARANTINED_MEDIA_CLEANUP_SQL,
@@ -34,6 +36,55 @@ import { UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION } from './draft-policy';
 import type { StoredDraft } from './draft-policy';
 
 describe('native draft storage privacy boundary', () => {
+  it('executes rejection CAS without clearing another request, owner, or media', () => {
+    const result = spawnSync(process.execPath, ['--no-warnings', '-e', `
+      const { DatabaseSync } = require('node:sqlite');
+      const sql = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+      const db = new DatabaseSync(':memory:');
+      db.exec('CREATE TABLE sighting_drafts (id TEXT, owner_subject TEXT, sighting_id TEXT, identity_continuation_json TEXT, revision INTEGER, updated_at TEXT, reviewed_media_ref TEXT, upload_state TEXT)');
+      db.prepare('INSERT INTO sighting_drafts VALUES (?,?,?,?,?,?,?,?)').run('draft', 'owner-a', 'sighting', 'new-request', 1, 'old', 'encrypted-media', 'needs_user');
+      const stale = db.prepare(sql).run('now', 'draft', 'owner-a', 'sighting', 'old-request').changes;
+      const other = db.prepare(sql).run('now', 'draft', 'owner-b', 'sighting', 'new-request').changes;
+      const own = db.prepare(sql).run('now', 'draft', 'owner-a', 'sighting', 'new-request').changes;
+      process.stdout.write(JSON.stringify({ stale, other, own, row: db.prepare('SELECT * FROM sighting_drafts').get() }));
+      db.close();
+    `], { input: JSON.stringify(CLEAR_IDENTITY_CONTINUATION_SQL), encoding: 'utf8' });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ stale: 0, other: 0, own: 1, row: { identity_continuation_json: null, revision: 2, reviewed_media_ref: 'encrypted-media', upload_state: 'needs_user', owner_subject: 'owner-a' } });
+  });
+
+  it('executes native SQL through attach, restart backfill and media cleanup without losing the identity request', async () => {
+    const columns = ['id TEXT PRIMARY KEY', 'notes TEXT', 'risk TEXT', 'updated_at TEXT'];
+    await ensureDraftTransportSchemaWithDependencies({
+      listColumns: async () => ['id', 'notes', 'risk', 'updated_at'],
+      addColumn: async (name, type) => { columns.push(`${name} ${type}`); },
+      backfillEncryptionVersion: async () => {}, backfillTextReceiptAnchors: async () => {}, clearLegacyReviewedPath: async () => {},
+    });
+    const continuation = { intent: { kind: 'new' }, requestId: '00000000-0000-4000-8000-000000000909' };
+    const time = '2026-09-08T00:00:00.000Z';
+    const commands = [
+      [DRAFT_SAVE_SQL, ['draft-12345678', '', 'normal', null, null, 'owner-12345678', null, null, null, null, null, null, null, null, null, null, JSON.stringify(continuation), time]],
+      [ATTACH_SIGHTING_TO_DRAFT_SQL, ['sighting-12345678', 'owner-12345678', time, time, 'draft-12345678', 'owner-12345678', 'sighting-12345678', 'owner-12345678']],
+      [TEXT_RECEIPT_BACKFILL_SQL, []],
+      ["UPDATE sighting_drafts SET upload_state='quarantined', reviewed_media_ref='reviewed-media/test.agcm', media_id='media-12345678' WHERE id='draft-12345678'", []],
+      [QUARANTINED_MEDIA_CLEANUP_SQL, ['draft-12345678', 1]],
+    ];
+    const result = spawnSync(process.execPath, ['--no-warnings', '-e', `
+      const { DatabaseSync } = require('node:sqlite');
+      const { columns, commands, read } = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+      const db = new DatabaseSync(':memory:');
+      db.exec('CREATE TABLE sighting_drafts (' + columns.join(',') + ')');
+      for (const [sql, args] of commands) db.prepare(sql).run(...args);
+      process.stdout.write(JSON.stringify(db.prepare(read).all())); db.close();
+    `], { input: JSON.stringify({ columns, commands, read: DRAFT_LIST_SQL }), encoding: 'utf8' });
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    const [saved] = deserializeDraftRows(JSON.parse(result.stdout));
+    expect(saved).toMatchObject({ sightingId: 'sighting-12345678', ownerSubject: 'owner-12345678', identityContinuation: continuation });
+    expect(saved.report).toBeUndefined();
+    expect(saved.encryptedReviewedRef).toBeUndefined();
+    expect(saved.textReceiptCommittedAt).toBe(time);
+  });
   it('migrates and round-trips the sanitized versioned report payload without sensitive columns', () => {
     const report = {
       version: 1,
@@ -44,6 +95,7 @@ describe('native draft storage privacy boundary', () => {
       markings: ['white-paws'],
       condition: 'appears_well',
       manualPublicCellId: null,
+      identityIntent: null,
       updatedAt: '2026-08-31T10:01:00.000Z',
     };
     expect(REPORT_PAYLOAD_COLUMN).toEqual({ report_payload_json: 'TEXT' });
@@ -239,6 +291,33 @@ describe('native draft storage privacy boundary', () => {
       textReceiptCommittedAt: '2026-09-01T12:00:00.000Z',
     });
     expect(JSON.stringify(anchor)).not.toMatch(/private note|tabby|white-paws|89652636d87ffff/);
+  });
+
+  it('retains only the owner-bound identity retry tuple after text cleanup', () => {
+    const [anchor] = deserializeDraftRows([{
+      id: 'draft-12345678', notes: 'private note', risk: 'sensitive', media_id: null,
+      sighting_id: '12345678-1234-1234-1234-123456789abc', owner_subject: 'owner-12345678',
+      reviewed_media_ref: null, encryption_version: null, review_receipt_json: null,
+      upload_state: null, upload_attempts: null, next_attempt_at: null, last_error: null,
+      upload_resume_state: null, upload_attempt_started_at: null, revision: 4,
+      text_committed_at: '2026-09-01T12:00:00.000Z', report_payload_json: null,
+      identity_continuation_json: JSON.stringify({
+        intent: { kind: 'existing', animalId: '87654321-1234-1234-1234-123456789abc' },
+        requestId: 'abcdef12-1234-1234-1234-123456789abc',
+      }),
+    }]);
+
+    expect(anchor).toMatchObject({
+      sightingId: '12345678-1234-1234-1234-123456789abc', ownerSubject: 'owner-12345678',
+      identityContinuation: {
+        intent: { kind: 'existing', animalId: '87654321-1234-1234-1234-123456789abc' },
+        requestId: 'abcdef12-1234-1234-1234-123456789abc',
+      },
+    });
+    expect(JSON.stringify(anchor)).not.toContain('private note');
+    expect(TEXT_RECEIPT_BACKFILL_SQL).not.toContain('identity_continuation_json = NULL');
+    expect(ATTACH_SIGHTING_TO_DRAFT_SQL).not.toContain('identity_continuation_json = NULL');
+    expect(QUARANTINED_MEDIA_CLEANUP_SQL).toContain('identity_continuation_json');
   });
 
   it('allows only the matching immutable sighting id to replay after a lost response', async () => {

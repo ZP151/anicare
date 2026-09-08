@@ -28,6 +28,7 @@ export function transitionClaimedMediaUpload(
   next: UploadJob,
 ): Promise<boolean>;
 export function attachSightingToDraft(id: string, sightingId: string, ownerSubject: string): Promise<boolean>;
+export function clearIdentityContinuation(id: string, sightingId: string, ownerSubject: string, requestId: string): Promise<boolean>;
 export function claimOfflineDraftOwner(id: string, ownerSubject: string): Promise<boolean>;
 export function cleanupQuarantinedMedia(id: string, revision: number): Promise<void>;
 export function deleteOfflineDraft(id: string, expectedOwnerSubject?: string | null): Promise<void>;

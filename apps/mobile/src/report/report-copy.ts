@@ -47,7 +47,7 @@ export type ReportCopy = Readonly<{
   browseNearbyAction: string;
   reportStateLabel: (state: 'draft' | 'submitted' | 'private_review' | 'delayed' | 'published' | 'archived') => string;
   mediaStateLabel: (state: 'none' | 'pending' | 'quarantined' | 'cleanup_pending' | 'removed' | 'needs_user') => string;
-  identityStateLabel: (state: 'not_requested' | 'pending_review' | 'linked' | 'closed') => string;
+  identityStateLabel: (state: 'not_requested' | 'pending_submission' | 'pending_review' | 'linked' | 'closed') => string;
   historyTitle: string;
   historySubtitle: string;
   historyLoading: string;
@@ -169,7 +169,9 @@ export function getReportCopy(locale: Locale): ReportCopy {
     browseNearbyAction: translate(locale, 'report.receipt.nearby'),
     reportStateLabel: (state) => translate(locale, `report.receipt.reportState.${state === 'private_review' ? 'privateReview' : state}` as never),
     mediaStateLabel: (state) => translate(locale, `report.receipt.mediaState.${state === 'cleanup_pending' ? 'cleanupPending' : state === 'needs_user' ? 'needsUser' : state}` as never),
-    identityStateLabel: (state) => translate(locale, `report.receipt.identityState.${state === 'not_requested' ? 'notRequested' : state === 'pending_review' ? 'pendingReview' : state}` as never),
+    identityStateLabel: (state) => state === 'pending_submission'
+      ? (locale === 'zh-CN' ? '身份待续办' : 'Identity submission pending')
+      : translate(locale, `report.receipt.identityState.${state === 'not_requested' ? 'notRequested' : state === 'pending_review' ? 'pendingReview' : state}` as never),
     historyTitle: translate(locale, 'report.history.title'),
     historySubtitle: translate(locale, 'report.history.subtitle'),
     historyLoading: translate(locale, 'report.history.loading'),

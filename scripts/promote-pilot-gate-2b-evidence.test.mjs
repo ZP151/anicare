@@ -96,6 +96,9 @@ test('downloads the exact run-attempt artifact and verifies its attestation befo
   const calls = [];
   const processAdapter = async (command, args) => {
     calls.push([command, ...args]);
+    if (args[0] === 'attestation' && args.includes('--no-public-good')) {
+      throw new Error('public_good_issuer_rejected');
+    }
     if (args[0] === 'api') return { stdout: JSON.stringify({
       total_count: 1,
       artifacts: [{
@@ -124,14 +127,21 @@ test('downloads the exact run-attempt artifact and verifies its attestation befo
         '--signer-workflow', 'ZP151/anicare/.github/workflows/hosted-gate-2b.yml',
         '--signer-digest', 'a'.repeat(40), '--source-digest', 'a'.repeat(40),
         '--source-ref', 'refs/heads/codex/hosted-gate-2b',
-        '--predicate-type', 'https://slsa.dev/provenance/v1', '--deny-self-hosted-runners', '--no-public-good',
+        '--predicate-type', 'https://slsa.dev/provenance/v1', '--deny-self-hosted-runners',
         '--format', 'json'],
     ]);
     await acquired.cleanup();
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('fails closed when attestation verification is absent or malformed', async () => {
+test('fails closed when attestation verification is absent or malformed', async (t) => {
+  const cases = [
+    { name: 'empty', invoke: () => ({ stdout: '[]' }) },
+    { name: 'malformed', invoke: () => ({ stdout: 'not-json' }) },
+    { name: 'missing-result', invoke: () => ({ stdout: '[{}]' }) },
+    { name: 'verification-failed', invoke: () => { throw new Error('verification_failed'); } },
+  ];
+  for (const candidate of cases) await t.test(candidate.name, async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'gate-2b-acquire-invalid-'));
   const processAdapter = async (_command, args) => {
     if (args[0] === 'api') return { stdout: JSON.stringify({
@@ -145,12 +155,38 @@ test('fails closed when attestation verification is absent or malformed', async 
       const directory = args[args.indexOf('--dir') + 1];
       await writeFile(path.join(directory, 'pilot-gate-2b-readiness.json'), `${JSON.stringify(evidence(), null, 2)}\n`);
     }
-    return { stdout: '[]' };
+    if (args[0] === 'attestation') return candidate.invoke();
+    return { stdout: '' };
   };
   try {
     await assert.rejects(acquireVerifiedPilotGate2BArtifact({
       runId: 123, runAttempt: 1, temporaryRoot: root, processAdapter,
       sourceDigest: 'a'.repeat(40), sourceRef: 'refs/heads/codex/hosted-gate-2b',
     }), /gate_2b_promotion_invalid/);
+    assert.deepEqual(await readdir(root), []);
   } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
+
+test('acquisition binds the readiness payload to the requested source, run and attempt', async (t) => {
+  for (const change of [{sourceCommit:'b'.repeat(40)}, {workflowRunId:124}, {workflowRunAttempt:2}]) {
+    await t.test(Object.keys(change)[0], async () => {
+      const root=await mkdtemp(path.join(tmpdir(),'gate-2b-payload-'));
+      let verificationCalled=false;
+      const processAdapter=async (_command,args) => {
+        if(args[0]==='api') return {stdout:JSON.stringify({total_count:1,artifacts:[{
+          name:'pilot-gate-2b-readiness-123-1',expired:false,digest:`sha256:${'d'.repeat(64)}`,
+          workflow_run:{id:123,head_sha:'a'.repeat(40),head_branch:'codex/hosted-gate-2b'},
+        }]})};
+        if(args[0]==='run') await writeFile(path.join(args[args.indexOf('--dir')+1],'pilot-gate-2b-readiness.json'),`${JSON.stringify({...evidence(),...change},null,2)}\n`);
+        if(args[0]==='attestation') verificationCalled=true;
+        return {stdout:args[0]==='attestation'?'[{"verificationResult":{"statement":{}}}]':''};
+      };
+      try {
+        await assert.rejects(acquireVerifiedPilotGate2BArtifact({runId:123,runAttempt:1,temporaryRoot:root,processAdapter,sourceDigest:'a'.repeat(40),sourceRef:'refs/heads/codex/hosted-gate-2b'}),/gate_2b_promotion_invalid/);
+        assert.equal(verificationCalled,false);
+        assert.deepEqual(await readdir(root),[]);
+      } finally {await rm(root,{recursive:true,force:true});}
+    });
+  }
 });

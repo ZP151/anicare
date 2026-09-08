@@ -34,11 +34,12 @@ export const TEXT_RECEIPT_BACKFILL_SQL = `UPDATE sighting_drafts
     AND review_receipt_json IS NULL AND encryption_version IS NULL
     AND upload_state IS NULL AND pending_media_cleanup_ref IS NULL;`;
 export const REPORT_PAYLOAD_COLUMN = { report_payload_json: 'TEXT' } as const;
+export const IDENTITY_CONTINUATION_COLUMN = { identity_continuation_json: 'TEXT' } as const;
 export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
      (id, notes, risk, media_id, sighting_id, owner_subject, reviewed_media_ref, encryption_version,
-      review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-      upload_resume_state, upload_attempt_started_at, report_payload_json, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
+       upload_resume_state, upload_attempt_started_at, report_payload_json, identity_continuation_json, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        notes = CASE WHEN sighting_drafts.sighting_id IS NULL THEN excluded.notes ELSE sighting_drafts.notes END,
        risk = CASE WHEN sighting_drafts.sighting_id IS NULL THEN excluded.risk ELSE sighting_drafts.risk END,
@@ -72,18 +73,19 @@ export const DRAFT_SAVE_SQL = `INSERT INTO sighting_drafts
          (sighting_drafts.media_id IS NULL OR
          (excluded.media_id = sighting_drafts.media_id AND sighting_drafts.upload_state = 'local_persisting'))
          THEN excluded.upload_attempt_started_at ELSE sighting_drafts.upload_attempt_started_at END,
-       report_payload_json = CASE WHEN sighting_drafts.sighting_id IS NULL
-         THEN COALESCE(excluded.report_payload_json, sighting_drafts.report_payload_json)
-         ELSE sighting_drafts.report_payload_json END,
+        report_payload_json = CASE WHEN sighting_drafts.sighting_id IS NULL
+          THEN COALESCE(excluded.report_payload_json, sighting_drafts.report_payload_json)
+          ELSE sighting_drafts.report_payload_json END,
+        identity_continuation_json = COALESCE(sighting_drafts.identity_continuation_json, excluded.identity_continuation_json),
        revision = sighting_drafts.revision + 1,
        updated_at = excluded.updated_at`;
 export const DRAFT_LIST_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, text_committed_at, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-  upload_resume_state, upload_attempt_started_at, report_payload_json, pending_media_cleanup_ref, revision
+   upload_resume_state, upload_attempt_started_at, report_payload_json, identity_continuation_json, pending_media_cleanup_ref, revision
   FROM sighting_drafts ORDER BY updated_at DESC`;
 export const DRAFT_GET_SQL = `SELECT id, notes, risk, media_id, sighting_id, owner_subject, text_committed_at, reviewed_media_ref,
   encryption_version, review_receipt_json, upload_state, upload_attempts, next_attempt_at, last_error,
-  upload_resume_state, upload_attempt_started_at, report_payload_json, pending_media_cleanup_ref, revision
+   upload_resume_state, upload_attempt_started_at, report_payload_json, identity_continuation_json, pending_media_cleanup_ref, revision
   FROM sighting_drafts WHERE id = ?`;
 export const MEDIA_JOURNAL_SAVE_SQL = `UPDATE sighting_drafts SET
   media_id = ?,
@@ -157,7 +159,13 @@ export const CLAIM_DRAFT_OWNER_SQL = `UPDATE sighting_drafts SET
   revision = revision + 1,
   updated_at = ?
   WHERE id = ? AND (owner_subject IS NULL OR owner_subject = ?)`;
-export const QUARANTINED_MEDIA_CLEANUP_SQL = `DELETE FROM sighting_drafts
+export const QUARANTINED_MEDIA_CLEANUP_SQL = `UPDATE sighting_drafts SET
+  notes = '', risk = 'normal', media_id = NULL, reviewed_media_ref = NULL,
+  encryption_version = NULL, review_receipt_json = NULL, upload_state = NULL,
+  upload_attempts = NULL, next_attempt_at = NULL, last_error = NULL,
+  upload_resume_state = NULL, upload_attempt_started_at = NULL, report_payload_json = NULL,
+  identity_continuation_json = identity_continuation_json,
+  text_committed_at = COALESCE(text_committed_at, updated_at), revision = revision + 1
   WHERE id = ? AND revision = ? AND upload_state = 'quarantined'`;
 export const PENDING_MEDIA_CLEANUP_LIST_SQL = `SELECT id, reviewed_media_ref,
   pending_media_cleanup_ref, revision FROM sighting_drafts
@@ -166,7 +174,10 @@ export const CLEAR_PENDING_MEDIA_CLEANUP_SQL = `UPDATE sighting_drafts SET
   pending_media_cleanup_ref = NULL,
   revision = revision + 1
   WHERE id = ? AND revision = ? AND (reviewed_media_ref = ? OR (reviewed_media_ref IS NULL AND ? IS NULL))
-    AND pending_media_cleanup_ref = ?`;
+  AND pending_media_cleanup_ref = ?`;
+export const CLEAR_IDENTITY_CONTINUATION_SQL = `UPDATE sighting_drafts SET
+  identity_continuation_json = NULL, revision = revision + 1, updated_at = ?
+  WHERE id = ? AND owner_subject = ? AND sighting_id = ? AND identity_continuation_json = ?`;
 export const REMOVE_REVIEWED_MEDIA_CAS_SQL = `UPDATE sighting_drafts SET
   pending_media_cleanup_ref = reviewed_media_ref,
   media_id = NULL,
@@ -204,6 +215,7 @@ type DraftRow = {
   upload_resume_state: string | null;
   upload_attempt_started_at: string | null;
   report_payload_json?: string | null;
+  identity_continuation_json?: string | null;
   pending_media_cleanup_ref?: string | null;
   revision: number;
 };
@@ -227,6 +239,7 @@ export function getPendingReviewedMediaVersionMismatch(
 
 const SCHEMA_V2_COLUMNS = {
   ...REPORT_PAYLOAD_COLUMN,
+  ...IDENTITY_CONTINUATION_COLUMN,
   media_id: 'TEXT',
   sighting_id: 'TEXT',
   owner_subject: 'TEXT',
@@ -287,6 +300,7 @@ async function initializeDraftDatabaseSchema(database: SQLite.SQLiteDatabase) {
       upload_resume_state TEXT,
       upload_attempt_started_at TEXT,
       report_payload_json TEXT,
+      identity_continuation_json TEXT,
       pending_media_cleanup_ref TEXT,
       revision INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
@@ -351,9 +365,20 @@ export async function saveOfflineDraft(input: Record<string, unknown>) {
     draft.uploadJob?.resumeState ?? null,
     draft.uploadJob?.attemptStartedAt ?? null,
     draft.report ? JSON.stringify(draft.report) : null,
+    draft.identityContinuation ? JSON.stringify(draft.identityContinuation) : null,
     new Date().toISOString(),
   );
   return draft;
+}
+
+export async function clearIdentityContinuation(
+  id: string, sightingId: string, ownerSubject: string, requestId: string,
+): Promise<boolean> {
+  const current = await getOfflineDraft(id);
+  if (!current || current.ownerSubject !== ownerSubject || current.sightingId !== sightingId || current.identityContinuation?.requestId !== requestId) return false;
+  const database = await getDatabase();
+  const result = await database.runAsync(CLEAR_IDENTITY_CONTINUATION_SQL, new Date().toISOString(), id, ownerSubject, sightingId, JSON.stringify(current.identityContinuation));
+  return result.changes === 1;
 }
 
 export type ReviewedMediaJournalState = 'local_persisting' | 'upload_pending' | 'needs_user';
@@ -948,10 +973,23 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
         report = undefined;
       }
     }
+    let identityContinuation: StoredDraft['identityContinuation'];
+    if (typeof row.identity_continuation_json === 'string') {
+      try {
+        identityContinuation = sanitizeDraftForStorage({
+          id: row.id, notes: '', risk: 'normal', identityContinuation: JSON.parse(row.identity_continuation_json),
+        }).identityContinuation;
+      } catch {
+        identityContinuation = undefined;
+      }
+    }
     let textOnly: StoredDraft;
     try {
       textOnly = {
-        ...sanitizeDraftForStorage({ id: row.id, notes: row.notes, risk: row.risk, ...(report ? { report } : {}) }),
+        ...sanitizeDraftForStorage({
+          id: row.id, notes: row.notes, risk: row.risk,
+          ...(report ? { report } : {}), ...(identityContinuation ? { identityContinuation } : {}),
+        }),
         revision: Number.isInteger(row.revision) && row.revision >= 0 ? row.revision : 0,
       };
     } catch {
@@ -976,8 +1014,9 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
         risk: 'normal',
         revision: textOnly.revision,
         sightingId: row.sighting_id,
-        ...(isStableMediaId(row.owner_subject) ? { ownerSubject: row.owner_subject } : {}),
-        ...(validCommittedAt ? { textReceiptCommittedAt: committedAt } : {}),
+          ...(isStableMediaId(row.owner_subject) ? { ownerSubject: row.owner_subject } : {}),
+          ...(validCommittedAt ? { textReceiptCommittedAt: committedAt } : {}),
+          ...(identityContinuation ? { identityContinuation } : {}),
       });
       continue;
     }
@@ -990,6 +1029,7 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
         sightingId: row.sighting_id ?? undefined,
         ownerSubject: row.owner_subject ?? undefined,
         ...(report ? { report } : {}),
+        ...(identityContinuation ? { identityContinuation } : {}),
         encryptedReviewedRef: row.reviewed_media_ref,
         encryptionVersion: 'aes-256-gcm.v1',
         receipt: JSON.parse(row.review_receipt_json ?? ''),

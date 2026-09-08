@@ -25,7 +25,7 @@ create-sighting
 
 AI worker
   ├─ future: reads only approved reviewed media + versioned references
-  └─ writes service-origin candidate proposal (tentative, never identity truth)
+  └─ completes private job candidates; future owner selection creates a tentative proposal
 
 admin
   └─ fixed-path role + recusal checks ──> moderation, identity review, task grants, audit
@@ -49,6 +49,9 @@ media.
 - `identity_proposals` and `match_reviews`: tentative service/manual proposal
   and append-only independent decision. Authenticated mutations use fixed-path,
   idempotent RPCs rather than direct table writes.
+- The legacy `service_submit_ai_identity_proposal` bridge is permanently
+  disabled. Service job completion stores private candidates, not proposals;
+  future owner-bound selection and independent review remain separate boundaries.
 - `moderation_reports`, `appeals`, `user_blocks`: UGC safety loop.
 - `role_grants`, `location_access_grants`, `audit.access_audit`: least privilege and accountability.
 
@@ -69,4 +72,9 @@ media.
 - Deploy separate development, staging and production projects with independent encryption keys.
 - Put AI behind a feature flag and queue; never block sighting creation on inference.
 - Require two-person approval for production schema changes affecting location, auth, storage or RLS.
-- Production admin must use authenticated server-side data access. The current static console is a visual/queue-policy scaffold only.
+- Admin already uses authenticated server-side session/role checks, narrow queue
+  reads and audited moderation actions. Hosted operational validation and the
+  reviewer private-media access flow remain open release gates.
+- Delivery status is tracked in [roadmap v3](iteration-roadmap-v3.md) and [product goals](product-goals.md). Hosted
+  execution, evidence consumption, native compilation and physical-device
+  acceptance are separate claims.
