@@ -31,6 +31,8 @@ function LocalizedStack() {
         <Stack.Screen name="care/my-care" options={{ title: cn ? '我的照护' : 'My care' }} />
         <Stack.Screen name="privacy" options={{ title: cn ? '隐私与请求' : 'Privacy and requests' }} />
         <Stack.Screen name="safety/[id]" options={{ title: cn ? '内容安全' : 'Content safety' }} />
+        <Stack.Screen name="community/index" options={{ title: cn ? '社区讨论' : 'Community' }} />
+        <Stack.Screen name="community/[id]" options={{ title: cn ? '回复' : 'Replies' }} />
         <Stack.Screen name="auth/callback" options={{ title: cn ? '登录' : 'Sign in' }} />
       </Stack>;
 }

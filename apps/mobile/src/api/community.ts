@@ -60,6 +60,11 @@ export async function deleteCommunityPost(postId: string, client?: CommunityRpcC
   if (!rpc || !uuid(postId)) throw new Error('invalid_community_delete');
   const { error } = await rpc.rpc('delete_community_content', { p_content_type: 'community_post', p_content_id: postId, p_request_id: requestId() }); if (error) throw new Error('community_delete_failed');
 }
+export async function reportCommunityContent(contentType: 'community_post' | 'community_reply', contentId: string, reason: string, client?: CommunityRpcClient): Promise<void> {
+  const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
+  if (!rpc || !uuid(contentId) || !['spam', 'harassment', 'animal_welfare', 'unsafe_location', 'precise_location_exposure'].includes(reason)) throw new Error('invalid_community_report');
+  const { error } = await rpc.rpc('create_moderation_report', { p_content_type: contentType, p_content_id: contentId, p_reason_code: reason, p_detail: null, p_request_id: requestId() }); if (error) throw new Error('community_report_failed');
+}
 export type CommunityReply = Readonly<{ replyId: string; body: string; createdAt: string; author: Readonly<{ name: string; avatarKey: string }>; cursor: string }>;
 export async function listCommunityReplies(postId: string, client?: CommunityRpcClient): Promise<readonly CommunityReply[]> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;

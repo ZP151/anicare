@@ -1,6 +1,6 @@
 import 'server-only';
 
-export type ModerationAction = 'hide_sighting' | 'restore_sighting' | 'no_action';
+export type ModerationAction = 'hide_sighting' | 'restore_sighting' | 'remove_community_content' | 'no_action';
 export type ModerationRisk = 'normal' | 'sensitive' | 'critical';
 export type ModerationStatus = 'open' | 'auto_hidden' | 'under_review' | 'resolved' | 'appealed' | 'closed';
 export type SightingVisibility = 'limited' | 'public' | 'hidden' | 'archived';
@@ -11,7 +11,7 @@ export interface NarrowRpcClient {
 
 export type AdminModerationQueueItem = Readonly<{
   reportId: string;
-  contentType: 'sighting';
+  contentType: 'sighting' | 'community_post' | 'community_reply';
   reasonCode: string;
   risk: ModerationRisk;
   status: ModerationStatus;
@@ -48,7 +48,7 @@ const REASON_CODES = new Set([
 ]);
 const RISKS = new Set<ModerationRisk>(['normal', 'sensitive', 'critical']);
 const STATUSES = new Set<ModerationStatus>(['open', 'auto_hidden', 'under_review', 'resolved', 'appealed', 'closed']);
-const ACTIONS = new Set<ModerationAction>(['hide_sighting', 'restore_sighting', 'no_action']);
+const ACTIONS = new Set<ModerationAction>(['hide_sighting', 'restore_sighting', 'remove_community_content', 'no_action']);
 const VISIBILITIES = new Set<SightingVisibility>(['limited', 'public', 'hidden', 'archived']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,7 +74,7 @@ function parseQueueItem(value: unknown): AdminModerationQueueItem {
   if (!isRecord(value)
     || !hasExactKeys(value, ['reportId', 'contentType', 'reasonCode', 'risk', 'status', 'dueAt'])
     || !isUuid(value.reportId)
-    || value.contentType !== 'sighting'
+    || (value.contentType !== 'sighting' && value.contentType !== 'community_post' && value.contentType !== 'community_reply')
     || typeof value.reasonCode !== 'string'
     || !REASON_CODES.has(value.reasonCode)
     || typeof value.risk !== 'string'
@@ -166,7 +166,10 @@ export async function resolveModerationReport(
 ): Promise<ModerationResolutionResult> {
   const resolution = parseModerationResolution(input);
   if (!isUuid(requestId)) throw new Error('invalid_admin_moderation_request');
-  const { data, error } = await client.rpc('admin_resolve_moderation_report', {
+  const functionName = resolution.action === 'remove_community_content'
+    ? 'admin_resolve_community_moderation_report'
+    : 'admin_resolve_moderation_report';
+  const { data, error } = await client.rpc(functionName, {
     p_report_id: resolution.reportId,
     p_action: resolution.action,
     p_rationale: resolution.rationale,

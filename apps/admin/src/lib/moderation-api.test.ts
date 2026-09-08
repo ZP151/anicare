@@ -126,6 +126,11 @@ describe('moderation RPC wrappers', () => {
     expect(client.rpc).toHaveBeenCalledWith('admin_list_moderation_queue', { p_request_id: requestId });
   });
 
+  it('accepts a community post queue item without exposing its author or body', async () => {
+    const client = rpcClient([{ reportId, contentType: 'community_post', reasonCode: 'harassment', risk: 'sensitive', status: 'open', dueAt: '2026-08-28T08:00:00.000Z' }]);
+    await expect(listModerationQueue(client, requestId)).resolves.toEqual([{ reportId, contentType: 'community_post', reasonCode: 'harassment', risk: 'sensitive', status: 'open', dueAt: '2026-08-28T08:00:00.000Z' }]);
+  });
+
   it('fails closed when a queue RPC response includes a raw database column', async () => {
     const client = rpcClient([{
       reportId,
@@ -190,6 +195,16 @@ describe('moderation RPC wrappers', () => {
       p_rationale: 'A sufficiently long moderation rationale.',
       p_request_id: requestId,
     });
+  });
+
+  it('accepts the narrow remove-community-content action', () => {
+    expect(parseModerationResolution({ reportId, action: 'remove_community_content', rationale: 'A sufficiently long moderation rationale.' })).toEqual({ reportId, action: 'remove_community_content', rationale: 'A sufficiently long moderation rationale.' });
+  });
+
+  it('routes community removal to its dedicated constrained RPC', async () => {
+    const client = rpcClient([{ reportId, action: 'remove_community_content', status: 'resolved', visibility: 'hidden' }]);
+    await resolveModerationReport(client, { reportId, action: 'remove_community_content', rationale: 'A sufficiently long moderation rationale.' }, requestId);
+    expect(client.rpc).toHaveBeenCalledWith('admin_resolve_community_moderation_report', expect.any(Object));
   });
 
   it.each(['appealed', 'closed'])('accepts the database status %s in a narrow report response', async (status) => {

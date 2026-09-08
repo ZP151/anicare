@@ -129,8 +129,44 @@ begin
  update private.safety_requests set result_id=v_report where actor_id=v_actor and request_id=p_request_id; insert into audit.access_audit(actor_id,action,resource_type,resource_id,purpose,request_id) values(v_actor,'create_moderation_report','moderation_report',v_report,'community_safety',p_request_id::text); return v_report;
 end $$;
 
+alter table public.moderation_actions drop constraint if exists moderation_actions_action_check;
+alter table public.moderation_actions add constraint moderation_actions_action_check check (action in ('hide_sighting','restore_sighting','remove_community_content','no_action'));
+alter table private.admin_moderation_requests drop constraint if exists admin_moderation_requests_action_check;
+alter table private.admin_moderation_requests add constraint admin_moderation_requests_action_check check (action is null or action in ('hide_sighting','restore_sighting','remove_community_content','no_action'));
+
+create or replace function public.admin_list_moderation_queue(p_request_id uuid) returns table("reportId" uuid,"contentType" text,"reasonCode" text,risk text,status text,"dueAt" timestamptz) language plpgsql volatile security definer set search_path=pg_catalog as $$
+declare v_actor uuid:=auth.uid(); v_prior private.admin_moderation_requests%rowtype;
+begin
+ if v_actor is null or not public.admin_has_active_platform_admin() then raise exception 'platform_admin_required' using errcode='42501'; end if; if p_request_id is null then raise exception 'invalid_admin_request' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.admin_moderation_requests where actor_id=v_actor and request_id=p_request_id; if found and v_prior.operation<>'queue_read' then raise exception 'idempotency_conflict' using errcode='P0001'; elsif not found then insert into private.admin_moderation_requests(actor_id,request_id,operation) values(v_actor,p_request_id,'queue_read'); end if;
+ return query select r.id,r.content_type,r.reason,r.risk::text,r.status::text,r.due_at from public.moderation_reports r where r.content_type in ('sighting','community_post','community_reply') and r.status in ('open','auto_hidden','under_review') order by case r.risk when 'critical' then 0 when 'sensitive' then 1 else 2 end,r.due_at,r.id;
+end $$;
+
+create or replace function public.admin_get_moderation_report(p_report_id uuid,p_request_id uuid) returns table("reportId" uuid,"contentType" text,"reasonCode" text,risk text,status text,"dueAt" timestamptz,"createdAt" timestamptz) language plpgsql volatile security definer set search_path=pg_catalog as $$
+declare v_actor uuid:=auth.uid(); v_prior private.admin_moderation_requests%rowtype; v_report public.moderation_reports%rowtype;
+begin
+ if v_actor is null or not public.admin_has_active_platform_admin() then raise exception 'platform_admin_required' using errcode='42501'; end if; if p_report_id is null or p_request_id is null then raise exception 'invalid_admin_request' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.admin_moderation_requests where actor_id=v_actor and request_id=p_request_id; if found and (v_prior.operation<>'report_read' or v_prior.report_id is distinct from p_report_id) then raise exception 'idempotency_conflict' using errcode='P0001'; end if;
+ select * into v_report from public.moderation_reports where id=p_report_id and content_type in ('sighting','community_post','community_reply') for key share; if not found then raise exception 'moderation_report_not_available' using errcode='P0001'; end if;
+ if not found then null; end if; if v_prior is null then insert into private.admin_moderation_requests(actor_id,request_id,operation,report_id) values(v_actor,p_request_id,'report_read',p_report_id); end if;
+ return query select v_report.id,v_report.content_type,v_report.reason,v_report.risk::text,v_report.status::text,v_report.due_at,v_report.created_at;
+end $$;
+
+create function public.admin_resolve_community_moderation_report(p_report_id uuid,p_action text,p_rationale text,p_request_id uuid) returns table("reportId" uuid,action text,status text,visibility text) language plpgsql volatile security definer set search_path=pg_catalog as $$
+declare v_actor uuid:=auth.uid(); v_report public.moderation_reports%rowtype; v_prior private.admin_moderation_requests%rowtype; v_body text:=pg_catalog.btrim(p_rationale);
+begin
+ if v_actor is null or not public.admin_has_active_platform_admin() then raise exception 'platform_admin_required' using errcode='42501'; end if; if p_report_id is null or p_request_id is null or p_action not in ('remove_community_content','no_action') or pg_catalog.char_length(coalesce(v_body,'')) not between 10 and 2000 then raise exception 'invalid_moderation_resolution' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.admin_moderation_requests where actor_id=v_actor and request_id=p_request_id for update; if found then if v_prior.operation<>'resolve' or v_prior.report_id<>p_report_id or v_prior.action<>p_action or v_prior.rationale<>v_body then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return query select p_report_id,p_action,'resolved'::text,'hidden'::text; return; end if;
+ select * into v_report from public.moderation_reports where id=p_report_id and content_type in ('community_post','community_reply') and status in ('open','auto_hidden','under_review') for update; if not found or v_actor in (v_report.reporter_id,v_report.content_author_id) then raise exception 'moderation_report_not_actionable' using errcode='P0001'; end if;
+ if p_action='remove_community_content' and v_report.content_type='community_post' then update public.community_posts set deleted_at=coalesce(deleted_at,pg_catalog.now()) where id=v_report.content_id; elsif p_action='remove_community_content' then update public.community_replies set deleted_at=coalesce(deleted_at,pg_catalog.now()) where id=v_report.content_id; end if;
+ insert into private.admin_moderation_requests(actor_id,request_id,operation,report_id,action,rationale) values(v_actor,p_request_id,'resolve',p_report_id,p_action,v_body); update public.moderation_reports set status='resolved',assigned_reviewer_id=v_actor,resolved_at=pg_catalog.now() where id=p_report_id; insert into public.moderation_actions(actor_id,report_id,action,rationale,request_id,resulting_visibility) values(v_actor,p_report_id,p_action,v_body,p_request_id,'hidden');
+ return query select p_report_id,p_action,'resolved'::text,'hidden'::text;
+end $$;
+
 revoke all on function private.community_target_available(text,uuid,uuid) from public,anon,authenticated,service_role;
 revoke all on function public.list_public_community_posts(uuid,integer,text,uuid),public.list_public_community_replies(uuid,uuid,integer),public.create_community_post(text,uuid,text,uuid),public.create_community_reply(uuid,text,uuid),public.delete_community_content(text,uuid,uuid),public.block_community_author(text,uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.list_public_community_posts(uuid,integer,text,uuid),public.list_public_community_replies(uuid,uuid,integer) to anon,authenticated;
 grant execute on function public.create_community_post(text,uuid,text,uuid),public.create_community_reply(uuid,text,uuid),public.delete_community_content(text,uuid,uuid),public.block_community_author(text,uuid,uuid),public.create_moderation_report(text,uuid,text,text,uuid) to authenticated;
+revoke all on function public.admin_resolve_community_moderation_report(uuid,text,text,uuid) from public,anon,authenticated;
+grant execute on function public.admin_resolve_community_moderation_report(uuid,text,text,uuid) to authenticated;
 commit;

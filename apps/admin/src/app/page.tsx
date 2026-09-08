@@ -58,8 +58,7 @@ export default async function OperationsPage() {
                   <input name="reportId" type="hidden" value={item.reportId} />
                   <select aria-label={`Decision for ${item.reportId}`} name="action" defaultValue="no_action">
                     <option value="no_action">No action</option>
-                    <option value="hide_sighting">Hide sighting</option>
-                    <option value="restore_sighting">Restore to limited</option>
+                    {item.contentType === 'sighting' ? <><option value="hide_sighting">Hide sighting</option><option value="restore_sighting">Restore to limited</option></> : <option value="remove_community_content">Remove community content</option>}
                   </select>
                   <input aria-label={`Rationale for ${item.reportId}`} name="rationale" minLength={10} maxLength={2000} required />
                   <button type="submit">Record</button>
