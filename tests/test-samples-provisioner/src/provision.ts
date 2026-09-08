@@ -54,7 +54,7 @@ async function main() {
             await sql`insert into public.animal_aliases(animal_id,alias) values(${id}::uuid,${english}) on conflict(animal_id,alias) do nothing`;
             await sql`update public.animals set primary_alias=${displayAlias+' '+label} where id=${id}::uuid and primary_alias=${alias+' '+label}`;
           }
-          if(place) await sql`update public.sightings set traits=jsonb_set(traits,'{public_place}',${JSON.stringify(place)}::jsonb) where animal_id=${id}::uuid and client_dedupe_key=${key+'-sighting'} and traits->>'source'='synthetic_test' and not traits ? 'public_place'`;
+          if(place) await sql`update public.sightings set traits=jsonb_set(traits,'{public_place}',${sql.json(place)}::jsonb) where animal_id=${id}::uuid and client_dedupe_key=${key+'-sighting'} and traits->>'source'='synthetic_test' and (not traits ? 'public_place' or (jsonb_typeof(traits->'public_place')='string' and traits->>'public_place'=${JSON.stringify(place)}))`;
           return;
         }
         if (filename && path) {
@@ -71,7 +71,7 @@ async function main() {
         await sql`insert into public.care_events(animal_id,activity,completed_at,public_cell_id,notes,client_dedupe_key,visibility,visible_at,created_at) values(${id}::uuid,'feed',now()-case when ${index} not in (4,5) then interval '6 hours' else interval '6 days' end,${cell},'Synthetic reported care test sample.',${key + '-care'},'public',now()-case when ${index} not in (4,5) then interval '3 hours' else interval '5 days' end,now()-case when ${index} not in (4,5) then interval '5 hours' else interval '5 days 2 hours' end)`;
         await sql`insert into private.cat_presentations(animal_id,portrait_path,sample_label,source_metadata) values(${id}::uuid,${path},${label},jsonb_build_object('provenance','synthetic_test','training_eligible',false,'fixture_key',${key}::text))`;
         await sql`insert into private.test_sample_provisioning(fixture_key,animal_id,source_sha256) values(${key},${id}::uuid,${sha})`;
-        if(place) await sql`update public.sightings set traits=jsonb_set(traits,'{public_place}',${JSON.stringify(place)}::jsonb) where animal_id=${id}::uuid and client_dedupe_key=${key+'-sighting'}`;
+        if(place) await sql`update public.sightings set traits=jsonb_set(traits,'{public_place}',${sql.json(place)}::jsonb) where animal_id=${id}::uuid and client_dedupe_key=${key+'-sighting'}`;
       });
     }
     const ids = samples.map(([, id]) => id);
