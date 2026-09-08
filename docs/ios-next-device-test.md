@@ -11,9 +11,20 @@
 5. **社区讨论**：从地图或猫档案进入，发布测试讨论并回复；关闭重开仍存在。用同一 iPhone 依次切换两个账号即可检查参与和回复；自己的内容可以删除，他人的内容可以举报或屏蔽。断网失败应保留输入，重试不产生重复内容。
 6. **材质与布局**：地图顶栏和底部导航在滚动/移动时有原生材质；检查浅色、深色及大字号。减少透明度开启时应保持可读。浏览器截图不证明 iOS Liquid Glass 效果。
 
-合成样本目标为 16 只，12 条带照片的档案复用四张合成猫图；没有伪造真实居民讨论。样本不代表实际猫位置。提交反馈用“步骤 + 实际现象”即可。
+合成样本已导入 16 只，12 条带照片的档案复用四张合成猫图；没有伪造真实居民讨论。样本不代表实际猫位置。提交反馈用“步骤 + 实际现象”即可。
 
-本轮发布检查：源 `f107154` 的[完整 CI](https://github.com/ZP151/anicare/actions/runs/34257057715)和[线上后端读写检查](https://github.com/ZP151/anicare/actions/runs/34257057659)通过。移动端 90 个套件、950 项测试通过；iPhone 结果待用户验证。
+本轮发布检查：功能源 `b3dada3` 的[完整 CI](https://github.com/ZP151/anicare/actions/runs/34259012380)和[线上后端读写检查](https://github.com/ZP151/anicare/actions/runs/34259012406)通过。移动端 90 个套件、952 项测试通过；[主分支 CI](https://github.com/ZP151/anicare/actions/runs/34259667258)也通过。iPhone 结果待用户验证。
+
+### 本次交付 — 2026-09-09
+
+- **0.2.0（4）**：[iOS 构建 34259667104](https://github.com/ZP151/anicare/actions/runs/34259667104)成功，源提交 `2216b1ec1f81b779bfa8635bc96c1c9ef2d13fe7`。同一 Apple ID 和签名设置下用 Sideloadly 更新，保留旧应用及草稿。
+- 安装包：`C:\Users\15492\Downloads\WhiskerCommons-iPhone-34259667104\whiskercommons-unsigned-2216b1ec1f81b779bfa8635bc96c1c9ef2d13fe7.ipa`，18,763,074 字节。
+- SHA-256：`66cba8d0ca1afbcf8291af48cd280d7d9f4b792ffc75ee7e27346026e7069ea6`。
+- 来源证明、三个交付文件、完整 manifest、文件摘要/大小、源提交中的两份锁文件、包内版本及 `sg.animalhelper.app` 标识均已核对。包内相机、图库、使用时定位说明存在；系统弹窗与实际硬件行为仍由真机验证。
+- [样本导入 34259350195](https://github.com/ZP151/anicare/actions/runs/34259350195)成功：[16 个样本回执](test-samples/ios-v1/deployed-34259350195.json)。匿名档案、12 条照片、照护、发现、社区足迹和楼栋字段校验通过。
+- 最终修复包含旧版三个区域限制的解除：13 个可选地点可用于发现和照护，地图仍按 55 个 URA 规划区组织活动。早先的未完成候选构建已取消，不用于本次验收。
+
+验收状态：代码、部署、样本与 IPA 已交付；报告完整提交、原生地图/Liquid Glass、权限弹窗、头像持久化与真实账户讨论仍待用户在 iPhone 上测试。
 
 ---
 
