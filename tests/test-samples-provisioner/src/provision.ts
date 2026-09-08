@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
@@ -18,11 +19,21 @@ const samples = [
 function required(name: string) { const value = process.env[name]; if (!value) throw new Error('test_sample_environment_invalid'); return value; }
 function sha256(value: Uint8Array) { return createHash('sha256').update(value).digest('hex'); }
 function assetPath(filename: string) { return resolve(import.meta.dirname, '../../../docs/test-samples/ios-v1/assets', filename); }
+function validDatabaseTarget(value: string) {
+  try {
+    const parsed = new URL(value);
+    const ref = 'fhugdtpjbgiatqhvjioy';
+    return parsed.protocol.startsWith('postgres') && (
+      (parsed.hostname === `db.${ref}.supabase.co` && parsed.username === 'postgres') ||
+      (parsed.hostname.endsWith('.pooler.supabase.com') && parsed.username === `postgres.${ref}`)
+    );
+  } catch { return false; }
+}
 async function main() {
   const url = required('SUPABASE_URL').replace(/\/$/, '');
   if (url !== project || process.env.CONFIRM_IOS26_TEST_SAMPLES !== 'yes') throw new Error('test_sample_target_refused');
   const databaseUrl = required('SUPABASE_DATABASE_URL');
-  if (!databaseUrl.includes('fhugdtpjbgiatqhvjioy')) throw new Error('test_sample_database_refused');
+  if (!validDatabaseTarget(databaseUrl)) throw new Error('test_sample_database_refused');
   const db = postgres(databaseUrl, { max: 1, ssl: 'require', prepare: false, debug: false, onnotice: () => undefined });
   const storage = createClient(url, required('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
   const anonymous = createClient(url, required('SUPABASE_PUBLIC_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
@@ -50,8 +61,8 @@ async function main() {
         }
         await sql`insert into public.animals(id,primary_alias,verification,lifecycle,visibility,identity_origin_required,confirmed_photo_count) values(${id}::uuid,${alias + ' ' + label},'reported','active','public',false,0)`;
         await sql`insert into public.animal_aliases(animal_id,alias) values(${id}::uuid,${label})`;
-        await sql`insert into public.sightings(animal_id,occurred_at,public_cell_id,time_bucket,risk,visibility,visible_at,traits,notes,client_dedupe_key) values(${id}::uuid,now()-case when ${index} < 4 then interval '6 hours' else interval '8 days' end,${cell},'morning','normal','public',now()-case when ${index} < 4 then interval '5 hours' else interval '7 days' end,'{"source":"synthetic_test","provenance":"reported"}'::jsonb,'Synthetic test sample; not a human confirmation.',${key + '-sighting'})`;
-        await sql`insert into public.care_events(animal_id,activity,completed_at,public_cell_id,notes,client_dedupe_key,visibility,visible_at) values(${id}::uuid,'feed',now()-case when ${index} < 4 then interval '4 hours' else interval '6 days' end,${cell},'Synthetic reported care test sample.',${key + '-care'},'public',now()-case when ${index} < 4 then interval '3 hours' else interval '5 days' end)`;
+        await sql`insert into public.sightings(animal_id,occurred_at,recorded_at,public_cell_id,time_bucket,risk,visibility,visible_at,traits,notes,client_dedupe_key) values(${id}::uuid,now()-case when ${index} < 4 then interval '8 hours' else interval '8 days' end,now()-case when ${index} < 4 then interval '7 hours' else interval '7 days 23 hours' end,${cell},'morning','normal','public',now()-case when ${index} < 4 then interval '5 hours' else interval '7 days 21 hours' end,'{"source":"synthetic_test","provenance":"reported"}'::jsonb,'Synthetic test sample; not a human confirmation.',${key + '-sighting'})`;
+        await sql`insert into public.care_events(animal_id,activity,completed_at,public_cell_id,notes,client_dedupe_key,visibility,visible_at,created_at) values(${id}::uuid,'feed',now()-case when ${index} < 4 then interval '6 hours' else interval '6 days' end,${cell},'Synthetic reported care test sample.',${key + '-care'},'public',now()-case when ${index} < 4 then interval '3 hours' else interval '5 days' end,now()-case when ${index} < 4 then interval '5 hours' else interval '5 days 2 hours' end)`;
         await sql`insert into private.cat_presentations(animal_id,portrait_path,sample_label,source_metadata) values(${id}::uuid,${path},${label},jsonb_build_object('provenance','synthetic_test','training_eligible',false,'fixture_key',${key}))`;
         await sql`insert into private.test_sample_provisioning(fixture_key,animal_id,source_sha256) values(${key},${id}::uuid,${sha})`;
       });
@@ -59,12 +70,26 @@ async function main() {
     const ids = samples.map(([, id]) => id);
     const presentations = await anonymous.rpc('get_public_cat_presentations', { p_animal_ids: ids });
     if (presentations.error || !Array.isArray(presentations.data) || presentations.data.length !== 6) throw new Error('test_sample_public_read_failed');
-    const rows = presentations.data as Array<{ animalId: string; portraitPath: string | null }>;
+    const rows = presentations.data as Array<{ animalId: string; portraitPath: string | null; sampleLabel: string }>;
+    if (new Set(rows.map((row) => row.animalId)).size !== 6 || new Set(rows.map((row) => row.sampleLabel)).size !== 6) throw new Error('test_sample_public_projection_invalid');
     for (const row of rows.filter((row) => row.portraitPath !== null)) {
       const signed = await anonymous.storage.from('cat-portraits').createSignedUrl(row.portraitPath!, 60);
-      if (signed.error || !signed.data?.signedUrl || !(await fetch(signed.data.signedUrl)).ok) throw new Error('test_sample_signed_portrait_failed');
+      const response = signed.data?.signedUrl ? await fetch(signed.data.signedUrl) : null;
+      const expected = await readFile(assetPath(assets[rows.filter((item) => item.portraitPath !== null).indexOf(row)]!));
+      if (signed.error || !response?.ok || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_signed_portrait_failed');
     }
-    process.stdout.write(JSON.stringify({ projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: assets.length }) + '\n');
+    for (const id of ids) {
+      const summary = await anonymous.rpc('get_public_cat_summary', { p_animal_id: id });
+      const care = await anonymous.rpc('list_public_care_history', { p_animal_id: id, p_cursor: null, p_limit: 20 });
+      if (summary.error || !Array.isArray(summary.data) || summary.data.length !== 1 || care.error || !Array.isArray(care.data) || care.data.length < 1) throw new Error('test_sample_public_journey_failed');
+    }
+    for (const cell of new Set(samples.map(([, , , , cell]) => cell))) {
+      const discovery = await anonymous.rpc('list_public_cat_discovery', { p_public_cell: cell, p_verifications: null, p_cursor: null, p_limit: 50 });
+      if (discovery.error || !Array.isArray(discovery.data) || discovery.data.length < 1) throw new Error('test_sample_discovery_failed');
+    }
+    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: assets.length };
+    await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
+    process.stdout.write('ios26_test_samples_provisioned\n');
   } finally { await db.end({ timeout: 5 }); }
 }
 main().catch(() => { process.stderr.write('test_sample_provision_failed\n'); process.exitCode = 1; });
