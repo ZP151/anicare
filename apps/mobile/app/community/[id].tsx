@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { createCommunityReply, listCommunityReplies, type CommunityReply } from '../../src/api/community';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { createCommunityReply, listCommunityReplies, reportCommunityContent, type CommunityReply } from '../../src/api/community';
 import { useAccountSession } from '../../src/auth/use-account-session';
 import { AppIcon } from '../../src/components/AppIcon';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -13,7 +13,7 @@ export default function CommunityDetailScreen() {
  const reply=async()=>{try{await createCommunityReply(id,body);setBody('');await load();}catch{setFailed(true);}};
  return <ScreenScaffold title="Replies" subtitle="Keep it useful and avoid sharing precise cat locations." nativeAppearance>
   {loading?<ActivityIndicator color={c.actionPrimary}/>:null}{failed?<Pressable onPress={()=>void load()}><Text style={s.link}>Try again</Text></Pressable>:null}
-  {replies.map(r=><View key={r.replyId} style={s.reply}><Text style={s.author}>{r.author.name}</Text><Text style={s.body}>{r.body}</Text></View>)}
+  {replies.map(r=><View key={r.replyId} style={s.reply}><Text style={s.author}>{r.author.name}</Text><Text style={s.body}>{r.body}</Text>{auth.owner?<Pressable accessibilityRole="button" onPress={()=>Alert.alert('Report reply','Choose a reason',[{text:'Spam',onPress:()=>void reportCommunityContent('community_reply',r.replyId,'spam').catch(()=>setFailed(true))},{text:'Harassment',onPress:()=>void reportCommunityContent('community_reply',r.replyId,'harassment').catch(()=>setFailed(true))},{text:'Unsafe location',onPress:()=>void reportCommunityContent('community_reply',r.replyId,'precise_location_exposure').catch(()=>setFailed(true))},{text:'Cancel',style:'cancel'}])}><Text style={s.link}>Report</Text></Pressable>:null}</View>)}
   {auth.owner?<View style={s.composer}><TextInput value={body} onChangeText={setBody} multiline placeholder="Write a reply" placeholderTextColor={c.muted} style={s.input}/><Pressable accessibilityRole="button" accessibilityLabel="Reply" onPress={()=>void reply()}><AppIcon name="send" color={c.actionPrimary} size={19}/></Pressable></View>:<Text style={s.note}>Sign in and confirm you are 18+ to reply.</Text>}
  </ScreenScaffold>;
 }
