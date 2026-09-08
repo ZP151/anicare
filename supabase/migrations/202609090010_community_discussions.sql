@@ -126,7 +126,7 @@ language sql stable security definer set search_path=pg_catalog as $$
  from public.community_posts p left join public.user_profiles profile on profile.id=p.author_id where p.id=p_post_id and private.community_post_available(p.id,auth.uid());
 $$;
 
-drop function public.list_public_community_replies(uuid,uuid,integer);
+drop function if exists public.list_public_community_replies(uuid,uuid,integer);
 create function public.list_public_community_replies(p_post_id uuid,p_cursor uuid default null,p_limit integer default 30)
 returns table("replyId" uuid,body text,"createdAt" timestamptz,author jsonb,"canDelete" boolean,cursor uuid)
 language plpgsql stable security definer set search_path=pg_catalog as $$
