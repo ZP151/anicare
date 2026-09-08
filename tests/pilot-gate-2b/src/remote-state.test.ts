@@ -13,10 +13,10 @@ function env(): HostedGateEnvironment {
 }
 
 describe('remote hosted deployment state', () => {
-  it('requires the M4 user rights migration at the remote head', () => {
+  it('requires the cat presentations migration at the remote head', () => {
     expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
-      version: '202609080007',
-      name: 'user_rights',
+      version: '202609080008',
+      name: 'cat_presentations',
     });
   });
 

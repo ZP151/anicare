@@ -31,6 +31,7 @@ const MIGRATION_FILES = [
   '202609080005_completed_care.sql',
   '202609080006_following_discovery.sql',
   '202609080007_user_rights.sql',
+  '202609080008_cat_presentations.sql',
 ] as const;
 
 export const EXPECTED_REMOTE_MIGRATIONS = MIGRATION_FILES.map((filename) => {

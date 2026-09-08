@@ -1,0 +1,37 @@
+name: Provision iOS 26 Test Samples
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios26-test-samples-fhugdtpjbgiatqhvjioy
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: hosted-gate-2b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.23.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @animalhelper/test-samples-provisioner typecheck
+      - name: Provision explicitly labelled synthetic samples
+        env:
+          CONFIRM_IOS26_TEST_SAMPLES: 'yes'
+          SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm --filter @animalhelper/test-samples-provisioner provision

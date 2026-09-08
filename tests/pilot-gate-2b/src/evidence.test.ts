@@ -107,7 +107,7 @@ describe('Gate 2B evidence', () => {
   it('matches the current repository migration head', () => {
     const repositoryRoot = resolve(import.meta.dirname, '..', '..', '..');
     const result = hashMigrationHead(repositoryRoot);
-    expect(result.filename).toBe('202609080007_user_rights.sql');
+    expect(result.filename).toBe('202609080008_cat_presentations.sql');
     expect(result.sha256).toBe(
       createHash('sha256')
         .update(readFileSync(join(repositoryRoot, 'supabase', 'migrations', result.filename)))
