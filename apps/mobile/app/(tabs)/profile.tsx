@@ -16,6 +16,7 @@ import { InterfaceColors, useNativeColors } from '../../src/design/native-colors
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { useAccountSession } from '../../src/auth/use-account-session';
 import { claimOfflineDraftOwner, getOfflineDraft } from '../../src/offline/draft-store';
+import { PROFILE_AVATAR_KEYS, profileAvatarKey, type ProfileAvatarKey } from '../../src/profile/profile-avatar';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -40,18 +41,43 @@ export default function ProfileScreen() {
   const [nameExists, setNameExists] = useState(false);
   const [nameLoading, setNameLoading] = useState(false);
   const [savingName, setSavingName] = useState(false);
+  const [avatarKey, setAvatarKey] = useState<ProfileAvatarKey>('cat');
+  const [showAvatar, setShowAvatar] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
   useEffect(() => {
     setAdult(null); setStatus(null); setEmail(''); setLoggingOut(false); setShowSignIn(false);
-    setEditingName(false); setNameValue(''); setNameExists(false); setNameLoading(false); setSavingName(false);
+    setEditingName(false); setNameValue(''); setNameExists(false); setNameLoading(false); setSavingName(false); setAvatarKey('cat'); setShowAvatar(false); setSavingAvatar(false);
     if (!auth.owner) return;
     const current = auth.pin(); let active = true;
     const client = getSupabaseClient();
     void Promise.resolve(client?.rpc('is_adult_contributor')).then(async result => {
       if (active && await current() && result && !result.error && typeof result.data === 'boolean') setAdult(result.data);
     }).catch(() => undefined);
+    void Promise.resolve(client?.from('user_profiles').select('avatar_key').eq('id', auth.owner).maybeSingle()).then(async result => {
+      if (active && await current() && result && !result.error) setAvatarKey(profileAvatarKey(result.data?.avatar_key));
+    }).catch(() => undefined);
     return () => { active = false; };
   }, [auth.owner, auth.pin]);
+
+  async function saveAvatar(nextAvatar: ProfileAvatarKey) {
+    if (!auth.owner || savingAvatar) return;
+    const current = auth.pin(); setSavingAvatar(true); setStatus(null);
+    try {
+      const client = getSupabaseClient();
+      if (!client || !await current()) throw new Error('profile_unavailable');
+      const { data: existing, error: lookupError } = await client.from('user_profiles').select('id').eq('id', auth.owner).maybeSingle();
+      if (lookupError) throw lookupError;
+      const result = existing
+        ? await client.from('user_profiles').update({ avatar_key: nextAvatar }).eq('id', auth.owner)
+        : await client.from('user_profiles').insert({ id: auth.owner, public_name: cn ? '社区贡献者' : 'Community contributor', locale, avatar_key: nextAvatar });
+      if (!await current()) return;
+      if (result.error) throw result.error;
+      setAvatarKey(nextAvatar); setShowAvatar(false);
+      setStatus(cn ? '头像已保存。' : 'Avatar saved.');
+    } catch { if (await current()) setStatus(cn ? '无法保存头像，请重试。' : 'Could not save your avatar. Try again.'); }
+    finally { if (await current()) setSavingAvatar(false); }
+  }
 
   async function editName() {
     if (!auth.owner) return;
@@ -227,7 +253,7 @@ export default function ProfileScreen() {
   return (
     <ScreenScaffold title={t('profile.title')} nativeAppearance>
       <View style={styles.account}>
-        <View style={styles.avatar}><AppIcon name="account" size={48} color={colors.actionPrimary} /></View>
+        <View style={styles.avatar}><AppIcon name={avatarKey === 'cat' ? 'cat' : avatarKey} size={42} color={colors.actionPrimary} /></View>
         <View style={styles.accountCopy}>
         <Text accessibilityLiveRegion="polite" style={styles.label}>{auth.owner === undefined ? (auth.failed ? (cn?'账户状态不可用':'Account state unavailable') : (cn?'正在读取账户…':'Loading account…')) : auth.owner ? (cn?'已登录':'Signed in') : (cn?'匿名浏览':'Browsing anonymously')}</Text>
         {auth.owner ? <Text style={styles.value}>{adult === null ? (cn?'贡献者状态尚未确认':'Contributor state not confirmed') : adult ? (cn?'已确认年满 18 岁':'18+ contributor confirmed') : (cn?'需要确认年满 18 岁':'18+ confirmation required')}</Text> : <Text style={styles.value}>{cn ? '一起记录社区猫的日常' : 'A little care, shared with your community.'}</Text>}
@@ -289,6 +315,8 @@ export default function ProfileScreen() {
         </Pressable>
       </View> : null}
       {auth.owner ? <SettingsGroup title={cn ? '账户' : 'Account'}>
+        <SettingsRow title={cn ? '头像' : 'Avatar'} icon={avatarKey === 'cat' ? 'cat' : avatarKey} onPress={() => setShowAvatar(true)} />
+        <Modal visible={showAvatar} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAvatar(false)}><ScreenScaffold title={cn ? '选择头像' : 'Choose avatar'} nativeAppearance><View style={styles.avatarChoices}>{PROFILE_AVATAR_KEYS.map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: avatarKey === key, disabled: savingAvatar }} disabled={savingAvatar} onPress={() => { void saveAvatar(key); }} style={[styles.avatarChoice, avatarKey === key && styles.selected]}><AppIcon name={key === 'cat' ? 'cat' : key} size={28} color={colors.actionPrimary} /><Text style={styles.choiceText}>{key[0].toUpperCase() + key.slice(1)}</Text><View style={styles.avatarChoiceCheck}>{avatarKey === key ? <AppIcon name="check" size={16} color={colors.actionPrimary} /> : null}</View></Pressable>)}</View></ScreenScaffold></Modal>
         <SettingsRow title={cn ? '昵称' : 'Display name'} icon="account" value={!editingName && nameValue ? nameValue : undefined} onPress={() => { void editName(); }} />
         {editingName ? <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditingName(false)}><ScreenScaffold title={cn?'编辑个人资料':'Edit profile'} nativeAppearance><View style={styles.nameForm}>
           <Pressable accessibilityRole="button" accessibilityLabel={cn?'关闭编辑':'Close edit'} onPress={() => setEditingName(false)} style={styles.close}><AppIcon name="close" color={colors.muted} size={18} /></Pressable>
@@ -317,6 +345,9 @@ const makeStyles = (colors: InterfaceColors) => StyleSheet.create({
   signIn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, alignSelf: 'flex-start' },
   linkText: { color: colors.actionPrimary, fontSize: 17, fontWeight: '600' },
   languageChoices: { paddingLeft: 52, paddingRight: 16 },
+  avatarChoices: { paddingHorizontal: 16, gap: 10 },
+  avatarChoice: { minHeight: 56, paddingHorizontal: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.surface },
+  avatarChoiceCheck: { marginLeft: 'auto', width: 24, alignItems: 'center' },
   nameForm: { padding: 16, gap: 12 },
   languageChoice: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   choiceText: { color: colors.ink, fontSize: 17 },

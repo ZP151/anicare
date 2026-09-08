@@ -36,6 +36,26 @@ import { UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION } from './draft-policy';
 import type { StoredDraft } from './draft-policy';
 
 describe('native draft storage privacy boundary', () => {
+  it('preserves the owner of a signed-in report draft without media so the report route can verify it', () => {
+    const report = {
+      version: 1, step: 'photo', creatorMode: 'authenticated',
+      occurredAt: '2026-09-09T00:00:00.000Z', coat: [], markings: [],
+      condition: null, manualPublicCellId: null, identityIntent: null,
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    };
+    const [draft] = deserializeDraftRows([{
+      id: '00000000-0000-4000-8000-000000000701', notes: '', risk: 'normal',
+      media_id: null, sighting_id: null, owner_subject: 'owner-12345678',
+      text_committed_at: null, reviewed_media_ref: null, encryption_version: null,
+      review_receipt_json: null, upload_state: null, upload_attempts: null,
+      next_attempt_at: null, last_error: null, upload_resume_state: null,
+      upload_attempt_started_at: null, report_payload_json: JSON.stringify(report),
+      identity_continuation_json: null, pending_media_cleanup_ref: null, revision: 0,
+    }]);
+
+    expect(draft).toMatchObject({ ownerSubject: 'owner-12345678', report });
+  });
+
   it('executes rejection CAS without clearing another request, owner, or media', () => {
     const result = spawnSync(process.execPath, ['--no-warnings', '-e', `
       const { DatabaseSync } = require('node:sqlite');

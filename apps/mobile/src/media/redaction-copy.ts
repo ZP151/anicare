@@ -11,6 +11,7 @@ export type RedactionReviewCopy = Readonly<{
   choosePhoto: string;
   takePhoto: string;
   cameraDenied: string;
+  libraryDenied: string;
   preparing: string;
   clearMasks: string;
   working: string;
@@ -44,6 +45,7 @@ const en: RedactionReviewCopy = {
   choosePhoto: 'Choose photo for private review',
   takePhoto: 'Take photo for private review',
   cameraDenied: 'Camera permission was not granted. You can still choose a photo.',
+  libraryDenied: 'Photo library permission was not granted. You can enable it in Settings and try again.',
   preparing: 'Preparing…',
   clearMasks: 'Clear all masks',
   working: 'Working…',
@@ -77,6 +79,7 @@ const zhCN: RedactionReviewCopy = {
   choosePhoto: '选择照片进行私密复核',
   takePhoto: '拍摄照片进行私密复核',
   cameraDenied: '未获得相机权限，你仍可从照片库选择照片。',
+  libraryDenied: '未获得照片库权限。请在“设置”中开启后重试。',
   preparing: '正在准备…',
   clearMasks: '清除全部遮挡',
   working: '处理中…',

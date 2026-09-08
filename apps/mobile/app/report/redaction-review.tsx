@@ -96,6 +96,12 @@ export default function RedactionReviewScreen() {
           setStatus(copy.cameraDenied);
           return;
         }
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync?.();
+        if (permission && !permission.granted) {
+          setStatus(copy.libraryDenied);
+          return;
+        }
       }
       const selected = await (source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync)({
         mediaTypes: ['images'],

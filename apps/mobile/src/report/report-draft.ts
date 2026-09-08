@@ -6,6 +6,7 @@ export type ReportCondition = 'appears_well' | 'needs_attention' | 'urgent';
 export type ReportAreaSelectionMode = 'either' | 'manual_required';
 export type ReportDraftCreatorMode = 'anonymous' | 'authenticated';
 export type ReportIdentityIntent = Readonly<{ kind: 'existing'; animalId: string }> | Readonly<{ kind: 'new' }> | null;
+export type ReportPublicPlace = Readonly<{ residenceType: 'hdb' | 'condo' | 'other'; name: string }>;
 
 export type ReportDraftPayloadV1 = Readonly<{
   version: 1;
@@ -17,6 +18,8 @@ export type ReportDraftPayloadV1 = Readonly<{
   markings: readonly string[];
   condition: ReportCondition | null;
   manualPublicCellId: string | null;
+  /** Explicitly supplied by the reporter; never inferred from a coordinate or H3 cell. */
+  publicPlace?: ReportPublicPlace;
   /** A reporter's tentative choice, never an accepted sighting/animal link. */
   /** Optional in the type solely for legacy callers; the sanitizer always emits null or a valid intent. */
   identityIntent?: ReportIdentityIntent;
@@ -33,9 +36,9 @@ const coatValues = new Set(['tabby', 'black', 'white', 'ginger', 'grey', 'calico
 const markingValues = new Set(['white-paws', 'white-chest', 'white-tail-tip', 'ear-tip', 'collar', 'scar', 'striped', 'spotted']);
 const pentagonBaseCells = new Set([4, 14, 24, 38, 49, 58, 63, 72, 83, 97, 107, 117]);
 const payloadKeys = [
-  'version', 'step', 'areaSelectionMode', 'creatorMode', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'identityIntent', 'identityRequestId', 'updatedAt',
+  'version', 'step', 'areaSelectionMode', 'creatorMode', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'publicPlace', 'identityIntent', 'identityRequestId', 'updatedAt',
 ] as const;
-const requiredPayloadKeys = payloadKeys.filter((key) => key !== 'areaSelectionMode' && key !== 'creatorMode' && key !== 'identityIntent' && key !== 'identityRequestId');
+const requiredPayloadKeys = payloadKeys.filter((key) => key !== 'areaSelectionMode' && key !== 'creatorMode' && key !== 'publicPlace' && key !== 'identityIntent' && key !== 'identityRequestId');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalid(): never {
@@ -80,6 +83,17 @@ function isCanonicalPublicCell(value: unknown): value is string {
   return !pentagonBaseCells.has(baseCell) || leadingNonZeroDigit !== 1;
 }
 
+function sanitizePublicPlace(value: unknown): ReportPublicPlace | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) invalid();
+  const candidate = value as Record<string, unknown>;
+  if (Object.keys(candidate).length !== 2 || !['hdb', 'condo', 'other'].includes(candidate.residenceType as string) ||
+      typeof candidate.name !== 'string' || /[\u0000-\u001F\u007F-\u009F]/.test(candidate.name)) invalid();
+  const name = candidate.name.trim();
+  if (name.length < 1 || name.length > 100) invalid();
+  return Object.freeze({ residenceType: candidate.residenceType as ReportPublicPlace['residenceType'], name });
+}
+
 export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1 {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) invalid();
   const candidate = value as Record<string, unknown>;
@@ -89,6 +103,7 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
   const areaSelectionMode = candidate.areaSelectionMode ?? 'either';
   const identityIntent = candidate.identityIntent ?? null;
   const identityRequestId = candidate.identityRequestId;
+  const publicPlace = sanitizePublicPlace(candidate.publicPlace);
   if (candidate.version !== 1 || typeof candidate.step !== 'string' || !reportSteps.has(candidate.step as ReportDraftStep) ||
       typeof areaSelectionMode !== 'string' || !areaSelectionModes.has(areaSelectionMode as ReportAreaSelectionMode) ||
       (candidate.creatorMode !== undefined &&
@@ -119,6 +134,7 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
     markings: sanitizeTraits(candidate.markings, markingValues),
     condition: candidate.condition as ReportCondition | null,
     manualPublicCellId: candidate.manualPublicCellId as string | null,
+    ...(publicPlace ? { publicPlace } : {}),
     identityIntent: identityIntent === null
       ? null
       : (identityIntent as ReportIdentityIntent),

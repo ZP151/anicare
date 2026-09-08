@@ -988,6 +988,7 @@ export function deserializeDraftRows(rows: readonly DraftRow[]): StoredDraft[] {
       textOnly = {
         ...sanitizeDraftForStorage({
           id: row.id, notes: row.notes, risk: row.risk,
+          ...(isStableMediaId(row.owner_subject) ? { ownerSubject: row.owner_subject } : {}),
           ...(report ? { report } : {}), ...(identityContinuation ? { identityContinuation } : {}),
         }),
         revision: Number.isInteger(row.revision) && row.revision >= 0 ? row.revision : 0,

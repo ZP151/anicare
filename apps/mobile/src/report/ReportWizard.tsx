@@ -9,7 +9,7 @@ import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
 import { earliestIncompleteStep, reportTraits, validateReportForSubmission } from './report-flow';
-import { createReportDraftPayload, sanitizeReportDraftPayload, type ReportCondition, type ReportDraftStep } from './report-draft';
+import { createReportDraftPayload, sanitizeReportDraftPayload, type ReportCondition, type ReportDraftStep, type ReportPublicPlace } from './report-draft';
 import { ReportAreaPicker } from './ReportAreaPicker';
 import { getReportCopy } from './report-copy';
 import { isOpaqueReportId } from './ReportRouteShell';
@@ -73,6 +73,7 @@ export function ReportWizard({
   const [manualSelectionRequested, setManualSelectionRequested] = useState(false);
   const [deviceAreaSelected, setDeviceAreaSelected] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [publicPlaceType, setPublicPlaceType] = useState<ReportPublicPlace['residenceType'] | null>(null);
   const coordinatesRef = useRef<Readonly<{ latitude: number; longitude: number }> | null>(null);
   const locationPromptedRef = useRef(false);
   const submitInFlightRef = useRef(false);
@@ -210,6 +211,15 @@ export function ReportWizard({
     setStatus(copy.wizardManualSelected);
   };
 
+  const updatePublicPlace = (residenceType: ReportPublicPlace['residenceType'] | null, name: string) => {
+    if (!draft?.report) return;
+    const trimmed = name.trim();
+    setDraft({ ...draft, report: sanitizeReportDraftPayload({
+      ...draft.report,
+      ...(residenceType && trimmed ? { publicPlace: { residenceType, name } } : { publicPlace: undefined }),
+    }) });
+  };
+
   const submit = async () => {
     if (!draft?.report || !stage || submitInFlightRef.current) return;
     submitInFlightRef.current = true;
@@ -301,6 +311,8 @@ export function ReportWizard({
   const canSubmit = prerequisiteIssues.length === 0;
   const canContinueFromArea = validationLocation !== null;
   const areaContinueLabel = draft.report.condition === null ? copy.wizardContinue : copy.wizardContinueToReview;
+  const selectedPlaceType = publicPlaceType ?? draft.report.publicPlace?.residenceType ?? null;
+  const publicPlaceName = draft.report.publicPlace?.name ?? '';
   const disabledReason = prerequisiteIssues[0] === 'details_required'
     ? copy.wizardDetailsRequired
     : prerequisiteIssues[0] === 'review_required' ? copy.wizardReviewRequired : copy.wizardSubmitDisabledReason;
@@ -351,6 +363,12 @@ export function ReportWizard({
           <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={selectDeviceArea} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardDeviceLocation}</Text></Pressable>
           {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => setManualSelectionRequested(true)} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardManualArea}</Text></Pressable>}
         </>}
+        <View style={styles.placeGroup}>
+          <Text style={styles.traitTitle}>{locale === 'zh-CN' ? '公开建筑或项目（可选）' : 'Public building or project (optional)'}</Text>
+          <Text style={styles.copy}>{locale === 'zh-CN' ? '仅在你明确填写后随报告延迟公开；不会从定位或区域推断。' : 'Only what you enter is shared after the report delay. It is never inferred from location or area.'}</Text>
+          <View style={styles.traitGrid}>{(['hdb', 'condo', 'other'] as const).map((type) => <Pressable key={type} accessibilityRole="button" accessibilityLabel={type === 'hdb' ? 'HDB' : type === 'condo' ? (locale === 'zh-CN' ? '公寓' : 'Condominium') : (locale === 'zh-CN' ? '其他' : 'Other')} accessibilityState={{ selected: selectedPlaceType === type }} onPress={() => { setPublicPlaceType(type); updatePublicPlace(type, publicPlaceName); }} style={[styles.trait, selectedPlaceType === type && styles.optionSelected]}><Text style={styles.optionText}>{type === 'hdb' ? 'HDB' : type === 'condo' ? (locale === 'zh-CN' ? '公寓' : 'Condominium') : (locale === 'zh-CN' ? '其他' : 'Other')}</Text></Pressable>)}</View>
+          <TextInput accessibilityLabel={locale === 'zh-CN' ? '建筑或项目名称' : 'Building or project name'} value={publicPlaceName} maxLength={100} onChangeText={(name) => updatePublicPlace(selectedPlaceType, name)} placeholder={locale === 'zh-CN' ? '例如：大牌 123 或项目名称' : 'For example, Block 123 or project name'} placeholderTextColor={palette.muted} style={styles.input} />
+        </View>
         {stage === 'area' ? <Pressable accessibilityLabel={areaContinueLabel} accessibilityRole="button" disabled={!canContinueFromArea} onPress={() => { void advance(); }} style={styles.secondary}><Text style={styles.secondaryText}>{areaContinueLabel}</Text></Pressable> : null}
       </View> : null}
 
@@ -361,6 +379,7 @@ export function ReportWizard({
           {draft.report.condition ? <Text style={styles.summaryItem}>{conditionLabels[draft.report.condition]}</Text> : null}
           <Text style={styles.summaryItem}>{riskLabels[draft.risk]}</Text>
           <Text style={styles.summaryItem}>{draft.report.manualPublicCellId ? copy.wizardManualSelected : copy.wizardDevicePending}</Text>
+          {draft.report.publicPlace ? <Text style={styles.summaryItem}>{draft.report.publicPlace.name}</Text> : null}
         </View>
         <View style={styles.reviewLinks}>
           {(['photo', 'details', 'safety', 'area'] as const).map((item) => {
@@ -397,7 +416,9 @@ const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.cr
   traitTitle: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '800' },
   traitGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   trait: { minHeight: 48, paddingHorizontal: 12, borderRadius: radii.small, justifyContent: 'center', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
+  placeGroup: { gap: 10, paddingTop: 8 },
   notes: { minHeight: 96, padding: 14, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, color: colors.ink, textAlignVertical: 'top' },
+  input: { minHeight: 48, paddingHorizontal: 14, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, color: colors.ink },
   status: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   disabledReason: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   reviewLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

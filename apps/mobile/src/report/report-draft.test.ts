@@ -35,6 +35,18 @@ describe('report draft payload', () => {
     expect(sanitizeReportDraftPayload(validPayload).identityIntent).toBeNull();
   });
 
+  it('preserves an explicitly supplied public place and rejects unsafe or blank names', () => {
+    expect(sanitizeReportDraftPayload({
+      ...validPayload,
+      publicPlace: { residenceType: 'hdb', name: '  Block 123, Example Road  ' },
+    }).publicPlace).toEqual({ residenceType: 'hdb', name: 'Block 123, Example Road' });
+    for (const publicPlace of [
+      { residenceType: 'other', name: '   ' },
+      { residenceType: 'house', name: 'Example' },
+      { residenceType: 'condo', name: 'Name\nwith control' },
+    ]) expect(() => sanitizeReportDraftPayload({ ...validPayload, publicPlace })).toThrow('invalid_report_draft');
+  });
+
   it('persists a bounded existing-cat identity intent with its stable retry key', () => {
     expect(sanitizeReportDraftPayload({
       ...validPayload,

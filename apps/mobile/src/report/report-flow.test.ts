@@ -72,10 +72,11 @@ describe('report workflow controller', () => {
   });
 
   it('maps bounded payload traits into the literal submission JSON shape', () => {
-    expect(reportTraits(payload)).toEqual({
+    expect(reportTraits({ ...payload, publicPlace: { residenceType: 'condo', name: 'Example Residences' } })).toEqual({
       coat: ['tabby'],
       markings: ['white-paws'],
       condition: 'needs_attention',
+      public_place: { residenceType: 'condo', name: 'Example Residences' },
     });
   });
 

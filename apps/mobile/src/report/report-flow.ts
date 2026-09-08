@@ -52,6 +52,7 @@ export function reportTraits(payload: ReportDraftPayloadV1): Readonly<Record<str
     coat: [...payload.coat],
     markings: [...payload.markings],
     condition: payload.condition,
+    ...(payload.publicPlace ? { public_place: { ...payload.publicPlace } } : {}),
   });
 }
 
