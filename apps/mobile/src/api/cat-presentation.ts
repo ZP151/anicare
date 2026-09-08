@@ -15,6 +15,19 @@ type PresentationClient = Readonly<{
 
 type PresentationRow = Readonly<{ animalId: string; portraitPath: string | null; sampleLabel: string | undefined }>;
 
+function validSignedPortraitUrl(value: unknown, path: string, expectedOrigin: string): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const signed = new URL(value);
+    const origin = new URL(expectedOrigin);
+    const expectedPath = `/storage/v1/object/sign/cat-portraits/${path}`;
+    return origin.protocol === 'https:' && signed.protocol === 'https:' && signed.origin === origin.origin &&
+      signed.username === '' && signed.password === '' && signed.pathname === expectedPath &&
+      [...signed.searchParams.keys()].every((key) => key === 'token') && signed.searchParams.getAll('token').length === 1 &&
+      signed.searchParams.get('token') !== '';
+  } catch { return false; }
+}
+
 function parseRows(data: unknown, requestedIds: Set<string>): PresentationRow[] | null {
   if (!Array.isArray(data)) return null;
   const rows: PresentationRow[] = [];
@@ -33,7 +46,7 @@ function parseRows(data: unknown, requestedIds: Set<string>): PresentationRow[] 
   return rows;
 }
 
-export async function getCatPresentations(animalIds: readonly string[], client: PresentationClient | null = getSupabaseClient() as unknown as PresentationClient | null): Promise<Map<string, CatPresentation>> {
+export async function getCatPresentations(animalIds: readonly string[], client: PresentationClient | null = getSupabaseClient() as unknown as PresentationClient | null, expectedOrigin = process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''): Promise<Map<string, CatPresentation>> {
   const ids = [...new Set(animalIds.map((id) => id.toLowerCase()))];
   if (!client || ids.length === 0 || ids.length > 50 || ids.some((id) => !UUID.test(id))) return new Map();
   try {
@@ -45,17 +58,16 @@ export async function getCatPresentations(animalIds: readonly string[], client: 
     const signed = paths.length === 0 ? null : await client.storage.from('cat-portraits').createSignedUrls(paths, MAX_SIGNED_URL_TTL_SECONDS);
     if (signed?.error) return new Map();
     const signedData = signed === null ? [] : signed.data;
-    if (!Array.isArray(signedData)) return new Map();
+    if (!Array.isArray(signedData)) return new Map(rows.map((row) => [row.animalId, row.sampleLabel === undefined ? {} : { sampleLabel: row.sampleLabel }]));
     const urls = new Map<string, string>();
     for (const value of signedData) {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return new Map();
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
       const row = value as Record<string, unknown>;
-      if (typeof row.path !== 'string' || typeof row.signedUrl !== 'string' || !paths.includes(row.path) || !row.signedUrl.startsWith('https://')) return new Map();
-      urls.set(row.path, row.signedUrl);
+      if (typeof row.path !== 'string' || !paths.includes(row.path) || !validSignedPortraitUrl(row.signedUrl, row.path, expectedOrigin)) continue;
+      urls.set(row.path, row.signedUrl as string);
     }
-    if (urls.size !== paths.length) return new Map();
     return new Map(rows.map((row) => [row.animalId, {
-      ...(row.portraitPath === null ? {} : { portraitUri: urls.get(row.portraitPath) }),
+      ...(row.portraitPath === null || !urls.has(row.portraitPath) ? {} : { portraitUri: urls.get(row.portraitPath) }),
       ...(row.sampleLabel === undefined ? {} : { sampleLabel: row.sampleLabel }),
     }]));
   } catch {

@@ -48,6 +48,18 @@ returns boolean language sql stable security definer set search_path=pg_catalog 
 $$;
 revoke all on function private.is_public_cat_presentation_available(uuid,uuid) from public,anon,authenticated,service_role;
 
+create function private.can_read_cat_portrait(p_bucket_id text,p_object_name text,p_caller_id uuid)
+returns boolean language sql stable security definer set search_path=pg_catalog as $$
+ select p_bucket_id='cat-portraits'
+   and exists (
+     select 1 from private.cat_presentations presentation
+     where presentation.portrait_path=p_object_name
+       and private.is_public_cat_presentation_available(presentation.animal_id,p_caller_id)
+   );
+$$;
+revoke all on function private.can_read_cat_portrait(text,text,uuid) from public,anon,authenticated,service_role;
+grant execute on function private.can_read_cat_portrait(text,text,uuid) to anon,authenticated;
+
 create function public.get_public_cat_presentations(p_animal_ids uuid[])
 returns table ("animalId" uuid,"portraitPath" text,"sampleLabel" text)
 language sql stable security definer set search_path=pg_catalog as $$
@@ -60,16 +72,11 @@ language sql stable security definer set search_path=pg_catalog as $$
 $$;
 revoke all on function public.get_public_cat_presentations(uuid[]) from public,anon,authenticated,service_role;
 grant execute on function public.get_public_cat_presentations(uuid[]) to anon,authenticated;
-comment on function public.get_public_cat_presentations(uuid[]) is 'Returns only current eligible public cat presentation metadata. portraitPath is an opaque private-bucket path; clients must mint a <=60 second signed URL. Signed URLs are bearer capabilities until expiry.';
+comment on function public.get_public_cat_presentations(uuid[]) is 'Returns only current eligible public cat presentation metadata. portraitPath is an opaque private-bucket path. The mobile client requests a 60-second signed URL; Storage signed URLs are bearer capabilities until their caller-selected expiry, so eligibility changes do not revoke a previously minted URL.';
 
 create policy "approved public cat portraits are readable" on storage.objects for select to anon,authenticated
 using (
-  bucket_id='cat-portraits'
-  and exists (
-    select 1 from private.cat_presentations presentation
-    where presentation.portrait_path=name
-      and private.is_public_cat_presentation_available(presentation.animal_id,auth.uid())
-  )
+  private.can_read_cat_portrait(bucket_id,name,auth.uid())
 );
 
 commit;

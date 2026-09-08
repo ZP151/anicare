@@ -34,4 +34,11 @@ jobs:
           SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: pnpm --filter @animalhelper/test-samples-provisioner provision
+          SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
+        run: pnpm --filter @animalhelper/test-samples-provisioner provision > ios26-test-samples-manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ios26-test-samples-manifest-${{ github.run_id }}
+          path: ios26-test-samples-manifest.json
+          if-no-files-found: error
+          retention-days: 7

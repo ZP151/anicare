@@ -35,6 +35,15 @@ insert into private.cat_presentations(animal_id,portrait_path,sample_label,sourc
  ('00000000-0000-4000-8000-000000002904','synthetic-test/00000000-0000-4000-8000-000000002904/portrait.jpg','测试样本 S04','{"provenance":"synthetic_test","training_eligible":false}'),
  ('00000000-0000-4000-8000-000000002905','synthetic-test/00000000-0000-4000-8000-000000002905/portrait.jpg','测试样本 S05','{"provenance":"synthetic_test","training_eligible":false}'),
  ('00000000-0000-4000-8000-000000002906',null,'测试样本 S06','{"provenance":"synthetic_test","training_eligible":false}');
+insert into storage.objects(bucket_id,name) values
+ ('cat-portraits','synthetic-test/00000000-0000-4000-8000-000000002901/portrait.jpg'),
+ ('cat-portraits','synthetic-test/00000000-0000-4000-8000-000000002902/portrait.jpg'),
+ ('cat-portraits','synthetic-test/00000000-0000-4000-8000-000000002905/portrait.jpg');
+
+set local role anon;
+select is((select count(*) from storage.objects where bucket_id='cat-portraits' and name='synthetic-test/00000000-0000-4000-8000-000000002901/portrait.jpg'),1::bigint,'anon can read an eligible approved portrait through Storage RLS');
+select is((select count(*) from storage.objects where bucket_id='cat-portraits' and name='synthetic-test/00000000-0000-4000-8000-000000002902/portrait.jpg'),0::bigint,'anon cannot read a hidden cat portrait through Storage RLS');
+reset role;
 
 select is((select array_agg("animalId" order by "animalId") from public.get_public_cat_presentations(array[
  '00000000-0000-4000-8000-000000002901','00000000-0000-4000-8000-000000002902','00000000-0000-4000-8000-000000002903','00000000-0000-4000-8000-000000002904','00000000-0000-4000-8000-000000002905','00000000-0000-4000-8000-000000002906']::uuid[])),
@@ -48,6 +57,7 @@ insert into public.user_blocks(blocker_id,blocked_id) values('00000000-0000-4000
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000002922',true);
 select is((select count(*) from public.get_public_cat_presentations(array['00000000-0000-4000-8000-000000002905']::uuid[])),0::bigint,'blocked source suppresses both portrait and label');
+select is((select count(*) from storage.objects where bucket_id='cat-portraits' and name='synthetic-test/00000000-0000-4000-8000-000000002905/portrait.jpg'),0::bigint,'blocked caller cannot read the portrait through Storage RLS');
 reset role;
 
 set local role authenticated;
