@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "projectRef": "fhugdtpjbgiatqhvjioy",
+  "projectOrigin": "https://fhugdtpjbgiatqhvjioy.supabase.co",
+  "sourceCommit": "7c73339f7bb80aa3775aeee5c92842dc107741dc",
+  "migrationHead": {
+    "filename": "202609080007_user_rights.sql",
+    "sha256": "916444bfc04ed93fe12e2f06b0a592a27d799555db9b2a1ac41002484a7d2c73"
+  },
+  "edgeFunctionsTreeSha256": "9c3edb4be4525a2e44cf0a068c5d89a313b2b1ec6880e975e8fb0c15a2e6dd29",
+  "workflowRunId": 34211232533,
+  "workflowRunAttempt": 1,
+  "createdAt": "2026-09-08T09:44:16.144Z",
+  "expiresAt": "2026-09-11T09:44:16.144Z",
+  "authRedirectCheck": "passed",
+  "mediaStagingCheck": "passed",
+  "publicKeyOriginCheck": "passed",
+  "syntheticOwnerHappyPath": "passed",
+  "crossOwnerIsolation": "passed"
+}

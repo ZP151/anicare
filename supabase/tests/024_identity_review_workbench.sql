@@ -120,19 +120,19 @@ select is((select status::text from public.identity_proposals where id=current_s
 
 -- Synthetic finalized media uses exactly the production owner/path/hash binding.
 insert into public.media_assets(id,sighting_id,uploader_id,storage_bucket,storage_path,sha256,redaction_confirmed_at,status,reviewed_at,client_media_id,byte_length,width,height,recipe_version,detector_versions)
-select ('00000000-0000-4000-8000-'||lpad((2460+n)::text,12,'0'))::uuid,
- ('00000000-0000-4000-8000-'||lpad((2420+n)::text,12,'0'))::uuid,
+select format('00000000-0000-4000-8000-%s',lpad((2460+n)::text,12,'0'))::uuid,
+ format('00000000-0000-4000-8000-%s',lpad((2420+n)::text,12,'0'))::uuid,
  '00000000-0000-4000-8000-000000002401','media-staging',
  'jobs/00000000-0000-4000-8000-'||lpad((2470+n)::text,12,'0')||'.jpg',repeat('a',64),now(),'quarantined',now(),
  'm13-media-'||n,100,64,64,'jpeg-srgb-2048-q88.v1','{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb
 from generate_series(0,1) n;
 insert into private.media_upload_jobs(id,sighting_id,uploader_id,media_id,sha256,byte_length,width,height,recipe_version,detector_versions,confirmed_at_local,object_path,status,reserved_at,reservation_expires_at,next_cleanup_at,finalized_at,media_asset_id)
-select ('00000000-0000-4000-8000-'||lpad((2470+n)::text,12,'0'))::uuid,
- ('00000000-0000-4000-8000-'||lpad((2420+n)::text,12,'0'))::uuid,
+select format('00000000-0000-4000-8000-%s',lpad((2470+n)::text,12,'0'))::uuid,
+ format('00000000-0000-4000-8000-%s',lpad((2420+n)::text,12,'0'))::uuid,
  '00000000-0000-4000-8000-000000002401','m13-media-'||n,repeat('a',64),100,64,64,'jpeg-srgb-2048-q88.v1',
  '{"cats":"unavailable","people":"unavailable","plates":"unavailable"}'::jsonb,now(),
  'jobs/00000000-0000-4000-8000-'||lpad((2470+n)::text,12,'0')||'.jpg','finalized',now(),now()+interval '10 minutes',now()+interval '1 day',now(),
- ('00000000-0000-4000-8000-'||lpad((2460+n)::text,12,'0'))::uuid
+ format('00000000-0000-4000-8000-%s',lpad((2460+n)::text,12,'0'))::uuid
 from generate_series(0,1) n;
 
 set local role authenticated;

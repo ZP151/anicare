@@ -55,7 +55,7 @@ select is((select count(*) from jsonb_object_keys((select to_jsonb(summary) from
 reset role;
 -- C04: more than fifty newer records cannot break a valid deep link.
 insert into public.animals(id,primary_alias,visibility)
-select ('00000000-0000-4000-8000-'||lpad((2600+n)::text,12,'0'))::uuid,'Window cat '||n,'public' from generate_series(1,51) n;
+select format('00000000-0000-4000-8000-%s',lpad((2600+n)::text,12,'0'))::uuid,'Window cat '||n,'public' from generate_series(1,51) n;
 insert into public.sightings(animal_id,reporter_id,occurred_at,public_cell_id,time_bucket,risk,visibility,visible_at,client_dedupe_key)
 select id,'00000000-0000-4000-8000-000000002503',now(),'8928308280fffff','morning','normal','public',now()-interval '1 hour','m14-window-'||id from public.animals where primary_alias like 'Window cat %';
 set local role anon;
