@@ -6,13 +6,13 @@ export type PodfileLockCode =
   | 'external_source_invalid'
   | 'git_source_not_allowed'
   | 'spec_repos_invalid'
+  | 'google_maps_pod_not_allowed'
   | 'required_pod_missing'
   | 'cocoapods_version_invalid';
 
 const requiredSections = [
   'PODS',
   'DEPENDENCIES',
-  'SPEC REPOS',
   'EXTERNAL SOURCES',
   'SPEC CHECKSUMS',
   'PODFILE CHECKSUM',
@@ -23,8 +23,7 @@ const requiredPods = [
   'Expo',
   'ExpoSQLite',
   'React-Core',
-  'react-native-maps/Google',
-  'GoogleMaps',
+  'react-native-maps',
 ] as const;
 
 const pinnedRevision = /^(?:= )?\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -41,7 +40,8 @@ export function evaluatePodfileLock(lock: string): readonly PodfileLockCode[] {
   const pods = sections.byName.get('PODS') ?? [];
   if (hasUnpinnedPodRevision(pods)) codes.push('pod_revision_unpinned');
   if (requiredPods.some((pod) => !hasPod(pods, pod))) codes.push('required_pod_missing');
-  if (!hasApprovedSpecRepos(sections.byName.get('SPEC REPOS') ?? [])) codes.push('spec_repos_invalid');
+  if (!hasNoSpecRepos(sections.byName.get('SPEC REPOS'))) codes.push('spec_repos_invalid');
+  if (hasGoogleProviderPod(pods)) codes.push('google_maps_pod_not_allowed');
 
   const externalSources = evaluateExternalSources(lock, sections.byName.get('EXTERNAL SOURCES') ?? []);
   if (externalSources.gitSource) codes.push('git_source_not_allowed');
@@ -56,12 +56,12 @@ export function evaluatePodfileLock(lock: string): readonly PodfileLockCode[] {
   return codes;
 }
 
-function hasApprovedSpecRepos(lines: readonly string[]): boolean {
-  return lines.filter((line) => line.length > 0).join('\n') === [
-    '  trunk:',
-    '    - Google-Maps-iOS-Utils',
-    '    - GoogleMaps',
-  ].join('\n');
+function hasNoSpecRepos(lines: readonly string[] | undefined): boolean {
+  return lines === undefined || lines.every((line) => line.length === 0);
+}
+
+function hasGoogleProviderPod(lines: readonly string[]): boolean {
+  return lines.some((line) => /^\s*- (?:Google[A-Za-z0-9_-]*|react-native-maps\/Google)(?:\s|\()/i.test(line));
 }
 
 function parseSections(lock: string): Readonly<{

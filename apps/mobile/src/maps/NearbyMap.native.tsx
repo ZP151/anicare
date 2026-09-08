@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 
 import { NearbyMap as UnavailableMap } from './NearbyMap.web';
@@ -11,8 +11,9 @@ const MAP_READINESS_TIMEOUT_MS = 8_000;
 
 export function NearbyMap({
   fallbackLabel,
-  googleMapsConfigured = Constants.expoConfig?.extra?.googleMapsConfigured === true,
+  androidGoogleMapsConfigured = Constants.expoConfig?.extra?.androidGoogleMapsConfigured === true,
 }: NearbyMapProps) {
+  const mapEnabled = Platform.OS === 'ios' || androidGoogleMapsConfigured;
   const [providerUnavailable, setProviderUnavailable] = useState(false);
   const mapReady = useRef(false);
   const readinessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,7 +30,7 @@ export function NearbyMap({
   }, [clearReadinessTimer]);
 
   useEffect(() => {
-    if (!googleMapsConfigured) {
+    if (!mapEnabled) {
       mapReady.current = false;
       return undefined;
     }
@@ -47,17 +48,17 @@ export function NearbyMap({
       clearReadinessTimer();
       mapReady.current = false;
     };
-  }, [clearReadinessTimer, googleMapsConfigured]);
+  }, [clearReadinessTimer, mapEnabled]);
 
-  if (!googleMapsConfigured || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;
+  if (!mapEnabled || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;
 
   return (
-    <View accessibilityLabel="Privacy-safe Google neighbourhood map" style={styles.frame}>
+    <View accessibilityLabel="Privacy-safe neighbourhood map" style={styles.frame}>
       <MapView
-        customMapStyle={PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({
+        customMapStyle={Platform.OS === 'android' ? PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({
           ...entry,
           stylers: entry.stylers.map((styler) => ({ ...styler })),
-        }))}
+        })) : undefined}
         initialRegion={PUBLIC_MAP_REGION}
         mapPadding={PUBLIC_MAP_PADDING}
         maxZoomLevel={14}
@@ -65,7 +66,7 @@ export function NearbyMap({
         onMapLoaded={markMapReady}
         onMapReady={markMapReady}
         pitchEnabled={false}
-        provider={PROVIDER_GOOGLE}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         rotateEnabled={false}
         showsBuildings={false}
         showsCompass={false}

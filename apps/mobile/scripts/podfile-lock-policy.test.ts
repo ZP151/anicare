@@ -1,25 +1,19 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { evaluatePodfileLock } from './podfile-lock-policy';
 
 const reviewedFixture = `PODS:
   - Expo (57.0.17)
   - ExpoSQLite (57.0.2)
-  - GoogleMaps (9.4.0)
   - React-Core (0.86.3)
-  - react-native-maps/Google (1.27.2):
-    - GoogleMaps
+  - react-native-maps (1.27.2)
 
 DEPENDENCIES:
   - "ExpoSQLite (from \`../../../node_modules/expo-sqlite/ios\`)"
-  - "react-native-maps/Google (from \`../../../node_modules/react-native-maps\`)"
-
-SPEC REPOS:
-  trunk:
-    - Google-Maps-iOS-Utils
-    - GoogleMaps
+  - "react-native-maps (from \`../../../node_modules/react-native-maps\`)"
 
 EXTERNAL SOURCES:
   ExpoSQLite:
@@ -35,7 +29,6 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   ExpoSQLite: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   Expo: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  GoogleMaps: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   React-Core: cccccccccccccccccccccccccccccccccccccccc
   react-native-maps: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 
@@ -45,18 +38,29 @@ COCOAPODS: 1.17.0
 `;
 
 describe('reviewed Podfile.lock policy', () => {
-  it('accepts a bounded workspace-native lock with the required Expo, React Native, and Maps pods', () => {
+  it('accepts an Apple-provider lock without a SPEC REPOS section', () => {
     expect(evaluatePodfileLock(reviewedFixture)).toEqual([]);
   });
 
-  it('accepts the actual reviewed lock only through its fixed zero-argument CLI', () => {
-    const script = resolve(__dirname, 'validate-reviewed-ios-device-lab-podfile-lock.ts');
-    const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), script], { encoding: 'utf8' });
+  it('keeps the reviewed-lock CLI fixed while exercising it in an isolated Apple-only fixture', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'ios-device-lab-reviewed-lock-'));
+    try {
+      const scripts = resolve(fixtureRoot, 'apps/mobile/scripts');
+      const ios = resolve(fixtureRoot, 'apps/mobile/ios-device-lab');
+      mkdirSync(scripts, { recursive: true });
+      mkdirSync(ios, { recursive: true });
+      for (const filename of ['podfile-lock-policy.ts', 'validate-reviewed-ios-device-lab-podfile-lock.ts']) {
+        copyFileSync(resolve(__dirname, filename), resolve(scripts, filename));
+      }
+      writeFileSync(resolve(ios, 'Podfile.lock'), reviewedFixture);
+      const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), resolve(scripts, 'validate-reviewed-ios-device-lab-podfile-lock.ts')], { encoding: 'utf8' });
 
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe('podfile_lock_valid\n');
-    expect(result.stderr).toBe('');
-    expect(evaluatePodfileLock(readFileSync(resolve(__dirname, '../ios-device-lab/Podfile.lock'), 'utf8'))).toEqual([]);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('podfile_lock_valid\n');
+      expect(result.stderr).toBe('');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('keeps the generated-lock CLI fixed to the generated path and bounded when absent', () => {
@@ -80,11 +84,9 @@ describe('reviewed Podfile.lock policy', () => {
 
   it.each([
     ['a repeated root section', `${reviewedFixture}\nPODS:\n`, 'duplicate_section'],
-    ['an unexpected spec repo', reviewedFixture.replace('  trunk:', '  evil:'), 'spec_repos_invalid'],
-    ['an unexpected spec repo pod', reviewedFixture.replace('    - GoogleMaps\n\nEXTERNAL SOURCES:', '    - GoogleMaps\n    - EvilPod\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
-    ['a duplicate spec repo pod', reviewedFixture.replace('    - GoogleMaps\n\nEXTERNAL SOURCES:', '    - GoogleMaps\n    - GoogleMaps\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
-    ['a malformed spec repo field', reviewedFixture.replace('    - GoogleMaps\n\nEXTERNAL SOURCES:', '    :url: https://evil.invalid\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
-    ['an unpinned pod revision', reviewedFixture.replace('GoogleMaps (9.4.0)', 'GoogleMaps'), 'pod_revision_unpinned'],
+    ['an unexpected spec repo', reviewedFixture.replace('\nEXTERNAL SOURCES:', '\nSPEC REPOS:\n  evil:\n    - EvilPod\n\nEXTERNAL SOURCES:'), 'spec_repos_invalid'],
+    ['a Google provider pod', reviewedFixture.replace('  - react-native-maps (1.27.2)', '  - GoogleMaps (9.4.0)\n  - react-native-maps/Google (1.27.2)'), 'google_maps_pod_not_allowed'],
+    ['an unpinned pod revision', reviewedFixture.replace('react-native-maps (1.27.2)', 'react-native-maps'), 'pod_revision_unpinned'],
     ['a non-workspace absolute pod path', reviewedFixture.replace(
       '  react-native-maps:\n    :path: "../../../node_modules/react-native-maps"',
       '  react-native-maps:\n    :path: "/Users/runner/work/other/node_modules/react-native-maps"',

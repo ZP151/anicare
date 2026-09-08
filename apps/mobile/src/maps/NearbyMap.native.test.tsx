@@ -13,7 +13,7 @@ jest.mock('react-native-maps', () => {
       React.useLayoutEffect(() => {
         if (mockMapLoadsDuringMount.value) (props.onMapLoaded as (() => void) | undefined)?.();
       }, [props.onMapLoaded]);
-      return React.createElement(View, { testID: 'google-map' });
+      return React.createElement(View, { testID: 'native-map' });
     },
     PROVIDER_GOOGLE: 'google',
   };
@@ -34,12 +34,12 @@ describe('NearbyMap native privacy contract', () => {
     jest.useRealTimers();
   });
 
-  it('uses Google only as a broad basemap with no location or marker layer', async () => {
-    const view = await render(<NearbyMap googleMapsConfigured />);
-    expect(view.getByTestId('google-map')).toBeTruthy();
+  it('uses Apple Maps on iOS without a Google key, with no location or marker layer', async () => {
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
+    expect(view.getByTestId('native-map')).toBeTruthy();
 
     const props = mockMapProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-    expect(props.provider).toBe('google');
+    expect(props.provider).toBeUndefined();
     expect(props.showsUserLocation).toBe(false);
     expect(props.showsMyLocationButton).toBe(false);
     expect(props.maxZoomLevel).toBe(14);
@@ -47,20 +47,11 @@ describe('NearbyMap native privacy contract', () => {
     await view.unmount();
   });
 
-  it('uses an honest no-map state when native keys are absent', async () => {
-    const fallbackLabel = 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.';
-    const view = await render(<NearbyMap fallbackLabel={fallbackLabel} googleMapsConfigured={false} />);
-    expect(view.getByLabelText(fallbackLabel)).toBeTruthy();
-    expect(JSON.stringify(view.toJSON())).not.toMatch(/atlas|coarse-atlas/i);
-    expect(mockMapProps).not.toHaveBeenCalled();
-    await view.unmount();
-  });
-
   it('uses the honest no-map state when a configured provider never becomes ready', async () => {
-    const fallbackLabel = 'Google Maps is unavailable. Switch to the area list to browse delayed community activity.';
-    const view = await render(<NearbyMap fallbackLabel={fallbackLabel} googleMapsConfigured />);
+    const fallbackLabel = 'The map is unavailable. Switch to the area list to browse delayed community activity.';
+    const view = await render(<NearbyMap fallbackLabel={fallbackLabel} androidGoogleMapsConfigured={false} />);
 
-    expect(view.getByTestId('google-map')).toBeTruthy();
+    expect(view.getByTestId('native-map')).toBeTruthy();
     await act(async () => { jest.advanceTimersByTime(10_000); });
 
     expect(view.getByLabelText(fallbackLabel)).toBeTruthy();
@@ -73,7 +64,7 @@ describe('NearbyMap native privacy contract', () => {
     async (readinessCallback) => {
       const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
       const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-      const view = await render(<NearbyMap googleMapsConfigured />);
+      const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
       const props = mockMapProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       const readinessTimerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => typeof delay === 'number' && delay >= 1_000);
       const readinessTimer = setTimeoutSpy.mock.results[readinessTimerIndex]?.value;
@@ -83,7 +74,7 @@ describe('NearbyMap native privacy contract', () => {
       expect(clearTimeoutSpy).toHaveBeenCalledWith(readinessTimer);
       await act(async () => { jest.advanceTimersByTime(60_000); });
 
-      expect(view.getByTestId('google-map')).toBeTruthy();
+      expect(view.getByTestId('native-map')).toBeTruthy();
       expect(view.queryByText(/atlas/i)).toBeNull();
       await view.unmount();
     },
@@ -91,11 +82,11 @@ describe('NearbyMap native privacy contract', () => {
 
   it('does not arm a late fallback when readiness arrives during native mount', async () => {
     mockMapLoadsDuringMount.value = true;
-    const view = await render(<NearbyMap googleMapsConfigured />);
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
 
     await act(async () => { jest.advanceTimersByTime(60_000); });
 
-    expect(view.getByTestId('google-map')).toBeTruthy();
+    expect(view.getByTestId('native-map')).toBeTruthy();
     expect(view.queryByText(/atlas/i)).toBeNull();
     await view.unmount();
   });
@@ -103,7 +94,7 @@ describe('NearbyMap native privacy contract', () => {
   it('clears the configured-provider readiness timer when unmounted', async () => {
     const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    const view = await render(<NearbyMap googleMapsConfigured />);
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
     const readinessTimerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => typeof delay === 'number' && delay >= 1_000);
     const readinessTimer = setTimeoutSpy.mock.results[readinessTimerIndex]?.value;
 
