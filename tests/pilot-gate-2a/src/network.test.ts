@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithTimeout, MAX_HARNESS_RESPONSE_BYTES } from './network.js';
 
@@ -7,6 +7,10 @@ function delay<T>(value: T, timeoutMs: number): Promise<T> {
 }
 
 describe('fetchWithTimeout', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('aborts a request that does not settle before its deadline', async () => {
     let aborted = false;
     const hungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
@@ -17,7 +21,7 @@ describe('fetchWithTimeout', () => {
       }, { once: true });
     });
 
-    await expect(fetchWithTimeout('http://127.0.0.1', {}, 1, hungFetch)).rejects.toBeDefined();
+    await expect(fetchWithTimeout('http://127.0.0.1', {}, 1, hungFetch)).rejects.toThrow('request_timeout');
     expect(aborted).toBe(true);
   });
 
@@ -37,6 +41,18 @@ describe('fetchWithTimeout', () => {
 
     await expect(request).rejects.toBeDefined();
     expect(aborted).toBe(true);
+  });
+
+  it('does not classify a caller cancellation with timeout text as a harness timeout', async () => {
+    const caller = new AbortController();
+    const hungFetch: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    });
+    const errorResult = fetchWithTimeout('http://127.0.0.1', { signal: caller.signal }, 100, hungFetch)
+      .then(() => undefined, (error: unknown) => error);
+    caller.abort(new Error('request_timeout'));
+
+    await expect(errorResult).resolves.toMatchObject({ message: 'request_aborted' });
   });
 
   it('rejects a response whose body never finishes within the request deadline', async () => {
@@ -79,17 +95,20 @@ describe('fetchWithTimeout', () => {
   });
 
   it('returns a bounded reconstructed response that callers can read normally', async () => {
-    const normalFetch: typeof fetch = async () => new Response('ready', {
+    const original = new Response('ready', {
       status: 201,
       statusText: 'Created',
       headers: { 'content-type': 'text/plain', 'x-fixture': 'normal' },
     });
+    Object.defineProperty(original, 'url', { value: 'https://fhugdtpjbgiatqhvjioy.supabase.co/auth/v1/settings' });
+    const normalFetch: typeof fetch = async () => original;
 
     const response = await fetchWithTimeout('http://127.0.0.1', {}, 100, normalFetch);
 
     expect(response.status).toBe(201);
     expect(response.statusText).toBe('Created');
     expect(response.headers.get('x-fixture')).toBe('normal');
+    expect(response.url).toBe('https://fhugdtpjbgiatqhvjioy.supabase.co/auth/v1/settings');
     await expect(response.text()).resolves.toBe('ready');
   });
 });

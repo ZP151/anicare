@@ -33,6 +33,16 @@ const remote: MyReportSummary = {
 };
 
 describe('report workflow controller', () => {
+  it('shows durable identity work as pending submission until authoritative progress exists', () => {
+    const pending = draft({ sightingId: remote.sightingId, identityContinuation: {
+      intent: { kind: 'new' }, requestId: '00000000-0000-4000-8000-000000000419',
+    } });
+    expect(mergeReceiptStatus({ ...remote, identityState: 'not_requested' }, pending)?.identityState).toBe('pending_submission');
+    expect(mergeReceiptStatus(null, pending)?.identityState).toBe('pending_submission');
+    for (const identityState of ['pending_review', 'closed', 'linked'] as const) {
+      expect(mergeReceiptStatus({ ...remote, identityState }, pending)?.identityState).toBe(identityState);
+    }
+  });
   it('reopens a saved review only when its persisted prerequisites remain valid', () => {
     expect(earliestIncompleteStep(draft())).toBe('review');
     expect(earliestIncompleteStep(draft({ report: { ...payload, condition: null } }))).toBe('details');

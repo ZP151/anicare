@@ -26,7 +26,23 @@ describe('report draft payload', () => {
       markings: ['white-paws'],
       condition: 'appears_well',
       manualPublicCellId: null,
+      identityIntent: null,
       updatedAt: '2026-08-31T10:01:00.000Z',
+    });
+  });
+
+  it('upgrades legacy drafts with no identity selection to a safe skip state', () => {
+    expect(sanitizeReportDraftPayload(validPayload).identityIntent).toBeNull();
+  });
+
+  it('persists a bounded existing-cat identity intent with its stable retry key', () => {
+    expect(sanitizeReportDraftPayload({
+      ...validPayload,
+      identityIntent: { kind: 'existing', animalId: '12345678-1234-1234-1234-123456789abc' },
+      identityRequestId: '87654321-1234-1234-1234-123456789abc',
+    })).toMatchObject({
+      identityIntent: { kind: 'existing', animalId: '12345678-1234-1234-1234-123456789abc' },
+      identityRequestId: '87654321-1234-1234-1234-123456789abc',
     });
   });
 
@@ -84,6 +100,7 @@ describe('report draft payload', () => {
       markings: [],
       condition: null,
       manualPublicCellId: null,
+      identityIntent: null,
       updatedAt: '2026-08-31T10:00:00.000Z',
     });
     expect(Object.isFrozen(payload.coat)).toBe(true);

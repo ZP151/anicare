@@ -118,7 +118,7 @@ describe('ReportHub', () => {
     expect(run.saveDraft).toHaveBeenCalledWith({
       id: '00000000-0000-4000-8000-000000000113', notes: '', risk: 'normal', report: {
         version: 1, step: 'photo', areaSelectionMode: 'either', creatorMode: 'anonymous', occurredAt: '2026-09-01T10:00:00.000Z', coat: [], markings: [],
-        condition: null, manualPublicCellId: null, updatedAt: '2026-09-01T10:00:00.000Z',
+        condition: null, manualPublicCellId: null, identityIntent: null, updatedAt: '2026-09-01T10:00:00.000Z',
       },
     });
     expect(run.navigate).toHaveBeenCalledWith('/report/new?draftId=00000000-0000-4000-8000-000000000113');

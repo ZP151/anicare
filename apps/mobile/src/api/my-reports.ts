@@ -121,3 +121,21 @@ export async function listMyReports(
     throw new Error('my_reports_unavailable');
   }
 }
+
+export async function getMySightingSummary(
+  sightingId: string,
+  client: NarrowRpcClient | null = getSupabaseClient() as unknown as NarrowRpcClient | null,
+): Promise<MyReportSummary | null> {
+  if (!client || !UUID.test(sightingId)) throw new Error('my_reports_unavailable');
+  try {
+    const result = await (client as unknown as { rpc: (name: string, args: Record<string, string>) => PromiseLike<Readonly<{ data: unknown; error: unknown | null }>> })
+      .rpc('get_my_sighting_summary', { p_sighting_id: sightingId });
+    if (result.error) throw new Error('rpc_failed');
+    if (result.data === null || (Array.isArray(result.data) && result.data.length === 0)) return null;
+    if (!Array.isArray(result.data) || result.data.length !== 1) throw new Error('invalid_my_reports_response');
+    return parseSummary(result.data[0]);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'invalid_my_reports_response') throw error;
+    throw new Error('my_reports_unavailable');
+  }
+}

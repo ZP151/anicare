@@ -6,6 +6,7 @@ import type {
 } from '../api/sightings';
 import type { StoredDraft } from '../offline/draft-policy';
 import type { UploadJobState } from '../offline/upload-job';
+import type { ReportIdentityIntent } from './report-draft';
 
 export type MediaSubmissionState = UploadJobState | 'cleanup_pending' | 'not_ready' | 'unavailable' | 'stale';
 
@@ -22,6 +23,7 @@ export type ReportSubmissionOutcome = Readonly<{
   sightingId: string | null;
   visibility: SightingSubmissionResponse['visibility'] | null;
   state: 'submitted_text_only' | 'recovery_miss' | MediaSubmissionState;
+  identityState?: 'pending_submission' | 'pending_review' | 'closed';
   receipt: Readonly<{
     sightingId: string;
     visibility: SightingSubmissionResponse['visibility'] | null;
@@ -58,6 +60,11 @@ export type ReportSubmissionDependencies = Readonly<{
   attachSighting(draftId: string, sightingId: string, ownerSubject: string): Promise<boolean>;
   uploadMedia(draftId: string, expectedOwnerSubject: string): Promise<MediaSubmissionState>;
   deleteDraft(draftId: string): Promise<void>;
+  submitIdentityProposal?(
+    sightingId: string,
+    intent: Exclude<ReportIdentityIntent, null>,
+    requestId: string,
+  ): Promise<Readonly<{ status: 'tentative' | 'confirmed' | 'rejected' | 'superseded' }>>;
 }>;
 
 export function nextReportDraftIdAfterSubmission(
@@ -107,17 +114,25 @@ type ResolvedSighting = Readonly<{
 function outcome(
   sighting: ResolvedSighting,
   state: Exclude<ReportSubmissionOutcome['state'], 'recovery_miss'>,
+  identityState?: ReportSubmissionOutcome['identityState'],
 ): ReportSubmissionOutcome {
   return {
     sightingId: sighting.sightingId,
     visibility: sighting.visibility,
     state,
+    ...(identityState ? { identityState } : {}),
     receipt: {
       sightingId: sighting.sightingId,
       visibility: sighting.visibility,
       mediaState: state,
     },
   };
+}
+
+function pendingIdentity(draft: StoredDraft): StoredDraft['identityContinuation'] {
+  return draft.identityContinuation ?? (draft.report?.identityIntent && draft.report.identityRequestId
+    ? { intent: draft.report.identityIntent, requestId: draft.report.identityRequestId }
+    : undefined);
 }
 
 function persistedMediaRecoveryState(
@@ -205,23 +220,35 @@ export async function submitReportWithMedia(
     throw new Error('sighting_attachment_conflict');
   }
 
+  const identity = pendingIdentity(durable) ?? pendingIdentity(draft);
+  let identityState: ReportSubmissionOutcome['identityState'];
+  if (identity) {
+    try {
+      if (!dependencies.submitIdentityProposal) throw new Error('identity_proposal_unavailable');
+      const result = await dependencies.submitIdentityProposal(resolved.sighting.sightingId, identity.intent, identity.requestId);
+      identityState = result.status === 'tentative' ? 'pending_review' : 'closed';
+    } catch {
+      identityState = 'pending_submission';
+    }
+  }
+
   if (!hasMediaBoundary(durable)) {
     // Keep the encrypted, owner-bound row as a durable receipt anchor until a
     // later authoritative My Reports reconciliation can safely remove it.
-    return outcome(resolved.sighting, 'submitted_text_only');
+    return outcome(resolved.sighting, 'submitted_text_only', identityState);
   }
 
   try {
     const state = await dependencies.uploadMedia(input.draftId, ownerSubject);
-    return outcome(resolved.sighting, state);
+    return outcome(resolved.sighting, state, identityState);
   } catch {
     try {
       return outcome(
         resolved.sighting,
-        persistedMediaRecoveryState(await dependencies.getDraft(input.draftId), resolved.sighting, ownerSubject),
+        persistedMediaRecoveryState(await dependencies.getDraft(input.draftId), resolved.sighting, ownerSubject), identityState,
       );
     } catch {
-      return outcome(resolved.sighting, 'unavailable');
+      return outcome(resolved.sighting, 'unavailable', identityState);
     }
   }
 }

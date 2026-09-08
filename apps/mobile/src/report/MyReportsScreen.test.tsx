@@ -49,12 +49,15 @@ describe('MyReportsScreen', () => {
   });
 
   it('shows only date and coarse lifecycle labels for successful rows', async () => {
-    const view = await render(<MyReportsScreen locale="en" dependencies={dependencies()} />);
+    const navigate = jest.fn();
+    const view = await render(<MyReportsScreen locale="en" dependencies={dependencies({ navigate })} />);
     await waitFor(() => expect(view.getByText('Private review')).toBeTruthy());
     expect(view.getByText('Private media awaiting validation')).toBeTruthy();
     expect(view.getByText('Identity review pending')).toBeTruthy();
     expect(view.queryByText('00000000-0000-4000-8000-000000000721')).toBeNull();
     expect(view.queryByText(/private notes|public cell|candidate|confidence|model|media path/i)).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: `View report ${first.sightingId}` }));
+    expect(navigate).toHaveBeenCalledWith(`/report/receipt?sightingId=${first.sightingId}`);
   });
 
   it('loads more with the keyset cursor', async () => {

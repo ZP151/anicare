@@ -10,6 +10,10 @@ import {
 
 const bashExecutable = process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
 
+function readBuildScript(): string {
+  return readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8').replaceAll('\r\n', '\n');
+}
+
 const safeInventory = {
   topLevelEntries: ['Payload'],
   appPaths: ['Payload/WhiskerCommons.app'],
@@ -135,7 +139,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('sanitizes control characters from runner image metadata before writing the manifest', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
     const definitions = [
       'set -euo pipefail',
       "APP_DIR='/tmp'",
@@ -157,7 +161,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('keeps ASCII spaces in runner image metadata', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
     const definitions = [
       'set -euo pipefail',
       "APP_DIR='/tmp'",
@@ -179,7 +183,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('selects the pinned toolchain and invokes the inventory policy before and after packaging', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
 
     expect(script).toContain('/Applications/Xcode_26.4.1.app');
     expect(script).toContain('26.4.1');
@@ -199,7 +203,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('only cleans generated paths owned by the current invocation', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
 
     expect(script).toContain('ios_dir_owned=0');
     expect(script).toContain('staging_dir_owned=0');
@@ -218,7 +222,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('transfers artifact ownership after a successful allowlist assertion while failed builds still clean it', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
     const cleanup = script.slice(script.indexOf('cleanup_owned_path() {'), script.indexOf('\ntrap cleanup EXIT'));
     const assertion = script.slice(script.indexOf('assert_artifact_allowlist() {'), script.indexOf('\nrequire_command codesign'));
     const runner = [
@@ -242,7 +246,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('validates the reviewed source before copying and the generated copy before CocoaPods deployment', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
     const reviewed = script.indexOf('pnpm validate:reviewed-ios-device-lab-podfile-lock');
     const copy = script.indexOf('cp -- "$LOCKFILE_SOURCE" "$IOS_DIR/Podfile.lock"');
     const generated = script.indexOf('pnpm validate:generated-ios-device-lab-podfile-lock');
@@ -257,7 +261,7 @@ describe('unsigned iOS build shell contract', () => {
   });
 
   it('accepts exactly the three regular SHA-derived artifact files and rejects additions or symlinks', () => {
-    const script = readFileSync(resolve(__dirname, 'build-unsigned-ios.sh'), 'utf8');
+    const script = readBuildScript();
     const assertion = script.slice(script.indexOf('assert_artifact_allowlist() {'), script.indexOf('\nrequire_command codesign'));
     const runner = [
       'set -euo pipefail',

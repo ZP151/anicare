@@ -16,7 +16,7 @@ describe('localization catalog', () => {
       { route: 'index', label: 'Nearby', accessibilityLabel: 'Nearby community cats' },
       { route: 'map', label: 'Map', accessibilityLabel: 'Community cat map' },
       { route: 'report', label: 'Report', accessibilityLabel: 'Report a community cat' },
-      { route: 'following', label: 'Following', accessibilityLabel: 'Followed cats and areas' },
+      { route: 'following', label: 'Following', accessibilityLabel: 'Followed cats' },
       { route: 'profile', label: 'Profile', accessibilityLabel: 'Your profile' },
     ]);
   });

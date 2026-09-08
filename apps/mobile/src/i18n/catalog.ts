@@ -363,7 +363,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.webDeviceLocation': 'Use device location',
     'report.wizard.webManualArea': 'Choose an area on the map',
     'following.title': 'Following',
-    'following.subtitle': 'De-sensitive updates for cats and areas you care about.',
+    'following.subtitle': 'Return to followed cats and their care records.',
     'profile.title': 'Your profile',
     'profile.subtitle': 'Manage privacy, training consent and trusted roles.',
     'profile.reportReturnTitle': 'Saved report waiting',
@@ -547,7 +547,7 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
     'report.wizard.webDeviceLocation': '使用设备位置',
     'report.wizard.webManualArea': '在地图上选择区域',
     'following.title': '关注',
-    'following.subtitle': '获取你关注的猫和区域的去敏更新。',
+    'following.subtitle': '回访关注的猫，查看照护记录。',
     'profile.title': '我的',
     'profile.subtitle': '管理隐私、训练授权和可信角色。',
     'profile.reportReturnTitle': '已保存的报告正在等待',
@@ -674,7 +674,7 @@ export function getTabDefinitions(locale: Locale): TabDefinition[] {
       { route: 'index', label: '附近', accessibilityLabel: '附近的社区猫' },
       { route: 'map', label: '地图', accessibilityLabel: '社区猫地图' },
       { route: 'report', label: '报告', accessibilityLabel: '报告一只社区猫' },
-      { route: 'following', label: '关注', accessibilityLabel: '关注的猫和区域' },
+      { route: 'following', label: '关注', accessibilityLabel: '关注的猫' },
       { route: 'profile', label: '我的', accessibilityLabel: '个人资料' },
     ];
   }
@@ -683,7 +683,7 @@ export function getTabDefinitions(locale: Locale): TabDefinition[] {
     { route: 'index', label: 'Nearby', accessibilityLabel: 'Nearby community cats' },
     { route: 'map', label: 'Map', accessibilityLabel: 'Community cat map' },
     { route: 'report', label: 'Report', accessibilityLabel: 'Report a community cat' },
-    { route: 'following', label: 'Following', accessibilityLabel: 'Followed cats and areas' },
+    { route: 'following', label: 'Following', accessibilityLabel: 'Followed cats' },
     { route: 'profile', label: 'Profile', accessibilityLabel: 'Your profile' },
   ];
 }

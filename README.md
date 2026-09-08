@@ -2,6 +2,17 @@
 
 WhiskerCommons is a privacy-first, free community-cat identity and care record platform for a closed Singapore pilot. It treats AI as a review aid, never as an automatic identity authority.
 
+Current product status (2026-09-07): [functional review](docs/reviews/2026-09-07-product-delivery-review.md),
+[iteration roadmap v3](docs/iteration-roadmap-v3.md), [product goals](docs/product-goals.md),
+and [regression playbook](docs/regression-playbook.md).
+Next: report-to-identity creation/review and useful care history. AI remains an
+unproven, optional assistance capability. Historical hosted evidence, evidence
+consumption and iOS build work retain their release boundaries; they do not block
+unrelated local feature development. These changes are not yet integrated into main.
+
+Fast local behavior regression: `pnpm test:product-core`. Required CI still runs
+the complete root verification and the independent database integration job.
+
 ## Current implementation
 
 WhiskerCommons is the display brand only. Existing package scopes, Python import
@@ -36,9 +47,10 @@ names remain compatible technical identifiers.
   inference. There are no model weights, labelled dataset, ANN, queue, real
   callback, or production accuracy claim.
 
-The UI contains synthetic placeholder content only. It is not connected to
-production data and must not be used to record real locations. This repository
-does not claim pilot readiness.
+The UI includes synthetic demo/fallback content and configured RPC-backed feed,
+report and authenticated admin paths. Those integrations do not establish
+production or physical-device readiness. Use synthetic data for current
+validation; this repository does not claim pilot readiness.
 
 ## Requirements
 
@@ -93,6 +105,14 @@ Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable th
 Gate 2A evidence and the remaining gates that still block pilot-ready status
 are:
 
+- The protected Hosted Gate 2B producer and its local promotion validator are
+  implemented; see the [operator runbook](docs/runbooks/hosted-gate-2b.md).
+  The real [run 33784288981](https://github.com/ZP151/anicare/actions/runs/33784288981)
+  passed correctness, cleanup and evidence issuance at `6797215`. The evidence
+  consumer currently rejects the actual signing issuer; canonical 72-hour
+  evidence has not been committed. Delivery readiness remains blocked until
+  that consumer is fixed and validated evidence is promoted while fresh.
+
 - The experimental Windows [iOS free-account device-test runbook](docs/runbooks/ios-free-account-device-test.md)
   and its [empty physical evidence template](docs/evidence/ios-device-physical-test-template.md)
   are handoff material only. They fail closed until a protected unsigned
@@ -124,3 +144,19 @@ are:
   least 85%, unknown rejection at least 80%, and likely false matches on unknown
   cats at most 5%. Current evaluation is synthetic only and establishes no
   production accuracy result.
+
+### 身份审核工作台的服务端配置
+
+`/identity` 供具有有效 trusted contributor、area steward 或 platform admin 授权的独立审核者使用。普通平台管理入口仍限定 platform admin；身份审核按授权区域及回避规则返回队列。
+
+Admin 服务端媒体代理还需在它自己的服务端环境设置 `SUPABASE_SERVICE_ROLE_KEY`。该变量仅用于读取已授权的审核素材，不得加 `NEXT_PUBLIC_` 前缀，也不得写入移动端或浏览器环境。缺少配置时素材代理返回不可用；工作台不提供公开 Storage URL。已有本地/托管密钥由运行环境提供，不在仓库保存。
+
+### Rights and account erasure operations
+
+`/rights` in Admin is a real authenticated intake queue. An active platform admin can move human requests to review, request a new identity proposal, or close intake. These actions do not merge cats or change identity decisions.
+
+Account deletion processing additionally uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to claim the owner-requested erasure, query/delete the Auth user, call the existing `cleanup-media-staging` and `cleanup-legacy-media` handlers, and reconcile linked cleanup jobs. Deploy those handlers to the same project and configure their existing required runtime settings. Only an authorized Admin Server Action invokes this flow; the mobile app never receives service credentials or an Auth target UUID. Processing is explicit from the queue, with durable retry and cleanup-pending states; no scheduler is implied. Revisit pending items and retry cleanup until the DB reports convergence. Storage credential lifetime and terminal legacy failures still prevent premature completion.
+
+Set mobile `EXPO_PUBLIC_RIGHTS_CONTACT_URL` to an **actual operated** HTTPS contact page or `mailto:` address before real-user use. The example is intentionally empty. Without it, the UI states that external contact is unavailable; the authenticated queue still receives requests, but post-deletion contact acceptance is incomplete. A saved local receipt is not proof of deletion completion and grants no anonymous status access. The operating owner/SLA and real contact channel remain product inputs, not generated addresses.
+
+The offline AI experiment is documented in [services/ai/OFFLINE_EVALUATION.md](services/ai/OFFLINE_EVALUATION.md). It does not enable product AI or replace a licensed identity dataset and held-out evaluation.

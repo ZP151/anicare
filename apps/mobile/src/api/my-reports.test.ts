@@ -1,4 +1,4 @@
-import { listMyReports, parseMyReports, type NarrowRpcClient } from './my-reports';
+import { getMySightingSummary, listMyReports, parseMyReports, type NarrowRpcClient } from './my-reports';
 
 const safeRow = {
   sightingId: '00000000-0000-4000-8000-000000002001',
@@ -49,6 +49,16 @@ describe('parseMyReports', () => {
 });
 
 describe('listMyReports', () => {
+  it('uses one owner-bound lookup for a receipt instead of paginating report history', async () => {
+    const client = rpcClient([safeRow]);
+    await expect(getMySightingSummary(safeRow.sightingId, client)).resolves.toEqual(safeRow);
+    expect(client.rpc).toHaveBeenCalledWith('get_my_sighting_summary', { p_sighting_id: safeRow.sightingId });
+  });
+
+  it('treats no row as a single privacy-safe unavailable result', async () => {
+    await expect(getMySightingSummary(safeRow.sightingId, rpcClient([]))).resolves.toBeNull();
+  });
+
   it('sends a bounded keyset cursor and does not expose RPC arguments beyond the narrow projection', async () => {
     const client = rpcClient([safeRow]);
     await expect(listMyReports({

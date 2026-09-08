@@ -1,5 +1,7 @@
 # Product charter
 
+> Delivery interpretation (2026-09-07): the next internal, synthetic-data increment proves manual identity creation/review and useful care history; AI feasibility is a bounded parallel track. This does not remove AI from the formal MVP or authorize a manual-only public pilot. Execution: [roadmap v3](iteration-roadmap-v3.md). Measured outcomes: [product goals](product-goals.md). Capability gaps: [functional review](reviews/2026-09-07-product-delivery-review.md).
+
 ## Decision
 
 WhiskerCommons is a free, privacy-first community-cat identity and care ledger for a closed Singapore pilot. It helps caregivers recognise a cat, understand recent care, coordinate safely and correct community knowledge. It is not a pet-owner social network, veterinary diagnostic tool, public real-time tracker or marketplace.

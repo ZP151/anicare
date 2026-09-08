@@ -117,7 +117,12 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
       {state === 'offline' && !snapshot ? <Text accessibilityLiveRegion="polite" style={styles.error}>{copy.offlineEmpty}</Text> : null}
       {state === 'offline' && snapshot ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.offlineSnapshot}</Text> : null}
       {(state === 'ready' || (state === 'offline' && snapshot)) && rows.length === 0 ? <View style={styles.state}><Text accessibilityRole="header" style={styles.emptyTitle}>{copy.historyEmptyTitle}</Text><Text style={styles.notice}>{copy.historyEmptyCopy}</Text></View> : null}
-      {rows.map((row) => <View key={row.key} style={styles.row}><Text style={styles.date}>{new Date(row.occurredAt).toLocaleDateString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG', { year: 'numeric', month: 'short', day: 'numeric' })}</Text><Text style={styles.label}>{copy.reportStateLabel(row.reportState)}</Text><Text style={styles.notice}>{copy.mediaStateLabel(row.mediaState)}</Text><Text style={styles.notice}>{copy.identityStateLabel(row.identityState)}</Text></View>)}
+      {rows.map((row) => {
+        const content = <><Text style={styles.date}>{new Date(row.occurredAt).toLocaleDateString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG', { year: 'numeric', month: 'short', day: 'numeric' })}</Text><Text style={styles.label}>{copy.reportStateLabel(row.reportState)}</Text><Text style={styles.notice}>{copy.mediaStateLabel(row.mediaState)}</Text><Text style={styles.notice}>{copy.identityStateLabel(row.identityState)}</Text></>;
+        return row.sightingId
+          ? <Pressable key={row.key} accessibilityLabel={`View report ${row.sightingId}`} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/receipt?sightingId=${encodeURIComponent(row.sightingId!)}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>{content}</Pressable>
+          : <View key={row.key} style={styles.row}>{content}</View>;
+      })}
       {snapshot?.nextCursor ? <Pressable accessibilityRole="button" accessibilityLabel={copy.loadMoreReports} disabled={loadingMore} onPress={() => { void load('more'); }} style={({ pressed }) => [styles.loadMore, (pressed || loadingMore) && styles.pressed]}><Text style={styles.loadMoreText}>{loadingMore ? copy.historyLoading : copy.loadMoreReports}</Text></Pressable> : null}
     </ScrollView>
   </SafeAreaView>;

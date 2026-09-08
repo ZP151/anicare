@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "a0-offline-eval.v1",
+  "baselineVersion": "rgb-16x16-cosine.v1",
+  "gallery": [],
+  "holdoutKnown": [],
+  "holdoutUnknown": [],
+  "train": [],
+  "development": []
+}

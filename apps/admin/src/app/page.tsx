@@ -18,7 +18,7 @@ export default async function OperationsPage() {
   }
   if (session.state === 'unauthenticated') redirect('/login');
   if (session.state === 'unauthorised') {
-    return <main><section className="panel"><h1>Access denied</h1><p>This signed-in account does not have an active platform-admin grant.</p></section></main>;
+    return <main><section className="panel"><h1>Access denied</h1><p>This signed-in account does not have an active platform-admin grant.</p><p><a href="/identity">Open identity review</a> for trusted identity reviewers.</p></section></main>;
   }
 
   let queue;
@@ -34,6 +34,8 @@ export default async function OperationsPage() {
         <div className="brand"><span>🐾</span><strong>WhiskerCommons</strong></div>
         <nav aria-label="Operations navigation">
           <a className="active" href="#queue">Review queue</a>
+          <a href="/identity">Identity review</a>
+          <a href="/rights">Rights requests</a>
         </nav>
         <p className="privacy">This console never displays precise locations, media paths, access grants, or audit records.</p>
       </aside>

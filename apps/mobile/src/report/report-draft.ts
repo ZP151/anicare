@@ -5,6 +5,7 @@ export type ReportDraftStep = 'photo' | 'details' | 'safety' | 'area' | 'review'
 export type ReportCondition = 'appears_well' | 'needs_attention' | 'urgent';
 export type ReportAreaSelectionMode = 'either' | 'manual_required';
 export type ReportDraftCreatorMode = 'anonymous' | 'authenticated';
+export type ReportIdentityIntent = Readonly<{ kind: 'existing'; animalId: string }> | Readonly<{ kind: 'new' }> | null;
 
 export type ReportDraftPayloadV1 = Readonly<{
   version: 1;
@@ -16,6 +17,11 @@ export type ReportDraftPayloadV1 = Readonly<{
   markings: readonly string[];
   condition: ReportCondition | null;
   manualPublicCellId: string | null;
+  /** A reporter's tentative choice, never an accepted sighting/animal link. */
+  /** Optional in the type solely for legacy callers; the sanitizer always emits null or a valid intent. */
+  identityIntent?: ReportIdentityIntent;
+  /** Stable only while an identity intent is pending, for idempotent retries. */
+  identityRequestId?: string;
   updatedAt: string;
 }>;
 
@@ -27,9 +33,10 @@ const coatValues = new Set(['tabby', 'black', 'white', 'ginger', 'grey', 'calico
 const markingValues = new Set(['white-paws', 'white-chest', 'white-tail-tip', 'ear-tip', 'collar', 'scar', 'striped', 'spotted']);
 const pentagonBaseCells = new Set([4, 14, 24, 38, 49, 58, 63, 72, 83, 97, 107, 117]);
 const payloadKeys = [
-  'version', 'step', 'areaSelectionMode', 'creatorMode', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'updatedAt',
+  'version', 'step', 'areaSelectionMode', 'creatorMode', 'occurredAt', 'coat', 'markings', 'condition', 'manualPublicCellId', 'identityIntent', 'identityRequestId', 'updatedAt',
 ] as const;
-const requiredPayloadKeys = payloadKeys.filter((key) => key !== 'areaSelectionMode' && key !== 'creatorMode');
+const requiredPayloadKeys = payloadKeys.filter((key) => key !== 'areaSelectionMode' && key !== 'creatorMode' && key !== 'identityIntent' && key !== 'identityRequestId');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalid(): never {
   throw new Error('invalid_report_draft');
@@ -80,13 +87,27 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
   if (keys.some((key) => !payloadKeys.includes(key as typeof payloadKeys[number])) ||
       requiredPayloadKeys.some((key) => !Object.prototype.hasOwnProperty.call(candidate, key))) invalid();
   const areaSelectionMode = candidate.areaSelectionMode ?? 'either';
+  const identityIntent = candidate.identityIntent ?? null;
+  const identityRequestId = candidate.identityRequestId;
   if (candidate.version !== 1 || typeof candidate.step !== 'string' || !reportSteps.has(candidate.step as ReportDraftStep) ||
       typeof areaSelectionMode !== 'string' || !areaSelectionModes.has(areaSelectionMode as ReportAreaSelectionMode) ||
       (candidate.creatorMode !== undefined &&
         (typeof candidate.creatorMode !== 'string' || !creatorModes.has(candidate.creatorMode as ReportDraftCreatorMode))) ||
       !isCanonicalIsoTimestamp(candidate.occurredAt) || !isCanonicalIsoTimestamp(candidate.updatedAt) ||
       (candidate.condition !== null && (typeof candidate.condition !== 'string' || !reportConditions.has(candidate.condition as ReportCondition))) ||
-      (candidate.manualPublicCellId !== null && !isCanonicalPublicCell(candidate.manualPublicCellId))) invalid();
+      (candidate.manualPublicCellId !== null && !isCanonicalPublicCell(candidate.manualPublicCellId)) ||
+      (identityIntent !== null && (!identityIntent || typeof identityIntent !== 'object' || Array.isArray(identityIntent))) ||
+      (identityIntent !== null && identityRequestId === undefined) ||
+      (identityRequestId !== undefined && (typeof identityRequestId !== 'string' || !UUID.test(identityRequestId)))) invalid();
+
+  if (identityIntent !== null) {
+    const intent = identityIntent as Record<string, unknown>;
+    const keys = Object.keys(intent);
+    const validExisting = intent.kind === 'existing' && keys.length === 2 &&
+      Object.prototype.hasOwnProperty.call(intent, 'animalId') && typeof intent.animalId === 'string' && UUID.test(intent.animalId);
+    const validNew = intent.kind === 'new' && keys.length === 1;
+    if (!validExisting && !validNew) invalid();
+  }
 
   return Object.freeze({
     version: 1,
@@ -98,6 +119,10 @@ export function sanitizeReportDraftPayload(value: unknown): ReportDraftPayloadV1
     markings: sanitizeTraits(candidate.markings, markingValues),
     condition: candidate.condition as ReportCondition | null,
     manualPublicCellId: candidate.manualPublicCellId as string | null,
+    identityIntent: identityIntent === null
+      ? null
+      : (identityIntent as ReportIdentityIntent),
+    ...(identityIntent !== null ? { identityRequestId: identityRequestId as string } : {}),
     updatedAt: candidate.updatedAt,
   });
 }
@@ -118,6 +143,7 @@ export function createReportDraftPayload(
     markings: [],
     condition: null,
     manualPublicCellId: null,
+    identityIntent: null,
     updatedAt: timestamp,
   });
 }

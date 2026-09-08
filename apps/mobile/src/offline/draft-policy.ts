@@ -3,6 +3,7 @@ import { MAX_REVIEWED_MEDIA_BYTES, type ReviewReceipt } from '../media/contracts
 import { isReviewedMediaReference } from '../media/media-reference';
 import type { UploadJob, UploadResumeState } from './upload-job';
 import { sanitizeReportDraftPayload, type ReportDraftPayloadV1 } from '../report/report-draft';
+import type { ReportIdentityIntent } from '../report/report-draft';
 
 export const UNSUPPORTED_REVIEWED_MEDIA_ENCRYPTION_VERSION = 'unsupported' as const;
 
@@ -22,6 +23,11 @@ export type StoredDraft = {
   revision?: number;
   mediaFailure?: 'local_media_corrupt' | 'version_mismatch' | 'auth_ownership';
   report?: ReportDraftPayloadV1;
+  /** The smallest owner-bound state needed to resume a post-report identity proposal. */
+  identityContinuation?: Readonly<{
+    intent: Exclude<ReportIdentityIntent, null>;
+    requestId: string;
+  }>;
 };
 
 const risks = new Set<SightingRisk>(['normal', 'sensitive', 'critical']);
@@ -32,6 +38,25 @@ const resumeStates = new Set<UploadResumeState>(['uploading', 'finalizing']);
 
 function stableId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/.test(value);
+}
+
+function identityContinuation(value: unknown): StoredDraft['identityContinuation'] | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (Object.keys(candidate).length !== 2 || typeof candidate.requestId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.requestId) ||
+      !candidate.intent || typeof candidate.intent !== 'object' || Array.isArray(candidate.intent) ||
+      Object.getPrototypeOf(candidate.intent) !== Object.prototype) return undefined;
+  const intent = candidate.intent as Record<string, unknown>;
+  if (intent.kind === 'new' && Object.keys(intent).length === 1) {
+    return { intent: { kind: 'new' }, requestId: candidate.requestId };
+  }
+  if (intent.kind === 'existing' && Object.keys(intent).length === 2 && typeof intent.animalId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(intent.animalId)) {
+    return { intent: { kind: 'existing', animalId: intent.animalId }, requestId: candidate.requestId };
+  }
+  return undefined;
 }
 
 function validReceipt(value: unknown): value is ReviewReceipt {
@@ -105,11 +130,16 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
       report = undefined;
     }
   }
+  const continuation = identityContinuation(input.identityContinuation) ??
+    (report?.identityIntent && report.identityRequestId
+      ? { intent: report.identityIntent, requestId: report.identityRequestId }
+      : undefined);
   const draft: StoredDraft = {
     id: input.id,
     notes: typeof input.notes === 'string' ? input.notes.trim().slice(0, 1000) : '',
     risk,
     ...(report ? { report } : {}),
+    ...(continuation ? { identityContinuation: continuation } : {}),
   };
 
   const hasAnyMedia = input.mediaId !== undefined || input.encryptedReviewedRef !== undefined ||
@@ -118,6 +148,7 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     ...draft,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),
     ...(stableId(input.ownerSubject) ? { ownerSubject: input.ownerSubject } : {}),
+    ...(continuation ? { identityContinuation: continuation } : {}),
     ...(typeof input.pendingMediaCleanupRef === 'string' && isReviewedMediaReference(input.pendingMediaCleanupRef)
       ? { pendingMediaCleanupRef: input.pendingMediaCleanupRef } : {}),
   };
@@ -143,6 +174,7 @@ export function sanitizeDraftForStorage(input: Record<string, unknown>): StoredD
     uploadJob,
     ...(stableId(input.sightingId) ? { sightingId: input.sightingId } : {}),
     ...(stableId(input.ownerSubject) ? { ownerSubject: input.ownerSubject } : {}),
+    ...(continuation ? { identityContinuation: continuation } : {}),
     ...(typeof input.pendingMediaCleanupRef === 'string' && isReviewedMediaReference(input.pendingMediaCleanupRef)
       ? { pendingMediaCleanupRef: input.pendingMediaCleanupRef } : {}),
   };

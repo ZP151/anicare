@@ -1,18 +1,14 @@
 // Control-plane JSON (Auth and Edge responses) is intentionally bounded to 64 KiB.
 export const MAX_HARNESS_RESPONSE_BYTES = 64 * 1024;
 
-function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error && signal.reason.message === 'request_timeout'
-    ? signal.reason
-    : new Error('request_aborted');
-}
+function abortError(): Error { return new Error('request_aborted'); }
 
 async function settleBeforeAbort<T>(work: Promise<T>, signal: AbortSignal, cancel: () => void): Promise<T> {
   let removeAbortListener: () => void = () => {};
   const aborted = new Promise<never>((_resolve, reject) => {
     const abort = () => {
       cancel();
-      reject(abortError(signal));
+      reject(abortError());
     };
     if (signal.aborted) {
       abort();
@@ -78,13 +74,18 @@ export async function fetchWithTimeout(
   init: RequestInit = {},
   timeoutMs: number,
   fetchImplementation: typeof fetch = globalThis.fetch,
+  timeoutResult?: symbol,
 ): Promise<Response> {
   const controller = new AbortController();
   const callerSignal = init.signal;
   const abortForCaller = () => controller.abort(new Error('request_aborted'));
   if (callerSignal?.aborted) abortForCaller();
   else callerSignal?.addEventListener('abort', abortForCaller, { once: true });
-  const timeout = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error('request_aborted'));
+  }, timeoutMs);
   try {
     const response = await settleBeforeAbort(
       Promise.resolve(fetchImplementation(input, { ...init, signal: controller.signal })),
@@ -99,7 +100,11 @@ export async function fetchWithTimeout(
       headers: response.headers,
     });
     Object.defineProperty(buffered, 'redirected', { value: response.redirected });
+    Object.defineProperty(buffered, 'url', { value: response.url });
     return buffered;
+  } catch (error) {
+    if (timedOut) throw timeoutResult ?? new Error('request_timeout');
+    throw error;
   } finally {
     clearTimeout(timeout);
     callerSignal?.removeEventListener('abort', abortForCaller);

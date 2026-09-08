@@ -1,4 +1,5 @@
 export type PublicSupabaseConfig = Readonly<{ url: string; key: string }>;
+export type ServiceSupabaseConfig = Readonly<{ url: string; serviceRoleKey: string }>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -30,4 +31,11 @@ export function getAdminAppUrl(environment: Environment = process.env): string |
 
 export function isAdminLoginConfigured(environment: Environment = process.env): boolean {
   return getAdminPublicSupabaseConfig(environment) !== null && getAdminAppUrl(environment) !== null;
+}
+
+export function getAdminServiceSupabaseConfig(environment: Environment = process.env): ServiceSupabaseConfig | null {
+  const publicConfig = getAdminPublicSupabaseConfig(environment);
+  const serviceRoleKey = environment.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!publicConfig || !serviceRoleKey) return null;
+  return { url: publicConfig.url, serviceRoleKey };
 }

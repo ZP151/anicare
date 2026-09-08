@@ -51,6 +51,10 @@ export async function attachSightingToDraft(_id: string, _sightingId: string, _o
   return unavailable();
 }
 
+export async function clearIdentityContinuation(_id: string, _sightingId: string, _ownerSubject: string, _requestId: string): Promise<boolean> {
+  return unavailable();
+}
+
 export async function claimOfflineDraftOwner(_id: string, _ownerSubject: string): Promise<boolean> {
   return unavailable();
 }

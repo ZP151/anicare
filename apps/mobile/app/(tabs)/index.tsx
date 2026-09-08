@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ScreenScaffold } from '../../src/components/ScreenScaffold';
+import { DiscoveryList } from '../../src/following/DiscoveryList';
 import { listPublicSightings, type NarrowRpcClient, type PublicSighting } from '../../src/api/feed';
 import { getSupabaseClient } from '../../src/api/supabase';
 import { readSessionSubjectStrict } from '../../src/auth/session-subject';
@@ -46,6 +48,12 @@ function pickPublicCat(sightings: readonly PublicSighting[]): SelectedCatSummary
 }
 
 export default function NearbyScreen() {
+  const {locale,t}=useLocale();
+  if(getSupabaseClient())return <ScreenScaffold title={locale==='zh-CN'?'附近':'Nearby'} subtitle={locale==='zh-CN'?'延迟、粗略的社区活动':'Delayed, coarse community activity'}><View style={{height:220}}><NearbyMap fallbackLabel={t('map.mapUnavailable')}/></View><DiscoveryList/></ScreenScaffold>;
+  return <PreviewNearbyScreen/>;
+}
+
+function PreviewNearbyScreen() {
   const { locale, t } = useLocale();
   const router = useRouter();
   const client = getSupabaseClient() as unknown as NarrowRpcClient | null;
@@ -88,9 +96,10 @@ export default function NearbyScreen() {
         saveDraft: saveOfflineDraft,
         createId: Crypto.randomUUID,
         now: () => new Date(),
-      });
-      const params = opaqueAnimalId.test(selectedCat.animalId) ? { draftId, animalId: selectedCat.animalId } : { draftId };
-      router.push({ pathname: '/report/new', params } as never);
+      }, opaqueAnimalId.test(selectedCat.animalId)
+        ? { identityIntent: { kind: 'existing', animalId: selectedCat.animalId } }
+        : {});
+      router.push({ pathname: '/report/new', params: { draftId } } as never);
     } catch {
       const reportCopy = getReportCopy(locale);
       Alert.alert(reportCopy.storageUnavailableTitle, reportCopy.startFailed);

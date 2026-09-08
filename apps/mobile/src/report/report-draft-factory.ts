@@ -1,5 +1,5 @@
 import type { StoredDraft } from '../offline/draft-policy';
-import { createReportDraftPayload, type ReportAreaSelectionMode, type ReportDraftStep } from './report-draft';
+import { createReportDraftPayload, type ReportAreaSelectionMode, type ReportDraftStep, type ReportIdentityIntent } from './report-draft';
 import { isOpaqueReportId } from './ReportRouteShell';
 
 export type ReportDraftAuthSnapshot = Readonly<{
@@ -15,7 +15,7 @@ export type OwnerAwareReportDraftFactoryDependencies = Readonly<{
 
 export async function createOwnerAwareReportDraft(
   dependencies: OwnerAwareReportDraftFactoryDependencies,
-  options: Readonly<{ step?: ReportDraftStep; areaSelectionMode?: ReportAreaSelectionMode }> = {},
+  options: Readonly<{ step?: ReportDraftStep; areaSelectionMode?: ReportAreaSelectionMode; identityIntent?: Exclude<ReportIdentityIntent, null> }> = {},
 ): Promise<string> {
   const before = await dependencies.readAuthSnapshot();
   const id = dependencies.createId();
@@ -24,12 +24,18 @@ export async function createOwnerAwareReportDraft(
     creatorMode: before.ownerSubject ? 'authenticated' : 'anonymous',
     areaSelectionMode: options.areaSelectionMode,
   });
+  const identityRequestId = options.identityIntent ? dependencies.createId() : undefined;
+  if (identityRequestId && !isOpaqueReportId(identityRequestId)) throw new Error('invalid_draft_id');
   await dependencies.saveDraft({
     id,
     notes: '',
     risk: 'normal',
     ...(before.ownerSubject ? { ownerSubject: before.ownerSubject } : {}),
-    report: { ...report, ...(options.step ? { step: options.step } : {}) },
+    report: {
+      ...report,
+      ...(options.step ? { step: options.step } : {}),
+      ...(options.identityIntent ? { identityIntent: options.identityIntent, identityRequestId } : {}),
+    },
   });
   const after = await dependencies.readAuthSnapshot();
   if (after.ownerSubject !== before.ownerSubject) throw new Error('authentication_changed');

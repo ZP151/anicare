@@ -1,5 +1,10 @@
 # Iteration and launch plan
 
+> **2026-09-05：以下 Sprint 记录保留为历史计划，不再代表当前执行优先级或验收状态。**
+> 当前路线已升级为 [Iteration roadmap v3](iteration-roadmap-v3.md)，验收依据见
+> [全项目功能评审](reviews/2026-09-07-product-delivery-review.md)。Hosted producer 历史上已通过，
+> 但证据消费与 iOS 编译仍有阻塞；不能按下文旧的“尚未执行”继续安排工作。
+
 This sequence deliberately proves safety and identity quality before community growth.
 
 ## Sprint 0–1 — foundation (implemented baseline)
@@ -69,6 +74,16 @@ only locally, and use synthetic-only test data. They do not claim a candidate,
 Gate 2B, installation, or physical-device completion. Missing candidate or
 current hosted-readiness evidence remains an external blocker, not an
 authorization to dispatch or refresh anything.
+
+## Hosted Gate 2B producer (implemented, not yet executed)
+
+The protected producer, hosted synthetic harness, exact cleanup proof, workflow
+contract, and fail-closed evidence promotion command are implemented. The
+[operator runbook](runbooks/hosted-gate-2b.md) defines the credential,
+environment-approval, merge-commit, 72-hour refresh, and redaction boundaries.
+No hosted-readiness claim exists until the exact reviewed SHA completes a real
+owner-approved run and its validated evidence is committed. The real two-hour
+Storage-token expiry/replay gate remains open.
 
 ## Sprint 3A — complete mobile product surfaces (planned, required)
 
