@@ -18,3 +18,7 @@ __pycache__/
 .venv/
 supabase/.branches/
 supabase/.temp/
+/apps/mobile/ios/
+/apps/mobile/.ios-device-lab-staging/
+/apps/mobile/.ios-device-lab-derived-data/
+/apps/mobile/ios-device-lab-artifacts/

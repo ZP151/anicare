@@ -1,7 +1,13 @@
 {
   "expo": {
     "name": "WhiskerCommons",
-    "slug": "animalhelper",
+    "slug": "anicare",
+    "owner": "zhoupingdevs-team",
+    "extra": {
+      "eas": {
+        "projectId": "f9b84744-77c7-4b2b-8631-f107a8b98af8"
+      }
+    },
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "animalhelper",
