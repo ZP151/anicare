@@ -1,0 +1,51 @@
+{
+  "createdAt": "2026-09-08",
+  "purpose": "Labeled iPhone testing fixtures; not real community observations or AI evaluation data.",
+  "transform": "JPEG format encoding at quality 88, sRGB, no crop or visual retouching; metadata omitted.",
+  "assets": [
+    {
+      "file": "assets/orange.jpg",
+      "source": "synthetic_test",
+      "generator": "existing_project_generated_artwork",
+      "content": "One synthetic community cat; no actual sighting or identifiable person.",
+      "sha256": "133d6a2144fb1d088ff5f255012911ec44ccafe18c789881e08455e5770de1a2",
+      "width": 1033,
+      "height": 1523,
+      "bytes": 243318,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/white.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "One synthetic community cat; no actual sighting or identifiable person.",
+      "sha256": "33b8bb86a2423bef74d80a08689e896bf81cc3ab72559b9731deadc22c920527",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 363903,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/tabby.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "One synthetic community cat; no actual sighting or identifiable person.",
+      "sha256": "09a71dd81143dc46d868c75c1c2adef8add46eece9d7079b658574868bc8d46e",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 370833,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/tuxedo.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "One synthetic community cat; no actual sighting or identifiable person.",
+      "sha256": "6298b0c26185f757fa26736dad28bcab1bb5ab20ff758d4ebc4d7b8ccff671dd",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 360597,
+      "format": "jpeg"
+    }
+  ]
+}
