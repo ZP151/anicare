@@ -2,37 +2,7 @@ import postgres from 'postgres';
 
 import type { HostedGateEnvironment } from './environment.js';
 
-const MIGRATION_FILES = [
-  '202608260001_initial_core.sql',
-  '202608260002_retention_and_deletion.sql',
-  '202608270001_safe_media_staging.sql',
-  '202608270002_safe_public_and_safety_rpcs.sql',
-  '202608270003_moderation_actions.sql',
-  '202608270004_moderation_hold_safety.sql',
-  '202608270005_account_erasure_and_block_oracle.sql',
-  '202608270006_legacy_media_erasure_and_guard_hardening.sql',
-  '202608270007_sighting_submission_recovery.sql',
-  '202608290001_identity_review_control_plane.sql',
-  '202608310001_identity_assistance_job_foundation.sql',
-  '202608310002_identity_assistance_state_guards.sql',
-  '202608310003_identity_assistance_state_guards_review_fixes.sql',
-  '202608310004_identity_assistance_media_invalidation.sql',
-  '202608310005_identity_assistance_erasure_locking.sql',
-  '202608310006_identity_assistance_service_lifecycle.sql',
-  '202608310007_identity_assistance_service_completion.sql',
-  '202608310008_revoke_legacy_ai_proposal_bridge.sql',
-  '202608310009_report_manual_area_submission.sql',
-  '202608310010_my_reports_projection.sql',
-  '202609030001_finalize_media_preflight.sql',
-  '202609080001_m1_1_identity_continuation.sql',
-  '202609080002_identity_profile_completion.sql',
-  '202609080003_identity_review_workbench.sql',
-  '202609080004_public_cat_summary.sql',
-  '202609080005_completed_care.sql',
-  '202609080006_following_discovery.sql',
-  '202609080007_user_rights.sql',
-  '202609080008_cat_presentations.sql',
-] as const;
+import { REVIEWED_MIGRATIONS as MIGRATION_FILES } from '../../../scripts/pilot-gate-2b-inputs.mjs';
 
 export const EXPECTED_REMOTE_MIGRATIONS = MIGRATION_FILES.map((filename) => {
   const match = /^(\d{12,14})_(.+)\.sql$/.exec(filename);
