@@ -54,7 +54,7 @@ export function NearbyMap({
   }, [clearReadinessTimer, mapEnabled]);
 
   useEffect(()=>{
-    if(selected) mapRef.current?.animateToRegion({latitude:selected.center[1]!,longitude:selected.center[0]!,latitudeDelta:0.055,longitudeDelta:0.055},350);
+    if(selected) mapRef.current?.animateToRegion({latitude:selected.center[1]!,longitude:selected.center[0]!,latitudeDelta:selected.parentId?0.018:0.055,longitudeDelta:selected.parentId?0.018:0.055},350);
   },[selected?.id]);
 
   if (!mapEnabled || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;

@@ -22,7 +22,7 @@ it('connects a Singapore community, building and cat to real routes',async()=>{
 });
 it('filters by region and building and can switch to the list without requesting device location',async()=>{
  const view=await render(<MapScreen/>);await waitFor(()=>expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy());
- await fireEvent.changeText(view.getByLabelText('Search community, cat or building'),'Block 123');expect(view.getByText('1 cats · 1 planning areas')).toBeTruthy();
+ await fireEvent.changeText(view.getByLabelText('Search community, cat or building'),'Block 123');expect(view.getByText('1 cats · 2 areas / neighbourhoods')).toBeTruthy();
  await fireEvent.press(view.getByText('North'));expect(view.getByText('No matching community, cat or building.')).toBeTruthy();
  await fireEvent.press(view.getByRole('button',{name:'Show all Singapore'}));expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy();
  await fireEvent.press(view.getByRole('button',{name:'Toggle map and list'}));expect(view.queryByText('Apple map boundary')).toBeNull();
@@ -31,7 +31,7 @@ it('filters by region and building and can switch to the list without requesting
 it('retains geography during a failed feed and retries without inventing sample cats',async()=>{
  mockFeed.mockRejectedValueOnce(new Error('offline'));const view=await render(<MapScreen/>);
  await waitFor(()=>expect(view.getByText('Activity could not load. Tap to retry.')).toBeTruthy());
- expect(view.getByText('0 cats · 55 planning areas')).toBeTruthy();expect(view.queryByText('Pepper')).toBeNull();
+ expect(view.getByText('Activity not loaded')).toBeTruthy();expect(view.queryByText('Pepper')).toBeNull();
  await fireEvent.press(view.getByText('Activity could not load. Tap to retry.'));
  await waitFor(()=>expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy());await view.unmount();
 });

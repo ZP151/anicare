@@ -12,7 +12,7 @@ import { GlassSurface } from '../../src/design/GlassSurface';
 import { useNativeColors } from '../../src/design/native-colors';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { NearbyMap } from '../../src/maps/NearbyMap';
-import { buildSingaporeAreas, filterSingaporeAreas, SG_COMMUNITIES, SG_REGIONS, type SingaporeArea } from '../../src/maps/singapore-communities';
+import { buildSingaporeAreas, filterSingaporeAreas, communityLabel, SG_COMMUNITIES, SG_REGIONS, type SingaporeArea } from '../../src/maps/singapore-communities';
 
 export default function MapScreen(){
  const {locale}=useLocale(); const cn=locale==='zh-CN'; const router=useRouter(); const colors=useNativeColors(); const styles=makeStyles(colors);
@@ -40,11 +40,13 @@ export default function MapScreen(){
    finally{if(ticket===generation.current){busy.current=false;setLoading(false);}}
  },[client,locale,desiredCommunity]);
  useEffect(()=>{void load();const unsubscribe=subscribeSessionSubject(()=>{void load();});return()=>{generation.current++;unsubscribe();};},[load]);
- const filtered=filterSingaporeAreas(areas,region,query); const selected=filtered.find(area=>area.id===selectedId);
+ const filtered=filterSingaporeAreas(areas,region,query); const selected=areas.find(area=>area.id===selectedId);
+ const children=selected?areas.filter(area=>area.parentId===selected.id):[];
+ const mapAreas=selected?[selected,...children]:filtered;
  const catCount=new Set(filtered.flatMap(area=>area.cats.map(cat=>cat.animalId))).size;
  const openCommunity=(area?:SingaporeArea)=>router.push((area?`/community?communitySlug=${area.id}`:'/community') as never);
  return <View style={styles.screen}>
-   {!listOnly&&<View style={StyleSheet.absoluteFill}><NearbyMap key={mapKey} areas={filtered} selectedAreaId={selectedId} onSelectArea={setSelectedId} fallbackLabel={cn?'地图暂不可用，下方仍可浏览社区。':'Map unavailable. Browse communities below.'}/></View>}
+   {!listOnly&&<View style={StyleSheet.absoluteFill}><NearbyMap key={mapKey} areas={mapAreas} selectedAreaId={selectedId} onSelectArea={setSelectedId} fallbackLabel={cn?'地图暂不可用，下方仍可浏览社区。':'Map unavailable. Browse communities below.'}/></View>}
    <SafeAreaView edges={['top']} style={styles.overlay} pointerEvents="box-none">
      <GlassSurface style={styles.header}>
        <View style={styles.heading}><View style={{flex:1}}><Text style={styles.kicker}>SINGAPORE</Text><Text style={styles.title}>{cn?'社区猫地图':'Community cats'}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={cn?'社区讨论':'Community discussions'} onPress={()=>openCommunity()} style={styles.icon}><AppIcon name="mail" color={colors.actionPrimary}/></Pressable></View>
@@ -53,19 +55,23 @@ export default function MapScreen(){
      </GlassSurface>
      <View style={styles.space} pointerEvents="box-none"><View style={styles.controls}><GlassSurface style={styles.round}><Pressable accessibilityRole="button" accessibilityLabel={cn?'显示全岛':'Show all Singapore'} onPress={()=>{setSelectedId(null);setRegion('all');setQuery('');setMapKey(k=>k+1);}} style={styles.icon}><AppIcon name="location" color={colors.actionPrimary}/></Pressable></GlassSurface><GlassSurface style={styles.round}><Pressable accessibilityRole="button" accessibilityLabel={cn?'切换地图与列表':'Toggle map and list'} onPress={()=>setListOnly(value=>!value)} style={styles.icon}><AppIcon name="reports" color={colors.actionPrimary}/></Pressable></GlassSurface></View></View>
      <View style={[styles.panel,listOnly&&styles.expanded]}>
-       <View style={styles.heading}>{selected?<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回社区列表':'Back to communities'} onPress={()=>setSelectedId(null)} style={styles.icon}><AppIcon name="back" color={colors.actionPrimary}/></Pressable>:null}<View style={{flex:1}}><Text style={styles.panelTitle}>{selected?.name??(cn?'探索社区':'Explore communities')}</Text><Text style={styles.meta}>{selected?(cn?`${selected.cats.length} 只猫 · 延迟公开活动`:`${selected.cats.length} cats · delayed activity`):(cn?`${catCount} 只猫 · ${filtered.length} 个规划区`:`${catCount} cats · ${filtered.length} planning areas`)}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={cn?'刷新':'Refresh'} onPress={()=>void load()} style={styles.icon}><AppIcon name="activity" color={colors.actionPrimary}/></Pressable></View>
+       <View style={styles.heading}>{selected?<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回社区列表':'Back to communities'} onPress={()=>setSelectedId(selected.parentId??null)} style={styles.icon}><AppIcon name="back" color={colors.actionPrimary}/></Pressable>:null}<View style={{flex:1}}><Text style={styles.panelTitle}>{selected?communityLabel(selected,locale):(cn?'探索社区':'Explore communities')}</Text><Text style={styles.meta}>{error?(cn?'活动暂未载入':'Activity not loaded'):selected?(cn?`${selected.cats.length} 只猫 · 延迟公开活动`:`${selected.cats.length} cats · delayed activity`):(cn?`${catCount} 只猫 · ${filtered.length} 个${query.trim()?'区域 / 邻里':'规划区'}`:`${catCount} cats · ${filtered.length} ${query.trim()?'areas / neighbourhoods':'planning areas'}`)}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={cn?'刷新':'Refresh'} onPress={()=>void load()} style={styles.icon}><AppIcon name="activity" color={colors.actionPrimary}/></Pressable></View>
        {loading?<ActivityIndicator accessibilityLabel={cn?'加载社区活动':'Loading community activity'} color={colors.actionPrimary}/>:null}
        {error?<Pressable accessibilityRole="button" onPress={()=>void load()}><Text style={styles.error}>{cn?'活动暂未载入，点此重试':'Activity could not load. Tap to retry.'}</Text></Pressable>:null}
        <ScrollView contentContainerStyle={styles.rows} showsVerticalScrollIndicator={false}>
          {selected?<>
-           <Text style={styles.meta}>{cn?'楼栋 / 项目名称由报告者提供，不代表固定住址。':'Building / project names are reported context, not a fixed home.'}</Text>
+           <Text style={styles.meta}>{selected.parentId?`${communityLabel(SG_COMMUNITIES.find(a=>a.id===selected.parentId)!,locale)} › ${communityLabel(selected,locale)}`:(cn?`${children.length} 个邻里`:`${children.length} neighbourhoods`)}</Text>
+           {children.map(child=><Pressable key={child.id} accessibilityRole="button" onPress={()=>setSelectedId(child.id)} style={styles.row}><AppIcon name="location" color={colors.actionPrimary}/><View style={{flex:1}}><Text style={styles.name}>{communityLabel(child,locale)}</Text></View><Text style={styles.count}>{error?'—':child.cats.length}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>)}
+
+
            {selected.cats.map(cat=><Pressable accessibilityRole="button" key={cat.animalId} onPress={()=>router.push(`/cat/${cat.animalId}` as never)} style={styles.row}><View style={styles.avatar}><AppIcon name="cat" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{cat.alias}</Text><Text style={styles.meta}>{cat.residenceType?`${cat.residenceType==='hdb'?'HDB':cat.residenceType==='condo'?'Condo':cn?'其他':'Other'} · ${cat.residenceName}`:cn?'楼栋信息未提供':'Building not provided'}</Text><Text style={styles.meta}>{cat.timeLabel}</Text></View><AppIcon name="chevron" color={colors.muted} size={16}/></Pressable>)}
-           {!selected.cats.length&&!loading?<Text style={styles.meta}>{cn?'这里尚无已公开的猫记录。可报告目击，或发起社区讨论。':'No public cat records here yet. Report a sighting or start a discussion.'}</Text>:null}
+           {!selected.cats.length&&!loading&&!error?<Text style={styles.meta}>{cn?'这里尚无已公开的猫记录。可报告目击，或发起社区讨论。':'No public cat records here yet. Report a sighting or start a discussion.'}</Text>:null}
            <View style={styles.actions}><Pressable accessibilityRole="button" onPress={()=>router.push('/report' as never)} style={styles.primary}><Text style={styles.primaryText}>{cn?'报告目击':'Report sighting'}</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>openCommunity(selected)} style={styles.secondary}><Text style={styles.chipText}>{cn?'社区讨论':'Discuss'}</Text></Pressable></View>
-         </>:filtered.map(area=><Pressable accessibilityRole="button" accessibilityLabel={`${area.name}, ${area.cats.length} ${cn?'只猫':'cats'}`} key={area.id} onPress={()=>setSelectedId(area.id)} style={styles.row}><View style={styles.avatar}><AppIcon name="location" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{area.name}</Text><Text style={styles.meta}>{SG_REGIONS.find(item=>item.id===area.region)?.[cn?'zh':'en']}</Text></View><Text style={styles.count}>{area.cats.length}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>)}
+         </>:filtered.map(area=><Pressable accessibilityRole="button" accessibilityLabel={`${communityLabel(area,locale)}, ${area.cats.length} ${cn?'只猫':'cats'}`} key={area.id} onPress={()=>setSelectedId(area.id)} style={styles.row}><View style={styles.avatar}><AppIcon name="location" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{communityLabel(area,locale)}</Text><Text style={styles.meta}>{area.parentId?`${SG_COMMUNITIES.find(p=>p.id===area.parentId)?.name} · ${cn?'邻里':'Neighbourhood'}`:SG_REGIONS.find(item=>item.id===area.region)?.[cn?'zh':'en']}</Text></View><Text style={styles.count}>{error?'—':area.cats.length}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>)}
          {!filtered.length?<Text style={styles.meta}>{cn?'没有匹配的社区、猫或楼栋。':'No matching community, cat or building.'}</Text>:null}
          {hasMore?<Pressable accessibilityRole="button" disabled={loading} onPress={()=>void load(false)} style={styles.secondary}><Text style={styles.chipText}>{cn?'载入更多活动':'Load more activity'}</Text></Pressable>:null}
-         <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://data.gov.sg/datasets/d_2cc750190544007400b2cfd5d7f53209/view')}><Text style={styles.credit}>URA Master Plan 2025 · Singapore Open Data Licence</Text></Pressable>
+         <Pressable accessibilityRole="link" onPress={()=>router.push('/community/geography' as never)}><Text style={styles.credit}>{cn?'社区与官方划分说明':'About communities and official boundaries'}</Text></Pressable>
+         <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL(selected?.parentId?'https://data.gov.sg/datasets/d_8594ae9ff96d0c708bc2af633048edfb/view':'https://data.gov.sg/datasets/d_2cc750190544007400b2cfd5d7f53209/view')}><Text style={styles.credit}>{selected?.parentId?'URA MP2019 · Subzones':'URA MP2025 · Planning areas'} · Singapore Open Data Licence</Text></Pressable>
        </ScrollView>
      </View>
    </SafeAreaView>

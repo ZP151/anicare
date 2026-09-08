@@ -8,23 +8,26 @@
         "projectId": "f9b84744-77c7-4b2b-8631-f107a8b98af8"
       }
     },
-    "version": "0.2.0",
+    "version": "0.2.1",
     "orientation": "portrait",
     "scheme": "animalhelper",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "4",
+      "buildNumber": "5",
       "bundleIdentifier": "sg.animalhelper.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choose a cat photo to create a private reviewed copy. Selected source media is never uploaded.",
         "NSCameraUsageDescription": "Take a cat photo for private review and redaction. Source media is never uploaded."
-      }
+      },
+      "icon": "./assets/app-icon-v1.png"
     },
     "android": {
       "package": "sg.animalhelper.app",
-      "permissions": ["android.permission.CAMERA"],
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -62,6 +65,7 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "icon": "./assets/app-icon-v1.png"
   }
 }

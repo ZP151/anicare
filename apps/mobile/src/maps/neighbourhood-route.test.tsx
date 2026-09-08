@@ -1,0 +1,26 @@
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+const mockPush=jest.fn(); let mockParams:Record<string,string>={};
+jest.mock('expo-router',()=>({useRouter:()=>({push:mockPush}),useLocalSearchParams:()=>mockParams}));
+jest.mock('../api/supabase',()=>({getSupabaseClient:()=>null}));
+jest.mock('../auth/session-subject',()=>({readSessionSubjectStrict:async()=>null,subscribeSessionSubject:()=>()=>{}}));
+jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
+jest.mock('./NearbyMap',()=>({NearbyMap:()=>null}));
+import MapScreen from '../../app/(tabs)/map';
+beforeEach(()=>{mockPush.mockReset();mockParams={};});
+it('drills from Clementi to West Coast, opens its discussion, and returns to the parent',async()=>{
+ const view=await render(<MapScreen/>);
+ await fireEvent.changeText(view.getByLabelText('搜索社区、猫或楼栋'),'金文泰');
+ await fireEvent.press(view.getByLabelText('金文泰 · Clementi, 0 只猫'));
+ await fireEvent.press(view.getByText('西海岸 · West Coast'));
+ expect(view.getByText('金文泰 · Clementi › 西海岸 · West Coast')).toBeTruthy();
+ await fireEvent.press(view.getByText('社区讨论'));expect(mockPush).toHaveBeenCalledWith('/community?communitySlug=sg-clsz05');
+ await fireEvent.press(view.getByLabelText('返回社区列表'));
+ expect(view.getByText('金文泰西 · Clementi West')).toBeTruthy();
+ await view.unmount();
+});
+it('resolves a neighbourhood deep link even when the initial list contains only planning areas',async()=>{
+ mockParams={communityId:'sg-clsz05'};
+ const view=await render(<MapScreen/>);
+ await waitFor(()=>expect(view.getByText('金文泰 · Clementi › 西海岸 · West Coast')).toBeTruthy());
+ await view.unmount();
+});
