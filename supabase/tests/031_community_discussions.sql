@@ -1,8 +1,9 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(33);
 
 set local session_replication_role = replica;
+insert into auth.users(id,email,created_at,updated_at) values ('00000000-0000-4000-8000-000000003101','author-community@example.test',now(),now());
 insert into public.user_profiles (id, public_name, adult_confirmed_at) values
  ('00000000-0000-4000-8000-000000003101','Author',now()),
  ('00000000-0000-4000-8000-000000003102','Reader',now()),
@@ -105,6 +106,13 @@ insert into public.community_posts(author_id,body,community_slug) values('000000
 select lives_ok($$delete from public.user_profiles where id='00000000-0000-4000-8000-000000003107'$$,'community-only profile erasure succeeds');
 select ok((select author_id is null from public.community_posts where body='Erasure post'),'erasure nulls post author');
 select is((select author->>'avatarKey' from public.list_public_community_posts(null,20,'harbor-cats',null) where body='Erasure post'),'cat','erased author has default avatar');
+
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003101',true);
+select lives_ok($$select * from public.request_account_erasure('00000000-0000-4000-8000-000000003211')$$,'author can request account erasure');
+select throws_ok($$select public.create_community_post('After erasure request',null,'harbor-cats','00000000-0000-4000-8000-000000003212')$$,'42501','adult_contributor_required','pending erasure blocks new community posts');
+reset role;
 
 select * from finish();
 rollback;

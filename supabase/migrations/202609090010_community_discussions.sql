@@ -29,91 +29,6 @@ grant select,insert,update,delete on table public.community_posts,public.communi
 alter table public.moderation_reports drop constraint if exists moderation_reports_content_type_check;
 alter table public.moderation_reports add constraint moderation_reports_content_type_check check (content_type in ('sighting','user','community_post','community_reply'));
 
-create or replace function private.community_target_available(p_type text,p_id uuid,p_actor uuid) returns table(author_id uuid) language sql stable security definer set search_path=pg_catalog as $$
- select p.author_id from public.community_posts p where p_type='community_post' and p.id=p_id and p.deleted_at is null
- and (p.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=p_actor and b.blocked_id=p.author_id) or (b.blocker_id=p.author_id and b.blocked_id=p_actor)))
- union all
- select r.author_id from public.community_replies r join public.community_posts p on p.id=r.post_id where p_type='community_reply' and r.id=p_id and r.deleted_at is null and p.deleted_at is null
- and (r.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=p_actor and b.blocked_id=r.author_id) or (b.blocker_id=r.author_id and b.blocked_id=p_actor)));
-$$;
-
-create or replace function public.list_public_community_posts(p_cursor uuid default null,p_limit integer default 20,p_community_slug text default null,p_cat_id uuid default null)
-returns table("postId" uuid,body text,"catId" uuid,"communitySlug" text,"createdAt" timestamptz,author jsonb,"replyCount" integer,"canDelete" boolean,cursor uuid)
-language plpgsql stable security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_created timestamptz; v_id uuid;
-begin
- if p_community_slug is not null and p_community_slug !~ '^[a-z0-9][a-z0-9-]{0,79}$' then raise exception 'invalid_community_scope' using errcode='22023'; end if;
- if p_cursor is not null then select created_at,id into v_created,v_id from public.community_posts where id=p_cursor and deleted_at is null and moderation_hidden_at is null; if not found then raise exception 'invalid_community_cursor' using errcode='P0001'; end if; end if;
- return query select p.id,p.body,p.cat_id,p.community_slug,p.created_at,
-  jsonb_build_object('name',coalesce(profile.public_name,'Community member'),'avatarKey',coalesce(profile.avatar_key,'cat')),
-  (select count(*)::integer from public.community_replies r where r.post_id=p.id and r.deleted_at is null and (v_actor is null or r.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=v_actor and b.blocked_id=r.author_id) or (b.blocker_id=r.author_id and b.blocked_id=v_actor)))),(v_actor is not null and p.author_id=v_actor),p.id
- from public.community_posts p left join public.user_profiles profile on profile.id=p.author_id
- where p.deleted_at is null and p.moderation_hidden_at is null and (p.cat_id is null or private.is_public_cat_available(p.cat_id,v_actor)) and (p_community_slug is null or p.community_slug=p_community_slug) and (p_cat_id is null or p.cat_id=p_cat_id)
- and (v_actor is null or p.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=v_actor and b.blocked_id=p.author_id) or (b.blocker_id=p.author_id and b.blocked_id=v_actor)))
- and (p_cursor is null or (p.created_at,p.id)<(v_created,v_id)) order by p.created_at desc,p.id desc limit least(greatest(coalesce(p_limit,20),1),50);
-end $$;
-
-create or replace function public.block_community_author(p_content_type text,p_content_id uuid,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_author uuid;
-begin
- if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
- if p_content_type not in ('community_post','community_reply') or p_content_id is null or p_request_id is null then raise exception 'invalid_community_block' using errcode='22023'; end if;
- select author_id into v_author from private.community_target_available(p_content_type,p_content_id,v_actor); if not found or v_author is null or v_author=v_actor then raise exception 'target_not_available' using errcode='P0001'; end if;
- perform public.block_user(v_author,p_request_id); return p_request_id;
-end $$;
-
-create or replace function public.list_public_community_replies(p_post_id uuid,p_cursor uuid default null,p_limit integer default 30)
-returns table("replyId" uuid,body text,"createdAt" timestamptz,author jsonb,cursor uuid)
-language plpgsql stable security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_created timestamptz; v_id uuid;
-begin
- if not exists(select 1 from public.community_posts p where p.id=p_post_id and p.deleted_at is null and p.moderation_hidden_at is null and (p.cat_id is null or private.is_public_cat_available(p.cat_id,v_actor)) and (p.author_id is null or v_actor is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=v_actor and b.blocked_id=p.author_id) or (b.blocker_id=p.author_id and b.blocked_id=v_actor)))) then raise exception 'community_post_not_available' using errcode='P0001'; end if;
- if p_cursor is not null then select created_at,id into v_created,v_id from public.community_replies where id=p_cursor and post_id=p_post_id and deleted_at is null; if not found then raise exception 'invalid_community_cursor' using errcode='P0001'; end if; end if;
- return query select r.id,r.body,r.created_at,jsonb_build_object('name',coalesce(profile.public_name,'Community member'),'avatarKey',coalesce(profile.avatar_key,'cat')),r.id
- from public.community_replies r left join public.user_profiles profile on profile.id=r.author_id where r.post_id=p_post_id and r.deleted_at is null
- and (v_actor is null or r.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=v_actor and b.blocked_id=r.author_id) or (b.blocker_id=r.author_id and b.blocked_id=v_actor)))
- and (p_cursor is null or (r.created_at,r.id)>(v_created,v_id)) order by r.created_at asc,r.id asc limit least(greatest(coalesce(p_limit,30),1),50);
-end $$;
-
-create or replace function public.create_community_post(p_body text,p_cat_id uuid,p_community_slug text,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_body text:=nullif(pg_catalog.btrim(p_body),''); v_prior private.safety_requests%rowtype; v_id uuid;
-begin
- if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
- if not exists(select 1 from public.user_profiles where id=v_actor and adult_confirmed_at is not null and adult_confirmed_at<=pg_catalog.now()) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
- if v_body is null or pg_catalog.char_length(v_body)>2000 or p_request_id is null or (p_community_slug is not null and p_community_slug !~ '^[a-z0-9][a-z0-9-]{0,79}$') or (p_cat_id is null and p_community_slug is null) then raise exception 'invalid_community_post' using errcode='22023'; end if;
- if p_cat_id is not null and not private.is_public_cat_available(p_cat_id,v_actor) then raise exception 'community_cat_not_available' using errcode='P0001'; end if;
- perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.safety_requests where actor_id=v_actor and request_id=p_request_id for update;
- if found then if v_prior.operation<>'community_post' then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return v_prior.result_id; end if;
- insert into public.community_posts(author_id,body,cat_id,community_slug) values(v_actor,v_body,p_cat_id,p_community_slug) returning id into v_id;
- insert into private.safety_requests(actor_id,request_id,operation,target_id,payload_hash,result_id) values(v_actor,p_request_id,'community_post',v_id,pg_catalog.encode(extensions.digest(v_body,'sha256'),'hex'),v_id);
- return v_id;
-end $$;
-
-create or replace function public.create_community_reply(p_post_id uuid,p_body text,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_body text:=nullif(pg_catalog.btrim(p_body),''); v_prior private.safety_requests%rowtype; v_id uuid;
-begin
- if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
- if not exists(select 1 from public.user_profiles where id=v_actor and adult_confirmed_at is not null and adult_confirmed_at<=pg_catalog.now()) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
- if v_body is null or pg_catalog.char_length(v_body)>2000 or p_request_id is null then raise exception 'invalid_community_reply' using errcode='22023'; end if;
- perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.safety_requests where actor_id=v_actor and request_id=p_request_id for update;
- if found then if v_prior.operation<>'community_reply' or v_prior.target_id<>p_post_id then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return v_prior.result_id; end if;
- if not exists(select 1 from public.community_posts where id=p_post_id and deleted_at is null) then raise exception 'community_post_not_available' using errcode='P0001'; end if;
- insert into public.community_replies(post_id,author_id,body) values(p_post_id,v_actor,v_body) returning id into v_id;
- insert into private.safety_requests(actor_id,request_id,operation,target_id,payload_hash,result_id) values(v_actor,p_request_id,'community_reply',p_post_id,pg_catalog.encode(extensions.digest(v_body,'sha256'),'hex'),v_id);
- return v_id;
-end $$;
-
-create or replace function public.delete_community_content(p_content_type text,p_content_id uuid,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_prior private.safety_requests%rowtype;
-begin
- if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if; if p_content_type not in ('community_post','community_reply') or p_content_id is null or p_request_id is null then raise exception 'invalid_community_delete' using errcode='22023'; end if;
- perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.safety_requests where actor_id=v_actor and request_id=p_request_id for update;
- if found then if v_prior.operation<>'community_delete' or v_prior.target_id<>p_content_id then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return p_request_id; end if;
- if p_content_type='community_post' then update public.community_posts set deleted_at=pg_catalog.now() where id=p_content_id and author_id=v_actor and deleted_at is null; else update public.community_replies set deleted_at=pg_catalog.now() where id=p_content_id and author_id=v_actor and deleted_at is null; end if;
- if not found then raise exception 'community_content_not_available' using errcode='P0001'; end if;
- insert into private.safety_requests(actor_id,request_id,operation,target_id,payload_hash,result_id) values(v_actor,p_request_id,'community_delete',p_content_id,pg_catalog.repeat('0',64),p_request_id); return p_request_id;
-end $$;
-
 create table if not exists private.community_report_requests (
  actor_id uuid not null references public.user_profiles(id) on delete cascade, request_id uuid not null, content_type text not null check(content_type in ('community_post','community_reply')), content_id uuid not null, reason text not null, detail text, result_id uuid references public.moderation_reports(id) on delete set null, primary key(actor_id,request_id)
 );
@@ -121,7 +36,7 @@ alter table private.community_report_requests enable row level security;
 revoke all on table private.community_report_requests from public,anon,authenticated,service_role;
 
 create or replace function public.create_community_moderation_report(p_content_type text,p_content_id uuid,p_reason_code text,p_detail text,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_author uuid; v_detail text:=nullif(pg_catalog.btrim(p_detail),''); v_risk public.risk_tier; v_status public.moderation_status; v_due timestamptz; v_report uuid; v_prior private.community_report_requests%rowtype;
+declare v_actor uuid:=auth.uid(); v_author uuid; v_parent uuid; v_detail text:=nullif(pg_catalog.btrim(p_detail),''); v_risk public.risk_tier; v_status public.moderation_status; v_due timestamptz; v_report uuid; v_prior private.community_report_requests%rowtype;
 begin
  if v_actor is null or not exists(select 1 from public.user_profiles where id=v_actor and adult_confirmed_at is not null and adult_confirmed_at<=pg_catalog.now()) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
  if p_content_type not in ('community_post','community_reply') or p_content_id is null or p_reason_code not in ('spam','harassment','unsafe_location','animal_welfare','graphic_content','misinformation','precise_location_exposure','animal_in_immediate_danger') or p_request_id is null or (p_detail is not null and v_detail is null) or pg_catalog.char_length(coalesce(v_detail,''))>1000 then raise exception 'invalid_report_request' using errcode='22023'; end if;
@@ -172,6 +87,12 @@ create or replace function private.community_post_available(p_post_id uuid,p_act
    and (p_actor is null or p.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=p_actor and b.blocked_id=p.author_id) or (b.blocker_id=p.author_id and b.blocked_id=p_actor))));
 $$;
 
+create or replace function private.community_mutation_eligible(p_actor uuid) returns boolean language sql stable security definer set search_path=pg_catalog as $$
+ select p_actor is not null
+   and exists(select 1 from public.user_profiles p where p.id=p_actor and p.adult_confirmed_at is not null and p.adult_confirmed_at<=pg_catalog.now())
+   and not exists(select 1 from private.account_erasure_requests e where e.target_subject_id=p_actor and e.status<>'completed');
+$$;
+
 create or replace function private.community_target_available(p_type text,p_id uuid,p_actor uuid) returns table(author_id uuid) language sql stable security definer set search_path=pg_catalog as $$
  select p.author_id from public.community_posts p
  where p_type='community_post' and p.id=p_id and private.community_post_available(p.id,p_actor)
@@ -182,7 +103,7 @@ create or replace function private.community_target_available(p_type text,p_id u
    and (p_actor is null or r.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=p_actor and b.blocked_id=r.author_id) or (b.blocker_id=r.author_id and b.blocked_id=p_actor)));
 $$;
 
-create table private.community_block_requests (
+create table if not exists private.community_block_requests (
  actor_id uuid not null references public.user_profiles(id) on delete cascade,
  request_id uuid not null,
  content_type text not null check(content_type in ('community_post','community_reply')),
@@ -227,7 +148,7 @@ begin
  and (p_cursor is null or (p.created_at,p.id)<(v_created,v_id)) order by p.created_at desc,p.id desc limit least(greatest(coalesce(p_limit,20),1),50);
 end $$;
 
-create function public.get_public_community_post(p_post_id uuid)
+create or replace function public.get_public_community_post(p_post_id uuid)
 returns table("postId" uuid,body text,"catId" uuid,"communitySlug" text,"createdAt" timestamptz,author jsonb,"replyCount" integer,"canDelete" boolean,cursor uuid)
 language sql stable security definer set search_path=pg_catalog as $$
  select p.id,p.body,p.cat_id,p.community_slug,p.created_at,jsonb_build_object('name',coalesce(profile.public_name,'Community member'),'avatarKey',coalesce(profile.avatar_key,'cat')),
@@ -252,7 +173,7 @@ create or replace function public.create_community_post(p_body text,p_cat_id uui
 declare v_actor uuid:=auth.uid(); v_body text:=nullif(pg_catalog.btrim(p_body),''); v_prior private.safety_requests%rowtype; v_id uuid; v_hash text;
 begin
  if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
- if not exists(select 1 from public.user_profiles where id=v_actor and adult_confirmed_at is not null and adult_confirmed_at<=pg_catalog.now()) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
+ if not private.community_mutation_eligible(v_actor) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
  if v_body is null or pg_catalog.char_length(v_body)>2000 or p_request_id is null or (p_community_slug is not null and p_community_slug !~ '^[a-z0-9][a-z0-9-]{0,79}$') or (p_cat_id is null and p_community_slug is null) then raise exception 'invalid_community_post' using errcode='22023'; end if;
  if p_cat_id is not null and not private.is_public_cat_available(p_cat_id,v_actor) then raise exception 'community_cat_not_available' using errcode='P0001'; end if;
  v_hash:=pg_catalog.encode(extensions.digest(pg_catalog.jsonb_build_object('body',v_body,'catId',p_cat_id,'communitySlug',p_community_slug)::text,'sha256'),'hex');
@@ -266,27 +187,43 @@ create or replace function public.create_community_reply(p_post_id uuid,p_body t
 declare v_actor uuid:=auth.uid(); v_body text:=nullif(pg_catalog.btrim(p_body),''); v_prior private.safety_requests%rowtype; v_id uuid; v_hash text;
 begin
  if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
- if not exists(select 1 from public.user_profiles where id=v_actor and adult_confirmed_at is not null and adult_confirmed_at<=pg_catalog.now()) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
+ if not private.community_mutation_eligible(v_actor) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
  if p_post_id is null or v_body is null or pg_catalog.char_length(v_body)>2000 or p_request_id is null then raise exception 'invalid_community_reply' using errcode='22023'; end if;
  v_hash:=pg_catalog.encode(extensions.digest(pg_catalog.jsonb_build_object('postId',p_post_id,'body',v_body)::text,'sha256'),'hex');
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.safety_requests where actor_id=v_actor and request_id=p_request_id for update;
  if found then if v_prior.operation is distinct from 'community_reply' or v_prior.target_id is distinct from p_post_id or v_prior.payload_hash is distinct from v_hash then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return v_prior.result_id; end if;
- if not private.community_post_available(p_post_id,v_actor) then raise exception 'community_post_not_available' using errcode='P0001'; end if;
+ perform 1 from public.community_posts p where p.id=p_post_id for update;
+ if not found or not private.community_post_available(p_post_id,v_actor) then raise exception 'community_post_not_available' using errcode='P0001'; end if;
  insert into public.community_replies(post_id,author_id,body) values(p_post_id,v_actor,v_body) returning id into v_id;
  insert into private.safety_requests(actor_id,request_id,operation,target_id,payload_hash,result_id) values(v_actor,p_request_id,'community_reply',p_post_id,v_hash,v_id); return v_id;
 end $$;
 
-create table private.community_moderation_holds(content_type text not null check(content_type in ('community_post','community_reply')),content_id uuid not null,source_report_id uuid primary key references public.moderation_reports(id) on delete cascade,released_at timestamptz);
+create or replace function public.delete_community_content(p_content_type text,p_content_id uuid,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
+declare v_actor uuid:=auth.uid(); v_prior private.safety_requests%rowtype;
+begin
+ if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
+ if p_content_type is null or p_content_type not in ('community_post','community_reply') or p_content_id is null or p_request_id is null then raise exception 'invalid_community_delete' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.safety_requests where actor_id=v_actor and request_id=p_request_id for update;
+ if found then if v_prior.operation is distinct from 'community_delete' or v_prior.target_id is distinct from p_content_id then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return p_request_id; end if;
+ if p_content_type='community_post' then update public.community_posts set deleted_at=pg_catalog.now() where id=p_content_id and author_id=v_actor and deleted_at is null;
+ else perform 1 from public.community_posts p join public.community_replies r on r.post_id=p.id where r.id=p_content_id for update of p; if found then update public.community_replies set deleted_at=pg_catalog.now() where id=p_content_id and author_id=v_actor and deleted_at is null; end if; end if;
+ if not found then raise exception 'community_content_not_available' using errcode='P0001'; end if;
+ insert into private.safety_requests(actor_id,request_id,operation,target_id,payload_hash,result_id) values(v_actor,p_request_id,'community_delete',p_content_id,pg_catalog.repeat('0',64),p_request_id); return p_request_id;
+end $$;
+
+create table if not exists private.community_moderation_holds(content_type text not null check(content_type in ('community_post','community_reply')),content_id uuid not null,source_report_id uuid primary key references public.moderation_reports(id) on delete cascade,released_at timestamptz);
 alter table private.community_moderation_holds enable row level security;
 revoke all on table private.community_moderation_holds from public,anon,authenticated,service_role;
 
 create or replace function public.create_community_moderation_report(p_content_type text,p_content_id uuid,p_reason_code text,p_detail text,p_request_id uuid) returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_author uuid; v_detail text:=nullif(pg_catalog.btrim(p_detail),''); v_risk public.risk_tier; v_status public.moderation_status; v_due timestamptz; v_report uuid; v_prior private.community_report_requests%rowtype;
+declare v_actor uuid:=auth.uid(); v_author uuid; v_parent uuid; v_detail text:=nullif(pg_catalog.btrim(p_detail),''); v_risk public.risk_tier; v_status public.moderation_status; v_due timestamptz; v_report uuid; v_prior private.community_report_requests%rowtype;
 begin
- if v_actor is null or not exists(select 1 from public.user_profiles where id=v_actor and adult_confirmed_at is not null and adult_confirmed_at<=pg_catalog.now()) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
+ if not private.community_mutation_eligible(v_actor) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
  if p_content_type is null or p_content_type not in ('community_post','community_reply') or p_content_id is null or p_reason_code is null or p_reason_code not in ('spam','harassment','unsafe_location','animal_welfare','graphic_content','misinformation','precise_location_exposure','animal_in_immediate_danger') or p_request_id is null or (p_detail is not null and v_detail is null) or pg_catalog.char_length(coalesce(v_detail,''))>1000 then raise exception 'invalid_report_request' using errcode='22023'; end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_actor::text||':'||p_request_id::text,0)); select * into v_prior from private.community_report_requests where actor_id=v_actor and request_id=p_request_id for update;
  if found then if v_prior.content_type is distinct from p_content_type or v_prior.content_id is distinct from p_content_id or v_prior.reason is distinct from p_reason_code or v_prior.detail is distinct from v_detail then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return v_prior.result_id; end if;
+ if p_content_type='community_post' then perform 1 from public.community_posts p where p.id=p_content_id for update; if not found then raise exception 'target_not_available' using errcode='P0001'; end if;
+ else select p.id into v_parent from public.community_posts p join public.community_replies r on r.post_id=p.id where r.id=p_content_id for update of p; if not found then raise exception 'target_not_available' using errcode='P0001'; end if; perform 1 from public.community_replies r where r.id=p_content_id for update; end if;
  select author_id into v_author from private.community_target_available(p_content_type,p_content_id,v_actor);
  if not found then
   select p.author_id into v_author from public.community_posts p where p_content_type='community_post' and p.id=p_content_id and p.deleted_at is null and (p.cat_id is null or private.is_public_cat_available(p.cat_id,v_actor)) and (p.author_id is null or not exists(select 1 from public.user_blocks b where (b.blocker_id=v_actor and b.blocked_id=p.author_id) or (b.blocker_id=p.author_id and b.blocked_id=v_actor)))
