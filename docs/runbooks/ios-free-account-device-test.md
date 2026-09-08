@@ -1,7 +1,7 @@
 # iOS free-account physical-device test handoff
 
-**Status: IPA INSTALLATION PENDING CANDIDATE.** Windows prerequisites and AltStore
-can be prepared now. Import the application IPA only after a protected
+**Current handoff: [verified candidate available; installation pending](../evidence/ios-candidate-2026-09-08.md).** Windows prerequisites and AltServer
+are prepared on the owner's machine. Import an application IPA only after a protected
 `device_candidate` run has produced verified candidate evidence. This is a
 local-owner handoff. The placeholders below intentionally fail closed: do not
 replace them with guesses, a PR compile run, a lock-bootstrap run, or a
@@ -10,7 +10,7 @@ locally invented hash.
 ## Required candidate inputs
 
 Obtain all of the following from the reviewed candidate evidence and its
-three-file artifact allowlist before opening AltStore:
+three-file artifact allowlist before local signing:
 
 - `[[REQUIRED: immutable candidate commit SHA]]`
 - `[[REQUIRED: candidate run ID and attempt]]`
@@ -87,30 +87,34 @@ if ($manifest.ipaByteSize -ne $actualByteSize -or $checksumContent -ne "$expecte
 
 Record only a pass/fail result, the reviewed unsigned-artifact SHA-256, and the
 immutable candidate run/commit in the evidence template. Do **not** require or
-invent a post-AltStore re-signed IPA hash; AltStore may not expose one.
+invent a locally re-signed IPA hash; the installation tool may not expose one.
 
-## 2. Install locally with AltStore
+## 2. Install directly with AltServer on Windows
 
-1. Install or use **AltStore Classic 2.2** on the owner-controlled Windows
-   machine. Record the **actual** AltServer version shown locally; do not assume
-   it is 2.2.
-2. Connect the owner's paired, unlocked iPhone over USB and complete any local
-   trust prompts. Apple Account entry, password, app-specific password, and
-   two-factor approval happen only in AltStore/AltServer on that machine; never
-   place them in chat, Git, GitHub, a screenshot, or the evidence template.
-3. Install the verified unsigned IPA with AltStore. In AltStore's App IDs and
-   permissions view, record only the effective bundle ID and a redacted
-   permission/App-ID summary. Export AltServer errors only after sanitizing
-   them.
+1. Install Apple's desktop iTunes and iCloud, then AltServer. The current owner
+   machine has iTunes 12.13.10.3, iCloud 7.21.0.23 and AltServer 1.7.4 installed.
+2. Connect the paired, unlocked iPhone over USB and complete local trust prompts.
+3. Hold **Shift** while clicking the AltServer system-tray icon, select
+   **Sideload .ipa…**, and choose the verified IPA. Installing AltStore on the
+   phone first is unnecessary for this direct path. Apple Account credentials
+   and two-factor approval are entered only by the owner in the local signing
+   interface; never put them in chat, Git, screenshots or evidence.
+4. Follow the phone's developer-trust prompt. Enable **Settings → Privacy &
+   Security → Developer Mode** if prompted, restart and confirm, then launch
+   Whisker Commons. Record the actual install/launch outcome. Keep any error
+   report limited to a sanitized error class.
+
+AltServer documents this direct-install path and its seven-day manual reinstall
+requirement in the [official release notes](https://github.com/altstoreio/FAQ/blob/main/release-notes/altserver.md#direct-ipa-sideloading).
+An existing AltStore installation remains an alternative; it is not a prerequisite.
 
 Free Personal Team provisioning, App IDs, devices, and installed apps can
 expire after **seven days** and are subject to Apple's limits. This is an
 experimental free-account bridge, not an EAS, TestFlight, App Store, or paid
 Apple Developer distribution path.
 
-If AltStore cannot complete the local install, **SideStore 0.6.3** may be tried
-as separately labelled fallback evidence. A SideStore result is not equivalent
-to an AltStore success and does not erase the original failure.
+If local installation fails, capture the bounded error and fix that cause before
+changing tools. A fallback tool's success does not erase the original failure.
 
 ## 3. Inspect the paired device without retaining identifiers
 
@@ -163,8 +167,9 @@ without adding credentials, UDIDs, exact locations, raw device output, or a
 re-signed IPA hash. Sanitized AltServer errors may name a bounded error class
 but must not contain account identifiers or tokens.
 
-Stop and report an external blocker if candidate provenance/checksum is absent
-or invalid, the protected candidate has not been authorized, Gate 2B readiness
-is missing/invalid, the device is not paired/unlocked, an installation fails,
-or any matrix row fails. This repository must not claim physical-iOS completion
-until the owner returns a completed, sanitized evidence template.
+Do not install an unverified or unauthorized candidate. If the phone is not
+paired/unlocked or installation fails, resolve that step before launch testing.
+During functional testing, record failures, continue independent scenarios and
+prioritize fixes that block launch, login, submission or data recovery. Cosmetic
+failures do not block unrelated testing. Claim physical completion only for
+scenarios actually observed; a form is a record, not an extra approval gate.

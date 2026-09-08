@@ -23,7 +23,7 @@ run.
 
 ## Local installation record
 
-- Installation tool: `[[REQUIRED: AltStore Classic 2.2 or SideStore 0.6.3 fallback]]`
+- Installation tool: `[[REQUIRED: actual tool; AltServer direct IPA install is supported]]`
 - Actual AltServer version: `[[REQUIRED: observed locally]]`
 - SideStore fallback used: `[[NOT RUN / YES / NO — separate from AltStore result]]`
 - Device detected over paired unlocked USB: `[[NOT RUN / YES / NO]]`
@@ -31,10 +31,10 @@ run.
 - iOS version/build (non-identifying): `[[REQUIRED after test]]`
 - Developer Mode state: `[[REQUIRED after test]]`
 - USB trust state: `[[REQUIRED after test]]`
-- Free storage: `[[REQUIRED after test]]`
+- Free storage: `[[optional; record when diagnosing installation/storage failure]]`
 - Effective `CFBundleIdentifier`: `[[REQUIRED after installation]]`
-- Google Maps restriction action: `[[NOT RUN / unchanged / exact effective ID added to same restricted key]]`
-- AltStore App IDs/permissions summary: `[[REQUIRED: redacted bounded summary]]`
+- Map provider: `Apple Maps / MapKit; no Google iOS key required`
+- App IDs/permissions summary: `[[bounded observation if exposed by the tool; otherwise unavailable]]`
 - Sanitized AltServer error class: `[[NONE / bounded sanitized error]]`
 
 Never record an Apple ID, email address, password, app-specific password,
