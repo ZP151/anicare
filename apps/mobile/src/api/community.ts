@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase';
+import { randomUUID } from 'expo-crypto';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,79}$/;
@@ -37,7 +38,7 @@ export async function listCommunityPosts(input: CommunityFeedInput = {}, client?
   if (error) throw new Error('community_unavailable'); return parseCommunityFeed(data);
 }
 
-function requestId(): string { return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-0000-4000-8000-000000000000`; }
+function requestId(): string { return randomUUID(); }
 export async function createCommunityPost(body: string, catId: string | null, communitySlug: string | null, client?: CommunityRpcClient): Promise<string> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
   if (!rpc || !body.trim() || body.trim().length > 2000 || (!catId && !communitySlug)) throw new Error('invalid_community_post');
@@ -63,7 +64,7 @@ export async function deleteCommunityPost(postId: string, client?: CommunityRpcC
 export async function reportCommunityContent(contentType: 'community_post' | 'community_reply', contentId: string, reason: string, client?: CommunityRpcClient): Promise<void> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
   if (!rpc || !uuid(contentId) || !['spam', 'harassment', 'animal_welfare', 'unsafe_location', 'precise_location_exposure'].includes(reason)) throw new Error('invalid_community_report');
-  const { error } = await rpc.rpc('create_moderation_report', { p_content_type: contentType, p_content_id: contentId, p_reason_code: reason, p_detail: null, p_request_id: requestId() }); if (error) throw new Error('community_report_failed');
+  const { error } = await rpc.rpc('create_community_moderation_report', { p_content_type: contentType, p_content_id: contentId, p_reason_code: reason, p_detail: null, p_request_id: requestId() }); if (error) throw new Error('community_report_failed');
 }
 export type CommunityReply = Readonly<{ replyId: string; body: string; createdAt: string; author: Readonly<{ name: string; avatarKey: string }>; cursor: string }>;
 export async function listCommunityReplies(postId: string, client?: CommunityRpcClient): Promise<readonly CommunityReply[]> {

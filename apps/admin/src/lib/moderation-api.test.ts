@@ -203,7 +203,7 @@ describe('moderation RPC wrappers', () => {
 
   it('routes community removal to its dedicated constrained RPC', async () => {
     const client = rpcClient([{ reportId, action: 'remove_community_content', status: 'resolved', visibility: 'hidden' }]);
-    await resolveModerationReport(client, { reportId, action: 'remove_community_content', rationale: 'A sufficiently long moderation rationale.' }, requestId);
+    await resolveModerationReport(client, { reportId, action: 'remove_community_content', rationale: 'A sufficiently long moderation rationale.' }, requestId, 'community_post');
     expect(client.rpc).toHaveBeenCalledWith('admin_resolve_community_moderation_report', expect.any(Object));
   });
 
@@ -263,11 +263,13 @@ describe('moderation server action input', () => {
     form.set('reportId', reportId);
     form.set('action', 'no_action');
     form.set('rationale', 'A sufficiently long moderation rationale.');
+    form.set('contentType', 'sighting');
 
     expect(parseModerationResolutionForm(form)).toEqual({
       reportId,
       action: 'no_action',
       rationale: 'A sufficiently long moderation rationale.',
+      contentType: 'sighting',
     });
   });
 
@@ -276,6 +278,7 @@ describe('moderation server action input', () => {
     form.set('reportId', reportId);
     form.set('action', 'hide_sighting');
     form.set('rationale', 'A sufficiently long moderation rationale.');
+    form.set('contentType', 'sighting');
     form.set('actorId', '00000000-0000-4000-8000-000000000099');
 
     expect(() => parseModerationResolutionForm(form)).toThrow('invalid_moderation_resolution_form');

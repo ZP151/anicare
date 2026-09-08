@@ -26,7 +26,7 @@ describe('community feed contract', () => {
   it('submits an explicit report reason without a client-controlled author', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: '00000000-0000-4000-8000-000000000009', error: null });
     await reportCommunityContent('community_post', row.postId, 'harassment', { rpc });
-    expect(rpc).toHaveBeenCalledWith('create_moderation_report', expect.objectContaining({ p_content_type: 'community_post', p_content_id: row.postId, p_reason_code: 'harassment' }));
+    expect(rpc).toHaveBeenCalledWith('create_community_moderation_report', expect.objectContaining({ p_content_type: 'community_post', p_content_id: row.postId, p_reason_code: 'harassment' }));
     expect(rpc.mock.calls[0][1]).not.toHaveProperty('authorId');
   });
 });

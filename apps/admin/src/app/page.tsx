@@ -56,6 +56,7 @@ export default async function OperationsPage() {
                 <span>{new Date(item.dueAt).toLocaleString()}</span>
                 <form action={resolveModerationReportAction}>
                   <input name="reportId" type="hidden" value={item.reportId} />
+                  <input name="contentType" type="hidden" value={item.contentType} />
                   <select aria-label={`Decision for ${item.reportId}`} name="action" defaultValue="no_action">
                     <option value="no_action">No action</option>
                     {item.contentType === 'sighting' ? <><option value="hide_sighting">Hide sighting</option><option value="restore_sighting">Restore to limited</option></> : <option value="remove_community_content">Remove community content</option>}

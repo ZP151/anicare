@@ -163,10 +163,11 @@ export async function resolveModerationReport(
   client: NarrowRpcClient,
   input: unknown,
   requestId: string,
+  contentType: AdminModerationQueueItem['contentType'] = 'sighting',
 ): Promise<ModerationResolutionResult> {
   const resolution = parseModerationResolution(input);
   if (!isUuid(requestId)) throw new Error('invalid_admin_moderation_request');
-  const functionName = resolution.action === 'remove_community_content'
+  const functionName = contentType !== 'sighting'
     ? 'admin_resolve_community_moderation_report'
     : 'admin_resolve_moderation_report';
   const { data, error } = await client.rpc(functionName, {
