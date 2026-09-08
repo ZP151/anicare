@@ -39,6 +39,7 @@ test "$(ruby --version | awk '{print $2}')" = '3.3.12'
 test "$(bundle exec ruby -e 'print RUBY_VERSION')" = '3.3.12'
 bundle exec ruby -rrbconfig -e 'puts RbConfig.ruby; puts Gem.dir; puts Gem.bin_path("cocoapods", "pod", "1.17.0")'
 test "$(bundle exec pod --version)" = '1.17.0'
+bundle exec ruby -rjson -e 'JSON.generate({}, quirks_mode: true, max_nesting: false)'
 `;
 const domainBuildCommand = 'pnpm --filter @animalhelper/domain build';
 const mobileUnsignedBuildCommand = 'pnpm --filter @animalhelper/mobile build:unsigned-ios';
