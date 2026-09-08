@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
+import { ensurePortrait } from './portrait.js';
 
 const project = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 const samples = [
@@ -55,21 +56,18 @@ async function main() {
           return;
         }
         if (filename && path) {
-          const downloaded = await storage.storage.from('cat-portraits').download(path);
-          if (downloaded.data) {
-            if (sha256(new Uint8Array(await downloaded.data.arrayBuffer())) !== sha) throw new Error('test_sample_portrait_collision');
-          } else {
-            const storageError = downloaded.error as {statusCode?:string|number;status?:number;message?:string}|null;
-            if (String(storageError?.statusCode ?? storageError?.status) !== '404' && storageError?.message !== 'Object not found') throw new Error('test_sample_portrait_download_failed');
-            const uploaded = await storage.storage.from('cat-portraits').upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
-            if (uploaded.error) throw new Error('test_sample_portrait_upload_failed');
-          }
+          const bucket = storage.storage.from('cat-portraits');
+          await ensurePortrait({
+            list: () => bucket.list(`synthetic-test/${id}`, {search:'portrait.jpg',limit:100}),
+            download: () => bucket.download(path),
+            upload: () => bucket.upload(path,bytes,{contentType:'image/jpeg',upsert:false}),
+          },sha);
         }
         await sql`insert into public.animals(id,primary_alias,verification,lifecycle,visibility,identity_origin_required,confirmed_photo_count) values(${id}::uuid,${alias + ' ' + label},'reported','active','public',false,0)`;
         await sql`insert into public.animal_aliases(animal_id,alias) values(${id}::uuid,${label})`;
         await sql`insert into public.sightings(animal_id,occurred_at,recorded_at,public_cell_id,time_bucket,risk,visibility,visible_at,traits,notes,client_dedupe_key) values(${id}::uuid,now()-case when ${index} < 4 then interval '8 hours' else interval '8 days' end,now()-case when ${index} < 4 then interval '7 hours' else interval '7 days 23 hours' end,${cell},'morning','normal','public',now()-case when ${index} < 4 then interval '5 hours' else interval '7 days 21 hours' end,'{"source":"synthetic_test","provenance":"reported"}'::jsonb,'Synthetic test sample; not a human confirmation.',${key + '-sighting'})`;
         await sql`insert into public.care_events(animal_id,activity,completed_at,public_cell_id,notes,client_dedupe_key,visibility,visible_at,created_at) values(${id}::uuid,'feed',now()-case when ${index} < 4 then interval '6 hours' else interval '6 days' end,${cell},'Synthetic reported care test sample.',${key + '-care'},'public',now()-case when ${index} < 4 then interval '3 hours' else interval '5 days' end,now()-case when ${index} < 4 then interval '5 hours' else interval '5 days 2 hours' end)`;
-        await sql`insert into private.cat_presentations(animal_id,portrait_path,sample_label,source_metadata) values(${id}::uuid,${path},${label},jsonb_build_object('provenance','synthetic_test','training_eligible',false,'fixture_key',${key}))`;
+        await sql`insert into private.cat_presentations(animal_id,portrait_path,sample_label,source_metadata) values(${id}::uuid,${path},${label},jsonb_build_object('provenance','synthetic_test','training_eligible',false,'fixture_key',${key}::text))`;
         await sql`insert into private.test_sample_provisioning(fixture_key,animal_id,source_sha256) values(${key},${id}::uuid,${sha})`;
       });
     }
