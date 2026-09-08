@@ -1,0 +1,611 @@
+[
+  {
+    "id": "A01",
+    "title": "附近 / 内容发现",
+    "route": "/(tabs)/index",
+    "desc": "照片建立记忆点；区域与身份筛选收为两个控件。仅在公开照片可用时显示照片，缺图使用 B05。 v2 材质修订：内容滚到导航下方时可看见模糊轮廓；内容可继续上滑并从导航下方经过。",
+    "group": "A"
+  },
+  {
+    "id": "A02",
+    "title": "地图 / 区域概览",
+    "route": "/(tabs)/map",
+    "desc": "地图铺满视野，用范围面替代猫的精确标记；点区域展开 B02。地图为布局示意，落地使用 Apple Maps。",
+    "group": "A"
+  },
+  {
+    "id": "A03",
+    "title": "报告 / 创建与恢复",
+    "route": "/(tabs)/report",
+    "desc": "新建为唯一主按钮；草稿和已提交报告分别呈现。无草稿时使用 F08，不展示空卡片。",
+    "group": "A"
+  },
+  {
+    "id": "A04",
+    "title": "关注 / 持续照护",
+    "route": "/(tabs)/following",
+    "desc": "保留猫关注与刷新；不用未经实现的消息红点、区域订阅或推送开关。",
+    "group": "A"
+  },
+  {
+    "id": "A05",
+    "title": "我的 / 分组个人中心",
+    "route": "/(tabs)/profile",
+    "desc": "资料、活动、偏好三层结构。昵称不与登录表单混排；退出登录单独分组。",
+    "group": "A"
+  },
+  {
+    "id": "B01",
+    "title": "附近筛选 / 底部浮层",
+    "route": "/(tabs)/index · filters",
+    "desc": "将旧版六个常驻文本按钮移入一个面板；沿用现有三个试点区域与身份筛选。",
+    "group": "B"
+  },
+  {
+    "id": "B02",
+    "title": "区域详情 / 地图浮层",
+    "route": "/(tabs)/map · CoarseAreaDetailSheet",
+    "desc": "区域 → 猫档案或新报告；移除尚不可用的区域关注按钮。聚合数字只按真实服务结果显示，稿中不编造。",
+    "group": "B"
+  },
+  {
+    "id": "B03",
+    "title": "猫档案 / 核心详情",
+    "route": "/cat/[id]",
+    "desc": "大图与身份信息优先；照护和活动作为两条明确入口；更多菜单承载举报与纠错。大图仅限真实可公开媒体。",
+    "group": "B"
+  },
+  {
+    "id": "B04",
+    "title": "猫的公开活动 / 历史",
+    "route": "/cat/[id] · public activity",
+    "desc": "拟将已有安全页可读取的延迟公开目击摘要整理成独立活动页。只用公开字段，不能把身份状态编成历史事件。",
+    "group": "B"
+  },
+  {
+    "id": "B05",
+    "title": "缺少公开照片 / 真实基线",
+    "route": "/cat/[id] · no public media",
+    "desc": "当前公开 API 未返回照片时必须使用此版，不能拿私有报告照片或样例照片冒充。附近列表同步用图标缩略图。",
+    "group": "B"
+  },
+  {
+    "id": "B06",
+    "title": "地图 / 区域列表",
+    "route": "/(tabs)/map · list",
+    "desc": "完整保留现有地图/列表切换。地图服务不可用时仍能浏览已读到的区域摘要。",
+    "group": "B"
+  },
+  {
+    "id": "B07",
+    "title": "猫档案 / 更多操作",
+    "route": "/cat/[id] · more",
+    "desc": "详情顶部更多按钮的完整内容；现有安全与纠错能力保持可发现。",
+    "group": "B"
+  },
+  {
+    "id": "B08",
+    "title": "猫档案 / 已关注",
+    "route": "/cat/[id] · followed",
+    "desc": "关注后使用实心爱心与可访问性“取消关注”标签。取消关注直接可逆，不额外增加确认门禁。",
+    "group": "B"
+  },
+  {
+    "id": "C01",
+    "title": "添加照片 / 第一步",
+    "route": "/report/new",
+    "desc": "保留无照片报告路径；相册和相机由系统接管。下一步前有照片时进入 C02 人工遮挡。",
+    "group": "C"
+  },
+  {
+    "id": "C02",
+    "title": "照片检查 / 手动遮挡",
+    "route": "/report/redaction-review",
+    "desc": "黑色实心遮挡、可选中删除与重做；处理后的预览必须实际生成再允许确认。图中遮挡仅演示工具，不表示自动检测。",
+    "group": "C"
+  },
+  {
+    "id": "C03",
+    "title": "描述这只猫 / 第二步",
+    "route": "/report/new",
+    "desc": "保留现有外观字段；以多选标签代替长段枚举说明。长备注随键盘滚动，不遮挡继续。",
+    "group": "C"
+  },
+  {
+    "id": "C04",
+    "title": "状态与保护 / 第三步",
+    "route": "/report/new",
+    "desc": "健康状态与位置风险是不同字段，保持分开；提示只在此决策点出现一次。",
+    "group": "C"
+  },
+  {
+    "id": "C05",
+    "title": "选择大致区域 / 第四步",
+    "route": "/report/new",
+    "desc": "保留单次定位与手选两条路径；手选进入 C06；拒绝定位仍可继续。",
+    "group": "C"
+  },
+  {
+    "id": "C06",
+    "title": "手动选区 / 区域选择器",
+    "route": "/report/new · ReportAreaPicker",
+    "desc": "当前只显示三个已支持的试点区域；示意地图不提供真实经纬度或精确猫位置。",
+    "group": "C"
+  },
+  {
+    "id": "C07",
+    "title": "确认报告 / 第五步",
+    "route": "/report/new",
+    "desc": "可回到对应步骤修改；此处不重复训练同意、审核流程等无关说明。",
+    "group": "C"
+  },
+  {
+    "id": "C08",
+    "title": "提交报告 / 正在发送",
+    "route": "/report/new · submitting",
+    "desc": "保留当前草稿与请求标识；确认结果前禁用重复提交，不虚构上传百分比。",
+    "group": "C"
+  },
+  {
+    "id": "C09",
+    "title": "提交回执 / 完整成功",
+    "route": "/report/receipt",
+    "desc": "分别呈现报告、媒体、身份状态；成功反馈克制。身份证据仍由独立人员确认。",
+    "group": "C"
+  },
+  {
+    "id": "C10",
+    "title": "提交回执 / 仅文字成功",
+    "route": "/report/receipt · media pending",
+    "desc": "建议新增明确的媒体恢复入口，需绑定原草稿和稳定请求。当前不是已实现功能；若本机副本不可恢复，改为“查看照片状态”，不能承诺重新上传。文字报告始终保留。",
+    "group": "C"
+  },
+  {
+    "id": "C11",
+    "title": "选择身份 / 已有猫",
+    "route": "/report/receipt · IdentityContinuation",
+    "desc": "人工选择，不展示 AI 相似度和推荐排名；已有猫、新猫、跳过三条路径都可见。选中状态落地必须明确。",
+    "group": "C"
+  },
+  {
+    "id": "C12",
+    "title": "新猫提案 / 确认选择",
+    "route": "/report/receipt · new identity",
+    "desc": "将新猫选择与结果分开，让用户理解实际提交的是提案。此确认可与原选择页内联实现。",
+    "group": "C"
+  },
+  {
+    "id": "C13",
+    "title": "身份提案 / 已提交",
+    "route": "/report/receipt · tentative",
+    "desc": "不把待确认冒充匹配成功；再次打开不要求重做已完成步骤。",
+    "group": "C"
+  },
+  {
+    "id": "C14",
+    "title": "我的报告 / 状态列表",
+    "route": "/report/my-reports",
+    "desc": "默认只用提交日期与生命周期。补照片是建议的 U2 恢复入口，实施前验证可恢复的原草稿；否则显示“媒体待处理”并进入回执。",
+    "group": "C"
+  },
+  {
+    "id": "C15",
+    "title": "草稿操作 / 继续或删除",
+    "route": "/(tabs)/report · draft actions",
+    "desc": "长按或草稿“更多”进入；删除前二次系统确认，保留与当前账户一致的归属校验。",
+    "group": "C"
+  },
+  {
+    "id": "C16",
+    "title": "报告归属 / 登录后继续",
+    "route": "/report/new · auth continuation",
+    "desc": "登录只在贡献动作需要时出现。匿名草稿需由本人明确领取，不在切换账户时自动归属。",
+    "group": "C"
+  },
+  {
+    "id": "C17",
+    "title": "遮挡编辑 / 辅助操作",
+    "route": "/report/redaction-review · accessible controls",
+    "desc": "保留原有可访问性移动/大小控制，不能只提供拖拽；清除全部遮挡后需重新生成与确认预览。",
+    "group": "C"
+  },
+  {
+    "id": "C18",
+    "title": "照片检查 / 使用确认",
+    "route": "/report/redaction-review · confirm",
+    "desc": "确认的是当前实际渲染的副本；生成失败/未落盘时按钮禁用，不能用过期预览通过。",
+    "group": "C"
+  },
+  {
+    "id": "C19",
+    "title": "报告结果 / 已关联档案",
+    "route": "/report/receipt · linked",
+    "desc": "示例为已关联身份且媒体已收到的报告。媒体行必须依据真实状态替换：未添加、待处理、待恢复、已移除或清理中；身份关联不能决定照片状态。",
+    "group": "C"
+  },
+  {
+    "id": "C20",
+    "title": "身份结果 / 需要重新选择",
+    "route": "/report/receipt · rejected",
+    "desc": "不将提案结束解释为猫身份自动改变；依照实际结果显示重选入口。",
+    "group": "C"
+  },
+  {
+    "id": "C21",
+    "title": "删除草稿 / 确认",
+    "route": "/(tabs)/report · delete draft",
+    "desc": "C15 选择删除后的明确确认。实现时只操作所属账户/匿名当前草稿，不扩展为批量删除。",
+    "group": "C"
+  },
+  {
+    "id": "D01",
+    "title": "照护记录 / 公共时间线",
+    "route": "/care/[id]",
+    "desc": "时间线只使用公开的粗略时间窗；不推断照护者姓名，也不显示私有完成时刻。",
+    "group": "D"
+  },
+  {
+    "id": "D02",
+    "title": "记录照护 / 完成表单",
+    "route": "/care/[id] · CareEntry",
+    "desc": "选择活动、三个区域之一、系统日期与时间；避免要求手填 YYYY-MM-DD。日期时间仅属本人记录。",
+    "group": "D"
+  },
+  {
+    "id": "D03",
+    "title": "我的照护 / 管理列表",
+    "route": "/care/my-care",
+    "desc": "点开记录可更正或撤回；已撤回/更正记录保留状态，不再提供不适用操作。",
+    "group": "D"
+  },
+  {
+    "id": "D04",
+    "title": "更正照护 / 编辑表单",
+    "route": "/care/my-care · correction",
+    "desc": "沿用 D02 格式，保留历史记录语义；请求结果未确认时锁定原输入并重试同一请求。",
+    "group": "D"
+  },
+  {
+    "id": "D05",
+    "title": "撤回照护 / 破坏性确认",
+    "route": "/care/my-care · withdraw",
+    "desc": "只对撤回等实际改变数据的操作确认；不为普通浏览和保存增加门禁。",
+    "group": "D"
+  },
+  {
+    "id": "D06",
+    "title": "照护保存 / 成功结果",
+    "route": "/care/[id] · recorded",
+    "desc": "以真实服务确认作为成功条件；“未能确认保存”使用 F06，不虚构完成状态。",
+    "group": "D"
+  },
+  {
+    "id": "E01",
+    "title": "编辑个人资料 / 统一表单",
+    "route": "/(tabs)/profile · edit",
+    "desc": "昵称为本轮已有可编辑字段；头像保持系统符号，不虚构头像上传、手机号、性别和地址字段。示例邮箱非用户数据。",
+    "group": "E"
+  },
+  {
+    "id": "E02",
+    "title": "登录 / 邮箱链接",
+    "route": "/(tabs)/profile · sign in",
+    "desc": "主要入口沿用邮箱 magic link；已配置的 Apple/Google 登录放到 E19。浏览无需账户，贡献时再进入此页。",
+    "group": "E"
+  },
+  {
+    "id": "E03",
+    "title": "登录链接 / 查看邮箱",
+    "route": "/(tabs)/profile · link sent",
+    "desc": "邮箱地址只在本人登录流程显示；重发沿用节流。返回邮件后的上下文保持当前草稿。",
+    "group": "E"
+  },
+  {
+    "id": "E04",
+    "title": "登录回调 / 链接失效",
+    "route": "/auth/callback",
+    "desc": "回调页不应停留技术错误文本；成功自动返回待办，失败提供重试与退出。",
+    "group": "E"
+  },
+  {
+    "id": "E05",
+    "title": "贡献资格 / 一次确认",
+    "route": "/(tabs)/profile · adult eligibility",
+    "desc": "只在首次需要资格时出现；已确认账户不在个人首页反复展示年龄门禁。",
+    "group": "E"
+  },
+  {
+    "id": "E06",
+    "title": "语言 / 系统分组选择",
+    "route": "/(tabs)/profile · language",
+    "desc": "两种现有语言完整保留，不添加尚未实现的自动翻译或多语言承诺。",
+    "group": "E"
+  },
+  {
+    "id": "E07",
+    "title": "隐私与请求 / 入口页",
+    "route": "/privacy",
+    "desc": "把旧版所有表单堆在同一页的问题改为清楚入口；表单、状态和删除独立呈现。",
+    "group": "E"
+  },
+  {
+    "id": "E08",
+    "title": "资料请求 / 选择与说明",
+    "route": "/privacy · rights form",
+    "desc": "三个个人资料请求类型共用相同格式；身份更正、重复猫与申诉另见 E17，避免用户面对六种混杂选项。",
+    "group": "E"
+  },
+  {
+    "id": "E09",
+    "title": "我的请求 / 状态列表",
+    "route": "/privacy · requests",
+    "desc": "分组不混淆资料权利与内容审核；状态显示服务真实值，不把关闭受理等同纠错成功。",
+    "group": "E"
+  },
+  {
+    "id": "E10",
+    "title": "请求详情 / 回执与进度",
+    "route": "/privacy · request detail",
+    "desc": "完整不透明 ID 只在详情中可复制；不占列表和主页面视觉。示例 ID 不对应真实请求。",
+    "group": "E"
+  },
+  {
+    "id": "E11",
+    "title": "删除账户 / 明确后果",
+    "route": "/privacy · erase confirmation",
+    "desc": "只此处展示删除后查询限制，不能把“申请已接收”写成“已彻底删除”。当前站外渠道缺失如实告知。",
+    "group": "E"
+  },
+  {
+    "id": "E12",
+    "title": "删除回执 / 退出后保留",
+    "route": "/privacy · local erasure receipt",
+    "desc": "登出后只展示允许保存的本机回执与状态；不伪造查询能力。",
+    "group": "E"
+  },
+  {
+    "id": "E13",
+    "title": "内容安全 / 选择活动",
+    "route": "/safety/[id]",
+    "desc": "先选具体内容，再举报/屏蔽；独立入口处理猫档案错误，不把审核工具塞进猫详情首页。",
+    "group": "E"
+  },
+  {
+    "id": "E14",
+    "title": "内容举报 / 理由选择",
+    "route": "/safety/[id] · report",
+    "desc": "理由标签必须映射现有 reasonCode；实施前按枚举复核，不新增后端类型。",
+    "group": "E"
+  },
+  {
+    "id": "E15",
+    "title": "屏蔽贡献者 / 确认",
+    "route": "/safety/[id] · block",
+    "desc": "不暴露贡献者私有身份。实际屏蔽效果依据服务端规则；不声称已支持解除屏蔽管理。",
+    "group": "E"
+  },
+  {
+    "id": "E16",
+    "title": "退出账户 / 账户操作",
+    "route": "/(tabs)/profile · sign out",
+    "desc": "切换账户清除旧会话视图；本机草稿不允许被下一位账户自动继承。",
+    "group": "E"
+  },
+  {
+    "id": "E17",
+    "title": "身份纠错 / 档案请求",
+    "route": "/privacy · identity rights",
+    "desc": "覆盖现有另三个权利类型。相关猫从入口传入，缺上下文时先选择档案。",
+    "group": "E"
+  },
+  {
+    "id": "E18",
+    "title": "个人中心 / 未登录",
+    "route": "/(tabs)/profile · signed out",
+    "desc": "匿名首页简洁完整，不展示不可用的个人统计或空账号表单。",
+    "group": "E"
+  },
+  {
+    "id": "E19",
+    "title": "其他登录方式 / 配置后展示",
+    "route": "/(tabs)/profile · providers",
+    "desc": "保留代码已有 Apple/Google 登录入口的设计位置；仅在服务配置及设备回归通过后展示。正式按钮使用厂商品牌规范，当前稿是文字排版示意。",
+    "group": "E"
+  },
+  {
+    "id": "F01",
+    "title": "附近 / 没有活动",
+    "route": "/(tabs)/index · empty",
+    "desc": "真实空数据不回填演示猫，不渲染重复大占位卡片。",
+    "group": "F"
+  },
+  {
+    "id": "F02",
+    "title": "关注 / 尚未关注",
+    "route": "/(tabs)/following · empty",
+    "desc": "一个清楚下一步，无虚构动态。未登录时将按钮替换为“登录后关注”，见状态矩阵。",
+    "group": "F"
+  },
+  {
+    "id": "F03",
+    "title": "我的报告 / 离线快照",
+    "route": "/report/my-reports · offline snapshot",
+    "desc": "使用 MyReportsScreen 已有的会话内快照；账户变更后清除，不能声称跨重启缓存已实现。",
+    "group": "F"
+  },
+  {
+    "id": "F04",
+    "title": "定位权限 / 拒绝后恢复",
+    "route": "/report/new · location denied",
+    "desc": "不反复弹权限框，主路径仍可完成。系统设置按钮需通过系统 Linking 打开。",
+    "group": "F"
+  },
+  {
+    "id": "F05",
+    "title": "加载失败 / 可以恢复",
+    "route": "/(tabs)/index · unavailable",
+    "desc": "网络失败、服务不可用使用同一恢复结构，并针对账户连接和数据读取显示准确对象。",
+    "group": "F"
+  },
+  {
+    "id": "F06",
+    "title": "照护保存 / 结果未确认",
+    "route": "/care/[id] · retryable",
+    "desc": "此结构也用于举报/权利请求的不确定提交结果；不引导重建一条可能重复的数据。",
+    "group": "F"
+  },
+  {
+    "id": "F07",
+    "title": "个人中心 / 大字号",
+    "route": "/(tabs)/profile · Dynamic Type",
+    "desc": "大字号与减少透明度的版式示范。行高随内容增长、允许滚动，非简单整体缩放；退出账户在滚动后。",
+    "group": "F"
+  },
+  {
+    "id": "F08",
+    "title": "报告 / 没有草稿",
+    "route": "/(tabs)/report · empty",
+    "desc": "真实首次进入报告页，移除空的“继续草稿”分组。",
+    "group": "F"
+  },
+  {
+    "id": "F09",
+    "title": "报告 / 本机存储不可用",
+    "route": "/(tabs)/report · storage unavailable",
+    "desc": "不能一边声称自动保存、一边让用户进入无法持久化的表单。只保留必要的数据保护拦截。",
+    "group": "F"
+  },
+  {
+    "id": "F10",
+    "title": "附近 / 骨架加载",
+    "route": "/(tabs)/index · loading",
+    "desc": "骨架与最终内容同尺寸，减少跳动。状态由屏幕阅读器播报，减少动态效果时不闪烁。",
+    "group": "F"
+  },
+  {
+    "id": "F11",
+    "title": "登录表单 / 键盘展开",
+    "route": "/(tabs)/profile · keyboard",
+    "desc": "键盘展开后主按钮仍可见；输入采用邮箱键盘、关闭自动大写。图为布局示意，实际由 iOS 系统绘制。",
+    "group": "F"
+  },
+  {
+    "id": "F12",
+    "title": "不可用的报告 / 无权限或失效",
+    "route": "/report/new · ReportRouteShell",
+    "desc": "不暴露其他账户数据。非法链接、已删除草稿和失效回执提供安全返回，而不是无限加载。",
+    "group": "F"
+  },
+  {
+    "id": "F13",
+    "title": "身份续办 / 暂无可选档案",
+    "route": "/report/receipt · no candidates",
+    "desc": "没有候选并不意味着识别失败；这不是 AI 匹配结果。若读取失败须改为“重试读取档案”。",
+    "group": "F"
+  },
+  {
+    "id": "F14",
+    "title": "身份续办 / 提案发送失败",
+    "route": "/report/receipt · proposal retry",
+    "desc": "报告成功与提案失败独立呈现，不因辅助步骤失败丢掉主任务。",
+    "group": "F"
+  },
+  {
+    "id": "F15",
+    "title": "登录回调 / 恢复任务",
+    "route": "/auth/callback · processing",
+    "desc": "覆盖收到回调后的短暂恢复状态。成功跳转需会话确认，不仅凭链接到达就宣称登录成功。",
+    "group": "F"
+  },
+  {
+    "id": "F16",
+    "title": "待确认请求 / 重试管理",
+    "route": "/privacy · RequestNotice",
+    "desc": "同一组件也用于 PendingCareNotice，替换对象、链接和文案。停止重试不是撤销请求。",
+    "group": "F"
+  },
+  {
+    "id": "F17",
+    "title": "个人资料 / 保存失败",
+    "route": "/(tabs)/profile · name error",
+    "desc": "空白或超 60 字的校验信息紧贴输入；读取失败则展示重试读取，不拿旧账户资料填充。",
+    "group": "F"
+  },
+  {
+    "id": "F18",
+    "title": "我的报告 / 暂无记录",
+    "route": "/report/my-reports · empty",
+    "desc": "空列表完整页面；下拉刷新与分页失败使用同一列表底部恢复组件。",
+    "group": "F"
+  },
+  {
+    "id": "F19",
+    "title": "我的照护 / 暂无记录",
+    "route": "/care/my-care · empty",
+    "desc": "不把未有照护当作欠任务，不引入排行榜、积分或连续打卡压力。",
+    "group": "F"
+  },
+  {
+    "id": "F20",
+    "title": "我的请求 / 暂无请求",
+    "route": "/privacy · requests empty",
+    "desc": "与加载、失败明确区分；没有请求时不渲染空回执卡片。",
+    "group": "F"
+  },
+  {
+    "id": "F21",
+    "title": "猫档案 / 不可用",
+    "route": "/cat/[id] · unavailable",
+    "desc": "无效 ID、未公开、读取失败的安全返回结构；不暴露内部错误或私有身份信息。",
+    "group": "F"
+  },
+  {
+    "id": "F22",
+    "title": "个人资料 / 读取失败",
+    "route": "/(tabs)/profile · name load error",
+    "desc": "读取失败与 F17 保存失败分开。未拿到当前账户字段时不显示已填表单或保存操作。",
+    "group": "F"
+  },
+  {
+    "id": "F23",
+    "title": "身份续办 / 档案读取失败",
+    "route": "/report/receipt · candidates load error",
+    "desc": "与 F13 真正无候选严格区分；网络失败不能变成“没有匹配”或默认创建新猫。",
+    "group": "F"
+  },
+  {
+    "id": "G01",
+    "title": "附近 / 深色",
+    "route": "/(tabs)/index",
+    "desc": "系统深色模式对应稿。玻璃、图标、背景和正文使用语义色，内容层保持清晰。 v2 材质修订：内容滚到导航下方时可看见模糊轮廓；内容可继续上滑并从导航下方经过。",
+    "group": "G"
+  },
+  {
+    "id": "G02",
+    "title": "地图 / 深色",
+    "route": "/(tabs)/map",
+    "desc": "系统深色模式对应稿。玻璃、图标、背景和正文使用语义色，内容层保持清晰。",
+    "group": "G"
+  },
+  {
+    "id": "G03",
+    "title": "报告 / 深色",
+    "route": "/(tabs)/report",
+    "desc": "系统深色模式对应稿。玻璃、图标、背景和正文使用语义色，内容层保持清晰。",
+    "group": "G"
+  },
+  {
+    "id": "G04",
+    "title": "关注 / 深色",
+    "route": "/(tabs)/following",
+    "desc": "系统深色模式对应稿。玻璃、图标、背景和正文使用语义色，内容层保持清晰。",
+    "group": "G"
+  },
+  {
+    "id": "G05",
+    "title": "我的 / 深色",
+    "route": "/(tabs)/profile",
+    "desc": "系统深色模式对应稿。玻璃、图标、背景和正文使用语义色，内容层保持清晰。",
+    "group": "G"
+  }
+]

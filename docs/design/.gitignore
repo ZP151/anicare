@@ -1,0 +1,9 @@
+# Earlier local exploration; the accepted v2 carries its own comparison image.
+/ios26-review-v1/
+# Reproducible delivery containers / contact sheets, retained locally and in Downloads.
+**/*.zip
+**/all-screens.pdf
+**/overview-*.png
+**/pdf-check-*
+**/probe-*
+**/material-layer-probe*
