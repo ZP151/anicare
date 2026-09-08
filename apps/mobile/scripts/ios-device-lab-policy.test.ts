@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import {
@@ -151,13 +152,22 @@ describe('Gate 2B readiness policy', () => {
   });
 
   it('uses the fixed-path readiness CLI and reports a missing evidence file with one bounded code', () => {
-    const script = resolve(__dirname, 'validate-gate-2b-readiness.ts');
-    const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), script], { encoding: 'utf8' });
+    const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'device-lab-missing-evidence-'));
+    try {
+      const scripts = resolve(fixtureRoot, 'apps/mobile/scripts');
+      mkdirSync(scripts, { recursive: true });
+      for (const filename of ['validate-gate-2b-readiness.ts', 'ios-device-lab-policy.ts']) {
+        copyFileSync(resolve(__dirname, filename), resolve(scripts, filename));
+      }
+      const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), resolve(scripts, 'validate-gate-2b-readiness.ts')], { encoding: 'utf8' });
 
-    expect(result.status).toBe(1);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toBe('gate_2b_readiness_missing\n');
-    expect(`${result.stdout}${result.stderr}`).not.toContain('pilot-gate-2b-readiness.json');
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('gate_2b_readiness_missing\n');
+      expect(`${result.stdout}${result.stderr}`).not.toContain('pilot-gate-2b-readiness.json');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('fails closed rather than following symlinked fixed readiness inputs', () => {
