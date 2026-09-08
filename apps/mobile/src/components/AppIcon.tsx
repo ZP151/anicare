@@ -28,6 +28,9 @@ const symbols = {
   heart: ['heart', 'heart-outline'],
   mail: ['envelope', 'email-outline'],
   close: ['xmark', 'close'],
+  community: ['text.bubble', 'forum-outline'],
+  send: ['paperplane.fill', 'send'],
+  reply: ['arrowshape.turn.up.left', 'reply-outline'],
 } as const;
 
 export type AppIconName = keyof typeof symbols;

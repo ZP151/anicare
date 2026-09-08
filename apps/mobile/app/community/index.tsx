@@ -1,0 +1,27 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { blockCommunityAuthor, createCommunityPost, deleteCommunityPost, listCommunityPosts, type CommunityPost } from '../../src/api/community';
+import { useAccountSession } from '../../src/auth/use-account-session';
+import { AppIcon } from '../../src/components/AppIcon';
+import { ScreenScaffold } from '../../src/components/ScreenScaffold';
+import { useNativeColors } from '../../src/design/native-colors';
+
+export default function CommunityScreen() {
+  const colors = useNativeColors(); const styles = makeStyles(colors); const router = useRouter(); const auth = useAccountSession();
+  const { communitySlug, catId } = useLocalSearchParams<{ communitySlug?: string; catId?: string }>();
+  const [items, setItems] = useState<readonly CommunityPost[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false); const [body, setBody] = useState(''); const [writing, setWriting] = useState(false);
+  const load = useCallback(async (more = false) => { setLoading(true); setError(false); try { const page = await listCommunityPosts({ communitySlug: communitySlug ?? null, catId: catId ?? null, cursor: more ? cursor : null }); setItems((old) => more ? [...old, ...page.items] : page.items); setCursor(page.nextCursor); } catch { setError(true); } finally { setLoading(false); } }, [catId, communitySlug, cursor]);
+  useEffect(() => { void load(false); }, [communitySlug, catId]);
+  const submit = async () => { if (!auth.owner || writing) return; setWriting(true); try { await createCommunityPost(body, catId ?? null, communitySlug ?? null); setBody(''); await load(false); } catch { setError(true); } finally { setWriting(false); } };
+  return <ScreenScaffold title="Community" subtitle={communitySlug ? `Conversations in ${communitySlug}` : 'Neighbourhood cat care, in context.'} nativeAppearance>
+    {auth.owner ? <View style={styles.composer}><TextInput accessibilityLabel="Start a discussion" value={body} onChangeText={setBody} multiline placeholder="Start a discussion" placeholderTextColor={colors.muted} style={styles.input} /><Pressable accessibilityRole="button" accessibilityLabel="Post" disabled={!body.trim() || writing} onPress={() => void submit()} style={styles.send}><AppIcon name="send" size={18} color={colors.actionPrimary} /></Pressable></View> : <Text style={styles.note}>Sign in and confirm you are 18+ to join the conversation.</Text>}
+    {loading && !items.length ? <ActivityIndicator color={colors.actionPrimary} /> : null}
+    {error ? <View style={styles.state}><Text style={styles.note}>We could not load this conversation.</Text><Pressable onPress={() => void load(false)}><Text style={styles.link}>Try again</Text></Pressable></View> : null}
+    {!loading && !error && !items.length ? <Text style={styles.note}>No discussions here yet. Start with something helpful for your neighbours.</Text> : null}
+    {items.map((post) => <View key={post.postId} style={styles.post}><Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/community/[id]', params: { id: post.postId } })} style={styles.postOpen}><View style={styles.meta}><Text style={styles.author}>{post.author.name}</Text><Text style={styles.muted}>{new Date(post.createdAt).toLocaleDateString()}</Text></View><Text style={styles.body}>{post.body}</Text><Text style={styles.muted}>{post.replyCount} {post.replyCount === 1 ? 'reply' : 'replies'}</Text></Pressable>{auth.owner ? <View style={styles.actions}>{post.canDelete ? <Pressable accessibilityRole="button" onPress={() => void deleteCommunityPost(post.postId).then(() => load(false)).catch(() => setError(true))}><Text style={styles.link}>Delete</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => void blockCommunityAuthor('community_post', post.postId).then(() => load(false)).catch(() => setError(true))}><Text style={styles.link}>Block author</Text></Pressable>}</View> : null}</View>)}
+    {cursor ? <Pressable accessibilityRole="button" disabled={loading} onPress={() => void load(true)} style={styles.more}><Text style={styles.link}>{loading ? 'Loading…' : 'Load more'}</Text></Pressable> : null}
+  </ScreenScaffold>;
+}
+const makeStyles = (c: ReturnType<typeof useNativeColors>) => StyleSheet.create({ composer:{backgroundColor:c.surface,borderRadius:16,padding:12,flexDirection:'row',alignItems:'flex-end',gap:8}, input:{flex:1,minHeight:44,color:c.ink,fontSize:17,lineHeight:23},send:{width:44,height:44,alignItems:'center',justifyContent:'center'},post:{paddingVertical:16,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:c.line,gap:8},postOpen:{gap:8},actions:{flexDirection:'row',justifyContent:'flex-end'},meta:{flexDirection:'row',justifyContent:'space-between',gap:12},author:{fontSize:17,fontWeight:'600',color:c.ink},body:{fontSize:17,lineHeight:24,color:c.ink},muted:{fontSize:13,color:c.muted},note:{fontSize:16,lineHeight:23,color:c.muted},link:{fontSize:17,color:c.actionPrimary,fontWeight:'600'},state:{gap:8},more:{minHeight:44,justifyContent:'center',alignItems:'center'} });
