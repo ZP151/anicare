@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { randomUUID } from 'expo-crypto';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { blockCommunityAuthor, createCommunityPost, deleteCommunityPost, listCommunityPosts, reportCommunityContent, type CommunityPost } from '../../src/api/community';
@@ -11,10 +12,10 @@ import { useNativeColors } from '../../src/design/native-colors';
 export default function CommunityScreen() {
   const colors = useNativeColors(); const styles = makeStyles(colors); const router = useRouter(); const auth = useAccountSession();
   const { communitySlug, catId } = useLocalSearchParams<{ communitySlug?: string; catId?: string }>();
-  const [items, setItems] = useState<readonly CommunityPost[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false); const [body, setBody] = useState(''); const [writing, setWriting] = useState(false); const [scope, setScope] = useState(communitySlug ?? '');
+  const [items, setItems] = useState<readonly CommunityPost[]>([]); const [cursor, setCursor] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false); const [body, setBody] = useState(''); const [writing, setWriting] = useState(false); const [scope, setScope] = useState(communitySlug ?? ''); const postRequestId = useRef<string | null>(null);
   const load = useCallback(async (more = false) => { setLoading(true); setError(false); try { const page = await listCommunityPosts({ communitySlug: communitySlug ?? null, catId: catId ?? null, cursor: more ? cursor : null }); setItems((old) => more ? [...old, ...page.items] : page.items); setCursor(page.nextCursor); } catch { setError(true); } finally { setLoading(false); } }, [catId, communitySlug, cursor]);
   useEffect(() => { void load(false); }, [communitySlug, catId]);
-  const submit = async () => { if (!auth.owner || writing || (!catId && !scope.trim())) return; setWriting(true); try { await createCommunityPost(body, catId ?? null, communitySlug ?? scope.trim()); setBody(''); await load(false); } catch { setError(true); } finally { setWriting(false); } };
+  const submit = async () => { if (!auth.owner || writing || (!catId && !scope.trim())) return; setWriting(true); postRequestId.current ??= randomUUID(); try { await createCommunityPost(body, catId ?? null, communitySlug ?? scope.trim(), undefined, postRequestId.current); setBody(''); postRequestId.current=null; await load(false); } catch { setError(true); } finally { setWriting(false); } };
   return <ScreenScaffold title="Community" subtitle={communitySlug ? `Conversations in ${communitySlug}` : 'Neighbourhood cat care, in context.'} nativeAppearance>
     {auth.owner ? <View style={styles.composer}>{!catId && !communitySlug ? <TextInput accessibilityLabel="Community area" value={scope} onChangeText={setScope} placeholder="Community area, e.g. punggol" placeholderTextColor={colors.muted} style={styles.scope} autoCapitalize="none" /> : null}<View style={styles.composerRow}><TextInput accessibilityLabel="Start a discussion" value={body} onChangeText={setBody} multiline placeholder="Start a discussion" placeholderTextColor={colors.muted} style={styles.input} /><Pressable accessibilityRole="button" accessibilityLabel="Post" disabled={!body.trim() || writing || (!catId && !scope.trim())} onPress={() => void submit()} style={styles.send}><AppIcon name="send" size={18} color={colors.actionPrimary} /></Pressable></View></View> : <Text style={styles.note}>Sign in and confirm you are 18+ to join the conversation.</Text>}
     {loading && !items.length ? <ActivityIndicator color={colors.actionPrimary} /> : null}
