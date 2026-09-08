@@ -27,7 +27,7 @@ const candidateSecrets = {
 const actionWith = {
   pnpm: { version: '11.19.0' },
   node: { 'node-version': '22.23.1', cache: 'pnpm' },
-  ruby: { 'ruby-version': '3.3.12', bundler: 'none' },
+  ruby: { 'ruby-version': '3.3.12', bundler: '2.6.9', 'bundler-cache': true },
 };
 const nativeUses = [sha.checkout, sha.pnpm, sha.node, sha.ruby];
 const toolCheck = `sudo xcode-select -s /Applications/Xcode_26.4.1.app/Contents/Developer
@@ -36,7 +36,9 @@ test "$(xcodebuild -version | sed -n '2p')" = 'Build version 17E202'
 test "$(node --version)" = 'v22.23.1'
 test "$(pnpm --version)" = '11.19.0'
 test "$(ruby --version | awk '{print $2}')" = '3.3.12'
-pod _1.17.0_ --version
+test "$(bundle exec ruby -e 'print RUBY_VERSION')" = '3.3.12'
+bundle exec ruby -rrbconfig -e 'puts RbConfig.ruby; puts Gem.dir; puts Gem.bin_path("cocoapods", "pod", "1.17.0")'
+test "$(bundle exec pod --version)" = '1.17.0'
 `;
 const domainBuildCommand = 'pnpm --filter @animalhelper/domain build';
 const mobileUnsignedBuildCommand = 'pnpm --filter @animalhelper/mobile build:unsigned-ios';
@@ -160,7 +162,7 @@ function assertWorkflowContract(workflow, source) {
   assert.equal(bootstrapPrepare.run, 'pnpm exec tsx scripts/prepare-ios-device-lab-podfile.ts');
   const bootstrapResolve = step(bootstrap, 'Resolve the missing Pod lock only');
   assert.equal(bootstrapResolve['working-directory'], 'apps/mobile');
-  assert.equal(bootstrapResolve.run, 'cd ios\npod _1.17.0_ install\n');
+  assert.equal(bootstrapResolve.run, 'cd ios\nbundle exec pod install\n');
   assert.equal(step(bootstrap, 'Validate the generated Pod lock').run, 'pnpm --filter @animalhelper/mobile validate:generated-ios-device-lab-podfile-lock');
   const bootstrapUpload = step(bootstrap, 'Upload the generated Pod lock for review');
   assert.deepEqual(bootstrapUpload.with, {

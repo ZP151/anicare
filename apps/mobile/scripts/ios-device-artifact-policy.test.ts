@@ -187,7 +187,7 @@ describe('unsigned iOS build shell contract', () => {
     expect(script).toMatch(/xcode_version_line.*== 'Xcode 26\.4\.1'/);
     expect(script).toMatch(/xcode_build_line.*== 'Build version 17E202'/);
     expect(script).toContain('expo prebuild --clean --platform ios --no-install');
-    expect(script).toContain('pod _1.17.0_ install --deployment');
+    expect(script).toContain('bundle exec pod install --deployment');
     expect(script).toContain('-destination generic/platform=iOS');
     expect(script).toContain('CODE_SIGNING_ALLOWED=NO');
     expect(script).toContain('CODE_SIGNING_REQUIRED=NO');
@@ -246,7 +246,7 @@ describe('unsigned iOS build shell contract', () => {
     const reviewed = script.indexOf('pnpm validate:reviewed-ios-device-lab-podfile-lock');
     const copy = script.indexOf('cp -- "$LOCKFILE_SOURCE" "$IOS_DIR/Podfile.lock"');
     const generated = script.indexOf('pnpm validate:generated-ios-device-lab-podfile-lock');
-    const deployment = script.indexOf('pod _1.17.0_ install --deployment');
+    const deployment = script.indexOf('bundle exec pod install --deployment');
 
     expect(reviewed).toBeGreaterThan(-1);
     expect(copy).toBeGreaterThan(reviewed);
