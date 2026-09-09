@@ -262,6 +262,7 @@ source_lock_sha256="$(shasum -a 256 "$LOCKFILE_SOURCE" | awk '{print $1}')"
 generated_lock_sha256="$(shasum -a 256 "$IOS_DIR/Podfile.lock" | awk '{print $1}')"
 [[ "$source_lock_sha256" == "$generated_lock_sha256" ]] || fail "generated_podfile_lock_invalid"
 [[ "$(bundle exec ruby -e 'print RUBY_VERSION')" == '3.3.12' ]] || fail "ruby_version_invalid"
+export PATH="$SCRIPT_DIR/maven-curl:$PATH"
 pod_version="$(bundle exec pod --version)"
 [[ "$pod_version" == '1.17.0' ]] || fail "cocoapods_version_invalid"
 (

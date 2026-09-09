@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The canonical Maven endpoint can return transient 404/522 responses for RN
+# artifacts. Use the GCS Maven Central mirror for these two public namespaces.
+# CocoaPods still records the canonical podspec URLs; RN tarball checksum
+# handling is retained. Other curl requests and arguments pass through unchanged.
+args=()
+for argument in "$@"; do
+  case "$argument" in
+    https://repo1.maven.org/maven2/com/facebook/react/react-native-artifacts/*|https://repo1.maven.org/maven2/com/facebook/hermes/hermes-ios/*)
+      argument="https://maven-central.storage-download.googleapis.com/maven2/${argument#https://repo1.maven.org/maven2/}"
+      ;;
+  esac
+  args+=("$argument")
+done
+exec /usr/bin/curl "${args[@]}"

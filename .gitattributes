@@ -2,3 +2,4 @@ supabase/migrations/*.sql text eol=lf
 supabase/functions/** text eol=lf
 docs/evidence/*.json text eol=lf
 *.sh text eol=lf
+apps/mobile/scripts/maven-curl/curl text eol=lf
