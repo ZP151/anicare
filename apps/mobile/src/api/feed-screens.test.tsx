@@ -10,6 +10,15 @@ jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:mockLocale.value}
 import MapScreen from '../../app/(tabs)/map';
 const row={sightingId:'00000000-0000-4000-8000-000000000101',animalId:'00000000-0000-4000-8000-000000000102',primaryAlias:'Pepper',verification:'reported',publicCellId:'896526add03ffff',timeBucket:'today',coverMediaId:null,cursor:'00000000-0000-4000-8000-000000000101'};
 beforeEach(()=>{jest.clearAllMocks();mockLocale.value='en';mockSubject.mockResolvedValue(null);mockFeed.mockResolvedValue({items:[row],nextCursor:row.cursor});mockPlaces.mockResolvedValue(new Map([[row.sightingId,{residenceType:'hdb',residenceName:'Block 123 Test Street'}]]));});
+it('switches the actual stored sample name in an already open map sheet',async()=>{
+ mockFeed.mockResolvedValue({items:[{...row,animalId:'00000000-0000-4000-8000-00000000a107',primaryAlias:'Mochi 麻糬 测试样本 S07'}],nextCursor:null});
+ const view=await render(<MapScreen/>);
+ await fireEvent.press(await view.findByRole('button',{name:'Tampines, 1 cats'}));
+ expect(view.getByText('Mochi')).toBeTruthy();expect(view.getByText('Test sample S07')).toBeTruthy();
+ mockLocale.value='zh-CN';await view.rerender(<MapScreen/>);
+ expect(view.getByText('麻糬')).toBeTruthy();expect(view.getByText('测试样本 S07')).toBeTruthy();
+ expect(view.queryByText('Mochi 麻糬 测试样本 S07')).toBeNull();await view.unmount();
+});
 it('connects a Singapore community, building and cat to real routes',async()=>{
  const view=await render(<MapScreen/>);
  await waitFor(()=>expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy());

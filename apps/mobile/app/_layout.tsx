@@ -34,6 +34,7 @@ function LocalizedStack() {
         <Stack.Screen name="privacy" options={{ title: cn ? '隐私与请求' : 'Privacy and requests' }} />
         <Stack.Screen name="safety/[id]" options={{ title: cn ? '内容安全' : 'Content safety' }} />
         <Stack.Screen name="community/geography" options={{ headerShown: false }} />
+        <Stack.Screen name="community/mine" options={{ headerShown: false }} />
         <Stack.Screen name="community/new" options={{ headerShown: false }} />
         <Stack.Screen name="community/index" options={{ headerShown: false }} />
         <Stack.Screen name="community/[id]" options={{ headerShown: false }} />

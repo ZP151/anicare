@@ -6,6 +6,8 @@ import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 import { ensurePortrait } from './portrait.js';
 import { samples, legacyEnglishNames, samplePlaces } from './fixtures.js';
+import { COMMUNITY_TEST_POSTS } from '../../../apps/mobile/src/community/test-samples.js';
+import { ensureCommunitySample } from './community.js';
 
 const project = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 
@@ -103,7 +105,36 @@ async function main() {
       const discovery = await anonymous.rpc('list_public_cat_discovery', { p_public_cell_id: cell, p_verifications: null, p_cursor: null, p_limit: 50 });
       if (discovery.error || !Array.isArray(discovery.data) || discovery.data.length < 1) throw new Error('test_sample_discovery_failed');
     }
-    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length };
+    const visiblePostIds: string[] = [];
+    const visibleReplyIds: string[] = [];
+    for (const post of COMMUNITY_TEST_POSTS) {
+      const visible = await db.begin(async sql => {
+        await sql`select pg_advisory_xact_lock(hashtext(${post.id}))`;
+        const expected = {id:post.id,author_id:null,body:post.body.en,cat_id:post.catId,community_slug:post.communitySlug};
+        const available = await ensureCommunitySample({
+          read:async()=> (await sql`select * from public.community_posts where id=${post.id}::uuid`)[0] ?? null,
+          insert:()=>sql`insert into public.community_posts(id,author_id,body,cat_id,community_slug,created_at) values(${post.id}::uuid,null,${post.body.en},${post.catId}::uuid,${post.communitySlug},now()-interval '8 hours')`,
+        },expected);
+        if (!available) return false;
+        await ensureCommunitySample({
+          read:async()=> (await sql`select * from public.community_replies where id=${post.reply.id}::uuid`)[0] ?? null,
+          insert:()=>sql`insert into public.community_replies(id,post_id,author_id,body,created_at) values(${post.reply.id}::uuid,${post.id}::uuid,null,${post.reply.body.en},now()-interval '7 hours')`,
+        },{id:post.reply.id,post_id:post.id,author_id:null,body:post.reply.body.en});
+        return true;
+      });
+      if (!visible) continue;
+      const [{data:detail,error:detailError},{data:replies,error:replyError},{data:reaction,error:reactionError}] = await Promise.all([
+        anonymous.rpc('get_public_community_post',{p_post_id:post.id}),
+        anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30}),
+        anonymous.rpc('get_community_post_reactions',{p_post_ids:[post.id]}),
+      ]);
+      if (detailError || !Array.isArray(detail) || detail.length!==1 || detail[0].body!==post.body.en ||
+          replyError || !Array.isArray(replies) || reactionError || !Array.isArray(reaction) || reaction.length!==1)
+        throw new Error('test_sample_community_journey_failed');
+      visiblePostIds.push(post.id);
+      if (replies.some(reply=>reply.replyId===post.reply.id && reply.body===post.reply.body.en)) visibleReplyIds.push(post.reply.id);
+    }
+    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds };
     await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
     process.stdout.write('ios26_test_samples_provisioned\n');
   } finally { await db.end({ timeout: 5 }); }

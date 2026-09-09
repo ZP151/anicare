@@ -1,7 +1,7 @@
 import {act,fireEvent,render,waitFor} from '@testing-library/react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000004'}));
-const mockList=jest.fn(),mockCreate=jest.fn();let mockOwner:string|null='owner-a';let mockEpoch=0;let mockDelayPin=false;const mockPins:Array<()=>void>=[];let mockParams:Record<string,string>={communitySlug:'tampines'};
-jest.mock('./community',()=>({listCommunityPosts:(...args:unknown[])=>mockList(...args),createCommunityPost:(...args:unknown[])=>mockCreate(...args),blockCommunityAuthor:jest.fn(),deleteCommunityPost:jest.fn(),reportCommunityContent:jest.fn()}));
+const mockList=jest.fn(),mockMine=jest.fn(),mockCreate=jest.fn();let mockOwner:string|null='owner-a';let mockEpoch=0;let mockDelayPin=false;const mockPins:Array<()=>void>=[];let mockParams:Record<string,string>={communitySlug:'tampines'};
+jest.mock('./community',()=>({listMyCommunityPosts:(...args:unknown[])=>mockMine(...args),listCommunityPosts:(...args:unknown[])=>mockList(...args),createCommunityPost:(...args:unknown[])=>mockCreate(...args),blockCommunityAuthor:jest.fn(),deleteCommunityPost:jest.fn(),reportCommunityContent:jest.fn()}));
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),pin:()=>{const epoch=mockEpoch;return async()=>{if(mockDelayPin)await new Promise<void>(resolve=>mockPins.push(resolve));return epoch===mockEpoch;};}})}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
 jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn(),replace:jest.fn(),setParams:jest.fn()}),useFocusEffect:jest.fn(),useLocalSearchParams:()=>mockParams}));
@@ -10,8 +10,25 @@ jest.mock('./cat-presentation',()=>({getCatPresentations:async()=>new Map()}));
 jest.mock('./community-avatar',()=>({getCommunityAvatars:async()=>new Map()}));
 jest.mock('./community-reactions',()=>({getCommunityReactions:async()=>new Map()}));
 import CommunityScreen from '../../app/community/index';
+import { COMMUNITY_TEST_POSTS } from '../community/test-samples';
 const post=(body:string)=>({postId:'00000000-0000-4000-8000-000000000001',body,catId:null,communitySlug:'tampines',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},replyCount:0,canDelete:false,cursor:'00000000-0000-4000-8000-000000000001'});
 beforeEach(()=>{jest.clearAllMocks();mockParams={communitySlug:'tampines'};mockOwner='owner-a';mockEpoch++;mockDelayPin=false;mockPins.length=0;mockList.mockResolvedValue({items:[],nextCursor:null});});
+it('renders persisted examples with translated text and a separate test badge',async()=>{
+ const sample=COMMUNITY_TEST_POSTS[0]!;
+ mockList.mockResolvedValue({items:[{...post(sample.body.en),postId:sample.id}],nextCursor:null});
+ const view=await render(<CommunityScreen/>);
+ expect(await view.findByText(sample.body.zh)).toBeTruthy();
+ expect(view.getByText('测试样本 C01')).toBeTruthy();
+ expect(view.queryByText(sample.body.en)).toBeNull();await view.unmount();
+});
+it('uses the owner collection and clears it after sign out',async()=>{
+ mockParams={};mockMine.mockResolvedValue({items:[post('My saved post')],nextCursor:null});
+ const view=await render(<CommunityScreen mine/>);
+ expect(await view.findByText('My saved post')).toBeTruthy();expect(mockList).not.toHaveBeenCalled();
+ mockOwner=null;mockEpoch++;await view.rerender(<CommunityScreen mine/>);
+ expect(await view.findByText('登录后查看自己的帖子')).toBeTruthy();expect(view.queryByText('My saved post')).toBeNull();
+ await view.unmount();
+});
 it('uses human community context and Chinese controls',async()=>{
  const view=await render(<CommunityScreen/>);expect(await view.findByRole('header',{name:'社区'})).toBeTruthy();expect(view.queryByLabelText('发起讨论')).toBeNull();expect(view.getByLabelText('发布帖子')).toBeTruthy();await view.unmount();
 });

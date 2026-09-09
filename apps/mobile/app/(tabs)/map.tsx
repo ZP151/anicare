@@ -1,3 +1,4 @@
+import { catSampleLabel } from '../../src/i18n/cat-name';
 import { PlaceSearch, MyLocationButton } from '../../src/maps/PlaceSearch';
 import type { NearbyMapProps } from '../../src/maps/NearbyMap.types';
 import type { SingaporeRegion } from '@animalhelper/domain';
@@ -18,6 +19,7 @@ import { buildSingaporeAreas, filterSingaporeAreas, communityLabel, SG_COMMUNITI
 
 export default function MapScreen(){
  const {locale}=useLocale(); const cn=locale==='zh-CN'; const router=useRouter(); const colors=useNativeColors(); const styles=makeStyles(colors);
+ const localeRef=useRef(locale);localeRef.current=locale;
  const params=useLocalSearchParams<{communityId?:string}>();
  const desiredCommunity=SG_COMMUNITIES.some(area=>area.id===params.communityId)?params.communityId!:null;
  const client=getSupabaseClient() as unknown as NarrowRpcClient|null;
@@ -31,7 +33,7 @@ export default function MapScreen(){
  const load=useCallback(async(reset=true)=>{
    if(busy.current&&!reset)return;
    const ticket=++generation.current; busy.current=true;setLoading(true);setError(false);
-   if(reset){rows.current=[];places.current=new Map();cursor.current=null;setHasMore(false);setSelectedId(desiredCommunity);setAreas(buildSingaporeAreas([],new Map(),locale));}
+   if(reset){rows.current=[];places.current=new Map();cursor.current=null;setHasMore(false);setSelectedId(desiredCommunity);setAreas(buildSingaporeAreas([],new Map(),localeRef.current));}
    try{
      if(!client)throw new Error('unconfigured');
      const owner=await readSessionSubjectStrict();
@@ -39,10 +41,11 @@ export default function MapScreen(){
      const metadata=await getSightingPlaces(page.items.map(item=>item.sightingId),client);
      if(ticket!==generation.current || owner!==await readSessionSubjectStrict())return;
      rows.current=[...rows.current,...page.items]; for(const [id,place] of metadata)places.current.set(id,place);
-     cursor.current=page.nextCursor;setHasMore(page.items.length===50);setAreas(buildSingaporeAreas(rows.current,places.current,locale));
+     cursor.current=page.nextCursor;setHasMore(page.items.length===50);setAreas(buildSingaporeAreas(rows.current,places.current,localeRef.current));
    }catch{if(ticket===generation.current)setError(true);}
    finally{if(ticket===generation.current){busy.current=false;setLoading(false);}}
- },[client,locale,desiredCommunity]);
+ },[client,desiredCommunity]);
+ useEffect(()=>{setAreas(buildSingaporeAreas(rows.current,places.current,locale));},[locale]);
  useEffect(()=>{void load();const unsubscribe=subscribeSessionSubject(()=>{void load();});return()=>{generation.current++;unsubscribe();};},[load]);
  const filtered=filterSingaporeAreas(areas,region,query); const selected=areas.find(area=>area.id===selectedId);
  const children=selected?areas.filter(area=>area.parentId===selected.id):[];
@@ -70,7 +73,7 @@ export default function MapScreen(){
            {children.map(child=><Pressable key={child.id} accessibilityRole="button" onPress={()=>setSelectedId(child.id)} style={styles.row}><AppIcon name="location" color={colors.actionPrimary}/><View style={{flex:1}}><Text style={styles.name}>{communityLabel(child,locale)}</Text></View><Text style={styles.count}>{error?'—':child.cats.length}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>)}
 
 
-           {selected.cats.map(cat=><Pressable accessibilityRole="button" key={cat.animalId} onPress={()=>router.push(`/cat/${cat.animalId}` as never)} style={styles.row}><View style={styles.avatar}><AppIcon name="cat" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{cat.alias}</Text><Text style={styles.meta}>{cat.residenceType?`${cat.residenceType==='hdb'?'HDB':cat.residenceType==='condo'?'Condo':cn?'其他':'Other'} · ${cat.residenceName}`:cn?'楼栋信息未提供':'Building not provided'}</Text><Text style={styles.meta}>{cat.timeLabel}</Text></View><AppIcon name="chevron" color={colors.muted} size={16}/></Pressable>)}
+           {selected.cats.map(cat=><Pressable accessibilityRole="button" key={cat.animalId} onPress={()=>router.push(`/cat/${cat.animalId}` as never)} style={styles.row}><View style={styles.avatar}><AppIcon name="cat" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{cat.alias}</Text>{catSampleLabel(cat.animalId,locale)?<Text style={styles.meta}>{catSampleLabel(cat.animalId,locale)}</Text>:null}<Text style={styles.meta}>{cat.residenceType?`${cat.residenceType==='hdb'?'HDB':cat.residenceType==='condo'?'Condo':cn?'其他':'Other'} · ${cat.residenceName}`:cn?'楼栋信息未提供':'Building not provided'}</Text><Text style={styles.meta}>{cat.timeLabel}</Text></View><AppIcon name="chevron" color={colors.muted} size={16}/></Pressable>)}
            {!selected.cats.length&&!loading&&!error?<Text style={styles.meta}>{cn?'这里尚无已公开的猫记录。可报告目击，或发起社区讨论。':'No public cat records here yet. Report a sighting or start a discussion.'}</Text>:null}
            <View style={styles.actions}><Pressable accessibilityRole="button" onPress={()=>router.push('/report' as never)} style={styles.primary}><Text style={styles.primaryText}>{cn?'报告目击':'Report sighting'}</Text></Pressable><Pressable accessibilityRole="button" onPress={()=>openCommunity(selected)} style={styles.secondary}><Text style={styles.chipText}>{cn?'社区讨论':'Discuss'}</Text></Pressable></View>
          </>:filtered.map(area=><Pressable accessibilityRole="button" accessibilityLabel={`${communityLabel(area,locale)}, ${area.cats.length} ${cn?'只猫':'cats'}`} key={area.id} onPress={()=>setSelectedId(area.id)} style={styles.row}><View style={styles.avatar}><AppIcon name="location" color={colors.actionPrimary}/></View><View style={{flex:1,gap:4}}><Text style={styles.name}>{communityLabel(area,locale)}</Text><Text style={styles.meta}>{area.parentId?`${SG_COMMUNITIES.find(p=>p.id===area.parentId)?.name} · ${cn?'邻里':'Neighbourhood'}`:SG_REGIONS.find(item=>item.id===area.region)?.[cn?'zh':'en']}</Text></View><Text style={styles.count}>{error?'—':area.cats.length}</Text><AppIcon name="chevron" size={16} color={colors.muted}/></Pressable>)}

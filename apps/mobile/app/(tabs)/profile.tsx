@@ -349,6 +349,7 @@ export default function ProfileScreen() {
       </View></ScreenScaffold></Modal>
       <SettingsGroup title={cn ? '我的记录' : 'Your activity'}>
         <SettingsRow title={cn?'我的报告与草稿':'My reports and drafts'} icon="reports" onPress={() => router.push('/report' as never)} />
+        <SettingsRow title={cn?'我的帖子':'My posts'} icon="community" onPress={() => router.push('/community/mine' as never)} />
         <SettingsRow title={cn?'我的照护记录':'My care records'} icon="care" onPress={() => router.push('/care/my-care' as never)} />
         <SettingsRow title={cn?'关注的猫':'Following'} icon="cat" last onPress={() => router.push('/following' as never)} />
       </SettingsGroup>

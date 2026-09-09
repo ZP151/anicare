@@ -1,3 +1,4 @@
+import { communitySampleText } from '../../src/community/test-samples';
 import { ProfileAvatar } from '../../src/profile/ProfileAvatar';
 import { getCommunityAvatars } from '../../src/api/community-avatar';
 import { getCatPresentations } from '../../src/api/cat-presentation';
@@ -35,14 +36,15 @@ export default function CommunityDetailScreen(){
    catch{if(alive.current&&scope===context.current&&await current())setNotice(zh?'回复未完成，内容已保留。请重试。':'Reply not completed. Your text is kept; please retry.');}
    finally{if(scope===context.current){busy.current=false;if(alive.current)setWriting(false);}}
  };
- const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><ProfileAvatar avatarKey={item.author.avatarKey} photoUri={avatars.get('postId' in item?item.postId:item.replyId)} size={42}/><View style={{flex:1}}><Text style={s.author}>{item.author.name}</Text><Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
+ const sample=(item:CommunityPost|CommunityReply)=>communitySampleText('postId' in item?item.postId:item.replyId,item.body,locale);
+ const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><ProfileAvatar avatarKey={sample(item).label?'person':item.author.avatarKey} photoUri={avatars.get('postId' in item?item.postId:item.replyId)} size={42}/><View style={{flex:1}}><Text style={s.author}>{sample(item).label?(zh?'示例邻居':'Demo neighbour'):item.author.name}</Text>{sample(item).label?<Text style={s.meta}>{sample(item).label}</Text>:null}<Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
  return <ScreenScaffold trailing={<Pressable accessibilityRole="button" accessibilityLabel={zh?'返回':'Back'} onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="close" color={c.actionPrimary}/></Pressable>} title={zh?'讨论':'Conversation'}>
    {auth.failed?<Pressable accessibilityRole="button" onPress={()=>void auth.reload()} style={s.touch}><Text style={s.link}>{zh?'重试账户连接':'Retry account connection'}</Text></Pressable>:null}
    {loading&&!post?<ActivityIndicator color={c.actionPrimary}/>:null}
    {failed?<Pressable accessibilityRole="button" onPress={()=>void load()} style={s.touch}><Text style={s.link}>{zh?'讨论暂不可用，点此重试':'Conversation unavailable. Tap to retry.'}</Text></Pressable>:null}
-   {post?<View style={s.parent}>{author(post,'community_post')}<Text style={s.body}>{post.body}</Text>{portrait?<Image source={{uri:portrait}} style={{width:'100%',aspectRatio:1,borderRadius:16}}/>:null}{post.catId?<Pressable accessibilityRole="button" onPress={()=>router.push(`/cat/${post.catId}` as never)} style={s.touch}><Text style={s.link}>{zh?'查看猫咪档案':'View cat profile'}</Text></Pressable>:null}</View>:null}
+   {post?<View style={s.parent}>{author(post,'community_post')}<Text style={s.body}>{sample(post).body}</Text>{portrait?<Image source={{uri:portrait}} style={{width:'100%',aspectRatio:1,borderRadius:16}}/>:null}{post.catId?<Pressable accessibilityRole="button" onPress={()=>router.push(`/cat/${post.catId}` as never)} style={s.touch}><Text style={s.link}>{zh?'查看猫咪档案':'View cat profile'}</Text></Pressable>:null}</View>:null}
    {post?<Text style={s.heading}>{zh?'回复':'Replies'}</Text>:null}
-   {replies.map(item=><View key={item.replyId} style={s.reply}>{author(item,'community_reply')}<Text style={s.body}>{item.body}</Text></View>)}
+   {replies.map(item=><View key={item.replyId} style={s.reply}>{author(item,'community_reply')}<Text style={s.body}>{sample(item).body}</Text></View>)}
    {post&&!replies.length&&!loading?<Text style={s.note}>{zh?'还没有回复。':'No replies yet.'}</Text>:null}
    {cursor?<Pressable accessibilityRole="button" disabled={loading} onPress={()=>void load(true)} style={s.touch}><Text style={s.link}>{zh?'载入更多回复':'Load more replies'}</Text></Pressable>:null}
    {notice?<Text accessibilityLiveRegion="polite" style={s.note}>{notice}</Text>:null}

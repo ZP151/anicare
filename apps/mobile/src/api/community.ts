@@ -38,6 +38,14 @@ export async function listCommunityPosts(input: CommunityFeedInput = {}, client?
   const { data, error } = await rpc.rpc('list_public_community_posts', buildCommunityFeedArgs(input));
   if (error) throw new Error('community_unavailable'); return parseCommunityFeed(data);
 }
+export async function listMyCommunityPosts(cursor: string | null = null, client?: CommunityRpcClient): Promise<CommunityPage> {
+  if (cursor !== null && !uuid(cursor)) throw new Error('invalid_community_feed_request');
+  const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
+  if (!rpc) throw new Error('community_unavailable');
+  const {data, error} = await rpc.rpc('list_my_community_posts', {p_cursor: cursor, p_limit: 20});
+  if (error) throw new Error('community_unavailable');
+  return parseCommunityFeed(data);
+}
 export async function getCommunityPost(postId: string, client?: CommunityRpcClient): Promise<CommunityPost> {
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
   if (!rpc || !uuid(postId)) throw new Error('invalid_community_post');
