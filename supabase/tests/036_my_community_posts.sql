@@ -7,9 +7,9 @@ insert into public.user_profiles(id,public_name,adult_confirmed_at) values
  ('00000000-0000-4000-8000-000000003602','Other',now());
 set local session_replication_role=origin;
 insert into public.community_posts(id,author_id,body,community_slug,created_at) values
- ('00000000-0000-4000-8000-000000003610','00000000-0000-4000-8000-000000003601','Older own post','clementi','2026-09-08'),
- ('00000000-0000-4000-8000-000000003611','00000000-0000-4000-8000-000000003601','Newest own post','clementi','2026-09-09'),
- ('00000000-0000-4000-8000-000000003612','00000000-0000-4000-8000-000000003602','Someone else','clementi','2026-09-10');
+ ('00000000-0000-4000-8000-000000003610','00000000-0000-4000-8000-000000003601','Older own post','clementi','2026-09-08T00:00:00Z'),
+ ('00000000-0000-4000-8000-000000003611','00000000-0000-4000-8000-000000003601','Newest own post','clementi','2026-09-09T00:00:00Z'),
+ ('00000000-0000-4000-8000-000000003612','00000000-0000-4000-8000-000000003602','Someone else','clementi','2026-09-10T00:00:00Z');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003601',true);
 select is((select count(*) from public.list_my_community_posts()),2::bigint,'only own posts');
