@@ -1,9 +1,17 @@
 # 下一次 iPhone 测试
 
 
-## 0.3.0（6）本轮真机验收 · 构建中
+## 0.3.0（6）本轮真机验收 · 已交付
 
-本轮对应用户对 0.2.1（5）的反馈。安装包路径和构建证据待本次发布完成后写入。使用原有 Apple ID 与 Sideloadly 设置覆盖更新；保留已安装应用和草稿。
+[下载本次 IPA](C:/Users/15492/Downloads/WhiskerCommons-iPhone-34377035450/whiskercommons-unsigned-9977e2927ac74aaa51de0378d171cdcdae171bbf.ipa)
+
+- 来源：`9977e2927ac74aaa51de0378d171cdcdae171bbf`；[iOS 构建 34377035450](https://github.com/ZP151/anicare/actions/runs/34377035450) 与 [完整 CI 34377033706](https://github.com/ZP151/anicare/actions/runs/34377033706) 均通过。后端源 `a91f276` 的 [部署检查](https://github.com/ZP151/anicare/actions/runs/34375166353)通过，迁移到 `202609090013`，已部署 8 个 Edge 接口。
+- 包大小：21,558,167 bytes。SHA-256：`9e75b7f18ea809463e54e679dacbcebe2b20e00776e142941da6891cdebf95bf`。
+- GitHub 来源证明、三文件清单、大小及哈希均核验。Pod 锁与当前源和上一版均一致，SHA-256 `f5913dee37e04627cbfada8f682dc2286d0637759b947c46a74e5c452cda8502`。
+- 包内版本 `0.3.0`、build `6`、标识 `sg.animalhelper.app`；Apple 地点搜索桥接已在 Xcode 中编译且存在于可执行文件中。三项权限说明齐全，相机／图库说明明确涵盖报告与公开个人头像。
+- 桌面 120px 图标含 4,442 种颜色、全不透明，Assets.car 和 AppIcon 声明齐全。图标、地图搜索及 Liquid Glass 的实际手机表现仍待用户验收。
+
+本轮对应用户对 0.2.1（5）的反馈。安装包已下载、校验并可通过 Sideloadly 安装。使用原有 Apple ID 与 Sideloadly 设置覆盖更新；保留已安装应用和草稿。
 
 1. **图标与语言**：桌面应为钴蓝底橘白动漫猫，不再是绿色。切换中文／English，查看 Mochi／麻糬、Oliver／奥利和附近、地图、猫档案、关注列表中的名字；用户自己取的名字保持原样。
 2. **定位**：地图点“我的位置”，报告内点设备定位，应在此时申请前台权限并显示进度。已授权时直接定位；拒绝或关闭系统定位后能查看提示、打开设置或手选区域，不应卡住。
