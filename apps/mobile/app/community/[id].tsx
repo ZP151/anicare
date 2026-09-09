@@ -1,7 +1,10 @@
+import { ProfileAvatar } from '../../src/profile/ProfileAvatar';
+import { getCommunityAvatars } from '../../src/api/community-avatar';
+import { getCatPresentations } from '../../src/api/cat-presentation';
 import {useLocalSearchParams,useRouter} from 'expo-router';
 import {useEffect,useRef,useState} from 'react';
 import {randomUUID} from 'expo-crypto';
-import {ActivityIndicator,Pressable,StyleSheet,Text,TextInput,View} from 'react-native';
+import {ActivityIndicator,Image,Pressable,StyleSheet,Text,TextInput,View} from 'react-native';
 import {createCommunityReply,getCommunityPost,listCommunityReplies,type CommunityPost,type CommunityReply} from '../../src/api/community';
 import {useAccountSession} from '../../src/auth/use-account-session';
 import {CommunityContentActions} from '../../src/community/CommunityContentActions';
@@ -15,28 +18,29 @@ import {profileAvatarKey} from '../../src/profile/profile-avatar';
 export default function CommunityDetailScreen(){
  const {id}=useLocalSearchParams<{id:string}>(),router=useRouter(),auth=useAccountSession();const {locale}=useLocale();const zh=locale==='zh-CN',c=useNativeColors(),s=styles(c);
  const [post,setPost]=useState<CommunityPost|null>(null),[replies,setReplies]=useState<readonly CommunityReply[]>([]),[cursor,setCursor]=useState<string|null>(null),[body,setBody]=useState(''),[loading,setLoading]=useState(true),[failed,setFailed]=useState(false),[notice,setNotice]=useState(''),[writing,setWriting]=useState(false);
+ const [avatars,setAvatars]=useState(new Map<string,string>());const [portrait,setPortrait]=useState<string>();
  const generation=useRef(0),busy=useRef(false),alive=useRef(true),context=useRef('');context.current=`${auth.owner??''}|${id}`;
  const pending=useRef<{key:string;id:string}|null>(null);
  const load=async(more=false)=>{
    if(!alive.current)return;const token=++generation.current,current=auth.pin();setLoading(true);setFailed(false);
-   try{const [parent,page]=await Promise.all([getCommunityPost(id),listCommunityReplies(id,more?cursor:null)]);if(alive.current&&token===generation.current&&await current()){setPost(parent);setReplies(old=>more?[...old,...page.items]:page.items);setCursor(page.nextCursor);}}
-   catch{if(alive.current&&token===generation.current&&await current()){setFailed(true);setPost(null);setReplies([]);setCursor(null);}}
+   try{const [parent,page]=await Promise.all([getCommunityPost(id),listCommunityReplies(id,more?cursor:null)]);const [postAvatars,replyAvatars,pictures]=await Promise.all([getCommunityAvatars('community_post',[id]).catch(()=>new Map<string,string>()),getCommunityAvatars('community_reply',page.items.map(r=>r.replyId)).catch(()=>new Map<string,string>()),getCatPresentations(parent.catId?[parent.catId]:[])]);if(alive.current&&token===generation.current&&await current()){setPost(parent);setAvatars(old=>new Map([...(more?old:[]),...postAvatars,...replyAvatars]));setPortrait(parent.catId?pictures.get(parent.catId)?.portraitUri:undefined);setReplies(old=>more?[...old,...page.items]:page.items);setCursor(page.nextCursor);}}
+   catch{if(alive.current&&token===generation.current&&await current()){setFailed(true);setPost(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);}}
    finally{if(alive.current&&token===generation.current&&await current())setLoading(false);}
  };
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++;};},[]);
- useEffect(()=>{generation.current++;busy.current=false;setWriting(false);setPost(null);setReplies([]);setCursor(null);setBody('');setNotice('');pending.current=null;if(auth.owner!==undefined)void load();},[id,auth.owner]);
+ useEffect(()=>{generation.current++;busy.current=false;setWriting(false);setPost(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);setBody('');setNotice('');pending.current=null;if(auth.owner!==undefined)void load();},[id,auth.owner]);
  const reply=async()=>{
    if(!post||!auth.owner||!body.trim()||busy.current)return;busy.current=true;setWriting(true);const current=auth.pin(),scope=context.current;
    try{if(!await current())return;const key=JSON.stringify([scope,body.trim()]);if(pending.current?.key!==key)pending.current={key,id:randomUUID()};await createCommunityReply(id,body,undefined,pending.current.id);if(alive.current&&scope===context.current&&await current()){pending.current=null;setBody('');setNotice(zh?'回复已发布':'Reply posted');await load();}}
    catch{if(alive.current&&scope===context.current&&await current())setNotice(zh?'回复未完成，内容已保留。请重试。':'Reply not completed. Your text is kept; please retry.');}
    finally{if(scope===context.current){busy.current=false;if(alive.current)setWriting(false);}}
  };
- const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><View style={s.avatar}><AppIcon name={profileAvatarKey(item.author.avatarKey)} color={c.actionPrimary}/></View><View style={{flex:1}}><Text style={s.author}>{item.author.name}</Text><Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
+ const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><ProfileAvatar avatarKey={item.author.avatarKey} photoUri={avatars.get('postId' in item?item.postId:item.replyId)} size={42}/><View style={{flex:1}}><Text style={s.author}>{item.author.name}</Text><Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
  return <ScreenScaffold trailing={<Pressable accessibilityRole="button" accessibilityLabel={zh?'返回':'Back'} onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="close" color={c.actionPrimary}/></Pressable>} title={zh?'讨论':'Conversation'}>
    {auth.failed?<Pressable accessibilityRole="button" onPress={()=>void auth.reload()} style={s.touch}><Text style={s.link}>{zh?'重试账户连接':'Retry account connection'}</Text></Pressable>:null}
    {loading&&!post?<ActivityIndicator color={c.actionPrimary}/>:null}
    {failed?<Pressable accessibilityRole="button" onPress={()=>void load()} style={s.touch}><Text style={s.link}>{zh?'讨论暂不可用，点此重试':'Conversation unavailable. Tap to retry.'}</Text></Pressable>:null}
-   {post?<View style={s.parent}>{author(post,'community_post')}<Text style={s.body}>{post.body}</Text></View>:null}
+   {post?<View style={s.parent}>{author(post,'community_post')}<Text style={s.body}>{post.body}</Text>{portrait?<Image source={{uri:portrait}} style={{width:'100%',aspectRatio:1,borderRadius:16}}/>:null}{post.catId?<Pressable accessibilityRole="button" onPress={()=>router.push(`/cat/${post.catId}` as never)} style={s.touch}><Text style={s.link}>{zh?'查看猫咪档案':'View cat profile'}</Text></Pressable>:null}</View>:null}
    {post?<Text style={s.heading}>{zh?'回复':'Replies'}</Text>:null}
    {replies.map(item=><View key={item.replyId} style={s.reply}>{author(item,'community_reply')}<Text style={s.body}>{item.body}</Text></View>)}
    {post&&!replies.length&&!loading?<Text style={s.note}>{zh?'还没有回复。':'No replies yet.'}</Text>:null}

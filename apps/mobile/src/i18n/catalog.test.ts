@@ -16,7 +16,7 @@ describe('localization catalog', () => {
       { route: 'index', label: 'Nearby', accessibilityLabel: 'Nearby community cats' },
       { route: 'map', label: 'Map', accessibilityLabel: 'Community cat map' },
       { route: 'report', label: 'Report', accessibilityLabel: 'Report a community cat' },
-      { route: 'following', label: 'Following', accessibilityLabel: 'Followed cats' },
+      { route: 'discuss', label: 'Community', accessibilityLabel: 'Community feed and discussions' },
       { route: 'profile', label: 'Profile', accessibilityLabel: 'Your profile' },
     ]);
   });
@@ -26,7 +26,7 @@ describe('localization catalog', () => {
       { route: 'index', label: '附近' },
       { route: 'map', label: '地图' },
       { route: 'report', label: '报告' },
-      { route: 'following', label: '关注' },
+      { route: 'discuss', label: '社区' },
       { route: 'profile', label: '我的' },
     ]);
     expect(translate('zh-CN', 'nearby.privacyNote')).toBe('公开位置已模糊处理，并延迟显示。');

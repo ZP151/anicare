@@ -14,7 +14,7 @@ const nativeIcons = {
   index: { default: 'location', selected: 'location.fill' },
   map: { default: 'map', selected: 'map.fill' },
   report: { default: 'square.and.pencil', selected: 'square.and.pencil' },
-  following: { default: 'heart', selected: 'heart.fill' },
+  discuss: { default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' },
   profile: { default: 'person.crop.circle', selected: 'person.crop.circle.fill' },
 } as const;
 

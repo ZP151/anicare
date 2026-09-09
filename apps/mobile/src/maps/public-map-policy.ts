@@ -1,3 +1,4 @@
+import { localizedCatName } from '../i18n/cat-name';
 import type { PublicSighting } from '../api/feed';
 import { getCommunityMapCopy, type Locale } from '../i18n/catalog';
 
@@ -67,7 +68,7 @@ export function toPublicMapPresentation(sighting: PublicSighting, locale: Locale
   if (!verificationLabel || !validTimeBucket) throw new Error('invalid_public_map_presentation');
 
   return {
-    alias: sighting.primaryAlias,
+    alias: localizedCatName(sighting.animalId, sighting.primaryAlias, locale),
     verificationLabel,
     timeLabel: copy.timeLabel(sighting.timeBucket),
     animalId: sighting.animalId,

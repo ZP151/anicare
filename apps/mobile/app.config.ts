@@ -37,7 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     ...base,
-    plugins: [...plugins, maps.plugin as NonNullable<ExpoConfig['plugins']>[number]],
+    plugins: [...plugins, './plugins/with-apple-place-search.cjs', maps.plugin as NonNullable<ExpoConfig['plugins']>[number]],
     extra: {
       ...base.extra,
       androidGoogleMapsConfigured: maps.configured,

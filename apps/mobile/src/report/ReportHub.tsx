@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenScaffold } from '../components/ScreenScaffold';
-import { colors, radii } from '../design/theme';
+import { radii } from '../design/theme';
+import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
 import { reportDraftSummary, type ReportDraftStep } from './report-draft';
@@ -48,7 +49,9 @@ function summarizeDrafts(drafts: readonly StoredDraft[], ownerSubject: string | 
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: ReportHubDependencies; locale: Locale }>) {
+export function ReportHub({ dependencies, locale, allDrafts = false }: Readonly<{ dependencies: ReportHubDependencies; locale: Locale; allDrafts?: boolean }>) {
+  const colors = useNativeColors();
+  const styles = makeStyles(colors);
   const copy = getReportCopy(locale);
   const [drafts, setDrafts] = useState<readonly DraftSummary[]>([]);
   const [draftStatus, setDraftStatus] = useState<DraftStatus>('loading');
@@ -145,11 +148,12 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
   }
 
   return (
-    <ScreenScaffold subtitle={copy.subtitle} title={copy.title}>
-      <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={startReport} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
+    <ScreenScaffold title={allDrafts ? (locale === 'zh-CN' ? '草稿' : 'Drafts') : copy.title}>
+      {allDrafts ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report')} style={styles.textAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? '返回报告' : 'Back to reports'}</Text></Pressable> : null}
+      {!allDrafts ? <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={startReport} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
         <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
         <Text style={styles.primaryActionText}>{starting ? copy.loading : copy.startAction}</Text>
-      </Pressable>
+      </Pressable> : null}
 
       <View style={styles.section}>
         <Text accessibilityRole="header" style={styles.sectionTitle}>{copy.draftsTitle}</Text>
@@ -157,16 +161,17 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
         {draftStatus === 'storage_unavailable' ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.storageUnavailable}</Text> : null}
         {draftStatus === 'error' ? <View style={styles.statusRow}><Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.loadFailed}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.textAction}><Text style={styles.textActionLabel}>{copy.retryAction}</Text></Pressable></View> : null}
         {draftStatus === 'ready' && drafts.length === 0 ? <View style={styles.empty}><MaterialCommunityIcons color={colors.aquaDeep} name="file-document-outline" size={22} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>{copy.emptyTitle}</Text><Text style={styles.muted}>{copy.emptyCopy}</Text></View></View> : null}
-        {draftStatus === 'ready' ? drafts.map((draft) => (
+        {draftStatus === 'ready' ? (allDrafts ? drafts : drafts.slice(0, 1)).map((draft) => (
           <View key={draft.id} style={styles.draftRow}>
             <Pressable accessibilityLabel={draft.claimRequired ? copy.claimContinueDraftLabel(draft.step) : copy.continueDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void continueDraft(draft.id, draft.claimRequired); }} style={({ pressed }) => [styles.draftMain, pressed && styles.pressed]}>
               <MaterialCommunityIcons color={colors.community} name={draft.hasReviewedMedia ? 'image-check-outline' : 'file-edit-outline'} size={21} />
-              <View style={styles.draftCopy}><Text style={styles.draftTitle}>{copy.draftShellTitle}</Text><Text style={styles.muted}>{copy.stepLabel(draft.step)}</Text></View>
+              <View style={styles.draftCopy}><Text style={styles.draftTitle}>{draft.title === 'Report draft' ? copy.draftShellTitle : draft.title}</Text><Text style={styles.muted}>{new Date(draft.updatedAt).toLocaleString(locale === 'zh-CN' ? 'zh-SG' : 'en-SG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {copy.stepLabel(draft.step)}</Text></View>
               <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
             </Pressable>
             <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id, draft.ownerSubject); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><Text style={styles.deleteActionText}>{copy.deleteAction}</Text></Pressable>
           </View>
         )) : null}
+        {!allDrafts && drafts.length > 0 ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report/drafts')} style={styles.reportsAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? `全部草稿 (${drafts.length})` : `All drafts (${drafts.length})`}</Text><MaterialCommunityIcons name="chevron-right" color={colors.muted} size={20}/></Pressable> : null}
       </View>
 
       <View style={styles.section}>
@@ -181,7 +186,7 @@ export function ReportHub({ dependencies, locale }: Readonly<{ dependencies: Rep
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
   primaryAction: { minHeight: 52, paddingHorizontal: 18, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: colors.leaf },
   primaryActionText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
   section: { gap: 10 },

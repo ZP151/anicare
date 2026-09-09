@@ -22,6 +22,7 @@ it('connects a Singapore community, building and cat to real routes',async()=>{
 });
 it('filters by region and building and can switch to the list without requesting device location',async()=>{
  const view=await render(<MapScreen/>);await waitFor(()=>expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy());
+ await fireEvent.press(view.getByText('Communities & cats'));
  await fireEvent.changeText(view.getByLabelText('Search community, cat or building'),'Block 123');expect(view.getByText('1 cats · 2 areas / neighbourhoods')).toBeTruthy();
  await fireEvent.press(view.getByText('North'));expect(view.getByText('No matching community, cat or building.')).toBeTruthy();
  await fireEvent.press(view.getByRole('button',{name:'Show all Singapore'}));expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy();

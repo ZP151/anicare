@@ -7,6 +7,7 @@ function unavailable(): never {
 export async function prepareCanonical(_sourceUri: string): Promise<RenderedMedia> {
   return unavailable();
 }
+export async function prepareAvatar(_sourceUri: string): Promise<RenderedMedia> { return unavailable(); }
 
 export async function renderOpaqueMasks(
   _input: Readonly<{ canonical: RenderedMedia; masks: readonly PrivacyMask[] }>,
@@ -17,3 +18,5 @@ export async function renderOpaqueMasks(
 export async function inspectRendered(_uri: string): Promise<RenderedMedia> {
   return unavailable();
 }
+
+export function discardAvatar(_uri: string): void {}

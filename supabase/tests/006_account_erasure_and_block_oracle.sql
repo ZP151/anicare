@@ -16,10 +16,12 @@ select results_eq(
      order by trigger_name collate "C"$$,
   $$values
       ('aaa_capture_erasure_staging'::text collate "C"),
+      ('aab_queue_profile_avatar_cleanup'::text collate "C"),
+      ('aac_capture_erasure_profile_avatar'::text collate "C"),
       ('user_profiles_account_erasure'::text collate "C"),
       ('user_profiles_legacy_media_deletion_outbox'::text collate "C"),
       ('zzz_capture_erasure_legacy'::text collate "C")$$,
-  'profile deletion retains the established erasure triggers and the two M4 cleanup receipt link triggers'
+  'profile deletion retains the established erasure triggers and media/avatar cleanup receipt triggers'
 );
 with expected(role_name) as (
   values ('public'), ('anon'), ('authenticated'), ('service_role')

@@ -23,3 +23,7 @@
 ## 参考与变更
 
 v2 作为不可覆盖的参考快照，保存全部 87 张页面图片、HTML/CSS、生成脚本、字体和图标许可证。PDF、ZIP、分组总览可从源码重新导出，避免重复大文件进入 Git。设计发生实质变化时创建 v3，并说明对应页面编号；日常实现进度写入交付计划，不改写基准截图来掩盖实现差异。
+
+## 2026-09-10 · Social v5
+
+Current implementation reference: [v5 archive](docs/design/ios26-social-v5/index.html). Use warm neutral surfaces, cobalt actions, native glass controls, human avatars and the original orange-and-ivory anime cat icon. Feed browsing and composition are separate; draft details live in a collection. Preserve prior reference archives. Device feedback, not concept imagery, establishes final visual acceptance.

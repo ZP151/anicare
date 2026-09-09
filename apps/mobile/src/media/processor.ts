@@ -11,6 +11,7 @@ export { CANONICAL_RECIPE, type MediaProcessorAdapter } from './processor-core';
 export async function prepareCanonical(sourceUri: string, adapter?: MediaProcessorAdapter): Promise<RenderedMedia> {
   return prepareCanonicalWithAdapter(sourceUri, adapter);
 }
+export async function prepareAvatar(_sourceUri: string): Promise<RenderedMedia> { throw new Error('secure_media_processing_unavailable'); }
 
 export async function renderOpaqueMasks(
   input: Readonly<{ canonical: RenderedMedia; masks: readonly PrivacyMask[] }>,
@@ -22,3 +23,5 @@ export async function renderOpaqueMasks(
 export async function inspectRendered(uri: string, adapter?: MediaProcessorAdapter): Promise<RenderedMedia> {
   return inspectRenderedWithAdapter(uri, adapter);
 }
+
+export function discardAvatar(_uri: string): void {}

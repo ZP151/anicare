@@ -8,20 +8,20 @@
         "projectId": "f9b84744-77c7-4b2b-8631-f107a8b98af8"
       }
     },
-    "version": "0.2.1",
+    "version": "0.3.0",
     "orientation": "portrait",
     "scheme": "animalhelper",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "5",
+      "buildNumber": "6",
       "bundleIdentifier": "sg.animalhelper.app",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Choose a cat photo to create a private reviewed copy. Selected source media is never uploaded.",
-        "NSCameraUsageDescription": "Take a cat photo for private review and redaction. Source media is never uploaded."
+        "NSPhotoLibraryUsageDescription": "Choose a photo for a report or your public profile avatar. Review the prepared copy before uploading.",
+        "NSCameraUsageDescription": "Take a photo for a report or your public profile avatar. Review the prepared copy before uploading."
       },
-      "icon": "./assets/app-icon-v1.png"
+      "icon": "./assets/app-icon-v2.png"
     },
     "android": {
       "package": "sg.animalhelper.app",
@@ -39,7 +39,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "WhiskerCommons uses your location once to protect and associate a community-cat sighting. Exact coordinates are never public.",
+          "locationWhenInUsePermission": "Find your position on the map or locate a sighting when you ask. Reports share only an approximate area.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false
         }
@@ -47,8 +47,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose a cat photo to attach to your report. Review and redact bystanders before upload.",
-          "cameraPermission": "Take a cat photo for private review and redaction. Source media is never uploaded.",
+          "photosPermission": "Choose a photo for a report or your public profile avatar. Review the prepared copy before uploading.",
+          "cameraPermission": "Take a photo for a report or your public profile avatar. Review the prepared copy before uploading.",
           "microphonePermission": false
         }
       ],
@@ -66,6 +66,6 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "icon": "./assets/app-icon-v1.png"
+    "icon": "./assets/app-icon-v2.png"
   }
 }

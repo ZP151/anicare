@@ -1,13 +1,13 @@
 import { useCallback } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Pressable, Text } from 'react-native';
-import { listFollowedCats } from '../../src/api/follows';
-import { useAccountSession } from '../../src/auth/use-account-session';
-import { CatList } from '../../src/following/CatList';
-import { useCatPage } from '../../src/following/use-cat-page';
-import { ScreenScaffold } from '../../src/components/ScreenScaffold';
-import { careStyles as styles } from '../../src/care/CareEntry';
-import { useLocale } from '../../src/i18n/LocaleContext';
+import { listFollowedCats } from '../src/api/follows';
+import { useAccountSession } from '../src/auth/use-account-session';
+import { CatList } from '../src/following/CatList';
+import { useCatPage } from '../src/following/use-cat-page';
+import { ScreenScaffold } from '../src/components/ScreenScaffold';
+import { careStyles as styles } from '../src/care/CareEntry';
+import { useLocale } from '../src/i18n/LocaleContext';
 export default function FollowingScreen(){
  const {locale}=useLocale();const cn=locale==='zh-CN';const router=useRouter();const auth=useAccountSession();
  const fetchPage=useCallback((cursor:string|null)=>listFollowedCats({cursor}),[]);const list=useCatPage(fetchPage,auth.pin);

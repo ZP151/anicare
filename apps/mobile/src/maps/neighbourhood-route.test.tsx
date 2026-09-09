@@ -9,6 +9,7 @@ import MapScreen from '../../app/(tabs)/map';
 beforeEach(()=>{mockPush.mockReset();mockParams={};});
 it('drills from Clementi to West Coast, opens its discussion, and returns to the parent',async()=>{
  const view=await render(<MapScreen/>);
+ await fireEvent.press(view.getByText('社区与猫'));
  await fireEvent.changeText(view.getByLabelText('搜索社区、猫或楼栋'),'金文泰');
  await fireEvent.press(view.getByLabelText('金文泰 · Clementi, 0 只猫'));
  await fireEvent.press(view.getByText('西海岸 · West Coast'));

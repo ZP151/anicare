@@ -9,11 +9,11 @@ describe('tab iconography', () => {
     expect(getTabIconName('map', false)).toBe('map-outline');
     expect(getTabIconName('report', true)).toBe('plus-circle');
     expect(getTabIconName('report', false)).toBe('plus-circle-outline');
-    expect(getTabIconName('following', true)).toBe('heart');
-    expect(getTabIconName('following', false)).toBe('heart-outline');
+    expect(getTabIconName('discuss', true)).toBe('forum');
+    expect(getTabIconName('discuss', false)).toBe('forum-outline');
     expect(getTabIconName('profile', true)).toBe('account');
     expect(getTabIconName('profile', false)).toBe('account-outline');
-    const routes: TabRoute[] = ['index', 'map', 'report', 'following', 'profile'];
+    const routes: TabRoute[] = ['index', 'map', 'report', 'discuss', 'profile'];
     expect(routes.flatMap((route) => [getTabIconName(route, true), getTabIconName(route, false)]).join(''))
       .not.toMatch(/[⌂⌖＋♡●]/);
   });

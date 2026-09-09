@@ -13,10 +13,10 @@ function env(): HostedGateEnvironment {
 }
 
 describe('remote hosted deployment state', () => {
-  it('requires the Singapore discovery migration at the remote head', () => {
+  it('requires the community reactions migration at the remote head', () => {
     expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
-      version: '202609090011',
-      name: 'singapore_discovery_areas',
+      version: '202609090013',
+      name: 'community_reactions',
     });
   });
 

@@ -1,4 +1,4 @@
-import * as Location from 'expo-location';
+import { requestDeviceLocation } from '../../src/maps/device-location';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -46,10 +46,8 @@ export default function NewReportRoute() {
       saveDraft: saveOfflineDraft,
       removeReviewedMedia: removeReviewedMediaFromDraft,
       requestDeviceLocation: async () => {
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (permission.status !== 'granted') return { kind: 'denied' as const };
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        return { kind: 'granted' as const, latitude: position.coords.latitude, longitude: position.coords.longitude };
+        const result = await requestDeviceLocation();
+        return result.kind === 'granted' ? result : { kind: 'denied' as const };
       },
       submit: async (input) => {
         const result = await submitReportWithMedia(input, {

@@ -48,6 +48,10 @@ const unsafeEvidence: NativeConfigEvidence = {
 };
 
 describe('native config policy', () => {
+  it('permits updated camera explanations without disabling microphone protection', () => {
+    const plugins = safeEvidence.plugins.map(plugin => Array.isArray(plugin) && plugin[0] === 'expo-image-picker' ? ['expo-image-picker', {cameraPermission: 'Take a profile photo.', microphonePermission: false}] : plugin);
+    expect(evaluateNativeConfigEvidence({...safeEvidence, plugins})).toEqual([]);
+  });
   it('reports forbidden capture and always-location evidence', () => {
     expect(evaluateNativeConfigEvidence(unsafeEvidence)).toEqual(
       expect.arrayContaining([

@@ -1,3 +1,4 @@
+import { localizedCatName } from '../i18n/cat-name';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -78,7 +79,7 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
     <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
     <Text style={styles.copy}>{copy.intro}</Text>
     {existing ? <Pressable accessibilityRole="button" accessibilityLabel={copy.retry} disabled={busy} onPress={() => { void submit(existing.intent, existing.requestId); }} style={styles.primary}><Text style={styles.primaryText}>{copy.retry}</Text></Pressable> : <>
-      {candidates.map((candidate) => <Pressable key={candidate.animalId} accessibilityRole="button" accessibilityLabel={candidate.primaryAlias} disabled={busy} onPress={() => { void submit({ kind: 'existing', animalId: candidate.animalId }); }} style={styles.option}><Text style={styles.optionText}>{candidate.primaryAlias}</Text></Pressable>)}
+      {candidates.map((candidate) => <Pressable key={candidate.animalId} accessibilityRole="button" accessibilityLabel={localizedCatName(candidate.animalId, candidate.primaryAlias, locale)} disabled={busy} onPress={() => { void submit({ kind: 'existing', animalId: candidate.animalId }); }} style={styles.option}><Text style={styles.optionText}>{localizedCatName(candidate.animalId, candidate.primaryAlias, locale)}</Text></Pressable>)}
       {cursor ? <Pressable accessibilityRole="button" accessibilityLabel={copy.more} disabled={busy} onPress={() => { void more(); }} style={styles.option}><Text style={styles.optionText}>{copy.more}</Text></Pressable> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={copy.new} disabled={busy} onPress={() => { void submit({ kind: 'new' }); }} style={styles.primary}><Text style={styles.primaryText}>{copy.new}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={copy.skip} disabled={busy} onPress={onSkip} style={styles.option}><Text style={styles.optionText}>{copy.skip}</Text></Pressable>

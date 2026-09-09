@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { SightingRisk } from '../api/sightings';
 import { ScreenScaffold } from '../components/ScreenScaffold';
@@ -74,6 +74,7 @@ export function ReportWizard({
   const [deviceAreaSelected, setDeviceAreaSelected] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [publicPlaceType, setPublicPlaceType] = useState<ReportPublicPlace['residenceType'] | null>(null);
+  const [placeNameInput, setPlaceNameInput] = useState<string | null>(null);
   const coordinatesRef = useRef<Readonly<{ latitude: number; longitude: number }> | null>(null);
   const locationPromptedRef = useRef(false);
   const submitInFlightRef = useRef(false);
@@ -156,7 +157,8 @@ export function ReportWizard({
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'background' && nextState !== 'inactive') return;
+      // iOS permission sheets make the app inactive; only a real background invalidates GPS.
+      if (nextState !== 'background') return;
       clearActiveDeviceLocation();
       const currentDraft = currentDraftRef.current;
       const currentStage = currentStageRef.current;
@@ -189,16 +191,38 @@ export function ReportWizard({
     setDraft({ ...draft, report: sanitizeReportDraftPayload({ ...draft.report, [kind]: next }) });
   };
 
-  const selectDeviceArea = () => {
+  const selectDeviceArea = async () => {
     if (locationPromptedRef.current) return;
-    setDeviceAreaSelected(true);
+    clearActiveDeviceLocation();
+    if (draft?.report) setDraft({ ...draft, report: { ...draft.report, manualPublicCellId: null } });
+    const attempt = deviceAttemptRef.current;
+    locationPromptedRef.current = true;
     setManualSelectionRequested(false);
-    setStatus(copy.wizardDevicePending);
+    setStatus(locale === 'zh-CN' ? '正在获取当前位置…' : 'Finding your location…');
+    try {
+      const result = await dependencies.requestDeviceLocation();
+      if (!mountedRef.current || attempt !== deviceAttemptRef.current) return;
+      if (result.kind !== 'granted') {
+        setManualSelectionRequested(true);
+        setStatus(copy.wizardLocationDenied);
+        return;
+      }
+      coordinatesRef.current = { latitude: result.latitude, longitude: result.longitude };
+      setDeviceAreaSelected(true);
+      setStatus(copy.wizardDevicePending);
+    } catch {
+      if (mountedRef.current && attempt === deviceAttemptRef.current) {
+        setManualSelectionRequested(true);
+        setStatus(locale === 'zh-CN' ? '暂时无法定位。请检查系统定位设置，或在地图上选择。' : 'Location unavailable. Check location settings or choose a place on the map.');
+      }
+    } finally {
+      locationPromptedRef.current = false;
+    }
   };
 
   const selectManualArea = (selection: { publicCellId: string }) => {
     if (!draft?.report) return;
-    setDeviceAreaSelected(false);
+    clearActiveDeviceLocation();
     setDraft({
       ...draft,
       report: sanitizeReportDraftPayload({
@@ -213,6 +237,7 @@ export function ReportWizard({
 
   const updatePublicPlace = (residenceType: ReportPublicPlace['residenceType'] | null, name: string) => {
     if (!draft?.report) return;
+    setPlaceNameInput(name);
     const trimmed = name.trim();
     setDraft({ ...draft, report: sanitizeReportDraftPayload({
       ...draft.report,
@@ -228,16 +253,7 @@ export function ReportWizard({
     const attemptIsCurrent = () => mountedRef.current && deviceAttemptRef.current === attempt;
     try {
       let location: Readonly<{ kind: 'device_once'; latitude: number; longitude: number }> | Readonly<{ kind: 'manual_area'; publicCellId: string }> | null = null;
-      if (deviceAreaSelected) {
-        locationPromptedRef.current = true;
-        const result = await dependencies.requestDeviceLocation();
-        if (!attemptIsCurrent()) return;
-        if (result.kind !== 'granted') {
-          setManualSelectionRequested(true);
-          setStatus(copy.wizardLocationDenied);
-          return;
-        }
-        coordinatesRef.current = { latitude: result.latitude, longitude: result.longitude };
+      if (deviceAreaSelected && coordinatesRef.current) {
         location = { kind: 'device_once', ...coordinatesRef.current };
       } else if (draft.report.manualPublicCellId) {
         location = { kind: 'manual_area', publicCellId: draft.report.manualPublicCellId };
@@ -312,7 +328,7 @@ export function ReportWizard({
   const canContinueFromArea = validationLocation !== null;
   const areaContinueLabel = draft.report.condition === null ? copy.wizardContinue : copy.wizardContinueToReview;
   const selectedPlaceType = publicPlaceType ?? draft.report.publicPlace?.residenceType ?? null;
-  const publicPlaceName = draft.report.publicPlace?.name ?? '';
+  const publicPlaceName = placeNameInput ?? draft.report.publicPlace?.name ?? '';
   const disabledReason = prerequisiteIssues[0] === 'details_required'
     ? copy.wizardDetailsRequired
     : prerequisiteIssues[0] === 'review_required' ? copy.wizardReviewRequired : copy.wizardSubmitDisabledReason;
@@ -329,7 +345,6 @@ export function ReportWizard({
       >
         {stages.map((item, index) => <View key={item} style={[styles.progressSegment, index <= stages.indexOf(stage) && styles.progressSegmentActive]} />)}
       </View>
-      <Text style={styles.stageCounter}>{copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage))}</Text>
       <Text accessibilityRole="header" style={styles.sectionTitle}>{copy.stepLabel(stage)}</Text>
 
       {stage === 'photo' ? <View style={styles.group}>
@@ -357,11 +372,11 @@ export function ReportWizard({
         <Pressable accessibilityLabel={copy.wizardContinueToArea} accessibilityRole="button" onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable>
       </View> : null}
 
-      {stage === 'area' || stage === 'review' ? <View style={styles.group}>
+      {stage === 'area' || (stage === 'review' && !validationLocation) ? <View style={styles.group}>
         <Text style={styles.copy}>{copy.wizardAreaIntro}</Text>
         {!captureAvailable || manualAreaRequired ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <>
-          <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={selectDeviceArea} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardDeviceLocation}</Text></Pressable>
-          {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => setManualSelectionRequested(true)} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardManualArea}</Text></Pressable>}
+          <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={() => { void selectDeviceArea(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardDeviceLocation}</Text></Pressable>
+          {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => { clearActiveDeviceLocation(); setManualSelectionRequested(true); }} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardManualArea}</Text></Pressable>}
         </>}
         <View style={styles.placeGroup}>
           <Text style={styles.traitTitle}>{locale === 'zh-CN' ? '公开建筑或项目（可选）' : 'Public building or project (optional)'}</Text>
@@ -390,6 +405,7 @@ export function ReportWizard({
         {!canSubmit ? <Text style={styles.disabledReason}>{disabledReason}</Text> : null}
         <Pressable accessibilityLabel={copy.wizardSubmit} accessibilityRole="button" accessibilityState={{ disabled: !canSubmit || submitting, busy: submitting }} disabled={!canSubmit || submitting} onPress={() => { void submit(); }} style={[styles.primary, (!canSubmit || submitting) && styles.disabled]}><Text style={styles.primaryText}>{copy.wizardSubmit}</Text></Pressable>
       </View> : null}
+      {status === copy.wizardLocationDenied ? <Pressable accessibilityRole="button" onPress={() => { void Linking.openSettings(); }} style={styles.secondary}><Text style={styles.secondaryText}>{locale === 'zh-CN' ? '打开定位设置' : 'Open location settings'}</Text></Pressable> : null}
       {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </ScreenScaffold>
   );

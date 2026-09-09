@@ -9,7 +9,7 @@ const tabIcons: Record<TabRoute, Readonly<{ active: IconName; inactive: IconName
   index: { active: 'map-marker', inactive: 'map-marker-outline' },
   map: { active: 'map', inactive: 'map-outline' },
   report: { active: 'plus-circle', inactive: 'plus-circle-outline' },
-  following: { active: 'heart', inactive: 'heart-outline' },
+  discuss: { active: 'forum', inactive: 'forum-outline' },
   profile: { active: 'account', inactive: 'account-outline' },
 };
 

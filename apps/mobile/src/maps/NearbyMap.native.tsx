@@ -10,7 +10,7 @@ import { PUBLIC_GOOGLE_MAP_STYLE, PUBLIC_MAP_PADDING, PUBLIC_MAP_REGION } from '
 const MAP_READINESS_TIMEOUT_MS = 8_000;
 
 export function NearbyMap({
-  fallbackLabel,
+  fallbackLabel, focusPoint,
   androidGoogleMapsConfigured = Constants.expoConfig?.extra?.androidGoogleMapsConfigured === true,
   areas = [], selectedAreaId, onSelectArea,
 }: NearbyMapProps) {
@@ -57,6 +57,10 @@ export function NearbyMap({
     if(selected) mapRef.current?.animateToRegion({latitude:selected.center[1]!,longitude:selected.center[0]!,latitudeDelta:selected.parentId?0.018:0.055,longitudeDelta:selected.parentId?0.018:0.055},350);
   },[selected?.id]);
 
+  useEffect(() => {
+    if (focusPoint) mapRef.current?.animateToRegion({ ...focusPoint, latitudeDelta: 0.008, longitudeDelta: 0.008 }, 350);
+  }, [focusPoint]);
+
   if (!mapEnabled || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;
 
   return (
@@ -69,7 +73,7 @@ export function NearbyMap({
         })) : undefined}
         initialRegion={PUBLIC_MAP_REGION}
         mapPadding={PUBLIC_MAP_PADDING}
-        maxZoomLevel={14}
+        maxZoomLevel={19}
         minZoomLevel={10}
         onMapLoaded={markMapReady}
         onMapReady={markMapReady}
@@ -80,13 +84,14 @@ export function NearbyMap({
         showsCompass={false}
         showsIndoors={false}
         showsMyLocationButton={false}
-        showsPointsOfInterests={false}
+        showsPointsOfInterests
         showsTraffic={false}
         showsUserLocation={false}
         style={StyleSheet.absoluteFill}
         toolbarEnabled={false}
       >
-        {selected?.polygons.map((polygon,index)=><Polygon key={`${selected.id}-${index}`} coordinates={polygon[0]!.map(point=>({latitude:point[1]!,longitude:point[0]!}))} holes={polygon.slice(1).map(ring=>ring.map(point=>({latitude:point[1]!,longitude:point[0]!})))} strokeColor="#247366" fillColor="rgba(36,115,102,0.10)" strokeWidth={2}/>)}
+        {focusPoint ? <Marker coordinate={focusPoint} title={focusPoint.title} pinColor={focusPoint.isUser ? '#3478F6' : '#E36A45'} /> : null}
+        {selected?.polygons.map((polygon,index)=><Polygon key={`${selected.id}-${index}`} coordinates={polygon[0]!.map(point=>({latitude:point[1]!,longitude:point[0]!}))} holes={polygon.slice(1).map(ring=>ring.map(point=>({latitude:point[1]!,longitude:point[0]!})))} strokeColor="#2465D8" fillColor="rgba(36,101,216,0.10)" strokeWidth={2}/>)}
         {areas.filter(area=>area.cats.length>0).map(area=><Marker key={area.id} coordinate={{latitude:area.center[1]!,longitude:area.center[0]!}} title={area.name} description={`${area.cats.length} cats · delayed community activity`} onPress={()=>onSelectArea?.(area.id)} tracksViewChanges>
           <View style={[styles.marker,selectedAreaId===area.id&&styles.selected]}><Text style={styles.count}>{area.cats.length}</Text><Text style={styles.name}>{area.name}</Text></View>
         </Marker>)}
@@ -95,4 +100,4 @@ export function NearbyMap({
   );
 }
 
-const styles = StyleSheet.create({ frame: { flex: 1 },marker:{backgroundColor:'#276D60',borderWidth:2,borderColor:'#fff',borderRadius:22,paddingHorizontal:12,paddingVertical:7,alignItems:'center'},selected:{backgroundColor:'#174639'},count:{color:'#fff',fontWeight:'800',fontSize:18},name:{color:'#fff',fontWeight:'600',fontSize:10} });
+const styles = StyleSheet.create({ frame: { flex: 1 },marker:{backgroundColor:'#2465D8',borderWidth:2,borderColor:'#fff',borderRadius:22,paddingHorizontal:12,paddingVertical:7,alignItems:'center'},selected:{backgroundColor:'#174899'},count:{color:'#fff',fontWeight:'800',fontSize:18},name:{color:'#fff',fontWeight:'600',fontSize:10} });

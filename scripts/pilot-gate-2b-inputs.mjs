@@ -35,11 +35,14 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202609090009_sighting_places.sql',
   '202609090010_community_discussions.sql',
   '202609090011_singapore_discovery_areas.sql',
+  '202609090012_profile_avatars.sql',
+  '202609090013_community_reactions.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([
-  'cleanup-legacy-media', 'cleanup-media-staging', 'create-sighting',
-  'delete-media', 'finalize-media-upload', 'reserve-media-upload',
+  'cleanup-legacy-media', 'cleanup-media-staging', 'cleanup-profile-avatars',
+  'create-sighting', 'delete-media', 'finalize-media-upload',
+  'profile-avatar-upload', 'reserve-media-upload',
 ]);
 
 const FIXED_FILES = Object.freeze({

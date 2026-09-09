@@ -42,7 +42,7 @@ describe('NearbyMap native privacy contract', () => {
     expect(props.provider).toBeUndefined();
     expect(props.showsUserLocation).toBe(false);
     expect(props.showsMyLocationButton).toBe(false);
-    expect(props.maxZoomLevel).toBe(14);
+    expect(props.maxZoomLevel).toBe(19);
     expect(props.showsBuildings).toBe(true);
     await view.unmount();
   });

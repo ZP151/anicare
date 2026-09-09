@@ -1,15 +1,17 @@
 import * as Crypto from 'expo-crypto';
-import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { readSessionSubjectStrict, subscribeSessionSubject } from '../../src/auth/session-subject';
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { claimOfflineDraftOwner, deleteOfflineDraft, listOfflineDrafts, saveOfflineDraft } from '../../src/offline/draft-store';
 import { ReportHub, type ReportHubDependencies } from '../../src/report/ReportHub';
 
-export default function ReportScreen() {
+export default function ReportScreen({ allDrafts = false }: { allDrafts?: boolean }) {
   const { locale } = useLocale();
   const router = useRouter();
+  const [revision, setRevision] = useState(0);
+  useFocusEffect(useCallback(() => { setRevision(n => n + 1); }, []));
   const dependencies = useMemo<ReportHubDependencies>(() => ({
     loadDrafts: listOfflineDrafts,
     saveDraft: saveOfflineDraft,
@@ -20,6 +22,6 @@ export default function ReportScreen() {
     createId: Crypto.randomUUID,
     now: () => new Date(),
     navigate: (path) => router.push(path as never),
-  }), [router]);
-  return <ReportHub dependencies={dependencies} locale={locale} />;
+  }), [router, revision]);
+  return <ReportHub allDrafts={allDrafts} dependencies={dependencies} locale={locale} />;
 }

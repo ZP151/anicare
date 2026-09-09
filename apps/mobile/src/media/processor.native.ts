@@ -20,13 +20,13 @@ const DETECTOR_VERSIONS = Object.freeze({
   plates: 'unavailable',
 });
 
-export function targetDimensions(width: number, height: number): { width: number; height: number } {
+export function targetDimensions(width: number, height: number, maxLongestEdge: number = CANONICAL_RECIPE.maxLongestEdge): { width: number; height: number } {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     throw new Error('invalid_source_dimensions');
   }
   const longest = Math.max(width, height);
-  if (longest <= CANONICAL_RECIPE.maxLongestEdge) return { width: Math.round(width), height: Math.round(height) };
-  const scale = CANONICAL_RECIPE.maxLongestEdge / longest;
+  if (longest <= maxLongestEdge) return { width: Math.round(width), height: Math.round(height) };
+  const scale = maxLongestEdge / longest;
   return { width: Math.round(width * scale), height: Math.round(height * scale) };
 }
 
@@ -194,10 +194,10 @@ function writeCacheJpeg(prefix: string, bytes: Uint8Array): string {
   return file.uri;
 }
 
-async function prepareNative(sourceUri: string): Promise<RenderedMedia> {
+async function prepareAt(sourceUri: string, maxLongestEdge: number, prefix: string): Promise<RenderedMedia> {
   const sourceContext = ImageManipulator.manipulate(sourceUri);
   const sourceImage = await sourceContext.renderAsync();
-  const dimensions = targetDimensions(sourceImage.width, sourceImage.height);
+  const dimensions = targetDimensions(sourceImage.width, sourceImage.height, maxLongestEdge);
   const context = dimensions.width === sourceImage.width && dimensions.height === sourceImage.height
     ? sourceContext
     : ImageManipulator.manipulate(sourceUri).resize(dimensions);
@@ -211,7 +211,7 @@ async function prepareNative(sourceUri: string): Promise<RenderedMedia> {
   const intermediate = new File(saved.uri);
   try {
     const canonicalBytes = renderSrgbJpeg(await intermediate.bytes(), []);
-    return inspectNative(writeCacheJpeg('animalhelper-canonical', canonicalBytes));
+    return inspectNative(writeCacheJpeg(prefix, canonicalBytes));
   } finally {
     try {
       if (intermediate.exists) intermediate.delete();
@@ -220,6 +220,8 @@ async function prepareNative(sourceUri: string): Promise<RenderedMedia> {
     }
   }
 }
+async function prepareNative(sourceUri: string): Promise<RenderedMedia> { return prepareAt(sourceUri, CANONICAL_RECIPE.maxLongestEdge, 'animalhelper-canonical'); }
+export async function prepareAvatar(sourceUri: string): Promise<RenderedMedia> { return prepareAt(sourceUri, 512, 'animalhelper-avatar'); }
 
 async function renderNative(input: Readonly<{
   canonical: RenderedMedia;
@@ -254,4 +256,8 @@ export function renderOpaqueMasks(
 
 export function inspectRendered(uri: string, adapter: MediaProcessorAdapter = nativeAdapter) {
   return inspectRenderedWithAdapter(uri, adapter);
+}
+
+export function discardAvatar(uri: string): void {
+  try { const file = new File(uri); if (file.parentDirectory.uri === Paths.cache.uri && /^animalhelper-avatar-[0-9a-f-]+\.jpg$/i.test(file.name) && file.exists) file.delete(); } catch { /* Temporary cache cleanup is best effort. */ }
 }

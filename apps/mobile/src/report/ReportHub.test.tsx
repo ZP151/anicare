@@ -72,12 +72,21 @@ describe('ReportHub', () => {
     expect(JSON.stringify(view.toJSON())).not.toMatch(/\bAI\b|candidate|model|exact location|media path|token/i);
   });
 
-  it('orders resumable draft summaries by their most recent update', async () => {
-    const view = await render(<ReportHub dependencies={dependencies({ loadDrafts: async () => [firstDraft, laterDraft] })} locale="en" />);
+  it('keeps only the latest draft on the home screen and opens the full collection', async () => {
+    const navigate = jest.fn();
+    const view = await render(<ReportHub dependencies={dependencies({ navigate, loadDrafts: async () => [firstDraft, laterDraft] })} locale="en" />);
+    await waitFor(() => expect(view.getByText('All drafts (2)')).toBeTruthy());
+    expect(view.getAllByRole('button', { name: /Continue report draft/i })).toHaveLength(1);
+    await fireEvent.press(view.getByText('All drafts (2)'));
+    expect(navigate).toHaveBeenCalledWith('/report/drafts');
+  });
 
-    await waitFor(() => expect(view.getByRole('button', { name: /Continue report draft from safety/i })).toBeTruthy());
+  it('orders resumable draft summaries by their most recent update', async () => {
+    const view = await render(<ReportHub dependencies={dependencies({ loadDrafts: async () => [firstDraft, laterDraft] })} allDrafts locale="en" />);
+
+    await waitFor(() => expect(view.getByRole('button', { name: /Continue report draft from visibility/i })).toBeTruthy());
     expect(view.getAllByRole('button', { name: /Continue report draft/i }).map((button) => button.props.accessibilityLabel)).toEqual([
-      'Continue report draft from safety',
+      'Continue report draft from visibility',
       'Continue report draft from details',
     ]);
   });
@@ -143,9 +152,9 @@ describe('ReportHub', () => {
       ],
     });
     const view = await render(<ReportHub dependencies={run} locale="en" />);
-    await waitFor(() => expect(view.getByRole('button', { name: 'Claim and continue report draft from safety' })).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('button', { name: 'Claim and continue report draft from visibility' })).toBeTruthy());
     expect(view.queryByRole('button', { name: /details/ })).toBeNull();
-    await fireEvent.press(view.getByRole('button', { name: 'Claim and continue report draft from safety' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Claim and continue report draft from visibility' }));
     expect(claimDraftOwner).toHaveBeenCalledWith(laterDraft.id, 'owner-12345678');
     expect(run.navigate).toHaveBeenCalledWith(`/report/new?draftId=${laterDraft.id}`);
   });

@@ -26,3 +26,7 @@ name capability. Async account changes clear private local UI state.
 Visual verification of 0.1.1 is pending actual native capture/device feedback.
 The installed 0.1.0 interface was explicitly rejected; it is not a visual
 reference or an approved baseline for future surfaces.
+
+## 2026-09-10 · Social v5
+
+Current implementation reference: [v5 archive](../../docs/design/ios26-social-v5/index.html). Use warm neutral surfaces, cobalt actions, native glass controls, human avatars and the original orange-and-ivory anime cat icon. Feed browsing and composition are separate; draft details live in a collection. Preserve prior reference archives. Device feedback, not concept imagery, establishes final visual acceptance.

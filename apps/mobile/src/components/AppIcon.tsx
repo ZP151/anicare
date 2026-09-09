@@ -5,6 +5,15 @@ import { ColorValue, Platform, View } from 'react-native';
 
 const symbols = {
   account: ['person.crop.circle', 'account-circle-outline'],
+  person: ['person.crop.circle', 'account-circle-outline'],
+  'human-01': ['person.crop.circle', 'account-circle-outline'], 'human-02': ['person.crop.circle', 'account-circle-outline'],
+  'human-03': ['person.crop.circle', 'account-circle-outline'], 'human-04': ['person.crop.circle', 'account-circle-outline'],
+  'human-05': ['person.crop.circle', 'account-circle-outline'], 'human-06': ['person.crop.circle', 'account-circle-outline'],
+  'human-07': ['person.crop.circle', 'account-circle-outline'], 'human-08': ['person.crop.circle', 'account-circle-outline'],
+  'human-09': ['person.crop.circle', 'account-circle-outline'], 'human-10': ['person.crop.circle', 'account-circle-outline'],
+  'human-11': ['person.crop.circle', 'account-circle-outline'], 'human-12': ['person.crop.circle', 'account-circle-outline'],
+  'human-13': ['person.crop.circle', 'account-circle-outline'], 'human-14': ['person.crop.circle', 'account-circle-outline'],
+  'human-15': ['person.crop.circle', 'account-circle-outline'],
   reports: ['doc.text', 'text-box-outline'],
   care: ['heart.text.clipboard', 'heart-outline'],
   privacy: ['hand.raised', 'hand-back-right-outline'],
@@ -26,6 +35,7 @@ const symbols = {
   activity: ['clock', 'clock-outline'],
   camera: ['camera', 'camera-outline'],
   heart: ['heart', 'heart-outline'],
+  heartFilled: ['heart.fill', 'heart'],
   mail: ['envelope', 'email-outline'],
   close: ['xmark', 'close'],
   community: ['text.bubble', 'forum-outline'],

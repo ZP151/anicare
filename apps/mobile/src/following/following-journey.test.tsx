@@ -11,7 +11,7 @@ jest.mock('../api/supabase',()=>({getSupabaseClient:()=>({rpc:mockRpc})}));
 jest.mock('../auth/session-subject',()=>({readSessionSubjectStrict:async()=>mockSubject,subscribeSessionSubject:(fn:()=>void)=>{mockListeners.add(fn);return()=>mockListeners.delete(fn);}}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'en',t:(key:string)=>key})}));
 import { FollowControl } from './FollowControl';
-import Following from '../../app/(tabs)/following';
+import Following from '../../app/following';
 import { DiscoveryList } from './DiscoveryList';
 const cat={animalId:mockAnimal,primaryAlias:'Return cat',verification:'reported',timeBucket:null,cursor:mockAnimal};
 beforeEach(()=>{mockSubject=mockOwner;mockRpc.mockReset();mockPush.mockReset();mockSequence=0;mockListeners.clear();});

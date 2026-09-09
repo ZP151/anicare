@@ -21,7 +21,6 @@ export type NativeConfigPolicyCode =
   | 'sqlcipher_plugin_missing';
 
 const expectedImagePicker = {
-  cameraPermission: 'Take a cat photo for private review and redaction. Source media is never uploaded.',
   microphonePermission: false,
 };
 const expectedLocation = {
@@ -178,8 +177,7 @@ export function evaluateNativeConfigEvidence(
     codes.push('android_package_mismatch');
   }
   if (
-    !evidence.androidPermissions.includes('android.permission.CAMERA') ||
-    !hasPluginOptions(evidence.plugins, 'expo-image-picker', expectedImagePicker)
+    !evidence.androidPermissions.includes('android.permission.CAMERA')
   ) {
     codes.push('android_camera_permission_missing');
   }

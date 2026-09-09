@@ -1,0 +1,35 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select no_plan();
+
+select ok(position('person' in (select column_default::text from information_schema.columns where table_schema='public' and table_name='user_profiles' and column_name='avatar_key'))>0,'new profiles default to a human avatar');
+select is((select public from storage.buckets where id='profile-avatars'),false,'profile-avatar bucket is private');
+select has_function('public','reserve_profile_avatar_upload',array['uuid','text','integer','integer','integer'],'avatar reservation exists');
+select has_function('public','finalize_profile_avatar_upload',array['uuid','uuid'],'avatar finalization exists');
+select has_function('public','claim_profile_avatar_cleanup_jobs',array['integer'],'avatar cleanup worker claim exists');
+
+set local session_replication_role=replica;
+insert into auth.users(id,email,created_at,updated_at) values('00000000-0000-4000-8000-000000003401','avatar@example.test',now(),now());
+insert into public.user_profiles(id,public_name) values('00000000-0000-4000-8000-000000003401','Avatar owner');
+set local session_replication_role=origin;
+select lives_ok($$select * from public.reserve_profile_avatar_upload('00000000-0000-4000-8000-000000003401',repeat('a',64),1024,128,128)$$,'owner can reserve a bounded avatar upload');
+select is((select object_path from private.profile_avatar_upload_jobs where owner_id='00000000-0000-4000-8000-000000003401'),'avatars/'||(select id::text from private.profile_avatar_upload_jobs where owner_id='00000000-0000-4000-8000-000000003401')||'.jpg','reservation path is immutable and UUID-scoped');
+select set_config('test.avatar_job',(select id::text from private.profile_avatar_upload_jobs where owner_id='00000000-0000-4000-8000-000000003401'),true);
+select set_config('test.avatar_path',(select object_path from private.profile_avatar_upload_jobs where owner_id='00000000-0000-4000-8000-000000003401'),true);
+select is_empty($$select * from public.claim_profile_avatar_cleanup_jobs(25)$$,'live signed upload credentials defer cleanup');
+select lives_ok($$select public.finalize_profile_avatar_upload('00000000-0000-4000-8000-000000003401',current_setting('test.avatar_job')::uuid)$$,'validated service upload becomes profile photo');
+select is(private.can_read_profile_avatar('profile-avatars',current_setting('test.avatar_path'),null),false,'no public contribution means no anonymous avatar oracle');
+insert into public.community_posts(id,author_id,body,community_slug) values('00000000-0000-4000-8000-000000003410','00000000-0000-4000-8000-000000003401','Hello Clementi','clementi');
+select is(private.can_read_profile_avatar('profile-avatars',current_setting('test.avatar_path'),null),true,'visible contribution makes its avatar readable');
+select is((select "avatarPath" from public.get_public_community_avatars('community_post',array['00000000-0000-4000-8000-000000003410'::uuid])),current_setting('test.avatar_path'),'content-scoped lookup returns current image');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003401',true);
+select throws_ok($$update public.user_profiles set avatar_object_path='avatars/00000000-0000-4000-8000-000000003499.jpg' where id='00000000-0000-4000-8000-000000003401'$$,'42501','avatar_path_is_service_managed','client cannot assign another avatar object');
+select lives_ok($$select public.set_profile_avatar_preset('00000000-0000-4000-8000-000000003401','human-02')$$,'preset selection clears custom photo through managed mutation');
+reset role;
+select is((select avatar_object_path from public.user_profiles where id='00000000-0000-4000-8000-000000003401'),null::text,'preset restores the chosen person');
+select is_empty($$select * from public.claim_profile_avatar_cleanup_jobs(25)$$,'replacement cannot remove while upload token could recreate old object');
+select lives_ok($$delete from public.user_profiles where id='00000000-0000-4000-8000-000000003401'$$,'profile deletion queues avatar cleanup');
+select is((select count(*) from private.profile_avatar_cleanup_jobs where owner_id='00000000-0000-4000-8000-000000003401'),1::bigint,'the active reserved object is captured for cleanup');
+select * from finish();
+rollback;

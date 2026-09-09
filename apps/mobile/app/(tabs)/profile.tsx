@@ -1,5 +1,6 @@
 import { makeRedirectUri } from 'expo-auth-session';
 import * as Linking from 'expo-linking';
+import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -16,7 +17,11 @@ import { InterfaceColors, useNativeColors } from '../../src/design/native-colors
 import { useLocale } from '../../src/i18n/LocaleContext';
 import { useAccountSession } from '../../src/auth/use-account-session';
 import { claimOfflineDraftOwner, getOfflineDraft } from '../../src/offline/draft-store';
-import { PROFILE_AVATAR_KEYS, profileAvatarKey, type ProfileAvatarKey } from '../../src/profile/profile-avatar';
+import { PROFILE_AVATAR_EMOJI, PROFILE_AVATAR_KEYS, profileAvatarKey, type ProfileAvatarKey } from '../../src/profile/profile-avatar';
+import { prepareAvatar, discardAvatar } from '../../src/media/processor';
+import { uploadProfileAvatar } from '../../src/api/profile-avatar-upload';
+import { ProfileAvatar } from '../../src/profile/ProfileAvatar';
+import type { RenderedMedia } from '../../src/media/contracts';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -41,21 +46,29 @@ export default function ProfileScreen() {
   const [nameExists, setNameExists] = useState(false);
   const [nameLoading, setNameLoading] = useState(false);
   const [savingName, setSavingName] = useState(false);
-  const [avatarKey, setAvatarKey] = useState<ProfileAvatarKey>('cat');
+  const [avatarKey, setAvatarKey] = useState<ProfileAvatarKey>('person');
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showAvatar, setShowAvatar] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [pendingAvatar, setPendingAvatar] = useState<RenderedMedia | null>(null);
+  useEffect(() => () => { if (pendingAvatar) discardAvatar(pendingAvatar.uri); }, [pendingAvatar]);
 
   useEffect(() => {
     setAdult(null); setStatus(null); setEmail(''); setLoggingOut(false); setShowSignIn(false);
-    setEditingName(false); setNameValue(''); setNameExists(false); setNameLoading(false); setSavingName(false); setAvatarKey('cat'); setShowAvatar(false); setSavingAvatar(false);
+    setEditingName(false); setNameValue(''); setNameExists(false); setNameLoading(false); setSavingName(false); setAvatarKey('person'); setAvatarPath(null); setAvatarUri(null); setShowAvatar(false); setSavingAvatar(false); setPendingAvatar(null);
     if (!auth.owner) return;
     const current = auth.pin(); let active = true;
     const client = getSupabaseClient();
     void Promise.resolve(client?.rpc('is_adult_contributor')).then(async result => {
       if (active && await current() && result && !result.error && typeof result.data === 'boolean') setAdult(result.data);
     }).catch(() => undefined);
-    void Promise.resolve(client?.from('user_profiles').select('avatar_key').eq('id', auth.owner).maybeSingle()).then(async result => {
-      if (active && await current() && result && !result.error) setAvatarKey(profileAvatarKey(result.data?.avatar_key));
+    void Promise.resolve(client?.from('user_profiles').select('avatar_key,avatar_object_path').eq('id', auth.owner).maybeSingle()).then(async result => {
+      if (active && await current() && result && !result.error) {
+        const path = typeof result.data?.avatar_object_path === 'string' ? result.data.avatar_object_path : null;
+        setAvatarKey(profileAvatarKey(result.data?.avatar_key)); setAvatarPath(path);
+        if (path && client) { const signed = await client.storage.from('profile-avatars').createSignedUrl(path, 60); if (active && await current() && !signed.error) setAvatarUri(signed.data?.signedUrl ?? null); }
+      }
     }).catch(() => undefined);
     return () => { active = false; };
   }, [auth.owner, auth.pin]);
@@ -69,13 +82,48 @@ export default function ProfileScreen() {
       const { data: existing, error: lookupError } = await client.from('user_profiles').select('id').eq('id', auth.owner).maybeSingle();
       if (lookupError) throw lookupError;
       const result = existing
-        ? await client.from('user_profiles').update({ avatar_key: nextAvatar }).eq('id', auth.owner)
+        ? await client.rpc('set_profile_avatar_preset', { p_owner_id: auth.owner, p_avatar_key: nextAvatar })
         : await client.from('user_profiles').insert({ id: auth.owner, public_name: cn ? '社区贡献者' : 'Community contributor', locale, avatar_key: nextAvatar });
       if (!await current()) return;
       if (result.error) throw result.error;
-      setAvatarKey(nextAvatar); setShowAvatar(false);
+      setAvatarKey(nextAvatar); setAvatarPath(null); setAvatarUri(null); setShowAvatar(false);
       setStatus(cn ? '头像已保存。' : 'Avatar saved.');
     } catch { if (await current()) setStatus(cn ? '无法保存头像，请重试。' : 'Could not save your avatar. Try again.'); }
+    finally { if (await current()) setSavingAvatar(false); }
+  }
+
+  async function chooseAvatar(source: 'camera' | 'library') {
+    if (!auth.owner || savingAvatar) return;
+    const current = auth.pin(); setSavingAvatar(true); setStatus(null);
+    try {
+      const permission = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!await current()) return;
+      if (!permission.granted) { setStatus(cn ? (source === 'camera' ? '请在系统设置中允许相机访问后重试。' : '请在系统设置中允许照片访问后重试。') : (source === 'camera' ? 'Allow camera access in Settings, then try again.' : 'Allow photo access in Settings, then try again.')); return; }
+      const selected = await (source === 'camera' ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync)({ mediaTypes: ['images'], allowsEditing: false, exif: false, quality: 1 });
+      if (!await current()) return;
+      if (selected.canceled || !selected.assets[0]?.uri) return;
+      // This decodes and re-rasterizes locally; the Edge function later accepts only the strict metadata-free JPEG profile.
+      const artifact = await prepareAvatar(selected.assets[0].uri);
+      if (!await current()) { discardAvatar(artifact.uri); return; }
+      setPendingAvatar(artifact);
+    } catch { if (await current()) setStatus(cn ? '无法准备照片头像，请重试。' : 'Could not prepare your photo. Try again.'); }
+    finally { if (await current()) setSavingAvatar(false); }
+  }
+
+  async function savePhotoAvatar() {
+    if (!pendingAvatar || !auth.owner || savingAvatar) return;
+    const current=auth.pin(); setSavingAvatar(true); setStatus(null);
+    try {
+      await uploadProfileAvatar(pendingAvatar, undefined, current);
+      if (!await current()) return;
+      const client = getSupabaseClient();
+      const profile = await client?.from('user_profiles').select('avatar_object_path').eq('id', auth.owner).maybeSingle();
+      if (!await current()) return;
+      const path = typeof profile?.data?.avatar_object_path === 'string' ? profile.data.avatar_object_path : null;
+      setAvatarPath(path);
+      if (path && client) { const signed = await client.storage.from('profile-avatars').createSignedUrl(path, 60); if (!await current()) return; setAvatarUri(!signed.error ? signed.data?.signedUrl ?? null : null); }
+      setPendingAvatar(null); setShowAvatar(false); setStatus(cn ? '照片头像已保存。' : 'Photo avatar saved.');
+    } catch { if (await current()) setStatus(cn ? '无法保存照片头像，请重试。' : 'Could not save your photo avatar. Try again.'); }
     finally { if (await current()) setSavingAvatar(false); }
   }
 
@@ -253,7 +301,7 @@ export default function ProfileScreen() {
   return (
     <ScreenScaffold title={t('profile.title')} nativeAppearance>
       <View style={styles.account}>
-        <View style={styles.avatar}><AppIcon name={avatarKey === 'cat' ? 'cat' : avatarKey} size={42} color={colors.actionPrimary} /></View>
+        <View style={styles.avatar}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath ? avatarUri : null} size={72} /></View>
         <View style={styles.accountCopy}>
         <Text accessibilityLiveRegion="polite" style={styles.label}>{auth.owner === undefined ? (auth.failed ? (cn?'账户状态不可用':'Account state unavailable') : (cn?'正在读取账户…':'Loading account…')) : auth.owner ? (cn?'已登录':'Signed in') : (cn?'匿名浏览':'Browsing anonymously')}</Text>
         {auth.owner ? <Text style={styles.value}>{adult === null ? (cn?'贡献者状态尚未确认':'Contributor state not confirmed') : adult ? (cn?'已确认年满 18 岁':'18+ contributor confirmed') : (cn?'需要确认年满 18 岁':'18+ confirmation required')}</Text> : <Text style={styles.value}>{cn ? '一起记录社区猫的日常' : 'A little care, shared with your community.'}</Text>}
@@ -301,7 +349,8 @@ export default function ProfileScreen() {
       </View></ScreenScaffold></Modal>
       <SettingsGroup title={cn ? '我的记录' : 'Your activity'}>
         <SettingsRow title={cn?'我的报告与草稿':'My reports and drafts'} icon="reports" onPress={() => router.push('/report' as never)} />
-        <SettingsRow title={cn?'我的照护记录':'My care records'} icon="care" last onPress={() => router.push('/care/my-care' as never)} />
+        <SettingsRow title={cn?'我的照护记录':'My care records'} icon="care" onPress={() => router.push('/care/my-care' as never)} />
+        <SettingsRow title={cn?'关注的猫':'Following'} icon="cat" last onPress={() => router.push('/following' as never)} />
       </SettingsGroup>
       <SettingsGroup title={cn ? '偏好与隐私' : 'Preferences & privacy'}>
         <SettingsRow title={cn?'语言':'Language'} icon="language" value={cn ? '简体中文' : 'English'} onPress={() => setShowLanguage(!showLanguage)} />
@@ -315,8 +364,8 @@ export default function ProfileScreen() {
         </Pressable>
       </View> : null}
       {auth.owner ? <SettingsGroup title={cn ? '账户' : 'Account'}>
-        <SettingsRow title={cn ? '头像' : 'Avatar'} icon={avatarKey === 'cat' ? 'cat' : avatarKey} onPress={() => setShowAvatar(true)} />
-        <Modal visible={showAvatar} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAvatar(false)}><ScreenScaffold title={cn ? '选择头像' : 'Choose avatar'} nativeAppearance><View style={styles.avatarChoices}>{PROFILE_AVATAR_KEYS.map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: avatarKey === key, disabled: savingAvatar }} disabled={savingAvatar} onPress={() => { void saveAvatar(key); }} style={[styles.avatarChoice, avatarKey === key && styles.selected]}><AppIcon name={key === 'cat' ? 'cat' : key} size={28} color={colors.actionPrimary} /><Text style={styles.choiceText}>{key[0].toUpperCase() + key.slice(1)}</Text><View style={styles.avatarChoiceCheck}>{avatarKey === key ? <AppIcon name="check" size={16} color={colors.actionPrimary} /> : null}</View></Pressable>)}</View></ScreenScaffold></Modal>
+        <SettingsRow title={cn ? '头像' : 'Avatar'} icon="account" onPress={() => setShowAvatar(true)} />
+        <Modal visible={showAvatar} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setPendingAvatar(null); setShowAvatar(false); }}><ScreenScaffold title={cn ? '选择头像' : 'Choose avatar'} nativeAppearance><View style={styles.avatarChoices}><View style={styles.avatarPhotoActions}><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void chooseAvatar('camera'); }} style={styles.choice}><Text style={styles.choiceText}>{cn ? '拍照' : 'Take photo'}</Text></Pressable><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void chooseAvatar('library'); }} style={styles.choice}><Text style={styles.choiceText}>{cn ? '从相册选择' : 'Choose from library'}</Text></Pressable></View>{pendingAvatar ? <View style={styles.photoReview}><ProfileAvatar avatarKey={avatarKey} photoUri={pendingAvatar.uri} size={128}/><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void savePhotoAvatar(); }} style={styles.primary}><Text style={styles.primaryText}>{savingAvatar ? (cn?'正在保存…':'Saving…') : (cn?'保存照片头像':'Save photo avatar')}</Text></Pressable><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={()=>setPendingAvatar(null)} style={styles.choice}><Text style={styles.choiceText}>{cn?'取消':'Cancel'}</Text></Pressable></View> : null}<View style={styles.avatarGrid}>{PROFILE_AVATAR_KEYS.map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: avatarKey === key, disabled: savingAvatar }} disabled={savingAvatar} onPress={() => { void saveAvatar(key); }} style={[styles.avatarTile, avatarKey === key && styles.selected]}><Text style={styles.avatarOptionEmoji}>{PROFILE_AVATAR_EMOJI[key]}</Text><Text style={styles.tileLabel}>{key === 'person' ? (cn ? '默认' : 'Default') : key.startsWith('human-') ? key.slice(-2) : key}</Text></Pressable>)}</View>{status?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}</View></ScreenScaffold></Modal>
         <SettingsRow title={cn ? '昵称' : 'Display name'} icon="account" value={!editingName && nameValue ? nameValue : undefined} onPress={() => { void editName(); }} />
         {editingName ? <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditingName(false)}><ScreenScaffold title={cn?'编辑个人资料':'Edit profile'} nativeAppearance><View style={styles.nameForm}>
           <Pressable accessibilityRole="button" accessibilityLabel={cn?'关闭编辑':'Close edit'} onPress={() => setEditingName(false)} style={styles.close}><AppIcon name="close" color={colors.muted} size={18} /></Pressable>
@@ -346,6 +395,12 @@ const makeStyles = (colors: InterfaceColors) => StyleSheet.create({
   linkText: { color: colors.actionPrimary, fontSize: 17, fontWeight: '600' },
   languageChoices: { paddingLeft: 52, paddingRight: 16 },
   avatarChoices: { paddingHorizontal: 16, gap: 10 },
+  avatarPhotoActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  photoReview: { alignItems: 'center', gap: 10, paddingVertical: 8 },
+  avatarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  avatarTile: { width: '30%', minHeight: 76, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  tileLabel: { color: colors.ink, fontSize: 12 },
+  avatarOptionEmoji: { fontSize: 28, width: 34, textAlign: 'center' },
   avatarChoice: { minHeight: 56, paddingHorizontal: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.surface },
   avatarChoiceCheck: { marginLeft: 'auto', width: 24, alignItems: 'center' },
   nameForm: { padding: 16, gap: 12 },

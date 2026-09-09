@@ -79,14 +79,14 @@ describe('ReportWizard', () => {
   it('exposes the active wizard stage as a five-step progress indicator', async () => {
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="safety" />);
 
-    await waitFor(() => expect(view.getByRole('header', { name: 'Safety' })).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('header', { name: 'Visibility' })).toBeTruthy());
     const stages = view.getByLabelText('Report stages');
     expect(stages.props.accessibilityRole).toBe('progressbar');
     expect(stages.props.accessibilityValue).toEqual({
       min: 1,
       now: 3,
       max: 5,
-      text: 'Step 3 of 5 · Safety',
+      text: 'Step 3 of 5 · Visibility',
     });
     await view.unmount();
   });
@@ -133,7 +133,7 @@ describe('ReportWizard', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Tabby coat' }));
     await fireEvent.press(view.getByRole('button', { name: 'White paws marking' }));
     await fireEvent.press(view.getByRole('button', { name: 'Appears well' }));
-    await fireEvent.press(view.getByRole('button', { name: 'Continue to safety' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue to visibility' }));
     await waitFor(() => expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
       report: expect.objectContaining({ coat: ['tabby'], markings: ['white-paws'] }),
     })));
@@ -193,16 +193,25 @@ describe('ReportWizard', () => {
     await view.unmount();
   });
 
-  it('does not request device coordinates until the user submits, then offers manual selection after denial without another prompt', async () => {
+  it('requests location immediately on tap and offers manual selection after denial', async () => {
     const requestDeviceLocation = jest.fn(async () => ({ kind: 'denied' as const }));
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ requestDeviceLocation })} initialStage="review" />);
 
     await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
-    expect(requestDeviceLocation).not.toHaveBeenCalled();
-    await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
+    await waitFor(() => expect(requestDeviceLocation).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(view.getByText('Location permission was not granted. Choose an area manually instead.')).toBeTruthy());
     expect(requestDeviceLocation).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
+  it('keeps building text and spaces before a residence type is chosen', async () => {
+    const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="area" />);
+    const input = view.getByLabelText('Building or project name');
+    await fireEvent.changeText(input, 'The Clementi Mall ');
+    expect(view.getByLabelText('Building or project name').props.value).toBe('The Clementi Mall ');
+    await fireEvent.press(view.getByRole('button', {name: 'Other'}));
+    expect(view.getByLabelText('Building or project name').props.value).toBe('The Clementi Mall ');
     await view.unmount();
   });
 
@@ -213,12 +222,14 @@ describe('ReportWizard', () => {
 
     await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Use device location' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Edit area' }));
     await fireEvent.press(view.getByRole('button', { name: 'Choose an area manually' }));
     await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue to review' }));
     await fireEvent.press(view.getByRole('button', { name: 'Submit report' }));
 
     await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ location: { kind: 'manual_area', publicCellId: '89652636d87ffff' } })));
-    expect(requestDeviceLocation).not.toHaveBeenCalled();
+    expect(requestDeviceLocation).toHaveBeenCalledTimes(1);
     await view.unmount();
   });
 
@@ -403,7 +414,7 @@ describe('ReportWizard', () => {
     await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
     expect(view.getByRole('button', { name: 'Edit photo' })).toBeTruthy();
     expect(view.getByRole('button', { name: 'Edit details' })).toBeTruthy();
-    expect(view.getByRole('button', { name: 'Edit safety' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Edit visibility' })).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Edit area' }));
     expect(view.getByRole('header', { name: 'Area' })).toBeTruthy();
     await view.unmount();
@@ -422,8 +433,8 @@ describe('ReportWizard', () => {
     await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
     expect(view.getByText('Private photo ready')).toBeTruthy();
     expect(view.getByText('Needs attention')).toBeTruthy();
-    expect(view.getByText('sensitive')).toBeTruthy();
-    expect(view.getByText('A broad area was selected. Your exact map tap was discarded.')).toBeTruthy();
+    expect(view.getByText('Share tomorrow')).toBeTruthy();
+    expect(view.getByText('Area selected.')).toBeTruthy();
     await view.unmount();
   });
 
@@ -432,9 +443,9 @@ describe('ReportWizard', () => {
     const exit = jest.fn();
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ saveDraft, exit })} initialStage="safety" />);
 
-    await waitFor(() => expect(view.getByRole('header', { name: 'Safety' })).toBeTruthy());
-    await fireEvent.press(view.getByRole('button', { name: 'critical' }));
-    expect(view.getByText('Critical reports are not publicly visible.')).toBeTruthy();
+    await waitFor(() => expect(view.getByRole('header', { name: 'Visibility' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Keep report private' }));
+    expect(view.getByText('This report stays off the public map and feed.')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Save and exit' }));
     await waitFor(() => expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
       id: draftId,

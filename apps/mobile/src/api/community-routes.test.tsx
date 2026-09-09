@@ -4,12 +4,16 @@ const mockList=jest.fn(),mockCreate=jest.fn();let mockOwner:string|null='owner-a
 jest.mock('./community',()=>({listCommunityPosts:(...args:unknown[])=>mockList(...args),createCommunityPost:(...args:unknown[])=>mockCreate(...args),blockCommunityAuthor:jest.fn(),deleteCommunityPost:jest.fn(),reportCommunityContent:jest.fn()}));
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),pin:()=>{const epoch=mockEpoch;return async()=>{if(mockDelayPin)await new Promise<void>(resolve=>mockPins.push(resolve));return epoch===mockEpoch;};}})}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
-jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn()}),useLocalSearchParams:()=>mockParams}));
+jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn(),replace:jest.fn(),setParams:jest.fn()}),useFocusEffect:jest.fn(),useLocalSearchParams:()=>mockParams}));
+jest.mock('./feed',()=>({listPublicSightings:async()=>({items:[],nextCursor:null})}));
+jest.mock('./cat-presentation',()=>({getCatPresentations:async()=>new Map()}));
+jest.mock('./community-avatar',()=>({getCommunityAvatars:async()=>new Map()}));
+jest.mock('./community-reactions',()=>({getCommunityReactions:async()=>new Map()}));
 import CommunityScreen from '../../app/community/index';
 const post=(body:string)=>({postId:'00000000-0000-4000-8000-000000000001',body,catId:null,communitySlug:'tampines',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},replyCount:0,canDelete:false,cursor:'00000000-0000-4000-8000-000000000001'});
 beforeEach(()=>{jest.clearAllMocks();mockParams={communitySlug:'tampines'};mockOwner='owner-a';mockEpoch++;mockDelayPin=false;mockPins.length=0;mockList.mockResolvedValue({items:[],nextCursor:null});});
 it('uses human community context and Chinese controls',async()=>{
- const view=await render(<CommunityScreen/>);expect(await view.findByText('邻里讨论')).toBeTruthy();expect(view.getByLabelText('发起讨论')).toBeTruthy();expect(view.getByText(/Tampines/)).toBeTruthy();await view.unmount();
+ const view=await render(<CommunityScreen/>);expect(await view.findByRole('header',{name:'社区'})).toBeTruthy();expect(view.queryByLabelText('发起讨论')).toBeNull();expect(view.getByLabelText('发布帖子')).toBeTruthy();await view.unmount();
 });
 it('does not reveal a stale feed after account switching',async()=>{
  let finish:(v:unknown)=>void=()=>{};mockList.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue({items:[post('New account feed')],nextCursor:null});
@@ -18,7 +22,7 @@ it('does not reveal a stale feed after account switching',async()=>{
  expect(view.queryByText('Old account feed')).toBeNull();await view.unmount();
 });
 it('single-flights two presses even while the session check is pending',async()=>{
- const view=await render(<CommunityScreen/>);await waitFor(()=>expect(mockList).toHaveBeenCalled());
+ const view=await render(<CommunityScreen compose/>);await waitFor(()=>expect(mockList).toHaveBeenCalled());
  await fireEvent.changeText(view.getByLabelText('发起讨论'),'Clean water bowls today.');
  mockDelayPin=true;mockCreate.mockImplementation(()=>new Promise(()=>{}));
  await fireEvent.press(view.getByLabelText('发布'));await fireEvent.press(view.getByLabelText('发布'));
@@ -27,7 +31,7 @@ it('single-flights two presses even while the session check is pending',async()=
 });
 it('selects a Chinese neighbourhood and posts to its stable subzone scope',async()=>{
  mockParams={};mockCreate.mockResolvedValue('00000000-0000-4000-8000-000000000003');
- const view=await render(<CommunityScreen/>);
+ const view=await render(<CommunityScreen compose/>);
  await fireEvent.press(view.getByText('选择社区'));
  await fireEvent.changeText(view.getByLabelText('搜索社区'),'西海岸');
  await fireEvent.press(view.getByLabelText('西海岸 · West Coast'));

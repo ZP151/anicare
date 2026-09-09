@@ -105,7 +105,7 @@ select ok((select moderation_hidden_at is null from public.community_replies whe
 insert into public.community_posts(author_id,body,community_slug) values('00000000-0000-4000-8000-000000003107','Erasure post','harbor-cats');
 select lives_ok($$delete from public.user_profiles where id='00000000-0000-4000-8000-000000003107'$$,'community-only profile erasure succeeds');
 select ok((select author_id is null from public.community_posts where body='Erasure post'),'erasure nulls post author');
-select is((select author->>'avatarKey' from public.list_public_community_posts(null,20,'harbor-cats',null) where body='Erasure post'),'cat','erased author has default avatar');
+select is((select author->>'avatarKey' from public.list_public_community_posts(null,20,'harbor-cats',null) where body='Erasure post'),'person','erased author has the human default avatar');
 
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);

@@ -1,9 +1,10 @@
+import { PROFILE_AVATAR_KEYS } from '../profile/profile-avatar';
 import { getSupabaseClient } from './supabase';
 import { randomUUID } from 'expo-crypto';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,79}$/;
-const AVATARS = new Set(['cat', 'paw', 'leaf', 'sun', 'moon', 'heart']);
+const AVATARS = new Set<string>(PROFILE_AVATAR_KEYS);
 
 export type CommunityPost = Readonly<{ postId: string; body: string; catId: string | null; communitySlug: string | null; createdAt: string; author: Readonly<{ name: string; avatarKey: string }>; replyCount: number; canDelete: boolean; cursor: string }>;
 export type CommunityPage = Readonly<{ items: readonly CommunityPost[]; nextCursor: string | null }>;

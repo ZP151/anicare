@@ -176,7 +176,7 @@ export function reportDraftSummary(draft: StoredDraft): Readonly<{
     id: draft.id,
     updatedAt: draft.report.updatedAt,
     step: draft.report.step,
-    title: 'Report draft',
+    title: draft.report.publicPlace?.name || draft.notes.trim().split('\n')[0]?.slice(0, 64) || 'Report draft',
     hasReviewedMedia: isReviewedMediaReference(draft.encryptedReviewedRef, draft.mediaId),
   });
 }
