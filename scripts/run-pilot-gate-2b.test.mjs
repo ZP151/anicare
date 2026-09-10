@@ -166,6 +166,8 @@ test('deploys incrementally in fixed order without privileged command arguments'
     commandText.includes('sb_secret_service'), false);
   const forbidden = new Set(['reset', 'repair', 'seed', 'dump', 'restore', 'prune', 'delete', 'pause', 'query']);
   assert.equal(commands.some(({ command, args }) => [command, ...args].some((token) => forbidden.has(token))), false);
+  const link = commands.find(({ command, args }) => command === 'supabase' && args[0] === 'link');
+  assert.equal(link.options.env.SUPABASE_DB_PASSWORD, 'db-secret');
   const integration = commands.find(({ command, args }) =>
     command === 'pnpm' && args[2] === 'test:integration');
   assert.equal(integration.options.env.PILOT_GATE_2B_MODE, 'correctness');

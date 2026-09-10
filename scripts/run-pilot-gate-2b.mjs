@@ -408,7 +408,7 @@ export async function runPilotGate2B({
     stageAdapter.enter('public_key_origin');
     await verifyPublicKeyOrigin(fetchAdapter, publicKey);
     stageAdapter.enter('supabase_link');
-    await processAdapter.run('supabase', ['link', '--project-ref', PROJECT_REF], { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
+    await processAdapter.run('supabase', ['link', '--project-ref', PROJECT_REF], { cwd: sourceRoot, env: dbCli, timeoutMs: 60_000 });
     stageAdapter.enter('database_dry_run');
     await processAdapter.run('supabase', ['db', 'push', '--dry-run'], { cwd: sourceRoot, env: dbCli, timeoutMs: 120_000 });
     stageAdapter.enter('database_push');
