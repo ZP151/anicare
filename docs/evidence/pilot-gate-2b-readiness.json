@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "projectRef": "fhugdtpjbgiatqhvjioy",
   "projectOrigin": "https://fhugdtpjbgiatqhvjioy.supabase.co",
-  "sourceCommit": "15fc6135121f20a786a3a7829baec5c14d1df85c",
+  "sourceCommit": "c29108fcba8960380419c00316bd4ccca6c99afa",
   "migrationHead": {
-    "filename": "202609100014_my_community_posts.sql",
-    "sha256": "24420ff72310e0730c6926ceff934dfcc4ee8c85ca4131629122b97171048d85"
+    "filename": "202609110016_community_activity.sql",
+    "sha256": "db5948884b65b9840319dfb528e5c8dfe5932566c2bd40f08ead8937fc4679fa"
   },
-  "edgeFunctionsTreeSha256": "fe2d2df6f58ab5f594ab65a3fb46d3c646af6ee72804e6b372cf1e6ed23bcf06",
-  "workflowRunId": 34384126918,
+  "edgeFunctionsTreeSha256": "8363e75f5b5d81101b4d7a98720490753e3f4c13ac079cb543fc9cf520c007f9",
+  "workflowRunId": 34512911878,
   "workflowRunAttempt": 1,
-  "createdAt": "2026-09-09T17:43:16.366Z",
-  "expiresAt": "2026-09-12T17:43:16.366Z",
+  "createdAt": "2026-09-10T18:18:09.170Z",
+  "expiresAt": "2026-09-13T18:18:09.170Z",
   "authRedirectCheck": "passed",
   "mediaStagingCheck": "passed",
   "publicKeyOriginCheck": "passed",

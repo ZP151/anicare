@@ -254,7 +254,7 @@ export function createDefaultProcessAdapter({ runId, runAttempt, temporaryRoot }
           } else child.kill('SIGKILL');
         }, options.timeoutMs);
         child.on('error', () => { clearTimeout(timer); reject(failure('spawn_error')); });
-        child.on('close', (code) => {
+        child.on('exit', (code) => {
           clearTimeout(timer);
           if (timedOut || code !== 0) {
             const output = Buffer.concat([...stdout, ...stderr]).toString('utf8');

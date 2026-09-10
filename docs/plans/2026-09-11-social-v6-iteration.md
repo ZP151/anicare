@@ -126,3 +126,5 @@ R2 的“消息”先提供真实互动通知，R3 才展示私信入口；图�
 R1–R2 已整合至 `a8d2835`，完整 CI 34511206401（工程检查与数据库契约）通过。首次 CI 暴露两条旧迁移清单断言被本地缓存掩盖；已更新到 016，并把 migrations/functions/scripts/workflows 纳入 gate 测试缓存输入，直接与无缓存回归通过。0.4.0（8）后端部署及 IPA 交付进行中，尚不代表手机验收通过。
 
 媒体清理队列与处理器已实现；GitHub 清理入口仅保留手动触发，避免受保护环境的每 15 分钟审批积压。R4 才接入 Vault + pg_cron/pg_net 的无人值守调度；本版不宣称自动物理清理已运行。
+
+部署修正：`eb8b733` 给非交互 Supabase link 传入现有数据库凭据；`c29108f` 修正服务器直接执行 TS 时的媒体导入扩展名，并使现有 Docker 预编译覆盖全部实际发布函数。两个新媒体函数的固定版本 Docker 编译、86 项 Edge 测试、类型检查及 emit build 通过。构建使用 [TypeScript 的相对扩展名重写](https://www.typescriptlang.org/tsconfig/rewriteRelativeImportExtensions.html)，保留 Deno 源代码可执行性。后续执行见 [R3 私信交接](2026-09-11-v6-r3-handoff.md)。
