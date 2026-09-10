@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { NearbyMap as UnavailableMap } from './NearbyMap.web';
@@ -14,7 +14,7 @@ const MAP_READINESS_TIMEOUT_MS = 8_000;
 export function NearbyMap({
   fallbackLabel, focusPoint,
   androidGoogleMapsConfigured = Constants.expoConfig?.extra?.androidGoogleMapsConfigured === true,
-  areas = [], selectedAreaId, onSelectArea, publicPortraits,
+  areas = [], selectedAreaId, onSelectArea, onSelectAreas, publicPortraits,
 }: NearbyMapProps) {
   const mapRef=useRef<MapView>(null);
   const selected=areas.find(area=>area.id===selectedAreaId);
@@ -23,6 +23,7 @@ export function NearbyMap({
   const mapEnabled = Platform.OS === 'ios' || androidGoogleMapsConfigured;
   const [providerUnavailable, setProviderUnavailable] = useState(false);
   const [settledPortraits, setSettledPortraits] = useState<Record<string, string>>({});
+  const [reduceMotion, setReduceMotion] = useState(false);
   const mapReady = useRef(false);
   const readinessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -59,12 +60,13 @@ export function NearbyMap({
   }, [clearReadinessTimer, mapEnabled]);
 
   useEffect(()=>{
-    if(selected) mapRef.current?.animateToRegion({latitude:selected.center[1]!,longitude:selected.center[0]!,latitudeDelta:selected.parentId?0.018:0.055,longitudeDelta:selected.parentId?0.018:0.055},350);
-  },[selected?.id]);
+    if(selected) mapRef.current?.animateToRegion({latitude:selected.center[1]!,longitude:selected.center[0]!,latitudeDelta:selected.parentId?0.018:0.055,longitudeDelta:selected.parentId?0.018:0.055},reduceMotion?0:350);
+  },[selected?.id,reduceMotion]);
 
   useEffect(() => {
-    if (focusPoint) mapRef.current?.animateToRegion({ ...focusPoint, latitudeDelta: 0.008, longitudeDelta: 0.008 }, 350);
-  }, [focusPoint]);
+    if (focusPoint) mapRef.current?.animateToRegion({ ...focusPoint, latitudeDelta: 0.008, longitudeDelta: 0.008 }, reduceMotion?0:350);
+  }, [focusPoint,reduceMotion]);
+  useEffect(()=>{void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);return()=>subscription.remove();},[]);
 
   if (!mapEnabled || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;
 
@@ -98,7 +100,7 @@ export function NearbyMap({
       >
         {focusPoint ? <Marker coordinate={focusPoint} title={focusPoint.title} pinColor={focusPoint.isUser ? '#3478F6' : '#E36A45'} /> : null}
         {selected?.polygons.map((polygon,index)=><Polygon key={`${selected.id}-${index}`} coordinates={polygon[0]!.map(point=>({latitude:point[1]!,longitude:point[0]!}))} holes={polygon.slice(1).map(ring=>ring.map(point=>({latitude:point[1]!,longitude:point[0]!})))} strokeColor="#2465D8" fillColor="rgba(36,101,216,0.10)" strokeWidth={2}/>)}
-        {catMarkers.map(marker=>{const portraitUri=publicPortraits?.get(marker.representativeCatId)?.portraitUri ?? null;return <Marker key={`${marker.id}|${portraitUri ?? ''}`} coordinate={marker.coordinate} onPress={()=>onSelectArea?.(marker.areaIds[0]!)} tracksViewChanges={Boolean(portraitUri) && settledPortraits[marker.id]!==portraitUri}>
+        {catMarkers.map(marker=>{const portraitUri=publicPortraits?.get(marker.representativeCatId)?.portraitUri ?? null;return <Marker key={`${marker.id}|${portraitUri ?? ''}`} coordinate={marker.coordinate} onPress={()=>marker.areaIds.length===1?onSelectArea?.(marker.areaIds[0]!):onSelectAreas?.(marker.areaIds)} tracksViewChanges={Boolean(portraitUri) && settledPortraits[marker.id]!==portraitUri}>
           <CatMapMarker portraitUri={portraitUri} count={marker.catIds.length} selected={marker.areaIds.includes(selectedAreaId ?? '')} onSnapshotSettled={()=>{if(portraitUri)setSettledPortraits(old=>old[marker.id]===portraitUri?old:{...old,[marker.id]:portraitUri});}}/>
         </Marker>;})}
       </MapView>

@@ -5,5 +5,6 @@ export type NearbyMapProps = Readonly<{
   areas?: readonly import('./singapore-communities').SingaporeArea[];
   selectedAreaId?: string | null;
   onSelectArea?: (id: string) => void;
+  onSelectAreas?: (ids: readonly string[]) => void;
   publicPortraits?: ReadonlyMap<string, Readonly<{ portraitUri?: string | null }>>;
 }>;
