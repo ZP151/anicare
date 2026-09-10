@@ -4,6 +4,8 @@ import { ComponentProps } from 'react';
 import { ColorValue, Platform, View } from 'react-native';
 
 const symbols = {
+  home: ['house', 'home-outline'],
+  map: ['map', 'map-outline'],
   account: ['person.crop.circle', 'account-circle-outline'],
   person: ['person.crop.circle', 'account-circle-outline'],
   'human-01': ['person.crop.circle', 'account-circle-outline'], 'human-02': ['person.crop.circle', 'account-circle-outline'],

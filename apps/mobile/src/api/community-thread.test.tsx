@@ -7,8 +7,19 @@ jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:'own
 jest.mock('../community/CommunityContentActions',()=>({CommunityContentActions:()=>null}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
 jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
+const mockExtras=jest.fn();
+jest.mock('./community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args),communityMediaUrl:(postId:string,mediaId:string)=>`https://media.test/${postId}/${mediaId}`}));
 import CommunityDetailScreen from '../../app/community/[id]';
-beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false}));mockList.mockResolvedValue({items:[],nextCursor:null});});
+beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false}));mockList.mockResolvedValue({items:[],nextCursor:null});mockExtras.mockResolvedValue(new Map());});
+it('shows every approved detail image above the existing replies',async()=>{
+ const first='00000000-0000-4000-8000-000000000011',second='00000000-0000-4000-8000-000000000012';
+ mockExtras.mockResolvedValue(new Map([[mockThread,{postId:mockThread,title:'Two bowls',media:[{mediaId:first,width:400,height:300},{mediaId:second,width:300,height:400}]}]]));
+ const view=await render(<CommunityDetailScreen/>);
+ await view.findByText('Two bowls');
+ expect(view.getByTestId(`community-gallery-${mockThread}`).props.children).toHaveLength(2);
+ expect(view.getByText('回复')).toBeTruthy();
+ await view.unmount();
+});
 it('keeps a failed reply and reuses its request id on retry',async()=>{
  mockReply.mockRejectedValueOnce(new Error('lost response')).mockResolvedValue('reply-id');
  const view=await render(<CommunityDetailScreen/>);const input=await view.findByLabelText('写回复');

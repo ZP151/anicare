@@ -1,10 +1,10 @@
 import {act,fireEvent,render,waitFor} from '@testing-library/react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000004'}));
-const mockList=jest.fn(),mockMine=jest.fn(),mockCreate=jest.fn();let mockOwner:string|null='owner-a';let mockEpoch=0;let mockDelayPin=false;const mockPins:Array<()=>void>=[];let mockParams:Record<string,string>={communitySlug:'tampines'};
+const mockList=jest.fn(),mockMine=jest.fn(),mockCreate=jest.fn(),mockReplace=jest.fn();let mockOwner:string|null='owner-a';let mockEpoch=0;let mockDelayPin=false;const mockPins:Array<()=>void>=[];let mockParams:Record<string,string>={communitySlug:'tampines'};
 jest.mock('./community',()=>({listMyCommunityPosts:(...args:unknown[])=>mockMine(...args),listCommunityPosts:(...args:unknown[])=>mockList(...args),createCommunityPost:(...args:unknown[])=>mockCreate(...args),blockCommunityAuthor:jest.fn(),deleteCommunityPost:jest.fn(),reportCommunityContent:jest.fn()}));
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),pin:()=>{const epoch=mockEpoch;return async()=>{if(mockDelayPin)await new Promise<void>(resolve=>mockPins.push(resolve));return epoch===mockEpoch;};}})}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
-jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn(),replace:jest.fn(),setParams:jest.fn()}),useFocusEffect:jest.fn(),useLocalSearchParams:()=>mockParams}));
+jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn(),replace:mockReplace,setParams:jest.fn()}),useFocusEffect:jest.fn(),useLocalSearchParams:()=>mockParams}));
 jest.mock('./feed',()=>({listPublicSightings:async()=>({items:[],nextCursor:null})}));
 jest.mock('./cat-presentation',()=>({getCatPresentations:async()=>new Map()}));
 jest.mock('./community-avatar',()=>({getCommunityAvatars:async()=>new Map()}));
@@ -32,6 +32,15 @@ it('uses the owner collection and clears it after sign out',async()=>{
 });
 it('uses human community context and Chinese controls',async()=>{
  const view=await render(<CommunityScreen/>);expect(await view.findByRole('header',{name:'社区'})).toBeTruthy();expect(view.queryByLabelText('发起讨论')).toBeNull();expect(view.getByLabelText('发布帖子')).toBeTruthy();await view.unmount();
+});
+it('offers nearby and cat discovery from the Home community feed',async()=>{
+ const view=await render(<CommunityScreen home/>);
+ await view.findByRole('header',{name:'发现'});
+ expect(view.getByLabelText('附近').props.accessibilityState.selected).toBe(true);
+ await fireEvent.press(view.getByLabelText('猫咪'));
+ expect(view.getByLabelText('猫咪').props.accessibilityState.selected).toBe(true);
+ expect(view.getByLabelText('筛选附近')).toBeTruthy();
+ await view.unmount();
 });
 it('does not reveal a stale feed after account switching',async()=>{
  let finish:(v:unknown)=>void=()=>{};mockList.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue({items:[post('New account feed')],nextCursor:null});
@@ -63,5 +72,6 @@ it('selects a Chinese neighbourhood and posts to its stable subzone scope',async
  await fireEvent.changeText(view.getByLabelText('发起讨论'),'西海岸的邻居好');
  await fireEvent.press(view.getByLabelText('发布'));
  await waitFor(()=>expect(mockCreate).toHaveBeenCalledWith('西海岸的邻居好',null,'sg-clsz05',undefined,expect.any(String)));
+ expect(mockReplace).toHaveBeenCalledWith('/community?communitySlug=sg-clsz05');
  await view.unmount();
 });

@@ -1,40 +1,16 @@
 import { Tabs } from 'expo-router';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { GlassSurface } from '../../src/design/GlassSurface';
 import { useNativeColors } from '../../src/design/native-colors';
-import { getTabDefinitions, TabRoute } from '../../src/i18n/catalog';
-import { useLocale } from '../../src/i18n/LocaleContext';
-import { getTabIconName } from '../../src/navigation/tab-icons';
+import { CustomTabBar } from '../../src/navigation/CustomTabBar';
 import { tabVisualContract } from '../../src/navigation/tab-style';
 
-const nativeIcons = {
-  index: { default: 'location', selected: 'location.fill' },
-  map: { default: 'map', selected: 'map.fill' },
-  report: { default: 'square.and.pencil', selected: 'square.and.pencil' },
-  discuss: { default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' },
-  profile: { default: 'person.crop.circle', selected: 'person.crop.circle.fill' },
-} as const;
-
 export default function TabLayout() {
-  const { locale } = useLocale();
   const colors = useNativeColors();
-  const tabs = getTabDefinitions(locale);
-
-  if (Platform.OS === 'ios') {
-    return <NativeTabs tintColor={colors.actionPrimary} minimizeBehavior="never">
-      {tabs.map(tab => <NativeTabs.Trigger key={tab.route} name={tab.route}
-        accessibilityLabel={tab.accessibilityLabel}>
-        <NativeTabs.Trigger.Icon sf={nativeIcons[tab.route]} />
-        <NativeTabs.Trigger.Label>{tab.label}</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>)}
-    </NativeTabs>;
-  }
-
   return (
     <Tabs
+      tabBar={props=><CustomTabBar {...props}/>}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.actionPrimary,
@@ -44,23 +20,7 @@ export default function TabLayout() {
         tabBarBackground: () => <GlassSurface style={[StyleSheet.absoluteFill, styles.tabBarBackground]} />,
       }}
     >
-      {tabs.map((tab) => (
-        <Tabs.Screen
-          key={tab.route}
-          name={tab.route}
-          options={{
-            title: tab.label,
-            tabBarAccessibilityLabel: tab.accessibilityLabel,
-            tabBarIcon: ({ color, focused, size }) => (
-              <MaterialCommunityIcons
-                color={color}
-                name={getTabIconName(tab.route, focused)}
-                size={Math.max(size, tabVisualContract.iconSize)}
-              />
-            ),
-          }}
-        />
-      ))}
+      <Tabs.Screen name="index" options={{title:'Home'}}/><Tabs.Screen name="map" options={{title:'Map'}}/><Tabs.Screen name="discuss" options={{title:'Messages'}}/><Tabs.Screen name="profile" options={{title:'Me'}}/>
     </Tabs>
   );
 }
@@ -78,8 +38,8 @@ const styles = StyleSheet.create({
   },
   tabBarBackground: { backgroundColor: 'transparent' },
   tabLabel: {
-    fontSize: Platform.select({ ios: 11, android: 12, default: tabVisualContract.labelFontSize }),
-    lineHeight: Platform.select({ ios: 14, android: 15, default: tabVisualContract.labelLineHeight }),
+    fontSize: tabVisualContract.labelFontSize,
+    lineHeight: tabVisualContract.labelLineHeight,
     fontWeight: '500',
   },
 });

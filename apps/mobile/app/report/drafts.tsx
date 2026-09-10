@@ -1,2 +1,2 @@
-import ReportScreen from '../(tabs)/report';
+import ReportScreen from './index';
 export default function DraftsRoute() { return <ReportScreen allDrafts />; }
