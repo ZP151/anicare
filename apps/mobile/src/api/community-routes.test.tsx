@@ -38,6 +38,13 @@ it('does not reveal a stale feed after account switching',async()=>{
  await view.findByText('New account feed');await act(async()=>finish({items:[post('Old account feed')],nextCursor:null}));
  expect(view.queryByText('Old account feed')).toBeNull();await view.unmount();
 });
+it('retains an existing post when pull refresh fails',async()=>{
+ mockList.mockResolvedValueOnce({items:[post('Existing post')],nextCursor:null}).mockRejectedValueOnce(new Error('offline'));
+ const view=await render(<CommunityScreen/>);await view.findByText('Existing post');
+ await act(async()=>view.getByTestId('screen-scroll').props.refreshControl.props.onRefresh());
+ await waitFor(()=>expect(view.getByText('Existing post')).toBeTruthy());
+ expect(view.getByText('讨论暂未载入，点此重试')).toBeTruthy();await view.unmount();
+});
 it('single-flights two presses even while the session check is pending',async()=>{
  const view=await render(<CommunityScreen compose/>);await waitFor(()=>expect(mockList).toHaveBeenCalled());
  await fireEvent.changeText(view.getByLabelText('发起讨论'),'Clean water bowls today.');

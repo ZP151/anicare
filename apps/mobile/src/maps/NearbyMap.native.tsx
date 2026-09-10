@@ -1,23 +1,28 @@
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { NearbyMap as UnavailableMap } from './NearbyMap.web';
 import type { NearbyMapProps } from './NearbyMap.types';
 import { PUBLIC_GOOGLE_MAP_STYLE, PUBLIC_MAP_PADDING, PUBLIC_MAP_REGION } from './public-map-policy';
+import { CatMapMarker } from './CatMapMarker';
+import { clusterCatActivity } from './map-marker-clusters';
 
 const MAP_READINESS_TIMEOUT_MS = 8_000;
 
 export function NearbyMap({
   fallbackLabel, focusPoint,
   androidGoogleMapsConfigured = Constants.expoConfig?.extra?.androidGoogleMapsConfigured === true,
-  areas = [], selectedAreaId, onSelectArea,
+  areas = [], selectedAreaId, onSelectArea, publicPortraits,
 }: NearbyMapProps) {
   const mapRef=useRef<MapView>(null);
   const selected=areas.find(area=>area.id===selectedAreaId);
+  const [viewport, setViewport] = useState<Region>(PUBLIC_MAP_REGION);
+  const catMarkers = clusterCatActivity(areas, { selectedAreaId, viewport });
   const mapEnabled = Platform.OS === 'ios' || androidGoogleMapsConfigured;
   const [providerUnavailable, setProviderUnavailable] = useState(false);
+  const [settledPortraits, setSettledPortraits] = useState<Record<string, string>>({});
   const mapReady = useRef(false);
   const readinessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,6 +82,7 @@ export function NearbyMap({
         minZoomLevel={10}
         onMapLoaded={markMapReady}
         onMapReady={markMapReady}
+        onRegionChangeComplete={setViewport}
         pitchEnabled={false}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         rotateEnabled={false}
@@ -92,12 +98,12 @@ export function NearbyMap({
       >
         {focusPoint ? <Marker coordinate={focusPoint} title={focusPoint.title} pinColor={focusPoint.isUser ? '#3478F6' : '#E36A45'} /> : null}
         {selected?.polygons.map((polygon,index)=><Polygon key={`${selected.id}-${index}`} coordinates={polygon[0]!.map(point=>({latitude:point[1]!,longitude:point[0]!}))} holes={polygon.slice(1).map(ring=>ring.map(point=>({latitude:point[1]!,longitude:point[0]!})))} strokeColor="#2465D8" fillColor="rgba(36,101,216,0.10)" strokeWidth={2}/>)}
-        {areas.filter(area=>area.cats.length>0).map(area=><Marker key={area.id} coordinate={{latitude:area.center[1]!,longitude:area.center[0]!}} title={area.name} description={`${area.cats.length} cats · delayed community activity`} onPress={()=>onSelectArea?.(area.id)} tracksViewChanges>
-          <View style={[styles.marker,selectedAreaId===area.id&&styles.selected]}><Text style={styles.count}>{area.cats.length}</Text><Text style={styles.name}>{area.name}</Text></View>
-        </Marker>)}
+        {catMarkers.map(marker=>{const portraitUri=publicPortraits?.get(marker.representativeCatId)?.portraitUri ?? null;return <Marker key={`${marker.id}|${portraitUri ?? ''}`} coordinate={marker.coordinate} onPress={()=>onSelectArea?.(marker.areaIds[0]!)} tracksViewChanges={Boolean(portraitUri) && settledPortraits[marker.id]!==portraitUri}>
+          <CatMapMarker portraitUri={portraitUri} count={marker.catIds.length} selected={marker.areaIds.includes(selectedAreaId ?? '')} onSnapshotSettled={()=>{if(portraitUri)setSettledPortraits(old=>old[marker.id]===portraitUri?old:{...old,[marker.id]:portraitUri});}}/>
+        </Marker>;})}
       </MapView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({ frame: { flex: 1 },marker:{backgroundColor:'#2465D8',borderWidth:2,borderColor:'#fff',borderRadius:22,paddingHorizontal:12,paddingVertical:7,alignItems:'center'},selected:{backgroundColor:'#174899'},count:{color:'#fff',fontWeight:'800',fontSize:18},name:{color:'#fff',fontWeight:'600',fontSize:10} });
+const styles = StyleSheet.create({ frame: { flex: 1 } });

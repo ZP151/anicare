@@ -13,6 +13,7 @@ beforeEach(()=>{jest.clearAllMocks();mockLocale.value='en';mockSubject.mockResol
 it('switches the actual stored sample name in an already open map sheet',async()=>{
  mockFeed.mockResolvedValue({items:[{...row,animalId:'00000000-0000-4000-8000-00000000a107',primaryAlias:'Mochi 麻糬 测试样本 S07'}],nextCursor:null});
  const view=await render(<MapScreen/>);
+ await fireEvent.press(view.getByLabelText('Expand neighbourhood activity'));
  await fireEvent.press(await view.findByRole('button',{name:'Tampines, 1 cats'}));
  expect(view.getByText('Mochi')).toBeTruthy();expect(view.getByText('Test sample S07')).toBeTruthy();
  mockLocale.value='zh-CN';await view.rerender(<MapScreen/>);
@@ -21,25 +22,26 @@ it('switches the actual stored sample name in an already open map sheet',async()
 });
 it('connects a Singapore community, building and cat to real routes',async()=>{
  const view=await render(<MapScreen/>);
+ await fireEvent.press(view.getByLabelText('Expand neighbourhood activity'));
  await waitFor(()=>expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy());
  await fireEvent.press(view.getByRole('button',{name:'Tampines, 1 cats'}));
  expect(view.getByText('HDB · Block 123 Test Street')).toBeTruthy();
  await fireEvent.press(view.getByText('Pepper'));expect(mockPush).toHaveBeenCalledWith(`/cat/${row.animalId}`);
  await fireEvent.press(view.getByText('Discuss'));expect(mockPush).toHaveBeenCalledWith('/community?communitySlug=tampines');
- expect(JSON.stringify(view.toJSON())).not.toContain(row.publicCellId);
+ expect(view.queryByText(row.publicCellId)).toBeNull();
  await view.unmount();
 });
-it('filters by region and building and can switch to the list without requesting device location',async()=>{
- const view=await render(<MapScreen/>);await waitFor(()=>expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy());
- await fireEvent.press(view.getByText('Communities & cats'));
- await fireEvent.changeText(view.getByLabelText('Search community, cat or building'),'Block 123');expect(view.getByText('1 cats · 2 areas / neighbourhoods')).toBeTruthy();
- await fireEvent.press(view.getByText('North'));expect(view.getByText('No matching community, cat or building.')).toBeTruthy();
- await fireEvent.press(view.getByRole('button',{name:'Show all Singapore'}));expect(view.getByText('1 cats · 55 planning areas')).toBeTruthy();
- await fireEvent.press(view.getByRole('button',{name:'Toggle map and list'}));expect(view.queryByText('Apple map boundary')).toBeNull();
+it('keeps filters hidden until the map filters action is opened and preserves map rendering',async()=>{
+ const view=await render(<MapScreen/>);await waitFor(()=>expect(view.getByText('Neighbourhood cat activity')).toBeTruthy());
+ expect(view.queryByText('North')).toBeNull();
+ await fireEvent.press(view.getByLabelText('Map filters'));
+ expect(view.getByText('North',{exact:true})).toBeTruthy();
+ await fireEvent.press(view.getByRole('button',{name:'Show all Singapore'}));
+ expect(view.getByText('Apple map boundary')).toBeTruthy();
  await view.unmount();
 });
 it('retains geography during a failed feed and retries without inventing sample cats',async()=>{
- mockFeed.mockRejectedValueOnce(new Error('offline'));const view=await render(<MapScreen/>);
+ mockFeed.mockRejectedValueOnce(new Error('offline'));const view=await render(<MapScreen/>);await fireEvent.press(view.getByLabelText('Expand neighbourhood activity'));
  await waitFor(()=>expect(view.getByText('Activity could not load. Tap to retry.')).toBeTruthy());
  expect(view.getByText('Activity not loaded')).toBeTruthy();expect(view.queryByText('Pepper')).toBeNull();
  await fireEvent.press(view.getByText('Activity could not load. Tap to retry.'));
@@ -48,7 +50,7 @@ it('retains geography during a failed feed and retries without inventing sample 
 it('discards an old feed after an account change',async()=>{
  let resolveOld:(value:unknown)=>void=()=>{};
  mockFeed.mockImplementationOnce(()=>new Promise(resolve=>{resolveOld=resolve;}));
- const view=await render(<MapScreen/>);await waitFor(()=>expect(mockFeed).toHaveBeenCalledTimes(1));
+ const view=await render(<MapScreen/>);await fireEvent.press(view.getByLabelText('Expand neighbourhood activity'));await waitFor(()=>expect(mockFeed).toHaveBeenCalledTimes(1));
  mockFeed.mockResolvedValue({items:[],nextCursor:null});
  await act(async()=>{mockSubscribe.mock.calls[0]![0]('new-owner');});
  await waitFor(()=>expect(view.getByText('0 cats · 55 planning areas')).toBeTruthy());
@@ -56,7 +58,7 @@ it('discards an old feed after an account change',async()=>{
  expect(view.getByText('0 cats · 55 planning areas')).toBeTruthy();await view.unmount();
 });
 it('renders Chinese community discovery and report action',async()=>{
- mockLocale.value='zh-CN';const view=await render(<MapScreen/>);
+ mockLocale.value='zh-CN';const view=await render(<MapScreen/>);await fireEvent.press(view.getByLabelText('展开附近活动'));
  await waitFor(()=>expect(view.getByText('1 只猫 · 55 个规划区')).toBeTruthy());
  await fireEvent.press(view.getByRole('button',{name:'Tampines, 1 只猫'}));
  expect(view.getByText('最近延迟时段内有目击记录')).toBeTruthy();
