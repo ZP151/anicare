@@ -47,8 +47,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose a photo for a report or your public profile avatar. Review the prepared copy before uploading.",
-          "cameraPermission": "Take a photo for a report or your public profile avatar. Review the prepared copy before uploading.",
+          "photosPermission": "Choose photos for a community post, a report, or your public profile avatar. Review your selection before uploading.",
+          "cameraPermission": "Take a photo for a community post, a report, or your public profile avatar. Review your photo before uploading.",
           "microphonePermission": false
         }
       ],
