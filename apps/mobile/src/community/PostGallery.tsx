@@ -1,0 +1,13 @@
+import {useState} from 'react';
+import {Modal,Pressable,ScrollView,Text,View,useWindowDimensions} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {CommunityPostImage} from './CommunityPostImage';
+import type {CommunityPostExtra} from '../api/community-extras';
+import {useLocale} from '../i18n/LocaleContext';
+import {AppIcon} from '../components/AppIcon';
+export function PostGallery({postId,media}:{postId:string;media:CommunityPostExtra['media']}){
+ const {width:screenWidth,height}=useWindowDimensions(),{locale}=useLocale(),zh=locale==='zh-CN';
+ const [width,setWidth]=useState(Math.max(240,screenWidth-68)),[page,setPage]=useState(0),[full,setFull]=useState(false);
+ const photos=(size:number,fullscreen=false)=>media.map((item,index)=><Pressable accessibilityRole="button" accessibilityLabel={zh?`打开照片 ${index+1}`:`Open photo ${index+1}`} key={item.mediaId} onPress={()=>{if(!fullscreen){setPage(index);setFull(true);}}} style={{width:size,justifyContent:'center'}}><CommunityPostImage postId={postId} mediaId={item.mediaId} variant="display" resizeMode={fullscreen?'contain':'cover'} label={zh?`照片 ${index+1}`:`Photo ${index+1}`} style={{width:size,height:fullscreen?Math.min(height-150,size*item.height/item.width):Math.min(460,size*item.height/item.width),borderRadius:fullscreen?0:14}}/></Pressable>);
+ return <View onLayout={event=>{if(event.nativeEvent.layout.width>0)setWidth(event.nativeEvent.layout.width);}} style={{gap:8}}><ScrollView testID={`community-gallery-${postId}`} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={event=>setPage(Math.round(event.nativeEvent.contentOffset.x/width))}>{photos(width)}</ScrollView>{media.length>1?<Text style={{fontSize:12,color:'#73737B',textAlign:'center'}}>{Math.min(page+1,media.length)} / {media.length}</Text>:null}<Modal visible={full} animationType="fade" onRequestClose={()=>setFull(false)}><SafeAreaView style={{flex:1,backgroundColor:'#111'}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16}}><Text style={{color:'#fff'}}>{page+1} / {media.length}</Text><Pressable accessibilityRole="button" accessibilityLabel={zh?'关闭照片':'Close photos'} onPress={()=>setFull(false)} style={{width:44,height:44,justifyContent:'center',alignItems:'center'}}><AppIcon name="close" color="#fff"/></Pressable></View><ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentOffset={{x:page*screenWidth,y:0}} onMomentumScrollEnd={event=>setPage(Math.round(event.nativeEvent.contentOffset.x/screenWidth))}>{photos(screenWidth,true)}</ScrollView></SafeAreaView></Modal></View>;
+}

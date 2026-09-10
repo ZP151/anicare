@@ -58,7 +58,7 @@ choice and independent review.
 
 ## Capabilities and Constraints
 
-- Five primary tabs: Nearby, Map, Report, Following and Profile. Each must have
+- Four primary destinations: Home, Map, Messages and Me, with a central creation action for posts and sightings. Report and scoped drafts remain reachable from Create and Me. Each must have
   a complete task, next action, return path and explicit loading, empty,
   offline, permission, authentication and error states where applicable.
 - Cat detail, coarse-area detail, report receipt/My Reports, draft recovery,
@@ -126,3 +126,7 @@ Support screen readers, Dynamic Type/large text, minimum 44pt iOS and 48dp
 Android touch targets, visible focus, sufficient contrast, one-handed reach and
 clear bilingual copy. Respect reduced motion and reduced transparency. Never
 make glass, colour, animation or haptics the only carrier of state or meaning.
+
+## Approved v6 delivery slice
+
+Home uses a virtualized image-first two-column feed with a one-column large-text layout. Explore is island-wide; Nearby requires an explicit neighbourhood choice. Cats remains a separate discovery filter. Social posts support up to six processed photos and real comments/likes; public posts are not sighting evidence. Native social drafts use their own SQLCipher database and do not modify report drafts. R2 Messages contains real comment/like notifications; private conversations, administrator chat, Bot and video are subsequent delivery slices.

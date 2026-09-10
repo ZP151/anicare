@@ -50,6 +50,7 @@ export async function getCommunityPost(postId: string, client?: CommunityRpcClie
   const rpc = client ?? getSupabaseClient() as unknown as CommunityRpcClient | null;
   if (!rpc || !uuid(postId)) throw new Error('invalid_community_post');
   const { data, error } = await rpc.rpc('get_public_community_post', { p_post_id: postId });
+  if (!error && Array.isArray(data) && data.length === 0) throw new Error('community_post_hidden');
   if (error || !Array.isArray(data) || data.length !== 1) throw new Error('community_unavailable'); return parsePost(data[0]);
 }
 

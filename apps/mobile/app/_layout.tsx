@@ -5,12 +5,14 @@ import { AuthLinkHandler } from '../src/components/AuthLinkHandler';
 import { LocaleProvider } from '../src/i18n/LocaleContext';
 import { useLocale } from '../src/i18n/LocaleContext';
 import { MediaUploadRecovery } from '../src/media/MediaUploadRecovery';
+import { SocialMediaRecovery } from '../src/community/SocialMediaRecovery';
 
 export default function RootLayout() {
   return (
     <LocaleProvider>
       <AuthLinkHandler />
       <MediaUploadRecovery />
+      <SocialMediaRecovery />
       <StatusBar style="auto" />
       <LocalizedStack />
     </LocaleProvider>
@@ -37,6 +39,7 @@ function LocalizedStack() {
         <Stack.Screen name="community/geography" options={{ headerShown: false }} />
         <Stack.Screen name="community/mine" options={{ headerShown: false }} />
         <Stack.Screen name="community/new" options={{ headerShown: false }} />
+        <Stack.Screen name="community/drafts" options={{ headerShown: false }} />
         <Stack.Screen name="community/index" options={{ headerShown: false }} />
         <Stack.Screen name="community/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="auth/callback" options={{ title: cn ? '登录' : 'Sign in' }} />

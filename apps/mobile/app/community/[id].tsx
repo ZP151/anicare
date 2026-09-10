@@ -1,8 +1,9 @@
+import { PostGallery } from '../../src/community/PostGallery';
 import { communitySampleText } from '../../src/community/test-samples';
 import { ProfileAvatar } from '../../src/profile/ProfileAvatar';
 import { getCommunityAvatars } from '../../src/api/community-avatar';
 import { getCatPresentations } from '../../src/api/cat-presentation';
-import { communityMediaUrl,getCommunityPostExtras,type CommunityPostExtra } from '../../src/api/community-extras';
+import { getCommunityPostExtras,type CommunityPostExtra } from '../../src/api/community-extras';
 import {useLocalSearchParams,useRouter} from 'expo-router';
 import {useEffect,useRef,useState} from 'react';
 import {randomUUID} from 'expo-crypto';
@@ -26,7 +27,7 @@ export default function CommunityDetailScreen(){
  const load=async(more=false,refresh=false)=>{
    if(!alive.current||loadingRequest.current)return;loadingRequest.current=true;const token=++generation.current,current=auth.pin();if(refresh)setRefreshing(true);else setLoading(true);setFailed(false);
    try{const [parent,page,extras]=await Promise.all([getCommunityPost(id),listCommunityReplies(id,more?cursor:null),getCommunityPostExtras([id])]);const [postAvatars,replyAvatars,pictures]=await Promise.all([getCommunityAvatars('community_post',[id]).catch(()=>new Map<string,string>()),getCommunityAvatars('community_reply',page.items.map(r=>r.replyId)).catch(()=>new Map<string,string>()),getCatPresentations(parent.catId?[parent.catId]:[])]);if(alive.current&&token===generation.current&&await current()){setPost(parent);setExtra(extras.get(id)??null);setAvatars(old=>new Map([...(more?old:[]),...postAvatars,...replyAvatars]));setPortrait(parent.catId?pictures.get(parent.catId)?.portraitUri:undefined);setReplies(old=>more?[...old,...page.items]:page.items);setCursor(page.nextCursor);}}
-   catch{if(alive.current&&token===generation.current&&await current()){setFailed(true);setPost(null);setExtra(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);}}
+   catch(error){if(alive.current&&token===generation.current&&await current()){setFailed(true);if(!refresh||(error instanceof Error&&error.message==='community_post_hidden')){setPost(null);setExtra(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);}}}
    finally{loadingRequest.current=false;if(alive.current&&token===generation.current&&await current()){if(refresh)setRefreshing(false);else setLoading(false);}}
  };
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++;};},[]);
@@ -52,6 +53,4 @@ export default function CommunityDetailScreen(){
    {auth.owner&&post?<GlassSurface style={s.composer}><TextInput accessibilityLabel={zh?'写回复':'Write a reply'} value={body} onChangeText={setBody} multiline maxLength={2000} editable={!writing} placeholder={zh?'写一条回复…':'Write a reply…'} placeholderTextColor={c.muted} style={s.input}/><Pressable accessibilityRole="button" accessibilityLabel={zh?'发送回复':'Send reply'} disabled={writing||!body.trim()} onPress={()=>void reply()} style={s.send}><AppIcon name="send" color={c.onAction} size={19}/></Pressable></GlassSurface>:auth.owner===null?<Pressable accessibilityRole="button" onPress={()=>router.push('/profile' as never)} style={s.touch}><Text style={s.link}>{zh?'登录后参与讨论':'Sign in to join the conversation'}</Text></Pressable>:null}
  </ScreenScaffold>;
 }
-function PostGallery({postId,media}:{postId:string;media:CommunityPostExtra['media']}){return <ScrollView testID={`community-gallery-${postId}`} horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={galleryStyles.row}>{media.map(item=>{const uri=communityMediaUrl(postId,item.mediaId,'display');return uri?<Image key={item.mediaId} accessibilityLabel="Community photo" source={{uri}} style={[galleryStyles.image,{aspectRatio:item.width/item.height}]}/>:null;})}</ScrollView>}
-const galleryStyles=StyleSheet.create({row:{gap:10},image:{width:280,maxWidth:280,borderRadius:16}});
 const styles=(c:ReturnType<typeof useNativeColors>)=>StyleSheet.create({parent:{gap:16,padding:18,backgroundColor:c.surface,borderRadius:24},reply:{gap:12,paddingVertical:16,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:c.line},authorRow:{flexDirection:'row',alignItems:'center',gap:10},avatar:{width:40,height:40,borderRadius:14,backgroundColor:c.leafSoft,alignItems:'center',justifyContent:'center'},author:{fontSize:16,fontWeight:'600',color:c.ink},meta:{fontSize:12,lineHeight:18,color:c.muted},heading:{fontSize:21,fontWeight:'700',color:c.ink},title:{fontSize:20,lineHeight:27,fontWeight:'700',color:c.ink},body:{fontSize:17,lineHeight:27,color:c.ink},composer:{borderRadius:24,padding:16,flexDirection:'row',alignItems:'flex-end',gap:10},input:{flex:1,minHeight:54,color:c.ink,fontSize:17,lineHeight:25},send:{width:44,height:44,borderRadius:22,backgroundColor:c.actionPrimary,alignItems:'center',justifyContent:'center'},link:{fontSize:15,fontWeight:'600',color:c.actionPrimary},touch:{minHeight:44,justifyContent:'center'},note:{fontSize:15,lineHeight:23,color:c.muted}});

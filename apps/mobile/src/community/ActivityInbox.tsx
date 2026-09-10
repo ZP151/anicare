@@ -85,18 +85,18 @@ export function ActivityInbox() {
     const owner = auth.owner;
     if (!owner) return;
     const current = auth.pin();
-    if (!await current()) return;
+    if (!alive.current || !await current()) return;
     if (!item.readAt) {
       try {
         await markCommunityActivityRead([item.eventId]);
       } catch {
-        if (await current()) router.push(`/community/${item.postId}` as never);
+        if (alive.current && await current()) router.push(`/community/${item.postId}` as never);
         return;
       }
-      if (!await current()) return;
+      if (!alive.current || !await current()) return;
       setItems(existing => existing.map(value => value.eventId === item.eventId ? { ...value, readAt: new Date().toISOString() } : value));
     }
-    if (await current()) router.push(`/community/${item.postId}` as never);
+    if (alive.current && await current()) router.push(`/community/${item.postId}` as never);
   }, [auth.owner, auth.pin, router]);
 
   if (auth.owner === null) {

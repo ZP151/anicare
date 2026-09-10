@@ -30,3 +30,7 @@ reference or an approved baseline for future surfaces.
 ## 2026-09-10 · Social v5
 
 Current implementation reference: [v5 archive](../../docs/design/ios26-social-v5/index.html). Use warm neutral surfaces, cobalt actions, native glass controls, human avatars and the original orange-and-ivory anime cat icon. Feed browsing and composition are separate; draft details live in a collection. Preserve prior reference archives. Device feedback, not concept imagery, establishes final visual acceptance.
+
+## v6 approved direction · 2026-09-11
+
+[Archived design](../../docs/design/ios26-social-v6/index.html) is approved. Use photo-first cards with compact captions and author metadata below the cover; native glass belongs to navigation/map controls, not every content card. Preserve 44pt actions and Dynamic Type, collapse map overlays by default, distinguish own-location and fit-island actions, and use public cat portraits on geographic clusters. Home/Map/+ action/Messages/Me replaces the old five destinations. Content discovery, publishing and private report drafts remain distinct tasks. Native visual acceptance remains pending the new IPA.
