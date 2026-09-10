@@ -39,16 +39,18 @@ test('discovers the complete repository source contract', () => {
   const repoRoot = path.resolve(import.meta.dirname, '..');
   const inputs = discoverPilotGateInputs(repoRoot);
 
-  assert.equal(inputs.sqlTests.length, 36);
+  assert.equal(inputs.sqlTests.length, 37);
   assert.equal(
     inputs.sqlTests.at(-1),
-    'supabase/tests/036_my_community_posts.sql',
+    'supabase/tests/037_community_media.sql',
   );
-  assert.equal(inputs.edgeHandlers.length, 8);
+  assert.equal(inputs.edgeHandlers.length, 10);
   assert.deepEqual(inputs.edgeHandlers, [
+    'supabase/functions/cleanup-community-media/index.ts',
     'supabase/functions/cleanup-legacy-media/index.ts',
     'supabase/functions/cleanup-media-staging/index.ts',
     'supabase/functions/cleanup-profile-avatars/index.ts',
+    'supabase/functions/community-media/index.ts',
     'supabase/functions/create-sighting/index.ts',
     'supabase/functions/delete-media/index.ts',
     'supabase/functions/finalize-media-upload/index.ts',

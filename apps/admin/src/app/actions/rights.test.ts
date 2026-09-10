@@ -11,8 +11,8 @@ beforeEach(()=>{vi.clearAllMocks();vi.stubGlobal('fetch',io.fetch);io.fetch.mock
 it('rechecks platform-admin session before creating a service client or deleting Auth',async()=>{
  io.rpc.mockResolvedValue({data:false,error:null});await expect(processErasureAction(form({requestId:request}))).rejects.toThrow('redirect:/rights?error=request_failed');expect(io.serviceFactory).not.toHaveBeenCalled();expect(io.deleteUser).not.toHaveBeenCalled();
 });
-it('runs the actual action-to-service deletion and existing cleanup handlers',async()=>{
- await expect(processErasureAction(form({requestId:request}))).rejects.toThrow('redirect:/rights');expect(io.deleteUser).toHaveBeenCalledWith(subject,false);expect(io.fetch).toHaveBeenCalledTimes(3);expect(io.fetch).toHaveBeenCalledWith('https://local.invalid/functions/v1/cleanup-legacy-media',expect.objectContaining({method:'POST',cache:'no-store'}));
+it('runs the actual action-to-service deletion and every durable cleanup handler',async()=>{
+ await expect(processErasureAction(form({requestId:request}))).rejects.toThrow('redirect:/rights');expect(io.deleteUser).toHaveBeenCalledWith(subject,false);expect(io.fetch).toHaveBeenCalledTimes(4);expect(io.fetch).toHaveBeenCalledWith('https://local.invalid/functions/v1/cleanup-community-media',expect.objectContaining({method:'POST',cache:'no-store'}));
 });
 it('passes a stable action request to human intake handling without changing identities',async()=>{
  io.rpc.mockImplementation(async(name:string)=>({data:name==='admin_has_active_platform_admin'?true:[{requestId:request,status:'reviewing'}],error:null}));const data=form({requestId:request,actionRequestId:claim,status:'reviewing'});await expect(updateRightsAction(data)).rejects.toThrow('redirect:/rights');await expect(updateRightsAction(data)).rejects.toThrow('redirect:/rights');const updates=io.rpc.mock.calls.filter(([name])=>name==='admin_update_user_rights_request');expect(updates).toHaveLength(2);expect(updates[0]).toEqual(updates[1]);expect(io.serviceFactory).not.toHaveBeenCalled();

@@ -16,8 +16,10 @@ select results_eq(
      order by trigger_name collate "C"$$,
   $$values
       ('aaa_capture_erasure_staging'::text collate "C"),
+      ('aaa_queue_community_media_cleanup'::text collate "C"),
       ('aab_queue_profile_avatar_cleanup'::text collate "C"),
       ('aac_capture_erasure_profile_avatar'::text collate "C"),
+      ('aad_capture_erasure_community_media'::text collate "C"),
       ('user_profiles_account_erasure'::text collate "C"),
       ('user_profiles_legacy_media_deletion_outbox'::text collate "C"),
       ('zzz_capture_erasure_legacy'::text collate "C")$$,

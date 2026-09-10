@@ -26,7 +26,7 @@ export async function processErasureAction(form:FormData):Promise<void>{
  const service=createAdminServiceClient();const config=getAdminServiceSupabaseConfig();if(!service||!config)redirect('/rights?error=service_unavailable');
  try{
   await processAccountErasure(service as never,request,session.userId,async()=>{
-   for(const name of ['cleanup-media-staging','cleanup-legacy-media','cleanup-profile-avatars']){
+   for(const name of ['cleanup-media-staging','cleanup-legacy-media','cleanup-profile-avatars','cleanup-community-media']){
     const response=await fetch(`${config.url}/functions/v1/${name}`,{method:'POST',headers:{Authorization:`Bearer ${config.serviceRoleKey}`,apikey:config.serviceRoleKey},cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.ok)throw new Error('cleanup_unavailable');
    }
