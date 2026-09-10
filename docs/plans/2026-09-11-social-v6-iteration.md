@@ -128,3 +128,7 @@ R1–R2 已整合至 `a8d2835`，完整 CI 34511206401（工程检查与数据�
 媒体清理队列与处理器已实现；GitHub 清理入口仅保留手动触发，避免受保护环境的每 15 分钟审批积压。R4 才接入 Vault + pg_cron/pg_net 的无人值守调度；本版不宣称自动物理清理已运行。
 
 部署修正：`eb8b733` 给非交互 Supabase link 传入现有数据库凭据；`c29108f` 修正服务器直接执行 TS 时的媒体导入扩展名，并使现有 Docker 预编译覆盖全部实际发布函数。两个新媒体函数的固定版本 Docker 编译、86 项 Edge 测试、类型检查及 emit build 通过。构建使用 [TypeScript 的相对扩展名重写](https://www.typescriptlang.org/tsconfig/rewriteRelativeImportExtensions.html)，保留 Deno 源代码可执行性。后续执行见 [R3 私信交接](2026-09-11-v6-r3-handoff.md)。
+
+## R1–R2 交付完成
+
+0.4.0（8）最终源码 `ff4472ef2a19aea3577774ec000a87f88d65e7dc`，IPA 构建 34515659309 及完整 CI 34515658956 成功，安装包已下载核验。[交付记录](../reviews/2026-09-11-v6-delivery.md)为当前状态；此前“待构建”记录是执行历史。用户实际手机验收尚未进行，继续沿用 0.3.1 基线并仅测七条增量路径。下一切片是[用户私信与评论续聊](2026-09-11-v6-r3-handoff.md)。

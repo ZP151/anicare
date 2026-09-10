@@ -62,3 +62,7 @@ Interface: `NearbyMapProps` receives optional public portrait lookup keyed by an
 ## Execution ledger · 2026-09-11
 
 Implemented in 9877465, d6456e9 and d6bf42e. Focused map/scaffold/feed tests and mobile typecheck pass. Review corrections preserve data on refresh errors, batch portraits beyond 50 IDs, make multi-area markers selectable, fit the collapsed header, and respect Reduce Motion. Native visual acceptance is still pending the 0.4.0 IPA. No new design approval is required.
+
+## Final delivery ledger · 2026-09-11
+
+R1–R2 implementation and delivery complete. Final candidate `ff4472ef2a19aea3577774ec000a87f88d65e7dc`, iOS run 34515659309, full CI 34515658956; package, provenance, native permissions, source locks and accepted icon verified. The original task sketches above are superseded by the concrete implementation and [delivery record](../../reviews/2026-09-11-v6-delivery.md). Physical acceptance remains pending; the active delivery goal does not claim it passed. R3 handoff is recorded separately.
