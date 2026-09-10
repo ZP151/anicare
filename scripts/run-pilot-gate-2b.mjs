@@ -98,10 +98,16 @@ function normalizeHostedGateControl(value) {
   return control;
 }
 
-export function buildProducerFailureDiagnostic(stage, control) {
+const PROCESS_OUTCOMES = new Set(['timeout', 'exit', 'spawn_error', 'module_resolution', 'network', 'authentication']);
+
+export function buildProducerFailureDiagnostic(stage, control, processFailure) {
   const safeStage = typeof stage === 'string' && PRODUCER_STAGES.has(stage) ? stage : 'unknown';
   const safeControl = safeStage === 'hosted_checks' ? normalizeHostedGateControl(control) : undefined;
   const diagnostic = { stage: safeStage, code: 'hosted_gate_failed' };
+  if (PROCESS_OUTCOMES.has(processFailure?.processOutcome)) diagnostic.processOutcome = processFailure.processOutcome;
+  if (['function_deployment', 'docker_bundler_verification'].includes(safeStage) && DEPLOYED_FUNCTIONS.includes(processFailure?.functionName)) {
+    diagnostic.functionName = processFailure.functionName;
+  }
   if (safeControl !== undefined) {
     diagnostic.gateStage = safeControl.gateStage;
     if (safeControl.check !== undefined) diagnostic.check = safeControl.check;
@@ -234,21 +240,31 @@ export function createDefaultProcessAdapter({ runId, runAttempt, temporaryRoot }
           detached: process.platform !== 'win32',
           stdio: ['ignore', 'pipe', 'pipe'],
         });
-        const stdout = []; const stderr = []; let bytes = 0;
+        const stdout = []; const stderr = []; let bytes = 0; let timedOut = false;
+        const failure = (processOutcome) => Object.assign(new Error('hosted_process_failed'), { processOutcome });
         const collect = (target) => (chunk) => {
           bytes += chunk.length;
           if (bytes <= 128 * 1024) target.push(Buffer.from(chunk));
         };
         child.stdout.on('data', collect(stdout)); child.stderr.on('data', collect(stderr));
         const timer = setTimeout(() => {
+          timedOut = true;
           if (process.platform !== 'win32' && child.pid) {
             try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
           } else child.kill('SIGKILL');
         }, options.timeoutMs);
-        child.on('error', reject);
-        child.on('exit', (code) => {
+        child.on('error', () => { clearTimeout(timer); reject(failure('spawn_error')); });
+        child.on('close', (code) => {
           clearTimeout(timer);
-          if (code !== 0) reject(new Error('hosted_process_failed'));
+          if (timedOut || code !== 0) {
+            const output = Buffer.concat([...stdout, ...stderr]).toString('utf8');
+            const outcome = timedOut ? 'timeout'
+              : /module not found|failed to resolve|could not resolve/i.test(output) ? 'module_resolution'
+              : /unauthorized|forbidden|invalid access token/i.test(output) ? 'authentication'
+              : /connection refused|connection reset|failed to fetch|network error|TLS handshake|unexpected status.*(?:429|50[234])/i.test(output) ? 'network'
+              : 'exit';
+            reject(failure(outcome));
+          }
           else resolve({ stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') });
         });
       });
@@ -400,11 +416,18 @@ export async function runPilotGate2B({
       cwd: sourceRoot, env: base, timeoutMs: 10_000,
     });
     const functionsRoot = path.join(sourceRoot, 'supabase', 'functions');
-    await processAdapter.run('docker', [
-      'run', '--rm', '-e', 'DENO_NO_PACKAGE_JSON=1', '--mount',
-      `type=bind,src=${functionsRoot},dst=/work/functions,readonly`, EDGE_RUNTIME_DIGEST,
-      'bundle', '--entrypoint', '/work/functions/cleanup-legacy-media/index.ts', '--output', '/tmp/probe.eszip',
-    ], { cwd: sourceRoot, env: base, timeoutMs: 180_000 });
+    for (const name of DEPLOYED_FUNCTIONS) {
+      try {
+        await processAdapter.run('docker', [
+          'run', '--rm', '-e', 'DENO_NO_PACKAGE_JSON=1', '--mount',
+          `type=bind,src=${functionsRoot},dst=/work/functions,readonly`, EDGE_RUNTIME_DIGEST,
+          'bundle', '--entrypoint', `/work/functions/${name}/index.ts`, '--output', '/tmp/probe.eszip',
+        ], { cwd: sourceRoot, env: base, timeoutMs: 180_000 });
+      } catch (error) {
+        if (error instanceof Error) error.functionName = name;
+        throw error;
+      }
+    }
     stageAdapter.enter('public_key_origin');
     await verifyPublicKeyOrigin(fetchAdapter, publicKey);
     stageAdapter.enter('supabase_link');
@@ -421,8 +444,13 @@ export async function runPilotGate2B({
       { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
     stageAdapter.enter('function_deployment');
     for (const name of DEPLOYED_FUNCTIONS) {
-      await processAdapter.run('supabase', ['functions', 'deploy', name, '--project-ref', PROJECT_REF, '--use-docker'],
-        { cwd: sourceRoot, env: cli, timeoutMs: 120_000 });
+      try {
+        await processAdapter.run('supabase', ['functions', 'deploy', name, '--project-ref', PROJECT_REF, '--use-docker'],
+          { cwd: sourceRoot, env: cli, timeoutMs: 120_000 });
+      } catch (error) {
+        if (error instanceof Error) error.functionName = name;
+        throw error;
+      }
     }
     stageAdapter.enter('function_inventory');
     const remoteFunctions = await processAdapter.run('supabase', [
@@ -500,8 +528,8 @@ if (entry === fileURLToPath(import.meta.url)) {
         enter: (stage) => { diagnosticStage = PRODUCER_STAGES.has(stage) ? stage : 'unknown'; },
         control: (control) => { diagnosticControl = normalizeHostedGateControl(control); },
       },
-    }).catch(async () => {
-      await writeFile(DIAGNOSTIC_PATH, buildProducerFailureDiagnostic(diagnosticStage, diagnosticControl), { mode: 0o600 })
+    }).catch(async (error) => {
+      await writeFile(DIAGNOSTIC_PATH, buildProducerFailureDiagnostic(diagnosticStage, diagnosticControl, error), { mode: 0o600 })
         .catch(() => undefined);
       process.stderr.write('pilot_gate_2b_failed\n');
       process.exitCode = 1;

@@ -3,10 +3,10 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
+    "rewriteRelativeImportExtensions": true,
     "outDir": "dist",
     "rootDir": "_shared"
   },
   "include": ["_shared/**/*.ts"],
   "exclude": ["_shared/**/*.test.ts"]
 }
-

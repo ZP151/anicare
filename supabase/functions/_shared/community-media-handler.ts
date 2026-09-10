@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { inspectJpeg } from './jpeg-policy.js';
+import { inspectJpeg } from './jpeg-policy.ts';
 
 const sha256 = /^[a-f0-9]{64}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

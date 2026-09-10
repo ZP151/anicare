@@ -150,9 +150,9 @@ test('deploys incrementally in fixed order without privileged command arguments'
     ['docker', 'info', '--format', '{{.ServerVersion}}'],
     ['docker', 'pull', runtimeDigest],
     ['docker', 'image', 'tag', runtimeDigest, 'public.ecr.aws/supabase/edge-runtime:v1.73.0'],
-    ['docker', 'run', '--rm', '-e', 'DENO_NO_PACKAGE_JSON=1', '--mount',
+    ...DEPLOYED_FUNCTIONS.map((name) => ['docker', 'run', '--rm', '-e', 'DENO_NO_PACKAGE_JSON=1', '--mount',
       `type=bind,src=${functionsRoot},dst=/work/functions,readonly`, runtimeDigest,
-      'bundle', '--entrypoint', '/work/functions/cleanup-legacy-media/index.ts', '--output', '/tmp/probe.eszip'],
+      'bundle', '--entrypoint', `/work/functions/${name}/index.ts`, '--output', '/tmp/probe.eszip']),
     ['supabase', 'link', '--project-ref', 'fhugdtpjbgiatqhvjioy'],
     ['supabase', 'db', 'push', '--dry-run'],
     ['supabase', 'db', 'push'],
@@ -181,6 +181,29 @@ test('deploys incrementally in fixed order without privileged command arguments'
     'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
     'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks',
   ]);
+});
+
+test('reports only fixed child failure categories and deployed function names', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'animalhelper-process-category-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const adapter = createDefaultProcessAdapter({ temporaryRoot: root, runId: '123', runAttempt: '1' });
+  for (const [script, timeoutMs, expected] of [
+    ['setInterval(() => {}, 1000)', 50, 'timeout'],
+    ['process.stderr.write("Bearer secret"); process.exit(1)', 10000, 'exit'],
+    ['process.stderr.write("Module not found https://secret.example"); process.exit(1)', 10000, 'module_resolution'],
+  ]) {
+    await assert.rejects(adapter.run(process.execPath, ['-e', script], {cwd: root, env: process.env, timeoutMs}), error => {
+      assert.equal(error.processOutcome, expected);
+      const parsed = JSON.parse(buildProducerFailureDiagnostic('function_deployment', undefined, {
+        processOutcome: error.processOutcome, functionName: 'community-media', stderr: 'secret',
+      }));
+      assert.deepEqual(parsed, {stage: 'function_deployment', code: 'hosted_gate_failed', processOutcome: expected, functionName: 'community-media'});
+      return true;
+    });
+  }
+  assert.deepEqual(JSON.parse(buildProducerFailureDiagnostic('function_deployment', undefined, {
+    processOutcome: 'Bearer secret', functionName: 'unknown-secret',
+  })), {stage: 'function_deployment', code: 'hosted_gate_failed'});
 });
 
 test('selects only fixed correctness and characterization runtime contracts', () => {
