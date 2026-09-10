@@ -1,0 +1,4 @@
+import { communityMediaUrl, getCommunityPostExtras } from './community-extras';
+const postId='00000000-0000-4000-8000-000000000001',mediaId='00000000-0000-4000-8000-000000000002';
+it('reads strict public post extras without changing legacy post contracts',async()=>{const rpc=jest.fn().mockResolvedValue({data:[{postId,title:'Hello',media:[{mediaId,width:480,height:320}]}],error:null});const result=await getCommunityPostExtras([postId],{rpc});expect(result.get(postId)?.media[0]?.mediaId).toBe(mediaId);expect(rpc).toHaveBeenCalledWith('get_public_community_post_extras',{p_post_ids:[postId]});});
+it('builds a visibility-checked media endpoint only for UUID ids',()=>{const previous=process.env.EXPO_PUBLIC_SUPABASE_URL;process.env.EXPO_PUBLIC_SUPABASE_URL='https://example.test';expect(communityMediaUrl(postId,mediaId,'thumb')).toContain('variant=thumb');expect(communityMediaUrl('bad',mediaId,'thumb')).toBeNull();process.env.EXPO_PUBLIC_SUPABASE_URL=previous;});

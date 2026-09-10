@@ -9,6 +9,7 @@ jest.mock('./feed',()=>({listPublicSightings:async()=>({items:[],nextCursor:null
 jest.mock('./cat-presentation',()=>({getCatPresentations:async()=>new Map()}));
 jest.mock('./community-avatar',()=>({getCommunityAvatars:async()=>new Map()}));
 jest.mock('./community-reactions',()=>({getCommunityReactions:async()=>new Map()}));
+jest.mock('./community-extras',()=>({getCommunityPostExtras:async()=>new Map(),communityMediaUrl:()=>null}));
 import CommunityScreen from '../../app/community/index';
 import { COMMUNITY_TEST_POSTS } from '../community/test-samples';
 const post=(body:string)=>({postId:'00000000-0000-4000-8000-000000000001',body,catId:null,communitySlug:'tampines',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},replyCount:0,canDelete:false,cursor:'00000000-0000-4000-8000-000000000001'});
