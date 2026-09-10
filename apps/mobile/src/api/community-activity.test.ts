@@ -6,7 +6,7 @@ const replyId = '00000000-0000-4000-8000-000000000003';
 const event = { eventId, kind: 'comment', postId, replyId, actor: { name: 'Neighbour', avatarKey: 'person' }, createdAt: '2026-09-11T00:00:00Z', readAt: null, cursor: eventId };
 
 it('reads only the approved activity fields and marks returned event ids read', async () => {
-  const rpc = jest.fn().mockResolvedValueOnce({ data: [event], error: null }).mockResolvedValueOnce({ data: null, error: null });
+  const rpc = jest.fn().mockResolvedValueOnce({ data: [event], error: null }).mockResolvedValueOnce({ data: [{ eventId, readAt: '2026-09-11T00:01:00Z' }], error: null });
   await expect(listMyCommunityActivity(null, { rpc })).resolves.toEqual({ items: [event], nextCursor: eventId });
   await expect(markCommunityActivityRead([eventId], { rpc })).resolves.toBeUndefined();
   expect(rpc).toHaveBeenNthCalledWith(1, 'list_my_community_activity', { p_cursor: null, p_limit: 20 });
@@ -16,4 +16,9 @@ it('reads only the approved activity fields and marks returned event ids read', 
 it('rejects private or malformed activity payloads', async () => {
   const rpc = jest.fn().mockResolvedValue({ data: [{ ...event, privateMediaId: 'nope' }], error: null });
   await expect(listMyCommunityActivity(null, { rpc })).rejects.toThrow('community_activity_unavailable');
+});
+
+it('rejects an incomplete read receipt instead of treating it as confirmation', async () => {
+  const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+  await expect(markCommunityActivityRead([eventId], { rpc })).rejects.toThrow('community_activity_unavailable');
 });
