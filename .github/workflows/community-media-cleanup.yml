@@ -1,0 +1,32 @@
+name: Community media cleanup
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-media-cleanup-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: hosted-gate-2b
+    permissions:
+      contents: read
+    steps:
+      - name: Remove expired community media
+        timeout-minutes: 2
+        env:
+          SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl --fail --silent --show-error --max-time 30 --request POST \
+            --header "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            --header "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            "${SUPABASE_URL}/functions/v1/cleanup-community-media"

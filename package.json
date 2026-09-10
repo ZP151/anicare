@@ -21,11 +21,12 @@
     "test:root-contracts": "node --test scripts/root-verify-contract.test.mjs",
     "test:ios-device-lab-workflow": "node --test scripts/ios-device-lab-workflow-contract.test.mjs",
     "test:hosted-gate-2b-workflow": "node --test scripts/hosted-gate-2b-workflow-contract.test.mjs",
+    "test:community-media-cleanup-workflow": "node --test scripts/community-media-cleanup-workflow-contract.test.mjs",
     "validate:ios-device-lab": "pnpm --filter @animalhelper/mobile validate:ios-device-lab",
     "test:ios-device-lab-policy": "pnpm --filter @animalhelper/mobile test:ios-device-lab-policy",
     "typecheck": "turbo run typecheck",
     "validate:pilot-policies": "pnpm --filter @animalhelper/mobile validate:native-config && pnpm --filter @animalhelper/mobile validate:pilot-build",
-    "verify": "pnpm validate:pilot-policies && pnpm test:root-contracts && pnpm test:pilot-gate-2b-ci && pnpm test:ios-device-lab-workflow && pnpm test:hosted-gate-2b-workflow && pnpm test:pilot-source-inventory && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm validate:pilot-policies && pnpm test:root-contracts && pnpm test:pilot-gate-2b-ci && pnpm test:ios-device-lab-workflow && pnpm test:hosted-gate-2b-workflow && pnpm test:community-media-cleanup-workflow && pnpm test:pilot-source-inventory && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

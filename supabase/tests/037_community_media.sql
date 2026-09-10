@@ -19,6 +19,12 @@ select lives_ok($$select * from public.reserve_community_media_upload('00000000-
 select set_config('test.community_media_one',(select id::text from private.community_media_jobs where owner_id='00000000-0000-4000-8000-000000003701'),true);
 select is((select thumb_path from private.community_media_jobs where id=current_setting('test.community_media_one')::uuid),'media/'||current_setting('test.community_media_one')||'/thumb.jpg','thumb path is server-derived');
 select lives_ok($$select public.finalize_community_media_upload('00000000-0000-4000-8000-000000003701',current_setting('test.community_media_one')::uuid)$$,'owner finalizes validated pair');
+select is(public.finalize_community_media_upload('00000000-0000-4000-8000-000000003701',current_setting('test.community_media_one')::uuid),current_setting('test.community_media_one')::uuid,'lost finalize response replays the same media ID');
+
+select lives_ok($$select * from public.reserve_community_media_upload('00000000-0000-4000-8000-000000003701','00000000-0000-4000-8000-000000003710',repeat('c',64),100,48,48,repeat('d',64),1000,480,320)$$,'owner reserves a separately expiring upload');
+select set_config('test.community_media_expired',(select id::text from private.community_media_jobs where owner_id='00000000-0000-4000-8000-000000003701' and request_id='00000000-0000-4000-8000-000000003710'),true);
+select lives_ok($$select public.finalize_community_media_upload('00000000-0000-4000-8000-000000003701',current_setting('test.community_media_expired')::uuid)$$,'owner finalizes the separately expiring upload');
+update private.community_media_jobs set created_at=now()-interval '10 minutes',reservation_expires_at=now()-interval '1 second',upload_token_expires_at=now()+interval '1 hour' where id=current_setting('test.community_media_expired')::uuid;
 
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
@@ -40,6 +46,16 @@ select throws_ok($$select public.create_community_post_with_media('foreign media
 reset role;
 select is((select count(*) from public.community_posts where body='foreign media'),0::bigint,'failed attachment validation leaves no partial post');
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003701',true);
+select throws_ok($$select public.create_community_post_with_media('expired attachment',null,null,'clementi',array[current_setting('test.community_media_expired')::uuid],'00000000-0000-4000-8000-000000003711')$$,'P0001','community_media_expired','expired owned media gives the exact safe-to-reopen recovery error');
+reset role;
+select is((select count(*) from public.community_posts where body='expired attachment'),0::bigint,'expired media recovery leaves no post');
+select is_empty($$select 1 from private.safety_requests where actor_id='00000000-0000-4000-8000-000000003701' and request_id='00000000-0000-4000-8000-000000003711'$$,'expired media recovery leaves no idempotency record');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003701',true);
+reset role;
+update private.community_media_jobs set created_at=now()-interval '10 minutes',reservation_expires_at=now()-interval '1 second',upload_token_expires_at=now()+interval '1 hour' where id=current_setting('test.community_media_one')::uuid;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003701',true);
 select is(public.create_community_post_with_media('one attachment','Cover',null,'clementi',array[current_setting('test.community_media_one')::uuid],'00000000-0000-4000-8000-000000003705'),current_setting('test.post_one')::uuid,'same ordered attachment publication replays');

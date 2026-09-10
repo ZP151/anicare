@@ -24,13 +24,13 @@ export async function processErasureAction(form:FormData):Promise<void>{
  const session=await getAdminSession(async()=>await createWritableAdminServerClient() as never);
  if(session.state==='unauthenticated')redirect('/login');if(session.state!=='authorised')redirect('/rights?error=request_failed');
  const service=createAdminServiceClient();const config=getAdminServiceSupabaseConfig();if(!service||!config)redirect('/rights?error=service_unavailable');
- try{
-  await processAccountErasure(service as never,request,session.userId,async()=>{
+ let status:string;try{
+  status=await processAccountErasure(service as never,request,session.userId,async()=>{
    for(const name of ['cleanup-media-staging','cleanup-legacy-media','cleanup-profile-avatars','cleanup-community-media']){
     const response=await fetch(`${config.url}/functions/v1/${name}`,{method:'POST',headers:{Authorization:`Bearer ${config.serviceRoleKey}`,apikey:config.serviceRoleKey},cache:'no-store',signal:AbortSignal.timeout(15000)});
     if(!response.ok)throw new Error('cleanup_unavailable');
    }
   });
  }catch{redirect('/rights?error=request_failed');}
- revalidatePath('/rights');redirect('/rights');
+ revalidatePath('/rights');redirect(`/rights?erasureStatus=${status}&erasureRequestId=${request}`);
 }

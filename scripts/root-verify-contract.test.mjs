@@ -42,11 +42,16 @@ test('root verification blocks on both native pilot policy validators', async ()
     packageJson.scripts['test:hosted-gate-2b-workflow'],
     'node --test scripts/hosted-gate-2b-workflow-contract.test.mjs',
   );
+  assert.equal(
+    packageJson.scripts['test:community-media-cleanup-workflow'],
+    'node --test scripts/community-media-cleanup-workflow-contract.test.mjs',
+  );
   assert.match(
     packageJson.scripts.verify,
     /pnpm test:hosted-gate-2b-workflow/,
     'root verification must include the Hosted Gate 2B workflow contract',
   );
+  assert.match(packageJson.scripts.verify, /pnpm test:community-media-cleanup-workflow/);
 });
 
 test('CI runs root verify once with required policy coverage and no duplicate preflight', async () => {
@@ -63,7 +68,7 @@ test('CI runs root verify once with required policy coverage and no duplicate pr
   assert.equal(rootSteps[0].if, undefined, 'root verification must not be conditional');
   assert.ok([undefined, false].includes(rootSteps[0]['continue-on-error']), 'root verification must block on failure');
   const commands = packageJson.scripts.verify.split(' && ');
-  for (const command of ['pnpm validate:pilot-policies', 'pnpm test:root-contracts', 'pnpm test:hosted-gate-2b-workflow']) {
+  for (const command of ['pnpm validate:pilot-policies', 'pnpm test:root-contracts', 'pnpm test:hosted-gate-2b-workflow', 'pnpm test:community-media-cleanup-workflow']) {
     assert.equal(commands.filter((value) => value === command).length, 1, `${command} must remain covered by root verify`);
     assert.equal(steps.filter((step) => step.run === command).length, 0, `${command} must not also run as a duplicate CI step`);
   }

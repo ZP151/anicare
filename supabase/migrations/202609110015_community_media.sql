@@ -116,6 +116,7 @@ begin
  v_hash:=encode(extensions.digest(jsonb_build_object('body',v_body,'title',v_title,'catId',p_cat_id,'communitySlug',p_community_slug,'mediaIds',coalesce(p_media_ids,'{}'::uuid[]))::text,'sha256'),'hex');
  select * into prior from private.safety_requests request_row where request_row.actor_id=v_actor and request_row.request_id=p_request_id for update;
  if found then if prior.operation<>'community_post' or prior.payload_hash<>v_hash then raise exception 'idempotency_conflict' using errcode='P0001'; end if; return prior.result_id; end if;
+ if exists(select 1 from private.community_media_jobs j where j.id=any(coalesce(p_media_ids,'{}'::uuid[])) and j.owner_id=v_actor and j.status='finalized' and j.reservation_expires_at<=now()) then raise exception 'community_media_expired' using errcode='P0001'; end if;
  perform 1 from private.community_media_jobs j where j.id=any(coalesce(p_media_ids,'{}'::uuid[])) order by j.id for update;
  if (select count(*) from private.community_media_jobs j where j.id=any(coalesce(p_media_ids,'{}'::uuid[])) and j.owner_id=v_actor and j.status='finalized' and j.reservation_expires_at>now())<>coalesce(cardinality(p_media_ids),0) then raise exception 'community_media_not_available' using errcode='P0001'; end if;
  insert into public.community_posts(author_id,body,title,cat_id,community_slug) values(v_actor,v_body,v_title,p_cat_id,p_community_slug) returning id into post_id;

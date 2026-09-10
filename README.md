@@ -80,6 +80,14 @@ Copy `.env.example` to a local untracked environment file and populate it with d
 
 Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable the Apple/Google providers before testing social sign-in. Invoke `private.apply_location_retention()` and `private.purge_expired_location_grants()` daily from a trusted database scheduler; only `service_role` can execute them. Invoke `cleanup-media-staging` from the same trusted scheduler with its service credential: it retains active quarantined-job metadata for later deletion, handles orphaned private staging jobs, and waits through signed-upload replay windows before physical deletion. Its client-facing `uploadCredentialUsableUntil` is a conservative pre-mint lower bound, never a claim that the token expires at that exact instant.
 
+Deploy the cleanup handler with an authenticated Supabase CLI, then keep [`.github/workflows/community-media-cleanup.yml`](.github/workflows/community-media-cleanup.yml) enabled on the default branch:
+
+```bash
+supabase functions deploy cleanup-community-media --project-ref fhugdtpjbgiatqhvjioy --use-docker
+```
+
+The workflow invokes that handler every 15 minutes from the protected `hosted-gate-2b` environment using its existing server-only `SUPABASE_SERVICE_ROLE_KEY`; manual dispatch runs the identical bounded request. The handler only claims expired unbound or deletion-pending jobs, so late signed uploads cannot be retained as live media.
+
 ## Safety invariants
 
 - Public clients receive H3 r9 cells, not latitude/longitude.
@@ -155,7 +163,9 @@ Admin 服务端媒体代理还需在它自己的服务端环境设置 `SUPABASE_
 
 `/rights` in Admin is a real authenticated intake queue. An active platform admin can move human requests to review, request a new identity proposal, or close intake. These actions do not merge cats or change identity decisions.
 
-Account deletion processing additionally uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to claim the owner-requested erasure, query/delete the Auth user, call the existing `cleanup-media-staging` and `cleanup-legacy-media` handlers, and reconcile linked cleanup jobs. Deploy those handlers to the same project and configure their existing required runtime settings. Only an authorized Admin Server Action invokes this flow; the mobile app never receives service credentials or an Auth target UUID. Processing is explicit from the queue, with durable retry and cleanup-pending states; no scheduler is implied. Revisit pending items and retry cleanup until the DB reports convergence. Storage credential lifetime and terminal legacy failures still prevent premature completion.
+Account deletion processing additionally uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to claim the owner-requested erasure, query/delete the Auth user, call the existing `cleanup-media-staging`, `cleanup-legacy-media`, `cleanup-profile-avatars`, and `cleanup-community-media` handlers, and reconcile linked cleanup jobs. Deploy those handlers to the same project and configure their existing required runtime settings. Only an authorized Admin Server Action invokes this flow; the mobile app never receives service credentials or an Auth target UUID. The queue displays the exact durable result from `finish_account_erasure` (`completed`, `cleanup pending`, or `retryable`) rather than treating invocation as completion. Revisit pending items and retry cleanup until the DB reports convergence. Storage credential lifetime and terminal legacy failures still prevent premature completion.
+
+When `create_community_post_with_media` returns PostgreSQL error `P0001` with message `community_media_expired`, it guarantees that no post or post idempotency result was created for that actor and request ID; exact prior publication replay is checked first. Preserve the draft, reopen editing only for that exact error, reserve/finalize replacement media with new media request IDs, then publish using a new post request ID. Do not use this recovery path for `community_media_not_available` or `idempotency_conflict`.
 
 Set mobile `EXPO_PUBLIC_RIGHTS_CONTACT_URL` to an **actual operated** HTTPS contact page or `mailto:` address before real-user use. The example is intentionally empty. Without it, the UI states that external contact is unavailable; the authenticated queue still receives requests, but post-deletion contact acceptance is incomplete. A saved local receipt is not proof of deletion completion and grants no anonymous status access. The operating owner/SLA and real contact channel remain product inputs, not generated addresses.
 

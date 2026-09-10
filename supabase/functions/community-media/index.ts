@@ -2,6 +2,15 @@ import { createClient } from '@supabase/supabase-js';
 
 import { COMMUNITY_MEDIA_BUCKET, createCommunityMediaHandler } from '../_shared/community-media-handler.ts';
 
+type StoredStatus = 'reserved' | 'finalized' | 'attached' | 'deletion_pending' | 'completed';
+function record(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
+function storedStatus(value: unknown): value is StoredStatus { return typeof value === 'string' && ['reserved', 'finalized', 'attached', 'deletion_pending', 'completed'].includes(value); }
+function storedVariant(row: Record<string, unknown>, prefix: 'thumb' | 'display') {
+  const path = row[`${prefix}_path`]; const sha256 = row[`${prefix}_sha256`]; const byteLength = row[`${prefix}_byte_length`]; const width = row[`${prefix}_width`]; const height = row[`${prefix}_height`];
+  return typeof path === 'string' && typeof sha256 === 'string' && typeof byteLength === 'number' && Number.isInteger(byteLength) && typeof width === 'number' && Number.isInteger(width) && typeof height === 'number' && Number.isInteger(height)
+    ? { path, sha256, byteLength, width, height } : null;
+}
+
 const url = Deno.env.get('SUPABASE_URL');
 const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const allowedOrigin = Deno.env.get('MEDIA_ALLOWED_ORIGIN') ?? null;
@@ -22,7 +31,7 @@ Deno.serve(createCommunityMediaHandler({
       p_thumb_sha256: input.thumb.sha256, p_thumb_byte_length: input.thumb.byteLength, p_thumb_width: input.thumb.width, p_thumb_height: input.thumb.height,
       p_display_sha256: input.display.sha256, p_display_byte_length: input.display.byteLength, p_display_width: input.display.width, p_display_height: input.display.height,
     }).maybeSingle();
-    if (error || !data || typeof data.job_id !== 'string' || typeof data.reservation_expires_at !== 'string' || typeof data.thumb_path !== 'string' || typeof data.display_path !== 'string') return null;
+    if (error || !record(data) || typeof data.job_id !== 'string' || typeof data.reservation_expires_at !== 'string' || typeof data.thumb_path !== 'string' || typeof data.display_path !== 'string') return null;
     return { jobId: data.job_id, reservationExpiresAt: data.reservation_expires_at, thumbPath: data.thumb_path, displayPath: data.display_path };
   },
   createSignedUpload: async path => {
@@ -33,9 +42,8 @@ Deno.serve(createCommunityMediaHandler({
   getJob: async (ownerId, jobId) => {
     if (!service) return null;
     const { data, error } = await service.rpc('get_community_media_upload_job', { p_owner_id: ownerId, p_job_id: jobId }).maybeSingle();
-    if (error || !data || !['reserved', 'finalized', 'attached', 'deletion_pending', 'completed'].includes(data.status) || typeof data.reservation_expires_at !== 'string') return null;
-    const variant = (prefix: 'thumb' | 'display') => typeof data[`${prefix}_path`] === 'string' && typeof data[`${prefix}_sha256`] === 'string' && Number.isInteger(data[`${prefix}_byte_length`]) && Number.isInteger(data[`${prefix}_width`]) && Number.isInteger(data[`${prefix}_height`]) ? { path: data[`${prefix}_path`] as string, sha256: data[`${prefix}_sha256`] as string, byteLength: data[`${prefix}_byte_length`] as number, width: data[`${prefix}_width`] as number, height: data[`${prefix}_height`] as number } : null;
-    const thumb = variant('thumb'); const display = variant('display');
+    if (error || !record(data) || !storedStatus(data.status) || typeof data.reservation_expires_at !== 'string') return null;
+    const thumb = storedVariant(data, 'thumb'); const display = storedVariant(data, 'display');
     return !thumb || !display ? null : { status: data.status, reservationExpiresAt: data.reservation_expires_at, thumb, display };
   },
   download: async path => {
