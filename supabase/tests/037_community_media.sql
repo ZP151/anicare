@@ -31,6 +31,8 @@ reset role;
 select is((select jsonb_array_length(media) from public.get_public_community_post_extras(array[current_setting('test.post_zero')::uuid])),0,'text posts retain an empty media array');
 select is((select title from public.get_public_community_post_extras(array[current_setting('test.post_one')::uuid])),'Cover','extras expose only the explicit title');
 select is((select media->0->>'mediaId' from public.get_public_community_post_extras(array[current_setting('test.post_one')::uuid])),current_setting('test.community_media_one'),'extras preserve attachment order and omit paths');
+update private.community_media_cleanup_jobs set not_before=now()-interval '1 second' where media_id=current_setting('test.community_media_one')::uuid;
+select is_empty($$select * from public.claim_community_media_cleanup_jobs(25)$$,'attached media cannot be collected as an expired upload orphan');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000003702',true);

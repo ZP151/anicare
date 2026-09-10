@@ -39,6 +39,7 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202609090013_community_reactions.sql',
   '202609100014_my_community_posts.sql',
   '202609110015_community_media.sql',
+  '202609110016_community_activity.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([

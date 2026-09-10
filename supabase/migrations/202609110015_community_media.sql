@@ -105,7 +105,7 @@ end $$;
 
 create or replace function public.create_community_post_with_media(p_body text,p_title text,p_cat_id uuid,p_community_slug text,p_media_ids uuid[],p_request_id uuid)
 returns uuid language plpgsql volatile security definer set search_path=pg_catalog as $$
-declare v_actor uuid:=auth.uid(); v_body text:=nullif(btrim(p_body),''); v_title text:=nullif(btrim(p_title),''); v_hash text; prior private.safety_requests%rowtype; post_id uuid; media_id uuid; position integer:=0;
+declare v_actor uuid:=auth.uid(); v_body text:=nullif(btrim(p_body),''); v_title text:=nullif(btrim(p_title),''); v_hash text; prior private.safety_requests%rowtype; post_id uuid; v_media_id uuid; position integer:=0;
 begin
  if v_actor is null then raise exception 'authentication_required' using errcode='42501'; end if;
  if not private.community_mutation_eligible(v_actor) then raise exception 'adult_contributor_required' using errcode='42501'; end if;
@@ -119,7 +119,12 @@ begin
  perform 1 from private.community_media_jobs j where j.id=any(coalesce(p_media_ids,'{}'::uuid[])) order by j.id for update;
  if (select count(*) from private.community_media_jobs j where j.id=any(coalesce(p_media_ids,'{}'::uuid[])) and j.owner_id=v_actor and j.status='finalized' and j.reservation_expires_at>now())<>coalesce(cardinality(p_media_ids),0) then raise exception 'community_media_not_available' using errcode='P0001'; end if;
  insert into public.community_posts(author_id,body,title,cat_id,community_slug) values(v_actor,v_body,v_title,p_cat_id,p_community_slug) returning id into post_id;
- foreach media_id in array coalesce(p_media_ids,'{}'::uuid[]) loop insert into private.community_post_media(post_id,media_id,position) values(post_id,media_id,position); update private.community_media_jobs set status='attached',attached_at=now() where id=media_id; position:=position+1; end loop;
+ foreach v_media_id in array coalesce(p_media_ids,'{}'::uuid[]) loop
+  insert into private.community_post_media(post_id,media_id,position) values(post_id,v_media_id,position);
+  update private.community_media_jobs set status='attached',attached_at=now() where id=v_media_id;
+  update private.community_media_cleanup_jobs cleanup set status='completed',completed_at=now(),claimed_at=null,claim_id=null where cleanup.media_id=v_media_id and cleanup.status='pending';
+  position:=position+1;
+ end loop;
  insert into private.safety_requests(actor_id,request_id,operation,target_id,payload_hash,result_id) values(v_actor,p_request_id,'community_post',post_id,v_hash,post_id);
  return post_id;
 end $$;
@@ -163,7 +168,7 @@ create or replace function public.claim_community_media_cleanup_jobs(p_limit int
 returns table(job_id uuid,thumb_path text,display_path text,claim_id uuid) language plpgsql volatile security definer set search_path=pg_catalog as $$
 begin
  if p_limit is null or p_limit not between 1 and 50 then raise exception 'invalid_cleanup_limit' using errcode='22023'; end if;
- return query with candidates as (select id from private.community_media_cleanup_jobs where status='pending' and not_before<=now() and (claimed_at is null or claimed_at<=now()-interval '5 minutes') order by created_at limit p_limit for update skip locked), claimed as (update private.community_media_cleanup_jobs c set claimed_at=now(),claim_id=extensions.gen_random_uuid() from candidates x where c.id=x.id returning c.*)
+ return query with candidates as (select cleanup.id from private.community_media_cleanup_jobs cleanup join private.community_media_jobs media on media.id=cleanup.media_id where cleanup.status='pending' and cleanup.not_before<=now() and (cleanup.claimed_at is null or cleanup.claimed_at<=now()-interval '5 minutes') and (media.status='deletion_pending' or (media.status in ('reserved','finalized') and media.reservation_expires_at<=now())) order by cleanup.created_at limit p_limit for update of cleanup skip locked), claimed as (update private.community_media_cleanup_jobs c set claimed_at=now(),claim_id=extensions.gen_random_uuid() from candidates x where c.id=x.id returning c.*)
  select c.id,j.thumb_path,j.display_path,c.claim_id from claimed c join private.community_media_jobs j on j.id=c.media_id;
 end $$;
 create or replace function public.complete_community_media_cleanup_job(p_job_id uuid,p_claim_id uuid) returns void language plpgsql volatile security definer set search_path=pg_catalog as $$
