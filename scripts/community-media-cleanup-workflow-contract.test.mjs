@@ -14,7 +14,7 @@ async function workflow() {
 
 function assertContract(source, value) {
   assert.equal(value.name, 'Community media cleanup');
-  assert.deepEqual(value.on.schedule, [{ cron: '*/15 * * * *' }]);
+  assert.equal(value.on.schedule, undefined);
   assert.equal(value.on.workflow_dispatch, null);
   assert.deepEqual(value.permissions, { contents: 'read' });
   assert.equal(value.concurrency.group, 'community-media-cleanup-${{ github.repository }}');
@@ -38,7 +38,7 @@ function assertContract(source, value) {
   assert.doesNotMatch(source, /contents:\s*write/);
 }
 
-test('schedules bounded protected cleanup using only the environment service credential', async () => {
+test('provides bounded manual cleanup using only the environment service credential', async () => {
   const { source, value } = await workflow();
   assertContract(source, value);
 });
@@ -46,7 +46,7 @@ test('schedules bounded protected cleanup using only the environment service cre
 test('rejects schedule, environment, credential, and request drift', async () => {
   const { source, value } = await workflow();
   const mutations = [
-    (item) => { item.on.schedule[0].cron = '0 * * * *'; },
+    (item) => { item.on.schedule = [{ cron: '*/15 * * * *' }]; },
     (item) => { item.jobs.cleanup.environment = 'production'; },
     (item) => { item.jobs.cleanup.permissions = { contents: 'write' }; },
     (item) => { item.jobs.cleanup.steps[0].env.SUPABASE_SERVICE_ROLE_KEY = 'plain-secret'; },

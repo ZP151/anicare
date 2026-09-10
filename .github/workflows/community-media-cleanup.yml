@@ -1,8 +1,7 @@
 name: Community media cleanup
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
+  # R4 will add an unattended database scheduler. This protected job is manual.
   workflow_dispatch:
 
 permissions:

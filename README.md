@@ -86,7 +86,7 @@ Deploy the cleanup handler with an authenticated Supabase CLI, then keep [`.gith
 supabase functions deploy cleanup-community-media --project-ref fhugdtpjbgiatqhvjioy --use-docker
 ```
 
-The workflow invokes that handler every 15 minutes from the protected `hosted-gate-2b` environment using its existing server-only `SUPABASE_SERVICE_ROLE_KEY`; manual dispatch runs the identical bounded request. The handler only claims expired unbound or deletion-pending jobs, so late signed uploads cannot be retained as live media.
+The workflow provides manual cleanup from the protected `hosted-gate-2b` environment using its existing server-only `SUPABASE_SERVICE_ROLE_KEY`. It requires the environment's existing review; unattended scheduling is pending R4 and is not enabled. The handler only claims expired unbound or deletion-pending jobs, so attached live media is excluded. R4 will configure a Vault-backed database scheduler through the authorized deployment runtime, without recurring GitHub approval requests.
 
 ## Safety invariants
 
