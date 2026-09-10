@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 const mockMapProps = jest.fn();
 const mockMapLoadsDuringMount = { value: false };
@@ -13,8 +13,10 @@ jest.mock('react-native-maps', () => {
       React.useLayoutEffect(() => {
         if (mockMapLoadsDuringMount.value) (props.onMapLoaded as (() => void) | undefined)?.();
       }, [props.onMapLoaded]);
-      return React.createElement(View, { testID: 'native-map' });
+      return React.createElement(View, { testID: 'native-map' }, props.children);
     },
+    Marker: (props: Record<string, unknown>) => React.createElement(View, { testID: 'native-marker', onPress: props.onPress }, props.children),
+    Polygon: () => null,
     PROVIDER_GOOGLE: 'google',
   };
 });
@@ -101,5 +103,18 @@ describe('NearbyMap native privacy contract', () => {
     expect(readinessTimer).toBeDefined();
     await view.unmount();
     expect(clearTimeoutSpy).toHaveBeenCalledWith(readinessTimer);
+  });
+
+  it('offers every original area in a multi-area marker instead of selecting its first area', async () => {
+    const onSelectArea = jest.fn(); const onSelectAreas = jest.fn();
+    const areas = [
+      { id: 'one', center: [103.75, 1.3], cats: [{ animalId: 'cat-one' }] },
+      { id: 'two', center: [103.7501, 1.3], cats: [{ animalId: 'cat-two' }] },
+    ] as never;
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} areas={areas} onSelectArea={onSelectArea} onSelectAreas={onSelectAreas} />);
+    await fireEvent.press(view.getByTestId('native-marker'));
+    expect(onSelectArea).not.toHaveBeenCalled();
+    expect(onSelectAreas).toHaveBeenCalledWith(['one', 'two']);
+    await view.unmount();
   });
 });
