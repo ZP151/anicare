@@ -28,6 +28,7 @@ function LocalizedStack() {
         <Stack.Screen name="cat/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="report/drafts" options={{ headerShown: false }} />
         <Stack.Screen name="following" options={{ title: cn ? '关注' : 'Following' }} />
+        <Stack.Screen name="report/index" options={{ headerShown: false }} />
         <Stack.Screen name="report/new" options={{ headerShown: false }} />
         <Stack.Screen name="report/receipt" options={{ title: cn ? '报告回执' : 'Report receipt' }} />
         <Stack.Screen name="report/my-reports" options={{ title: cn ? '我的报告' : 'My reports' }} />

@@ -23,5 +23,5 @@ export default function ReportScreen({ allDrafts = false }: { allDrafts?: boolea
     now: () => new Date(),
     navigate: (path) => router.push(path as never),
   }), [router, revision]);
-  return <ReportHub allDrafts={allDrafts} dependencies={dependencies} locale={locale} />;
+  return <ReportHub onClose={()=>router.canGoBack()?router.back():router.replace('/' as never)} allDrafts={allDrafts} dependencies={dependencies} locale={locale} />;
 }

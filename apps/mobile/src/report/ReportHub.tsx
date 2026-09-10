@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenScaffold } from '../components/ScreenScaffold';
+import { AppIcon } from '../components/AppIcon';
 import { radii } from '../design/theme';
 import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
@@ -49,7 +50,7 @@ function summarizeDrafts(drafts: readonly StoredDraft[], ownerSubject: string | 
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export function ReportHub({ dependencies, locale, allDrafts = false }: Readonly<{ dependencies: ReportHubDependencies; locale: Locale; allDrafts?: boolean }>) {
+export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: Readonly<{ dependencies: ReportHubDependencies; locale: Locale; allDrafts?: boolean; onClose?:()=>void }>) {
   const colors = useNativeColors();
   const styles = makeStyles(colors);
   const copy = getReportCopy(locale);
@@ -148,7 +149,7 @@ export function ReportHub({ dependencies, locale, allDrafts = false }: Readonly<
   }
 
   return (
-    <ScreenScaffold title={allDrafts ? (locale === 'zh-CN' ? '草稿' : 'Drafts') : copy.title}>
+    <ScreenScaffold compact trailing={onClose?<Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'关闭':'Close'} onPress={onClose} style={{minWidth:44,minHeight:44,justifyContent:'center',alignItems:'center'}}><AppIcon name="close" color={colors.actionPrimary}/></Pressable>:undefined} title={allDrafts ? (locale === 'zh-CN' ? '草稿' : 'Drafts') : copy.title}>
       {allDrafts ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report')} style={styles.textAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? '返回报告' : 'Back to reports'}</Text></Pressable> : null}
       {!allDrafts ? <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={startReport} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
         <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
