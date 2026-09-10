@@ -211,7 +211,9 @@ async function prepareAt(sourceUri: string, maxLongestEdge: number, prefix: stri
   const intermediate = new File(saved.uri);
   try {
     const canonicalBytes = renderSrgbJpeg(await intermediate.bytes(), []);
-    return inspectNative(writeCacheJpeg(prefix, canonicalBytes));
+    const output=writeCacheJpeg(prefix, canonicalBytes);
+    try { return await inspectNative(output); }
+    catch(error){try{const file=new File(output);if(file.exists)file.delete();}catch{/* Preserve the processing error. */}throw error;}
   } finally {
     try {
       if (intermediate.exists) intermediate.delete();
@@ -222,6 +224,12 @@ async function prepareAt(sourceUri: string, maxLongestEdge: number, prefix: stri
 }
 async function prepareNative(sourceUri: string): Promise<RenderedMedia> { return prepareAt(sourceUri, CANONICAL_RECIPE.maxLongestEdge, 'animalhelper-canonical'); }
 export async function prepareAvatar(sourceUri: string): Promise<RenderedMedia> { return prepareAt(sourceUri, 512, 'animalhelper-avatar'); }
+export async function prepareCommunityImage(sourceUri: string, variant: 'thumb'|'display'): Promise<RenderedMedia> {
+  return prepareAt(sourceUri, variant === 'thumb' ? 480 : 2048, 'animalhelper-social');
+}
+export function discardCommunityImage(uri: string): void {
+  try { const file = new File(uri); if (file.parentDirectory.uri === Paths.cache.uri && /^animalhelper-social-[0-9a-f-]+\.jpg$/i.test(file.name) && file.exists) file.delete(); } catch { /* Scoped temporary cache cleanup. */ }
+}
 
 async function renderNative(input: Readonly<{
   canonical: RenderedMedia;

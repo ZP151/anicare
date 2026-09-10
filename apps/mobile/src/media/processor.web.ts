@@ -8,6 +8,8 @@ export async function prepareCanonical(_sourceUri: string): Promise<RenderedMedi
   return unavailable();
 }
 export async function prepareAvatar(_sourceUri: string): Promise<RenderedMedia> { return unavailable(); }
+export async function prepareCommunityImage(_sourceUri: string, _variant: 'thumb'|'display'): Promise<RenderedMedia> { return unavailable(); }
+export function discardCommunityImage(_uri: string): void {}
 
 export async function renderOpaqueMasks(
   _input: Readonly<{ canonical: RenderedMedia; masks: readonly PrivacyMask[] }>,

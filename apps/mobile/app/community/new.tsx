@@ -1,2 +1,2 @@
-import CommunityScreen from './index';
-export default function NewPostRoute(){ return <CommunityScreen compose />; }
+import {SocialComposer} from '../../src/community/SocialComposer';
+export default SocialComposer;
