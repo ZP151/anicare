@@ -47,6 +47,7 @@ function LocalizedStack() {
         <Stack.Screen name="messages/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="messages/new" options={{ headerShown: false }} />
         <Stack.Screen name="requests" options={{ headerShown: false }} />
+        <Stack.Screen name="activity" options={{ headerShown: false }} />
         <Stack.Screen name="auth/callback" options={{ title: cn ? '登录' : 'Sign in' }} />
       </Stack>;
 }

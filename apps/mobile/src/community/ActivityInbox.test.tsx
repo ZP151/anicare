@@ -40,14 +40,14 @@ it('does not fake a read receipt when marking an opened event fails',async()=>{
 it('opens a child-comment notification in its parent thread after resolving visible context',async()=>{
  const childId='00000000-0000-4000-8000-000000000008',parentId='00000000-0000-4000-8000-000000000009';
  const event={...activity('8'),replyId:childId};mockContext.mockResolvedValueOnce({replyId:childId,postId:event.postId,parentReplyId:parentId});mockList.mockResolvedValue({items:[event],nextCursor:null});
- const view=await render(<ActivityInbox/>);await fireEvent.press(await view.findByRole('button',{name:'Commenter replied to your comment, unread'}));
+ const view=await render(<ActivityInbox/>);await fireEvent.press(await view.findByRole('button',{name:'Commenter replied to you, unread'}));
  await waitFor(()=>expect(mockContext).toHaveBeenCalledWith(childId));
  expect(mockPush).toHaveBeenCalledWith(`/community/comments/${parentId}?childId=${childId}`);await view.unmount();
 });
 
 it('keeps an unavailable child notification on the post instead of navigating to stale content',async()=>{
  const childId='00000000-0000-4000-8000-000000000008',event={...activity('8'),replyId:childId};mockContext.mockRejectedValueOnce(new Error('hidden'));mockList.mockResolvedValue({items:[event],nextCursor:null});
- const view=await render(<ActivityInbox/>);await fireEvent.press(await view.findByRole('button',{name:'Commenter replied to your comment, unread'}));
+ const view=await render(<ActivityInbox/>);await fireEvent.press(await view.findByRole('button',{name:'Commenter replied to you, unread'}));
  await waitFor(()=>expect(mockContext).toHaveBeenCalledWith(childId));
  expect(mockPush).not.toHaveBeenCalled();await view.unmount();
 });

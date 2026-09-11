@@ -46,9 +46,14 @@ set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000004002',true);
 select is((select status from public.respond_direct_message_request(current_setting('test.dm_conversation')::uuid,true,'00000000-0000-4000-8000-000000004014')),'accepted','recipient accepts request');
+select set_config('test.dm_accepted_at',(select "updatedAt"::text from public.respond_direct_message_request(current_setting('test.dm_conversation')::uuid,true,'00000000-0000-4000-8000-000000004014')),true);
 select set_config('test.dm_reply',(select "messageId"::text from public.send_direct_message(current_setting('test.dm_conversation')::uuid,'Welcome','00000000-0000-4000-8000-000000004015')),true);
 select is((select "requestId" from public.list_direct_messages(current_setting('test.dm_conversation')::uuid,null,50) where "messageId"=current_setting('test.dm_reply')::uuid),'00000000-0000-4000-8000-000000004015','own request ID supports outbox reconciliation');
 select is((select count(*) from public.mark_direct_conversation_read(current_setting('test.dm_conversation')::uuid,current_setting('test.dm_reply')::uuid)),1::bigint,'member advances read cursor from a message anchor');
+reset role;
+update private.direct_conversations set updated_at=now()+interval '1 day' where id=current_setting('test.dm_conversation')::uuid;
+set local role authenticated;
+select is((select "updatedAt" from public.respond_direct_message_request(current_setting('test.dm_conversation')::uuid,true,'00000000-0000-4000-8000-000000004014')),current_setting('test.dm_accepted_at')::timestamptz,'response retry preserves timestamp after later conversation activity');
 reset role;
 
 set local role authenticated;
@@ -63,6 +68,8 @@ select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000004001'
 select is((select "requestId" is null from public.list_direct_messages(current_setting('test.dm_conversation')::uuid,null,50) where "messageId"=current_setting('test.dm_reply')::uuid),true,'other member request IDs remain private');
 select lives_ok($$select public.block_direct_conversation(current_setting('test.dm_conversation')::uuid,'00000000-0000-4000-8000-000000004016')$$,'member can block through conversation');
 select is_empty($$select * from public.get_direct_conversation(current_setting('test.dm_conversation')::uuid)$$,'block makes conversation inaccessible');
+select throws_ok($$select * from public.send_direct_message(current_setting('test.dm_conversation')::uuid,'After block','00000000-0000-4000-8000-000000004017')$$,'P0001','direct_message_not_available','blocked sender cannot create another message');
+select throws_ok($$select * from public.create_direct_message_request('community_post','00000000-0000-4000-8000-000000004010','Hello there','00000000-0000-4000-8000-000000004011')$$,'P0001','direct_message_target_not_available','blocked request replay does not disclose the old result');
 reset role;
 select is((select count(*) from private.direct_conversations where id=current_setting('test.dm_conversation')::uuid),1::bigint,'block does not retain a client-visible route');
 select lives_ok($$delete from public.user_profiles where id='00000000-0000-4000-8000-000000004002'$$,'account erasure purges recipient conversations');
