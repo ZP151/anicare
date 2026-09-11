@@ -1,15 +1,13 @@
-import { Tabs, useRouter } from 'expo-router';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import { AppIcon } from '../../src/components/AppIcon';
-import { GlassSurface } from '../../src/design/GlassSurface';
-import { useNativeColors } from '../../src/design/native-colors';
-import { useLocale } from '../../src/i18n/LocaleContext';
+import { Tabs } from 'expo-router';
 import { CustomTabBar } from '../../src/navigation/CustomTabBar';
-import {usesNativeLiquidTabs} from '../../src/navigation/native-tabs-policy';
-import { tabVisualContract } from '../../src/navigation/tab-style';
 
-const supportsBottomAccessory=usesNativeLiquidTabs(Platform.OS,Platform.Version);
-export default function TabLayout(){const colors=useNativeColors();if(supportsBottomAccessory)return <IOSLiquidTabs/>;return <Tabs tabBar={props=><CustomTabBar {...props}/>} screenOptions={{headerShown:false,tabBarActiveTintColor:colors.actionPrimary,tabBarInactiveTintColor:colors.mineral,tabBarLabelStyle:styles.tabLabel,tabBarStyle:styles.tabBar,tabBarBackground:()=> <GlassSurface style={[StyleSheet.absoluteFill,styles.tabBarBackground]}/>}}><Tabs.Screen name="index" options={{title:'Home'}}/><Tabs.Screen name="map" options={{title:'Map'}}/><Tabs.Screen name="discuss" options={{title:'Messages'}}/><Tabs.Screen name="profile" options={{title:'Me'}}/></Tabs>;}
-function IOSLiquidTabs(){const c=useNativeColors(),router=useRouter(),{locale}=useLocale(),cn=locale==='zh-CN';const labels={home:cn?'首页':'Home',map:cn?'地图':'Map',messages:cn?'消息':'Messages',me:cn?'我的':'Me',create:cn?'创建':'Create'};return <NativeTabs iconColor={{default:c.muted,selected:c.actionPrimary}} labelStyle={{fontSize:11,fontWeight:'500'}} minimizeBehavior="automatic"><NativeTabs.BottomAccessory><View style={styles.accessory}><Pressable accessibilityRole="button" accessibilityLabel={labels.create} onPress={()=>router.push('/create' as never)} style={[styles.create,{backgroundColor:c.actionPrimary}]}><AppIcon name="plus" color={c.onAction} size={22}/></Pressable></View></NativeTabs.BottomAccessory><NativeTabs.Trigger name="index"><NativeTabs.Trigger.Icon sf={{default:'house',selected:'house.fill'}}/><NativeTabs.Trigger.Label>{labels.home}</NativeTabs.Trigger.Label></NativeTabs.Trigger><NativeTabs.Trigger name="map"><NativeTabs.Trigger.Icon sf={{default:'map',selected:'map.fill'}}/><NativeTabs.Trigger.Label>{labels.map}</NativeTabs.Trigger.Label></NativeTabs.Trigger><NativeTabs.Trigger name="discuss"><NativeTabs.Trigger.Icon sf={{default:'bubble.left.and.bubble.right',selected:'bubble.left.and.bubble.right.fill'}}/><NativeTabs.Trigger.Label>{labels.messages}</NativeTabs.Trigger.Label></NativeTabs.Trigger><NativeTabs.Trigger name="profile"><NativeTabs.Trigger.Icon sf={{default:'person',selected:'person.fill'}}/><NativeTabs.Trigger.Label>{labels.me}</NativeTabs.Trigger.Label></NativeTabs.Trigger></NativeTabs>;}
-const styles=StyleSheet.create({tabBar:{position:'absolute',borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:'rgba(18,59,70,0.16)',elevation:0,backgroundColor:'transparent',height:tabVisualContract.barHeight,paddingTop:tabVisualContract.topPadding,paddingBottom:tabVisualContract.bottomPadding},tabBarBackground:{backgroundColor:'transparent'},tabLabel:{fontSize:tabVisualContract.labelFontSize,lineHeight:tabVisualContract.labelLineHeight,fontWeight:'500'},accessory:{flex:1,alignItems:'center',justifyContent:'center'},create:{width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center',shadowColor:'#123B46',shadowOpacity:.18,shadowRadius:8,shadowOffset:{width:0,height:3}}});
+// BottomAccessory occupies a separate row. The shared bar uses native GlassView
+// on iOS 26 while keeping Create inside the same navigation row.
+export default function TabLayout() {
+  return <Tabs tabBar={props => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tabs.Screen name="index" options={{ title: 'Home' }} />
+    <Tabs.Screen name="map" options={{ title: 'Map' }} />
+    <Tabs.Screen name="discuss" options={{ title: 'Messages' }} />
+    <Tabs.Screen name="profile" options={{ title: 'Me' }} />
+  </Tabs>;
+}

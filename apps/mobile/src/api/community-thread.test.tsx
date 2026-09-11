@@ -1,4 +1,5 @@
-import {act,fireEvent,render,waitFor} from '@testing-library/react-native';
+import {act,fireEvent,render,waitFor,within} from '@testing-library/react-native';
+import {DeviceEventEmitter,StyleSheet} from 'react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
 const mockGet=jest.fn(),mockList=jest.fn(),mockReply=jest.fn();
 const mockAuthor=jest.fn();
@@ -13,6 +14,19 @@ const mockExtras=jest.fn();
 jest.mock('./community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args),communityMediaUrl:(postId:string,mediaId:string)=>`https://media.test/${postId}/${mediaId}`}));
 import CommunityDetailScreen from '../../app/community/[id]';
 beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false}));mockList.mockResolvedValue({items:[],nextCursor:null});mockExtras.mockResolvedValue(new Map());});
+it('keeps the editable reply and send action outside the long post scroll, inside keyboard avoidance',async()=>{
+ const view=await render(<CommunityDetailScreen/>);
+ const input=await view.findByLabelText('写回复');
+ expect(within(view.getByTestId('screen-scroll')).queryByLabelText('写回复')).toBeNull();
+ await fireEvent(view.getByTestId('screen-keyboard-layout'),'layout',{persist:()=>{},nativeEvent:{layout:{x:0,y:0,width:390,height:800}}});
+ await act(async()=>{DeviceEventEmitter.emit('keyboardWillShow',{duration:250,easing:'keyboard',endCoordinates:{screenY:500,height:300,width:390,screenX:0}});});
+ expect(StyleSheet.flatten(view.getByTestId('screen-keyboard-layout').props.style).paddingBottom).toBe(300);
+ await fireEvent.changeText(input,'Visible above the keyboard');
+ expect(view.getByLabelText('写回复').props.value).toBe('Visible above the keyboard');
+ expect(view.getByLabelText('发送回复')).toBeTruthy();
+ await act(async()=>{DeviceEventEmitter.emit('keyboardWillHide',{duration:250,easing:'keyboard',endCoordinates:{screenY:800,height:0,width:390,screenX:0}});});
+ await view.unmount();
+});
 it('shows every approved detail image above the existing replies',async()=>{
  const first='00000000-0000-4000-8000-000000000011',second='00000000-0000-4000-8000-000000000012';
  mockExtras.mockResolvedValue(new Map([[mockThread,{postId:mockThread,title:'Two bowls',media:[{mediaId:first,width:400,height:300},{mediaId:second,width:300,height:400}]}]]));

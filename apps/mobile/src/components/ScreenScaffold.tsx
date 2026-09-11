@@ -1,5 +1,5 @@
 import { PropsWithChildren, ReactNode } from 'react';
-import { Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useNativeColors } from '../design/native-colors';
@@ -14,6 +14,7 @@ interface ScreenScaffoldProps extends PropsWithChildren {
   refreshing?: boolean;
   onRefresh?: () => void;
   refreshLabel?: string;
+  footer?: ReactNode;
 }
 
 export function ScreenScaffold({
@@ -27,12 +28,14 @@ export function ScreenScaffold({
   refreshing = false,
   onRefresh,
   refreshLabel = 'Refresh',
+  footer,
 }: ScreenScaffoldProps) {
   const palette = useNativeColors();
   const nativeStyle = nativeAppearance ? { backgroundColor: palette.canvas } : undefined;
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
-      <ScrollView testID="screen-scroll" alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent]}>
+    <SafeAreaView edges={footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
+      <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+      <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
             <Text accessibilityRole="header" style={[styles.title, compact && styles.compactTitle, nativeAppearance && { color: palette.ink }]}>
@@ -45,14 +48,19 @@ export function ScreenScaffold({
         </View>
         {children}
       </ScrollView>
+      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F2F2F7' },
+  fill: { flex: 1 },
+  footer: { paddingHorizontal: 12, paddingVertical: 6 },
+  footerContent: { paddingBottom: 16 },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: Platform.OS === 'ios' ? 112 : 120, gap: 24 },
-  compactContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20, gap: 12 },
+  compactContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 112, gap: 12 },
   pullable: { flexGrow: 1 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   headingCopy: { flex: 1, gap: 6 },

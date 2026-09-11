@@ -10,6 +10,27 @@ jest.mock('react-native-safe-area-context',()=>({SafeAreaView:require('react-nat
 jest.mock('../api/direct-messages',()=>({listDirectConversations:(...args:unknown[])=>mockList(...args)}));
 const base={isIncoming:true,otherMember:{name:'Mei',avatarKey:'person'},lastMessagePreview:'Hello',lastMessageAt:'2026-09-11T00:00:00Z',unreadCount:1,createdAt:'2026-09-11T00:00:00Z',cursor:'c'};
 beforeEach(()=>jest.clearAllMocks());
+it('offers labelled sample conversations and a real discovery action when the account has no conversations',async()=>{
+ mockList.mockResolvedValue({items:[],nextCursor:null});
+ const view=await render(<MessagesInbox/>);
+ await view.findByText('Sample conversations');
+ await fireEvent.press(view.getByRole('button',{name:'Browse community'}));
+ expect(mockPush).toHaveBeenCalledWith('/');
+ await fireEvent.press(view.getByRole('button',{name:'Mei · Sample conversation'}));
+ expect(mockPush).toHaveBeenCalledWith('/messages/example?id=west-coast');
+ await view.unmount();
+});
+it('clears a closed search so an empty inbox keeps its discovery and sample conversations reachable',async()=>{
+ mockList.mockResolvedValue({items:[],nextCursor:null});
+ const view=await render(<MessagesInbox/>);await view.findByText('Sample conversations');
+ await fireEvent.press(view.getByRole('button',{name:'Search conversations'}));
+ await fireEvent.changeText(view.getByPlaceholderText('Search conversations'),'nobody');
+ expect(view.queryByText('Sample conversations')).toBeNull();
+ await fireEvent.press(view.getByRole('button',{name:'Search conversations'}));
+ expect(view.getByText('Sample conversations')).toBeTruthy();
+ expect(view.getByRole('button',{name:'Browse community'})).toBeTruthy();
+ await view.unmount();
+});
 it('keeps older requests reachable and opens a request for reading before deciding',async()=>{
  mockList.mockResolvedValueOnce({items:[{...base,conversationId:'accepted',status:'accepted'}],nextCursor:'c'}).mockResolvedValueOnce({items:[{...base,conversationId:'pending',status:'pending'}],nextCursor:null});
  const view=await render(<MessagesInbox requestsOnly/>);

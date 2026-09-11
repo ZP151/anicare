@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
 
 const mockMapProps = jest.fn(), mockFitToCoordinates = jest.fn();
@@ -12,7 +13,7 @@ jest.mock('react-native-maps', () => {
       mockMapProps(props);
       React.useImperativeHandle(ref, () => ({ fitToCoordinates: mockFitToCoordinates, animateToRegion: jest.fn() }));
       React.useLayoutEffect(() => {
-        if (mockMapLoadsDuringMount.value) (props.onMapLoaded as (() => void) | undefined)?.();
+        if (mockMapLoadsDuringMount.value) (props.onMapReady as (() => void) | undefined)?.();
       }, [props.onMapLoaded]);
       return React.createElement(View, { testID: 'native-map' }, props.children);
     }),
@@ -27,6 +28,7 @@ import { NearbyMap } from './NearbyMap.native';
 describe('NearbyMap native privacy contract', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    jest.replaceProperty(Platform, 'OS', 'ios');
     mockMapProps.mockClear();
     mockFitToCoordinates.mockClear();
     mockMapLoadsDuringMount.value = false;
@@ -51,24 +53,33 @@ describe('NearbyMap native privacy contract', () => {
     await view.unmount();
   });
 
-  it('uses the honest no-map state when a configured provider never becomes ready', async () => {
-    const fallbackLabel = 'The map is unavailable. Switch to the area list to browse delayed community activity.';
-    const view = await render(<NearbyMap fallbackLabel={fallbackLabel} androidGoogleMapsConfigured={false} />);
-
+  it('keeps Apple Maps mounted past the timeout and fits when an offscreen map finally renders', async () => {
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
+    await act(async () => { jest.advanceTimersByTime(60_000); });
     expect(view.getByTestId('native-map')).toBeTruthy();
-    await act(async () => { jest.advanceTimersByTime(10_000); });
+    expect(mockFitToCoordinates).not.toHaveBeenCalled();
+    const props = mockMapProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    await act(async () => { (props.onMapReady as () => void)(); });
+    expect(mockFitToCoordinates).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId('native-map')).toBeTruthy();
+    await view.unmount();
+  });
 
-    expect(view.getByLabelText(fallbackLabel)).toBeTruthy();
-    expect(JSON.stringify(view.toJSON())).not.toMatch(/atlas|coarse-atlas/i);
+  it('keeps the fallback for an unconfigured Android provider', async () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} fallbackLabel="Map unavailable" />);
+    expect(view.queryByTestId('native-map')).toBeNull();
+    expect(view.getByLabelText('Map unavailable')).toBeTruthy();
     await view.unmount();
   });
 
   it.each(['onMapLoaded', 'onMapReady'] as const)(
     'cancels the readiness fallback when the configured map reports %s',
     async (readinessCallback) => {
+      jest.replaceProperty(Platform, 'OS', 'android');
       const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
       const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-      const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
+      const view = await render(<NearbyMap androidGoogleMapsConfigured />);
       const props = mockMapProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       const readinessTimerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => typeof delay === 'number' && delay >= 1_000);
       const readinessTimer = setTimeoutSpy.mock.results[readinessTimerIndex]?.value;
@@ -95,10 +106,11 @@ describe('NearbyMap native privacy contract', () => {
     await view.unmount();
   });
 
-  it('clears the configured-provider readiness timer when unmounted', async () => {
+  it('clears the Android configured-provider readiness timer when unmounted', async () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
     const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} />);
+    const view = await render(<NearbyMap androidGoogleMapsConfigured />);
     const readinessTimerIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => typeof delay === 'number' && delay >= 1_000);
     const readinessTimer = setTimeoutSpy.mock.results[readinessTimerIndex]?.value;
 
