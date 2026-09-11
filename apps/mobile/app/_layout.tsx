@@ -43,6 +43,10 @@ function LocalizedStack() {
         <Stack.Screen name="community/drafts" options={{ headerShown: false }} />
         <Stack.Screen name="community/index" options={{ headerShown: false }} />
         <Stack.Screen name="community/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="community/comments/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="messages/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="messages/new" options={{ headerShown: false }} />
+        <Stack.Screen name="requests" options={{ headerShown: false }} />
         <Stack.Screen name="auth/callback" options={{ title: cn ? '登录' : 'Sign in' }} />
       </Stack>;
 }

@@ -5,6 +5,7 @@ import { ColorValue, Platform, View } from 'react-native';
 
 const symbols = {
   home: ['house', 'home-outline'],
+  search: ['magnifyingglass', 'magnify'],
   map: ['map', 'map-outline'],
   account: ['person.crop.circle', 'account-circle-outline'],
   person: ['person.crop.circle', 'account-circle-outline'],

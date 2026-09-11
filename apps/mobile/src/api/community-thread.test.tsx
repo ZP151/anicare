@@ -1,6 +1,8 @@
 import {act,fireEvent,render,waitFor} from '@testing-library/react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
 const mockGet=jest.fn(),mockList=jest.fn(),mockReply=jest.fn();
+const mockAuthor=jest.fn();
+jest.mock('./direct-messages',()=>({getCommunityAuthor:(...args:unknown[])=>mockAuthor(...args)}));
 let mockThread='00000000-0000-4000-8000-000000000001';
 jest.mock('./community',()=>({getCommunityPost:(...a:unknown[])=>mockGet(...a),listCommunityReplies:(...a:unknown[])=>mockList(...a),createCommunityReply:(...a:unknown[])=>mockReply(...a)}));
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:'owner-a',failed:false,reload:jest.fn(),pin:()=>async()=>true})}));
@@ -19,6 +21,12 @@ it('shows every approved detail image above the existing replies',async()=>{
  expect(view.getByTestId(`community-gallery-${mockThread}`).props.children).toHaveLength(2);
  expect(view.getByText('回复')).toBeTruthy();
  await view.unmount();
+});
+it('shows the message action only for an available author or existing conversation',async()=>{
+ mockAuthor.mockResolvedValue({canMessage:false,conversationId:null});
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');expect(view.queryByLabelText('发送私信')).toBeNull();
+ await view.unmount();mockAuthor.mockResolvedValue({canMessage:true,conversationId:null});
+ const available=await render(<CommunityDetailScreen/>);await available.findByLabelText('发送私信');await available.unmount();
 });
 it('keeps a failed reply and reuses its request id on retry',async()=>{
  mockReply.mockRejectedValueOnce(new Error('lost response')).mockResolvedValue('reply-id');
