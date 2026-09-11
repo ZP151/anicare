@@ -24,7 +24,7 @@ function LocalizedStack() {
   const cn = locale === 'zh-CN';
   return <Stack screenOptions={{ headerShown: true, headerBackTitle: cn ? '返回' : 'Back' }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="create" options={{ headerShown: false, presentation: 'formSheet', sheetAllowedDetents: [0.35], sheetGrabberVisible: true }} />
+        <Stack.Screen name="create" options={{ headerShown: false, presentation: 'formSheet', sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true }} />
         <Stack.Screen name="cat/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="report/drafts" options={{ headerShown: false }} />
         <Stack.Screen name="following" options={{ title: cn ? '关注' : 'Following' }} />
