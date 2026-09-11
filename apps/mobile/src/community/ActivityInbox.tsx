@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useRouter } from 'expo-router';
 
 import { listMyCommunityActivity, markCommunityActivityRead, type CommunityActivity } from '../api/community-activity';
+import { getCommunityCommentContext } from '../api/community-comment-replies';
 import { useAccountSession } from '../auth/use-account-session';
 import { AppIcon } from '../components/AppIcon';
 import { ScreenScaffold } from '../components/ScreenScaffold';
@@ -90,13 +91,26 @@ export function ActivityInbox() {
       try {
         await markCommunityActivityRead([item.eventId]);
       } catch {
-        if (alive.current && await current()) router.push(`/community/${item.postId}` as never);
+        if (alive.current && await current()) {
+          if (!item.replyId) router.push(`/community/${item.postId}` as never);
+          else {
+            try {
+              const resolved = await getCommunityCommentContext(item.replyId);
+              if (alive.current && await current()) router.push(resolved.parentReplyId ? `/community/comments/${resolved.parentReplyId}?childId=${item.replyId}` as never : `/community/${resolved.postId}` as never);
+            } catch { /* hidden content must not reopen stale detail */ }
+          }
+        }
         return;
       }
       if (!alive.current || !await current()) return;
       setItems(existing => existing.map(value => value.eventId === item.eventId ? { ...value, readAt: new Date().toISOString() } : value));
     }
-    if (alive.current && await current()) router.push(`/community/${item.postId}` as never);
+    if (!alive.current || !await current()) return;
+    if (!item.replyId) { router.push(`/community/${item.postId}` as never); return; }
+    try {
+      const resolved = await getCommunityCommentContext(item.replyId);
+      if (alive.current && await current()) router.push(resolved.parentReplyId ? `/community/comments/${resolved.parentReplyId}?childId=${item.replyId}` as never : `/community/${resolved.postId}` as never);
+    } catch { /* deleted, hidden, or blocked activity cannot navigate */ }
   }, [auth.owner, auth.pin, router]);
 
   if (auth.owner === null) {
@@ -111,7 +125,7 @@ export function ActivityInbox() {
   }
 
   const visible = filter === 'all' ? items : items.filter(item => item.kind === filter);
-  const label = (item: CommunityActivity) => `${item.actor.name} ${item.kind === 'like' ? (cn ? '赞了你的帖子' : 'liked your post') : (cn ? '评论了你的帖子' : 'commented on your post')}${item.readAt ? '' : cn ? '，未读' : ', unread'}`;
+  const label = (item: CommunityActivity) => `${item.actor.name} ${item.kind === 'like' ? (cn ? '赞了你的帖子' : 'liked your post') : item.replyId ? (cn ? '回复了你的评论' : 'replied to your comment') : (cn ? '评论了你的帖子' : 'commented on your post')}${item.readAt ? '' : cn ? '，未读' : ', unread'}`;
   const filterLabel = (value: Filter) => value === 'all' ? (cn ? '全部' : 'All') : value === 'comment' ? (cn ? '评论' : 'Comments') : (cn ? '点赞' : 'Likes');
 
   return <ScreenScaffold compact title={cn ? '消息' : 'Messages'} refreshing={refreshing} refreshLabel={cn ? '刷新消息' : 'Refresh messages'} onRefresh={() => void load('refresh')}>
@@ -119,7 +133,7 @@ export function ActivityInbox() {
     {loading && !items.length ? <ActivityIndicator color={colors.actionPrimary} /> : null}
     {failed ? <Text accessibilityLiveRegion="polite" style={{ color: colors.muted }}>{cn ? '互动暂不可用，下拉重试。' : 'Activity unavailable. Pull to retry.'}</Text> : null}
     {!loading && !failed && !visible.length ? <View style={styles.empty}><AppIcon name="activity" size={34} color={colors.actionPrimary} /><Text style={{ color: colors.muted }}>{cn ? '还没有互动。' : 'No activity yet.'}</Text></View> : null}
-    <View style={styles.list}>{visible.map(item => <Pressable key={item.eventId} accessibilityRole="button" accessibilityLabel={label(item)} accessibilityState={{ selected: !item.readAt }} onPress={() => void open(item)} style={[styles.row, !item.readAt && { backgroundColor: colors.leafSoft }]}><AppIcon name={item.kind === 'like' ? 'heart' : 'reply'} color={colors.actionPrimary} /><View style={{ flex: 1 }}><Text style={{ color: colors.ink, fontWeight: '600' }}>{item.actor.name} {item.kind === 'like' ? (cn ? '赞了你的帖子' : 'liked your post') : (cn ? '评论了你的帖子' : 'commented on your post')}</Text><Text style={{ color: colors.muted, fontSize: 13 }}>{new Date(item.createdAt).toLocaleDateString(cn ? 'zh-SG' : 'en-SG', { month: 'short', day: 'numeric' })}</Text></View><AppIcon name="chevron" size={16} color={colors.muted} /></Pressable>)}</View>
+    <View style={styles.list}>{visible.map(item => <Pressable key={item.eventId} accessibilityRole="button" accessibilityLabel={label(item)} accessibilityState={{ selected: !item.readAt }} onPress={() => void open(item)} style={[styles.row, !item.readAt && { backgroundColor: colors.leafSoft }]}><View style={styles.avatar}><AppIcon name={item.kind === 'like' ? 'heart' : 'reply'} color={colors.actionPrimary} size={16} /></View><View style={{ flex: 1 }}><Text style={{ color: colors.ink, fontWeight: '600' }}>{item.actor.name} {item.kind === 'like' ? (cn ? '赞了你的帖子' : 'liked your post') : item.replyId ? (cn ? '回复了你的评论' : 'replied to your comment') : (cn ? '评论了你的帖子' : 'commented on your post')}</Text><Text style={{ color: colors.muted, fontSize: 13 }}>{new Date(item.createdAt).toLocaleDateString(cn ? 'zh-SG' : 'en-SG', { month: 'short', day: 'numeric' })}</Text></View>{!item.readAt ? <View accessibilityLabel={cn ? '未读' : 'Unread'} style={[styles.unread, { backgroundColor: colors.actionPrimary }]} /> : null}<AppIcon name="chevron" size={16} color={colors.muted} /></Pressable>)}</View>
     {cursor ? <Pressable accessibilityRole="button" accessibilityLabel={cn ? '载入更多' : 'Load more'} onPress={() => void load('more')} style={styles.touch}><Text style={{ color: colors.actionPrimary, fontWeight: '600' }}>{cn ? '载入更多' : 'Load more'}</Text></Pressable> : null}
   </ScreenScaffold>;
 }
@@ -128,7 +142,9 @@ const styles = StyleSheet.create({
   filters: { flexDirection: 'row', gap: 8 },
   filter: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   list: { gap: 8 },
-  row: { minHeight: 64, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  row: { minHeight: 64, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F2EA' },
+  unread: { width: 8, height: 8, borderRadius: 4 },
   touch: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   empty: { paddingVertical: 24, alignItems: 'center', gap: 12 },
 });
