@@ -1,4 +1,4 @@
-import {act,render,waitFor} from '@testing-library/react-native';
+import {act,fireEvent,render,waitFor} from '@testing-library/react-native';
 let mockOwner:string|null|undefined='owner-a';const mockSession=jest.fn();
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner})}));
 jest.mock('../api/supabase',()=>({getSupabaseClient:()=>({auth:{getSession:mockSession}})}));
@@ -19,4 +19,9 @@ it('ignores a previous account token arriving after account switching',async()=>
  let finish:(value:unknown)=>void=()=>{};mockSession.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue({data:{session:null},error:null});
  const view=await render(<CommunityPostImage {...props}/>);mockOwner='owner-b';await view.rerender(<CommunityPostImage {...props}/>);
  await act(async()=>finish({data:{session:{user:{id:'owner-a'},access_token:'old'}},error:null}));expect(view.getByLabelText('Post photo').props.source).toBeUndefined();await view.unmount();
+});
+it('keeps a readable placeholder after a thumbnail load failure',async()=>{
+ mockOwner=null;const view=await render(<CommunityPostImage {...props}/>);
+ await fireEvent(view.getByLabelText('Post photo'),'error');
+ expect(view.getByText('Photo unavailable')).toBeTruthy();expect(view.getByLabelText('Post photo')).toBeTruthy();await view.unmount();
 });

@@ -40,6 +40,8 @@ const symbols = {
   collapse: ['chevron.down', 'chevron-down'],
   activity: ['clock', 'clock-outline'],
   camera: ['camera', 'camera-outline'],
+  photo: ['photo', 'image-outline'],
+  plus: ['plus', 'plus'],
   heart: ['heart', 'heart-outline'],
   heartFilled: ['heart.fill', 'heart'],
   mail: ['envelope', 'email-outline'],

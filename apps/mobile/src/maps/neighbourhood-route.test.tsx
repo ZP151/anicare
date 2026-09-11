@@ -1,3 +1,4 @@
+jest.mock('react-native-safe-area-context',()=>require('react-native-safe-area-context/jest/mock').default);
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 const mockPush=jest.fn(); let mockParams:Record<string,string>={};
 jest.mock('expo-router',()=>({useRouter:()=>({push:mockPush}),useLocalSearchParams:()=>mockParams}));

@@ -7,4 +7,8 @@ export type NearbyMapProps = Readonly<{
   onSelectArea?: (id: string) => void;
   onSelectAreas?: (ids: readonly string[]) => void;
   publicPortraits?: ReadonlyMap<string, Readonly<{ portraitUri?: string | null }>>;
+  /** Increments only for an explicit user request to return to the official Singapore bounds. */
+  fitSingaporeRequest?: number;
+  fitEdgePadding?: Readonly<{top:number;right:number;bottom:number;left:number}>;
+  fitLayoutReady?: boolean;
 }>;

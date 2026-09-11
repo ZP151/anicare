@@ -12,9 +12,9 @@ import { getGlassMode, supportsReduceTransparencyApi } from './glass-policy';
 type GlassSurfaceProps = PropsWithChildren<{
   style?: StyleProp<ViewStyle>;
   interactive?: boolean;
-}> & Pick<ViewProps, 'accessibilityLabel'>;
+}> & Pick<ViewProps, 'accessibilityLabel'|'onLayout'>;
 
-export function GlassSurface({ children, style, interactive = false, accessibilityLabel }: GlassSurfaceProps) {
+export function GlassSurface({ children, style, interactive = false, accessibilityLabel, onLayout }: GlassSurfaceProps) {
   const [reduceTransparency, setReduceTransparency] = useState(false);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function GlassSurface({ children, style, interactive = false, accessibili
 
   if (mode === 'liquid') {
     return (
-      <GlassView accessibilityLabel={accessibilityLabel} glassEffectStyle="regular" isInteractive={interactive} style={materialStyle}>
+      <GlassView accessibilityLabel={accessibilityLabel} onLayout={onLayout} glassEffectStyle="regular" isInteractive={interactive} style={materialStyle}>
         {children}
       </GlassView>
     );
@@ -49,13 +49,13 @@ export function GlassSurface({ children, style, interactive = false, accessibili
 
   if (mode === 'blur') {
     return (
-      <BlurView accessibilityLabel={accessibilityLabel} intensity={55} tint={dark ? 'systemChromeMaterialDark' : 'systemMaterial'} style={materialStyle}>
+      <BlurView accessibilityLabel={accessibilityLabel} onLayout={onLayout} intensity={55} tint={dark ? 'systemChromeMaterialDark' : 'systemMaterial'} style={materialStyle}>
         {children}
       </BlurView>
     );
   }
 
-  return <View accessibilityLabel={accessibilityLabel} style={[style, styles.solid, dark && styles.solidDark]}>{children}</View>;
+  return <View accessibilityLabel={accessibilityLabel} onLayout={onLayout} style={[style, styles.solid, dark && styles.solidDark]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

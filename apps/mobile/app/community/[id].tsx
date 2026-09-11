@@ -1,6 +1,6 @@
 import { PostGallery } from '../../src/community/PostGallery';
-import { communitySampleText } from '../../src/community/test-samples';
-import { ProfileAvatar } from '../../src/profile/ProfileAvatar';
+import { communitySampleText, communitySampleAuthor } from '../../src/community/test-samples';
+import { CommunityAuthorAvatar } from '../../src/community/CommunityAuthorAvatar';
 import { getCommunityAvatars } from '../../src/api/community-avatar';
 import { getCatPresentations } from '../../src/api/cat-presentation';
 import { getCommunityPostExtras,type CommunityPostExtra } from '../../src/api/community-extras';
@@ -39,7 +39,7 @@ export default function CommunityDetailScreen(){
    finally{if(scope===context.current){busy.current=false;if(alive.current)setWriting(false);}}
  };
  const sample=(item:CommunityPost|CommunityReply)=>communitySampleText('postId' in item?item.postId:item.replyId,item.body,locale);
- const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><ProfileAvatar avatarKey={sample(item).label?'person':item.author.avatarKey} photoUri={avatars.get('postId' in item?item.postId:item.replyId)} size={42}/><View style={{flex:1}}><Text style={s.author}>{sample(item).label?(zh?'示例邻居':'Demo neighbour'):item.author.name}</Text>{sample(item).label?<Text style={s.meta}>{sample(item).label}</Text>:null}<Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
+ const author=(item:CommunityPost|CommunityReply,type:'community_post'|'community_reply')=><View style={s.authorRow}><CommunityAuthorAvatar id={'postId' in item?item.postId:item.replyId} avatarKey={sample(item).label?'person':item.author.avatarKey} photoUri={avatars.get('postId' in item?item.postId:item.replyId)} size={42}/><View style={{flex:1}}><Text style={s.author}>{communitySampleAuthor('postId' in item?item.postId:item.replyId,locale)?.name??item.author.name}</Text>{sample(item).label?<Text style={s.meta}>{sample(item).label}</Text>:null}<Text style={s.meta}>{new Date(item.createdAt).toLocaleDateString(zh?'zh-SG':'en-SG',{month:'short',day:'numeric'})}</Text></View>{auth.owner?<CommunityContentActions type={type} id={'postId'in item?item.postId:item.replyId} canDelete={item.canDelete} zh={zh} pin={auth.pin} onChanged={()=>load()} onNotice={setNotice}/>:null}</View>;
  return <ScreenScaffold compact refreshing={refreshing} refreshLabel={zh?'刷新':'Refresh'} onRefresh={()=>void load(false,true)} trailing={<Pressable accessibilityRole="button" accessibilityLabel={zh?'返回':'Back'} onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="close" color={c.actionPrimary}/></Pressable>} title={zh?'讨论':'Conversation'}>
    {auth.failed?<Pressable accessibilityRole="button" onPress={()=>void auth.reload()} style={s.touch}><Text style={s.link}>{zh?'重试账户连接':'Retry account connection'}</Text></Pressable>:null}
    {loading&&!post?<ActivityIndicator color={c.actionPrimary}/>:null}

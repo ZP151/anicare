@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 
-const mockMapProps = jest.fn();
+const mockMapProps = jest.fn(), mockFitToCoordinates = jest.fn();
 const mockMapLoadsDuringMount = { value: false };
 
 jest.mock('react-native-maps', () => {
@@ -8,13 +8,14 @@ jest.mock('react-native-maps', () => {
   const { View } = require('react-native');
   return {
     __esModule: true,
-    default: (props: Record<string, unknown>) => {
+    default: React.forwardRef((props: Record<string, unknown>, ref: unknown) => {
       mockMapProps(props);
+      React.useImperativeHandle(ref, () => ({ fitToCoordinates: mockFitToCoordinates, animateToRegion: jest.fn() }));
       React.useLayoutEffect(() => {
         if (mockMapLoadsDuringMount.value) (props.onMapLoaded as (() => void) | undefined)?.();
       }, [props.onMapLoaded]);
       return React.createElement(View, { testID: 'native-map' }, props.children);
-    },
+    }),
     Marker: (props: Record<string, unknown>) => React.createElement(View, { testID: 'native-marker', onPress: props.onPress }, props.children),
     Polygon: () => null,
     PROVIDER_GOOGLE: 'google',
@@ -27,6 +28,7 @@ describe('NearbyMap native privacy contract', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockMapProps.mockClear();
+    mockFitToCoordinates.mockClear();
     mockMapLoadsDuringMount.value = false;
   });
 
@@ -103,6 +105,29 @@ describe('NearbyMap native privacy contract', () => {
     expect(readinessTimer).toBeDefined();
     await view.unmount();
     expect(clearTimeoutSpy).toHaveBeenCalledWith(readinessTimer);
+  });
+
+  it('fits the published Singapore boundary when ready and only repeats for Show all', async () => {
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} fitSingaporeRequest={0} fitEdgePadding={{top:100,right:20,bottom:180,left:20}} />);
+    const props = mockMapProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    await act(async () => { (props.onMapReady as () => void)(); });
+    expect(mockFitToCoordinates).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({edgePadding:{top:100,right:20,bottom:180,left:20}}));
+    const firstCalls=mockFitToCoordinates.mock.calls.length;
+    await view.rerender(<NearbyMap androidGoogleMapsConfigured={false} fitSingaporeRequest={1} fitEdgePadding={{top:100,right:20,bottom:180,left:20}} />);
+    expect(mockFitToCoordinates.mock.calls.length).toBe(firstCalls+1);
+    await view.unmount();
+  });
+
+  it('waits for measured overlays before the initial fit and leaves a focused map alone', async () => {
+    const view = await render(<NearbyMap androidGoogleMapsConfigured={false} fitLayoutReady={false} />);
+    const props = mockMapProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    await act(async () => { (props.onMapReady as () => void)(); });
+    expect(mockFitToCoordinates).not.toHaveBeenCalled();
+    await view.rerender(<NearbyMap androidGoogleMapsConfigured={false} fitLayoutReady />);
+    expect(mockFitToCoordinates).toHaveBeenCalledTimes(1);
+    await view.rerender(<NearbyMap androidGoogleMapsConfigured={false} fitLayoutReady focusPoint={{latitude:1.3,longitude:103.8,title:'Search'}} fitSingaporeRequest={0} />);
+    expect(mockFitToCoordinates).toHaveBeenCalledTimes(1);
+    await view.unmount();
   });
 
   it('offers every original area in a multi-area marker instead of selecting its first area', async () => {

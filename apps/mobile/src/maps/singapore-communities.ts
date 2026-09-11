@@ -1,4 +1,4 @@
-import { singaporeCommunities, singaporeNeighbourhoods, neighbourhoodForPublicCell, communityForPublicCell, type SingaporeCommunity, type SingaporeRegion } from '@animalhelper/domain';
+import { singaporeCommunities, singaporeNeighbourhoods, neighbourhoodForPublicCell, communityForPublicCell, pointInPolygon, type SingaporeCommunity, type SingaporeRegion } from '@animalhelper/domain';
 import type { PublicSighting } from '../api/feed';
 import type { SightingPlace } from '../api/sighting-places';
 import type { Locale } from '../i18n/catalog';
@@ -16,6 +16,14 @@ export function communityMatches(area:BrowseCommunity,query:string):boolean {
 }
 export function browseSingaporeCommunities(query:string,parentId:string|null=null):readonly BrowseCommunity[] {
  return SG_COMMUNITIES.filter(area=>query.trim()?communityMatches(area,query):parentId?area.parentId===parentId:!area.parentId);
+}
+/** Resolves a one-time device fix against the published URA geometry. The coordinate is never retained. */
+export function neighbourhoodForCoordinate(latitude:number,longitude:number):BrowseCommunity|null {
+ const point=[longitude,latitude] as const;
+ const matches=(area:BrowseCommunity)=>area.polygons.some(polygon=>pointInPolygon(point,polygon));
+ return SG_COMMUNITIES.find(area=>Boolean(area.parentId)&&matches(area))
+   ?? SG_COMMUNITIES.find(matches)
+   ?? null;
 }
 export const SG_REGIONS:readonly {id:SingaporeRegion;en:string;zh:string}[]=[{id:'central',en:'Central',zh:'中部'},{id:'east',en:'East',zh:'东部'},{id:'north',en:'North',zh:'北部'},{id:'north_east',en:'North-East',zh:'东北部'},{id:'west',en:'West',zh:'西部'}];
 export type SingaporeArea=BrowseCommunity & Readonly<{cats:readonly (PublicMapPresentation & Partial<SightingPlace>)[]}>;

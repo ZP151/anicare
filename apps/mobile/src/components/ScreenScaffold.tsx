@@ -52,12 +52,12 @@ export function ScreenScaffold({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F2F2F7' },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: Platform.OS === 'ios' ? 112 : 120, gap: 24 },
-  compactContent: { paddingHorizontal: 16, paddingTop: 14, gap: 16 },
+  compactContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20, gap: 12 },
   pullable: { flexGrow: 1 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   headingCopy: { flex: 1, gap: 6 },
   contextNote: { color: '#62626A', fontSize: 13, lineHeight: 18 },
-  title: { color: '#1C1C1E', fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: -0.5 },
-  compactTitle: { fontSize: 22, lineHeight: 28, letterSpacing: -0.2 },
+  title: { color: '#1C1C1E', fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.4 },
+  compactTitle: { fontSize: 20, lineHeight: 25, letterSpacing: -0.2 },
   subtitle: { color: '#62626A', fontSize: 16, lineHeight: 23 },
 });

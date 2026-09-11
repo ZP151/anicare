@@ -1,3 +1,4 @@
+jest.mock('react-native-safe-area-context',()=>require('react-native-safe-area-context/jest/mock').default);
 import { act,fireEvent,render,waitFor } from '@testing-library/react-native';
 const mockClient={rpc:jest.fn()};const mockFeed=jest.fn();const mockPlaces=jest.fn();const mockPresentations=jest.fn();const mockPush=jest.fn();const mockSubject=jest.fn();const mockSubscribe=jest.fn();const mockLocale={value:'en'};
 jest.mock('./supabase',()=>({getSupabaseClient:()=>mockClient}));

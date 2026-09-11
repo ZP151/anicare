@@ -1,4 +1,4 @@
-import { buildSingaporeAreas, filterSingaporeAreas, browseSingaporeCommunities } from './singapore-communities';
+import { buildSingaporeAreas, filterSingaporeAreas, browseSingaporeCommunities, neighbourhoodForCoordinate, SG_COMMUNITIES } from './singapore-communities';
 import type { PublicSighting } from '../api/feed';
 
 const row:PublicSighting={sightingId:'00000000-0000-4000-8000-000000000001',animalId:'00000000-0000-4000-8000-000000000002',primaryAlias:'Mochi',verification:'reported',publicCellId:'896526add03ffff',timeBucket:'today',coverMediaId:null,cursor:'00000000-0000-4000-8000-000000000001'};
@@ -25,4 +25,9 @@ it('finds West Coast in either language and lets Clementi open its nine neighbou
  expect(browseSingaporeCommunities('', 'clementi')).toHaveLength(9);
  expect(browseSingaporeCommunities('', null)).toHaveLength(55);
  expect(browseSingaporeCommunities('金文泰', null).some(a=>a.id==='clementi')).toBe(true);
+});
+it('resolves a temporary device fix through official polygons and rejects coordinates outside Singapore',()=>{
+ const westCoast=SG_COMMUNITIES.find(area=>area.id==='sg-clsz05')!;
+ expect(neighbourhoodForCoordinate(westCoast.center[1]!,westCoast.center[0]!)?.id).toBe('sg-clsz05');
+ expect(neighbourhoodForCoordinate(1.7,103.8)).toBeNull();
 });
