@@ -24,6 +24,7 @@ export function ActivityInbox() {
   const router = useRouter();
   const auth = useAccountSession();
   const [items, setItems] = useState<readonly CommunityActivity[]>([]);
+  const [loadedOwner, setLoadedOwner] = useState<string|null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,7 @@ export function ActivityInbox() {
       const page = await listMyCommunityActivity(mode === 'more' ? cursor : null);
       if (!alive.current || token !== generation.current || !await current()) return;
       setItems(existing => mode === 'more' ? mergeActivity(existing, page.items) : page.items);
+      setLoadedOwner(owner);
       setCursor(page.nextCursor);
     } catch {
       if (alive.current && token === generation.current && await current()) setFailed(true);
@@ -124,11 +126,11 @@ export function ActivityInbox() {
     </ScreenScaffold>;
   }
 
-  const visible = filter === 'all' ? items : items.filter(item => item.kind === filter);
+  const visible = loadedOwner === auth.owner && auth.owner ? (filter === 'all' ? items : items.filter(item => item.kind === filter)) : [];
   const label = (item: CommunityActivity) => `${item.actor.name} ${item.kind === 'like' ? (cn ? '赞了你的帖子' : 'liked your post') : item.replyId ? (cn ? '回复了你' : 'replied to you') : (cn ? '评论了你的帖子' : 'commented on your post')}${item.readAt ? '' : cn ? '，未读' : ', unread'}`;
   const filterLabel = (value: Filter) => value === 'all' ? (cn ? '全部' : 'All') : value === 'comment' ? (cn ? '评论' : 'Comments') : (cn ? '点赞' : 'Likes');
 
-  return <ScreenScaffold compact title={cn ? '消息' : 'Messages'} refreshing={refreshing} refreshLabel={cn ? '刷新消息' : 'Refresh messages'} onRefresh={() => void load('refresh')}>
+  return <ScreenScaffold compact title={cn ? '互动' : 'Activity'} trailing={<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回':'Back'} onPress={()=>router.back()} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="back" color={colors.ink} size={21}/></Pressable>} refreshing={refreshing} refreshLabel={cn ? '刷新消息' : 'Refresh messages'} onRefresh={() => void load('refresh')}>
     <View style={styles.filters}>{(['all', 'comment', 'like'] as const).map(value => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }} accessibilityLabel={filterLabel(value)} onPress={() => setFilter(value)} style={[styles.filter, { backgroundColor: filter === value ? colors.leafSoft : colors.surface }]}><Text style={{ color: colors.actionPrimary, fontWeight: '600' }}>{filterLabel(value)}</Text></Pressable>)}</View>
     {loading && !items.length ? <ActivityIndicator color={colors.actionPrimary} /> : null}
     {failed ? <Text accessibilityLiveRegion="polite" style={{ color: colors.muted }}>{cn ? '互动暂不可用，下拉重试。' : 'Activity unavailable. Pull to retry.'}</Text> : null}

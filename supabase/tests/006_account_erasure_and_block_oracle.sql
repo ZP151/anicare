@@ -22,7 +22,8 @@ select results_eq(
       ('aad_capture_erasure_community_media'::text collate "C"),
       ('user_profiles_account_erasure'::text collate "C"),
       ('user_profiles_legacy_media_deletion_outbox'::text collate "C"),
-      ('zzz_capture_erasure_legacy'::text collate "C")$$,
+      ('zzz_capture_erasure_legacy'::text collate "C"),
+      ('zzz_purge_direct_messages_for_erasure'::text collate "C")$$,
   'profile deletion retains the established erasure triggers and media/avatar cleanup receipt triggers'
 );
 with expected(role_name) as (

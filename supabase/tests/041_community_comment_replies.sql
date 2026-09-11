@@ -54,6 +54,7 @@ select set_config('test.comment_avatar_job',(select id::text from private.profil
 select set_config('test.comment_avatar_path',(select object_path from private.profile_avatar_upload_jobs where owner_id='00000000-0000-4000-8000-000000004103'),true);
 select public.finalize_profile_avatar_upload('00000000-0000-4000-8000-000000004103',current_setting('test.comment_avatar_job')::uuid);
 select is(private.can_read_profile_avatar('profile-avatars',current_setting('test.comment_avatar_path'),null),false,'hidden child cannot authorize avatar storage access');
+select is_empty($$select * from public.get_public_community_avatars('community_reply',array[current_setting('test.comment_child')::uuid])$$,'hidden child does not project an avatar path');
 update public.community_replies set deleted_at=null,moderation_hidden_at=now() where id=current_setting('test.comment_parent')::uuid;
 select is(private.can_read_profile_avatar('profile-avatars',current_setting('test.comment_avatar_path'),null),false,'moderated parent also hides child avatar access');
 
