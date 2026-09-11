@@ -1,0 +1,9 @@
+import {useState} from 'react';
+import {Pressable,Text,TextInput} from 'react-native';
+import {useLocalSearchParams,useRouter} from 'expo-router';
+import {randomUUID} from 'expo-crypto';
+import {createDirectMessageRequest,getCommunityAuthor} from '../../src/api/direct-messages';
+import {ScreenScaffold} from '../../src/components/ScreenScaffold';
+import {useNativeColors} from '../../src/design/native-colors';
+import {useAccountSession} from '../../src/auth/use-account-session';
+export default function NewMessage(){const p=useLocalSearchParams<{type:string;contentId:string}>(),router=useRouter(),c=useNativeColors(),auth=useAccountSession(),[body,setBody]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);const send=async()=>{if(!body.trim()||busy||!auth.owner)return;setBusy(true);const pin=auth.pin();try{const author=await getCommunityAuthor(p.type==='community_reply'?'community_reply':'community_post',p.contentId);if(author.conversationId){if(await pin())router.replace(`/messages/${author.conversationId}` as never);return;}if(!author.canMessage)throw new Error();const row=await createDirectMessageRequest(p.type==='community_reply'?'community_reply':'community_post',p.contentId,body.trim(),randomUUID());if(await pin())router.replace(`/messages/${row.conversationId}` as never);}catch{if(await pin())setError('Message request could not be sent.');}finally{setBusy(false);}};return <ScreenScaffold compact title="New message"><TextInput accessibilityLabel="Message" value={body} onChangeText={setBody} multiline style={{minHeight:120,color:c.ink}}/><Pressable accessibilityRole="button" onPress={()=>void send()} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:c.actionPrimary,fontWeight:'600'}}>Send request</Text></Pressable>{error?<Text style={{color:c.muted}}>{error}</Text>:null}</ScreenScaffold>;}

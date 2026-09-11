@@ -21,9 +21,9 @@ it('keeps request mutations strict', async () => {
   await expect(createDirectMessageRequest('community_post',id('02'),'Hello',id('03'),{rpc})).rejects.toThrow('direct_message_write_failed');
 });
 
-it('uses ascending messages and the oldest cursor for another page', async () => {
+it('uses ascending messages and the oldest cursor only for a full page', async () => {
   const message={messageId:id('02'),body:'Hello',sentAt:'2026-09-11T00:00:00.000Z',isMine:false,requestId:null,cursor:id('02')};
-  const rpc=jest.fn().mockResolvedValue({data:[message],error:null});
-  await expect(listDirectMessages(id('01'),id('04'),{rpc})).resolves.toEqual({items:[message],nextCursor:id('02')});
+  const rpc=jest.fn().mockResolvedValue({data:Array.from({length:50},(_,i)=>({...message,messageId:id(String(i+10).padStart(2,'0')),cursor:id(String(i+10).padStart(2,'0')),sentAt:`2026-09-11T00:${String(i).padStart(2,'0')}:00.000Z`})),error:null});
+  const page=await listDirectMessages(id('01'),id('04'),{rpc});expect(page.nextCursor).toBe(id('10'));
   expect(rpc).toHaveBeenCalledWith('list_direct_messages',{p_conversation_id:id('01'),p_cursor:id('04'),p_limit:50});
 });

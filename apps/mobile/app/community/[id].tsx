@@ -45,6 +45,7 @@ export default function CommunityDetailScreen(){
    {loading&&!post?<ActivityIndicator color={c.actionPrimary}/>:null}
    {failed?<Pressable accessibilityRole="button" onPress={()=>void load()} style={s.touch}><Text style={s.link}>{zh?'讨论暂不可用，点此重试':'Conversation unavailable. Tap to retry.'}</Text></Pressable>:null}
    {post?<View style={s.parent}>{author(post,'community_post')}{extra?.title?<Text style={s.title}>{extra.title}</Text>:null}<Text style={s.body}>{sample(post).body}</Text>{extra?.media.length?<PostGallery postId={post.postId} media={extra.media}/>:portrait?<Image source={{uri:portrait}} style={{width:'100%',aspectRatio:1,borderRadius:16}}/>:null}{post.catId?<Pressable accessibilityRole="button" onPress={()=>router.push(`/cat/${post.catId}` as never)} style={s.touch}><Text style={s.link}>{zh?'查看猫咪档案':'View cat profile'}</Text></Pressable>:null}</View>:null}
+   {post&&auth.owner?<Pressable accessibilityRole="button" accessibilityLabel={zh?'发送私信':'Message author'} onPress={()=>router.push(`/messages/new?type=community_post&contentId=${post.postId}` as never)} style={s.touch}><Text style={s.link}>{zh?'发送私信':'Message author'}</Text></Pressable>:null}
    {post?<Text style={s.heading}>{zh?'回复':'Replies'}</Text>:null}
    {replies.map(item=><View key={item.replyId} style={s.reply}>{author(item,'community_reply')}<Text style={s.body}>{sample(item).body}</Text></View>)}
    {post&&!replies.length&&!loading?<Text style={s.note}>{zh?'还没有回复。':'No replies yet.'}</Text>:null}
