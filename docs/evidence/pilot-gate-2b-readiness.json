@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "projectRef": "fhugdtpjbgiatqhvjioy",
   "projectOrigin": "https://fhugdtpjbgiatqhvjioy.supabase.co",
-  "sourceCommit": "c3d96f6f2e5efba782e5f0cb3d8be0e7f313f6ae",
+  "sourceCommit": "f64af48ac2b01fb5ca896ae57e811bf186c0abd0",
   "migrationHead": {
-    "filename": "202609110017_test_sample_community_media.sql",
-    "sha256": "578f75710f2e80b60a6b8a80896526541be26e65f817973940dd188a11b8efce"
+    "filename": "202609110019_r3_contract_hardening.sql",
+    "sha256": "bf680e239c45087218d33c8cda7961d9c9a54cbbdf585c8c9fc30217a40de284"
   },
   "edgeFunctionsTreeSha256": "8363e75f5b5d81101b4d7a98720490753e3f4c13ac079cb543fc9cf520c007f9",
-  "workflowRunId": 34609819950,
+  "workflowRunId": 34621202270,
   "workflowRunAttempt": 1,
-  "createdAt": "2026-09-11T14:29:44.335Z",
-  "expiresAt": "2026-09-14T14:29:44.335Z",
+  "createdAt": "2026-09-11T16:22:53.618Z",
+  "expiresAt": "2026-09-14T16:22:53.618Z",
   "authRedirectCheck": "passed",
   "mediaStagingCheck": "passed",
   "publicKeyOriginCheck": "passed",
