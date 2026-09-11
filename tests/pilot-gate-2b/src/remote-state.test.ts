@@ -13,10 +13,10 @@ function env(): HostedGateEnvironment {
 }
 
 describe('remote hosted deployment state', () => {
-  it('requires the community activity migration at the remote head', () => {
+  it('requires the test sample community media migration at the remote head', () => {
     expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
-      version: '202609110016',
-      name: 'community_activity',
+      version: '202609110017',
+      name: 'test_sample_community_media',
     });
   });
 

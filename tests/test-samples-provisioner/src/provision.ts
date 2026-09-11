@@ -8,12 +8,20 @@ import { ensurePortrait } from './portrait.js';
 import { samples, legacyEnglishNames, samplePlaces } from './fixtures.js';
 import { COMMUNITY_TEST_POSTS } from '../../../apps/mobile/src/community/test-samples.js';
 import { ensureCommunitySample } from './community.js';
+import { canUpgradeNoPhotoPortrait } from './fixture-upgrade.js';
+import { validateCommunityMediaVariants, type CommunityMediaVariant } from './media.js';
 
 const project = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 
 function required(name: string) { const value = process.env[name]; if (!value) throw new Error('test_sample_environment_invalid'); return value; }
 function sha256(value: Uint8Array) { return createHash('sha256').update(value).digest('hex'); }
 function assetPath(filename: string) { return resolve(import.meta.dirname, '../../../docs/test-samples/ios-v1/assets', filename); }
+function thumbAssetPath(filename: string) { return assetPath(filename.replace(/\.jpg$/, '-thumb.jpg')); }
+function fixtureMediaId(index: number) { return `00000000-0000-4000-8000-00000000e${String(101 + index).padStart(3, '0')}`; }
+function fixtureMediaRequestId(index: number) { return `00000000-0000-4000-8000-00000000f${String(101 + index).padStart(3, '0')}`; }
+function mediaPayloadHash(fixtureKey: string, position: number, display: CommunityMediaVariant, thumb: CommunityMediaVariant) {
+  return sha256(Buffer.from(JSON.stringify({fixtureKey, position, display: {sha256: display.sha256, byteLength: display.bytes.byteLength, width: display.width, height: display.height}, thumb: {sha256: thumb.sha256, byteLength: thumb.bytes.byteLength, width: thumb.width, height: thumb.height}})));
+}
 function validDatabaseTarget(value: string) {
   try {
     const parsed = new URL(value);
@@ -24,19 +32,47 @@ function validDatabaseTarget(value: string) {
     );
   } catch { return false; }
 }
+type FixtureMediaBucket = Readonly<{
+  list(path: string, options: {search: string; limit: number}): Promise<{data: unknown; error: unknown}>;
+  download(path: string): Promise<{data: Blob | null; error: unknown}>;
+  upload(path: string, bytes: Uint8Array, options: {contentType: string; upsert: false}): Promise<{error: unknown}>;
+}>;
+async function ensureCommunityMediaObject(bucket: FixtureMediaBucket, path: string, bytes: Uint8Array, expectedSha: string) {
+  const slash = path.lastIndexOf('/'); const directory = path.slice(0, slash); const filename = path.slice(slash + 1);
+  const listed = await bucket.list(directory, {search: filename, limit: 100});
+  if (listed.error || !Array.isArray(listed.data) || listed.data.some(row => !row || typeof row !== 'object' || typeof (row as {name?: unknown}).name !== 'string')) throw new Error('test_sample_community_media_list_failed');
+  if (listed.data.some(row => (row as {name: string}).name === filename)) {
+    const downloaded = await bucket.download(path);
+    if (downloaded.error || !downloaded.data || sha256(new Uint8Array(await downloaded.data.arrayBuffer())) !== expectedSha) throw new Error('test_sample_community_media_collision');
+    return;
+  }
+  const uploaded = await bucket.upload(path, bytes, {contentType: 'image/jpeg', upsert: false});
+  if (uploaded.error) throw new Error('test_sample_community_media_upload_failed');
+}
 async function main() {
   const url = required('SUPABASE_URL').replace(/\/$/, '');
   if (url !== project || process.env.CONFIRM_IOS26_TEST_SAMPLES !== 'yes') throw new Error('test_sample_target_refused');
+  const provenance = JSON.parse(await readFile(resolve(import.meta.dirname, '../../../docs/test-samples/ios-v1/asset-provenance.json'), 'utf8')) as {assets: Array<{file:string;source:string;sha256:string}>};
+  const portraitAssetNames = samples.flatMap(sample => sample[3] ? [sample[3]] : []);
+  const communityAssetNames = COMMUNITY_TEST_POSTS.flatMap(post => post.media.flatMap(filename => [filename, filename.replace(/\.jpg$/, '-thumb.jpg')]));
+  const approvedAssetNames = new Set([...portraitAssetNames, ...communityAssetNames]);
+  for (const filename of approvedAssetNames) {
+    const approved = provenance.assets.find(asset => asset.file === `assets/${filename}` && asset.source === 'synthetic_test');
+    const bytes = await readFile(filename.endsWith('-thumb.jpg') ? thumbAssetPath(filename.replace(/-thumb\.jpg$/, '.jpg')) : assetPath(filename));
+    if (!approved || sha256(bytes) !== approved.sha256) throw new Error('test_sample_asset_not_approved');
+  }
+  if (process.env.IOS26_TEST_SAMPLES_DRY_RUN === 'yes') {
+    const manifest = {projectRef: 'fhugdtpjbgiatqhvjioy', dryRun: true, fixtureKeys: samples.map(([key]) => key), portraitCount: samples.filter(sample => sample[3]).length, communityPostIds: COMMUNITY_TEST_POSTS.map(post => post.id), communityReplyIds: COMMUNITY_TEST_POSTS.map(post => post.reply.id), communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => post.media.length > 0).map(post => post.id)};
+    await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
+    process.stdout.write('ios26_test_samples_dry_run\n');
+    return;
+  }
   const databaseUrl = required('SUPABASE_DATABASE_URL');
   if (!validDatabaseTarget(databaseUrl)) throw new Error('test_sample_database_refused');
-  const provenance = JSON.parse(await readFile(resolve(import.meta.dirname, '../../../docs/test-samples/ios-v1/asset-provenance.json'), 'utf8')) as {assets: Array<{file:string;source:string;sha256:string}>};
-  for (const filename of new Set(samples.flatMap(sample => sample[3] ? [sample[3]] : []))) {
-    const approved = provenance.assets.find(asset => asset.file === `assets/${filename}` && asset.source === 'synthetic_test');
-    if (!approved || sha256(await readFile(assetPath(filename))) !== approved.sha256) throw new Error('test_sample_asset_not_approved');
-  }
   const db = postgres(databaseUrl, { max: 1, ssl: 'require', prepare: false, debug: false, onnotice: () => undefined });
   const storage = createClient(url, required('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
-  const anonymous = createClient(url, required('SUPABASE_PUBLIC_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
+  const publicKey = required('SUPABASE_PUBLIC_KEY');
+  const anonymous = createClient(url, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
     for (const [index, [key, id, alias, filename, cell]] of samples.entries()) {
       const label = `测试样本 S${String(index + 1).padStart(2, '0')}`;
@@ -50,7 +86,19 @@ async function main() {
         await sql`select pg_advisory_xact_lock(hashtext(${key}))`;
         const existing = await sql`select fixture_key,animal_id,source_sha256 from private.test_sample_provisioning where fixture_key=${key}`;
         if (existing.length !== 0) {
-          if (existing[0]!.animal_id !== id || existing[0]!.source_sha256 !== sha) throw new Error('test_sample_collision');
+          const upgrade = canUpgradeNoPhotoPortrait([key, id, alias, filename, cell], {animalId: existing[0]!.animal_id, sourceSha256: existing[0]!.source_sha256});
+          if (existing[0]!.animal_id !== id || (existing[0]!.source_sha256 !== sha && !upgrade)) throw new Error('test_sample_collision');
+          if (upgrade && filename && path) {
+            const bucket = storage.storage.from('cat-portraits');
+            await ensurePortrait({
+              list: () => bucket.list(`synthetic-test/${id}`, {search:'portrait.jpg',limit:100}),
+              download: () => bucket.download(path),
+              upload: () => bucket.upload(path,bytes,{contentType:'image/jpeg',upsert:false}),
+            },sha);
+            const presentation = await sql`update private.cat_presentations set portrait_path=${path} where animal_id=${id}::uuid and portrait_path is null and sample_label=${label} and source_metadata->>'fixture_key'=${key} returning animal_id`;
+            if (presentation.length !== 1) throw new Error('test_sample_collision');
+            await sql`update private.test_sample_provisioning set source_sha256=${sha} where fixture_key=${key} and source_sha256=${existing[0]!.source_sha256}`;
+          }
           // Only upgrade the original untouched fixture name; never overwrite a later user edit.
           if (english) {
             await sql`insert into public.animal_aliases(animal_id,alias) values(${id}::uuid,${english}) on conflict(animal_id,alias) do nothing`;
@@ -105,6 +153,7 @@ async function main() {
       const discovery = await anonymous.rpc('list_public_cat_discovery', { p_public_cell_id: cell, p_verifications: null, p_cursor: null, p_limit: 50 });
       if (discovery.error || !Array.isArray(discovery.data) || discovery.data.length < 1) throw new Error('test_sample_discovery_failed');
     }
+    const mediaFixtures = COMMUNITY_TEST_POSTS.flatMap((post) => post.media.map((sourceFile, position) => ({post, sourceFile, position, fixtureKey: `ios26-${post.code.toLowerCase()}`})));
     const visiblePostIds: string[] = [];
     const visibleReplyIds: string[] = [];
     for (const post of COMMUNITY_TEST_POSTS) {
@@ -123,6 +172,41 @@ async function main() {
         return true;
       });
       if (!visible) continue;
+      for (const fixture of mediaFixtures.filter(candidate => candidate.post.id === post.id)) {
+        const sequence = mediaFixtures.findIndex(candidate => candidate.fixtureKey === fixture.fixtureKey && candidate.position === fixture.position);
+        const mediaId = fixtureMediaId(sequence); const requestId = fixtureMediaRequestId(sequence);
+        const displayBytes = new Uint8Array(await readFile(assetPath(fixture.sourceFile)));
+        const thumbBytes = new Uint8Array(await readFile(thumbAssetPath(fixture.sourceFile)));
+        const variants = await validateCommunityMediaVariants(displayBytes, thumbBytes);
+        const payloadHash = mediaPayloadHash(fixture.fixtureKey, fixture.position, variants.display, variants.thumb);
+        await db.begin(async sql => {
+          await sql`select pg_advisory_xact_lock(hashtext(${fixture.fixtureKey+':'+fixture.position}))`;
+          const existing = await sql`select media_id,source_file,display_sha256,thumb_sha256 from private.test_sample_community_media where fixture_key=${fixture.fixtureKey} and position=${fixture.position} for update`;
+          if (existing.length !== 0) {
+            if (existing[0]!.media_id !== mediaId || existing[0]!.source_file !== fixture.sourceFile || existing[0]!.display_sha256 !== variants.display.sha256 || existing[0]!.thumb_sha256 !== variants.thumb.sha256) throw new Error('test_sample_community_media_collision');
+            const job = await sql`select status from private.community_media_jobs where id=${mediaId}::uuid`;
+            if (job.length !== 1 || !['reserved','finalized','attached'].includes(job[0]!.status)) throw new Error('test_sample_community_media_reprovision_required');
+            return;
+          }
+          await sql`insert into private.community_media_jobs(id,owner_id,request_id,payload_hash,thumb_sha256,thumb_byte_length,thumb_width,thumb_height,display_sha256,display_byte_length,display_width,display_height,reservation_expires_at,upload_token_expires_at,status) values(${mediaId}::uuid,null,${requestId}::uuid,${payloadHash},${variants.thumb.sha256},${variants.thumb.bytes.byteLength},${variants.thumb.width},${variants.thumb.height},${variants.display.sha256},${variants.display.bytes.byteLength},${variants.display.width},${variants.display.height},now()+interval '10 minutes',now()+interval '2 hours 10 minutes','reserved')`;
+          await sql`insert into private.community_media_cleanup_jobs(media_id,owner_id,not_before) values(${mediaId}::uuid,null,now()+interval '2 hours 15 minutes')`;
+          await sql`insert into private.test_sample_community_media(fixture_key,position,post_id,media_id,source_file,display_sha256,thumb_sha256) values(${fixture.fixtureKey},${fixture.position},${post.id}::uuid,${mediaId}::uuid,${fixture.sourceFile},${variants.display.sha256},${variants.thumb.sha256})`;
+        });
+        const bucket = storage.storage.from('community-media');
+        await ensureCommunityMediaObject(bucket, `media/${mediaId}/display.jpg`, variants.display.bytes, variants.display.sha256);
+        await ensureCommunityMediaObject(bucket, `media/${mediaId}/thumb.jpg`, variants.thumb.bytes, variants.thumb.sha256);
+        await db.begin(async sql => {
+          await sql`select pg_advisory_xact_lock(hashtext(${fixture.fixtureKey+':'+fixture.position}))`;
+          const target = await sql`select id from public.community_posts where id=${post.id}::uuid and deleted_at is null and moderation_hidden_at is null for update`;
+          if (target.length !== 1) throw new Error('test_sample_community_post_not_available');
+          const attached = await sql`select media_id from private.community_post_media where post_id=${post.id}::uuid and position=${fixture.position}`;
+          if (attached.length !== 0 && attached[0]!.media_id !== mediaId) throw new Error('test_sample_community_media_collision');
+          if (attached.length === 0) await sql`insert into private.community_post_media(post_id,media_id,position) values(${post.id}::uuid,${mediaId}::uuid,${fixture.position})`;
+          const updated = await sql`update private.community_media_jobs set status='attached',finalized_at=coalesce(finalized_at,now()),attached_at=coalesce(attached_at,now()) where id=${mediaId}::uuid and status in ('reserved','attached') returning id`;
+          if (updated.length !== 1) throw new Error('test_sample_community_media_collision');
+          await sql`update private.community_media_cleanup_jobs set status='completed',completed_at=coalesce(completed_at,now()),claimed_at=null,claim_id=null where media_id=${mediaId}::uuid`;
+        });
+      }
       const [{data:detail,error:detailError},{data:replies,error:replyError},{data:reaction,error:reactionError}] = await Promise.all([
         anonymous.rpc('get_public_community_post',{p_post_id:post.id}),
         anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30}),
@@ -134,7 +218,17 @@ async function main() {
       visiblePostIds.push(post.id);
       if (replies.some(reply=>reply.replyId===post.reply.id && reply.body===post.reply.body.en)) visibleReplyIds.push(post.reply.id);
     }
-    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds };
+    const extras = await anonymous.rpc('get_public_community_post_extras', {p_post_ids: visiblePostIds});
+    if (extras.error || !Array.isArray(extras.data)) throw new Error('test_sample_community_media_public_read_failed');
+    for (const fixture of mediaFixtures.filter(candidate => visiblePostIds.includes(candidate.post.id))) {
+      const sequence = mediaFixtures.findIndex(candidate => candidate.fixtureKey === fixture.fixtureKey && candidate.position === fixture.position);
+      const mediaId = fixtureMediaId(sequence); const extra = extras.data.find((row: {postId?: unknown}) => row.postId === fixture.post.id) as {media?: Array<{mediaId?: unknown}>} | undefined;
+      if (!extra || !Array.isArray(extra.media) || extra.media[fixture.position]?.mediaId !== mediaId) throw new Error('test_sample_community_media_public_read_failed');
+      const response = await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey}});
+      const expected = await readFile(assetPath(fixture.sourceFile));
+      if (!response.ok || !response.headers.get('content-type')?.startsWith('image/jpeg') || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_community_media_public_read_failed');
+    }
+    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds, communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => post.media.length > 0).map(post => post.id) };
     await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
     process.stdout.write('ios26_test_samples_provisioned\n');
   } finally { await db.end({ timeout: 5 }); }

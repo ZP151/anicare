@@ -40,6 +40,7 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202609100014_my_community_posts.sql',
   '202609110015_community_media.sql',
   '202609110016_community_activity.sql',
+  '202609110017_test_sample_community_media.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([

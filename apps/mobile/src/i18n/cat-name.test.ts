@@ -2,6 +2,7 @@ import { localizedCatName } from './cat-name';
 import { samples, legacyEnglishNames } from '../../../../tests/test-samples-provisioner/src/fixtures';
 
 it('localises every exact provisioned alias including its test-label suffix', () => {
+  expect(samples).toHaveLength(32);
   samples.forEach(([, id, alias], index) => {
     const label = `测试样本 S${String(index + 1).padStart(2, '0')}`;
     const english = legacyEnglishNames[index];

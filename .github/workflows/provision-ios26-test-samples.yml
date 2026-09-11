@@ -2,6 +2,12 @@ name: Provision iOS 26 Test Samples
 
 on:
   workflow_dispatch:
+    inputs:
+      apply:
+        description: Write approved synthetic fixtures to the hosted test project
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -31,6 +37,7 @@ jobs:
       - name: Provision explicitly labelled synthetic samples
         env:
           CONFIRM_IOS26_TEST_SAMPLES: 'yes'
+          IOS26_TEST_SAMPLES_DRY_RUN: ${{ inputs.apply && 'no' || 'yes' }}
           SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
