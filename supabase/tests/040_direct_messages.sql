@@ -28,6 +28,8 @@ select is((select author->>'name' from public.get_community_author('community_po
 select ok((select "canMessage" from public.get_community_author('community_post','00000000-0000-4000-8000-000000004010')),'visible other author is messageable');
 select set_config('test.dm_conversation',(select "conversationId"::text from public.create_direct_message_request('community_post','00000000-0000-4000-8000-000000004010','Hello there','00000000-0000-4000-8000-000000004011')),true);
 select set_config('test.dm_message',(select "messageId"::text from public.create_direct_message_request('community_post','00000000-0000-4000-8000-000000004010','Hello there','00000000-0000-4000-8000-000000004011')),true);
+select is((select "conversationId" from public.get_community_author('community_post','00000000-0000-4000-8000-000000004010')),current_setting('test.dm_conversation')::uuid,'author projection returns the existing conversation route');
+select is((select "canMessage" from public.get_community_author('community_post','00000000-0000-4000-8000-000000004010')),false,'existing conversation suppresses another first-contact request');
 select throws_ok($$select * from public.create_direct_message_request('community_post','00000000-0000-4000-8000-000000004010','Changed','00000000-0000-4000-8000-000000004011')$$,'P0001','idempotency_conflict','request ID rejects changed body');
 select throws_ok($$select * from public.send_direct_message(current_setting('test.dm_conversation')::uuid,'Too early','00000000-0000-4000-8000-000000004012')$$,'P0001','direct_message_not_available','pending request cannot send a second message');
 reset role;
@@ -47,6 +49,12 @@ select is((select status from public.respond_direct_message_request(current_sett
 select set_config('test.dm_reply',(select "messageId"::text from public.send_direct_message(current_setting('test.dm_conversation')::uuid,'Welcome','00000000-0000-4000-8000-000000004015')),true);
 select is((select "requestId" from public.list_direct_messages(current_setting('test.dm_conversation')::uuid,null,50) where "messageId"=current_setting('test.dm_reply')::uuid),'00000000-0000-4000-8000-000000004015','own request ID supports outbox reconciliation');
 select is((select count(*) from public.mark_direct_conversation_read(current_setting('test.dm_conversation')::uuid,current_setting('test.dm_reply')::uuid)),1::bigint,'member advances read cursor from a message anchor');
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000004001',true);
+select is((select status from public.create_direct_message_request('community_post','00000000-0000-4000-8000-000000004010','Hello there','00000000-0000-4000-8000-000000004011')),'pending','opening-request retry preserves its original pending result after acceptance');
 reset role;
 
 set local role authenticated;

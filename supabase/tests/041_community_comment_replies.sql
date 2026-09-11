@@ -27,6 +27,15 @@ select is((select count(*) from public.list_community_comment_replies(current_se
 reset role;
 set local role anon;
 select set_config('request.jwt.claim.role','anon',true);
+select is((select count(*) from public.list_public_community_replies('00000000-0000-4000-8000-000000004110',null,30)),1::bigint,'existing top-level reply API excludes child replies');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.role','authenticated',true);
+select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000004101',true);
+select is((select kind from public.list_my_community_activity(null,20) where "replyId"=current_setting('test.comment_child')::uuid),'comment','child activity maps to the established comment kind');
+reset role;
+set local role anon;
+select set_config('request.jwt.claim.role','anon',true);
 select is((select "parentReplyId" from public.get_community_comment_context(current_setting('test.comment_child')::uuid)),current_setting('test.comment_parent')::uuid,'anonymous context is safe for a notification route');
 reset role;
 update public.community_replies set deleted_at=now() where id=current_setting('test.comment_parent')::uuid;
