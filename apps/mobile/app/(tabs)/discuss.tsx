@@ -1,2 +1,2 @@
-import { ActivityInbox } from '../../src/community/ActivityInbox';
-export default function DiscussScreen(){return <ActivityInbox/>;}
+import { MessagesInbox } from '../../src/community/MessagesInbox';
+export default function DiscussScreen(){return <MessagesInbox/>;}
