@@ -2,18 +2,20 @@ import {act,fireEvent,render,waitFor,within} from '@testing-library/react-native
 import {DeviceEventEmitter,StyleSheet} from 'react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
 const mockGet=jest.fn(),mockList=jest.fn(),mockReply=jest.fn();
-const mockAuthor=jest.fn();
+const mockAuthor=jest.fn(),mockReactions=jest.fn(),mockLike=jest.fn(),mockPush=jest.fn();
+jest.mock('./community-reactions',()=>({getCommunityReactions:(...args:unknown[])=>mockReactions(...args),setCommunityLike:(...args:unknown[])=>mockLike(...args)}));
+jest.mock('./cats',()=>({getPublicCatSummary:async()=>({primaryAlias:'Mochi'})}));
 jest.mock('./direct-messages',()=>({getCommunityAuthor:(...args:unknown[])=>mockAuthor(...args)}));
 let mockThread='00000000-0000-4000-8000-000000000001';
 jest.mock('./community',()=>({getCommunityPost:(...a:unknown[])=>mockGet(...a),listCommunityReplies:(...a:unknown[])=>mockList(...a),createCommunityReply:(...a:unknown[])=>mockReply(...a)}));
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:'owner-a',failed:false,reload:jest.fn(),pin:()=>async()=>true})}));
 jest.mock('../community/CommunityContentActions',()=>({CommunityContentActions:()=>null}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
-jest.mock('expo-router',()=>({useRouter:()=>({push:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
+jest.mock('expo-router',()=>({useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
 const mockExtras=jest.fn();
 jest.mock('./community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args),communityMediaUrl:(postId:string,mediaId:string)=>`https://media.test/${postId}/${mediaId}`}));
 import CommunityDetailScreen from '../../app/community/[id]';
-beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false}));mockList.mockResolvedValue({items:[],nextCursor:null});mockExtras.mockResolvedValue(new Map());});
+beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false,replyCount:0,communitySlug:'clementi',catId:'00000000-0000-4000-8000-000000000050'}));mockList.mockResolvedValue({items:[],nextCursor:null});mockExtras.mockResolvedValue(new Map());mockReactions.mockResolvedValue(new Map([[mockThread,{postId:mockThread,liked:false,likeCount:3}]]));mockLike.mockResolvedValue({postId:mockThread,liked:true,likeCount:4});});
 it('keeps the editable reply and send action outside the long post scroll, inside keyboard avoidance',async()=>{
  const view=await render(<CommunityDetailScreen/>);
  const input=await view.findByLabelText('写回复');
@@ -56,4 +58,31 @@ it('does not clear a new thread draft when the previous thread reply finishes',a
  const view=await render(<CommunityDetailScreen/>);await fireEvent.changeText(await view.findByLabelText('写回复'),'Old thread reply');await fireEvent.press(view.getByLabelText('发送回复'));await waitFor(()=>expect(mockReply).toHaveBeenCalledTimes(1));
  mockThread='00000000-0000-4000-8000-000000000002';await view.rerender(<CommunityDetailScreen/>);await fireEvent.changeText(await view.findByLabelText('写回复'),'New thread draft');await act(async()=>finish());
  expect(view.getByLabelText('写回复').props.value).toBe('New thread draft');expect(view.queryByText('回复已发布')).toBeNull();await view.unmount();
+});
+
+it('connects the detail to real reactions, cat context and neighbourhood',async()=>{
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ expect(await view.findByText('Mochi')).toBeTruthy();expect(view.getByText('金文泰 · Clementi')).toBeTruthy();
+ expect(view.getByText('3')).toBeTruthy();await fireEvent.press(view.getByLabelText('点赞'));
+ await view.findByLabelText('取消点赞');expect(mockLike).toHaveBeenCalledWith(mockThread,true);expect(view.getByText('4')).toBeTruthy();
+ await fireEvent.press(view.getByLabelText('查看猫咪档案'));expect(mockPush).toHaveBeenCalledWith('/cat/00000000-0000-4000-8000-000000000050');await view.unmount();
+});
+it('opens a compact author summary with a real message action and dismisses it',async()=>{
+ mockAuthor.mockResolvedValue({author:{name:'Neighbour',avatarKey:'person'},canMessage:true,conversationId:null});
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ await fireEvent.press(view.getByLabelText('查看作者资料'));expect(view.getByLabelText('关闭作者资料')).toBeTruthy();
+ await fireEvent.press(view.getByLabelText('关闭作者资料'));expect(view.queryByLabelText('关闭作者资料')).toBeNull();await view.unmount();
+});
+it('does not invent a zero reaction count on reaction read failure and retries it',async()=>{
+ mockReactions.mockRejectedValueOnce(new Error('offline'));
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ expect(view.queryByLabelText('点赞')).toBeNull();await fireEvent.press(view.getByLabelText('重试点赞状态'));
+ await view.findByLabelText('点赞');await view.unmount();
+});
+
+it('binds the author action to the displayed post identity',async()=>{
+ mockAuthor.mockResolvedValue({canMessage:true,conversationId:null});
+ const shownId='00000000-0000-4000-8000-000000000099';mockGet.mockResolvedValue({postId:shownId,body:'Shown story',createdAt:'2026-09-09T00:00:00Z',author:{name:'Shown author',avatarKey:'cat'},canDelete:false});
+ const view=await render(<CommunityDetailScreen/>);await fireEvent.press(await view.findByLabelText('发送私信'));
+ expect(mockPush).toHaveBeenCalledWith(`/messages/new?type=community_post&contentId=${shownId}`);await view.unmount();
 });

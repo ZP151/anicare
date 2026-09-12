@@ -1,0 +1,4 @@
+import { act, fireEvent, render } from '@testing-library/react-native';
+const mockSet=jest.fn();jest.mock('../api/community-reactions',()=>({setCommunityLike:(...args:unknown[])=>mockSet(...args)}));
+import { CommunityLike } from './CommunityLike';
+it('does not commit a like completion after leaving the post',async()=>{let finish:(v:unknown)=>void=()=>{};mockSet.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));const change=jest.fn(),error=jest.fn(),reaction={postId:'post-a',liked:false,likeCount:2};const view=await render(<CommunityLike reaction={reaction} owner="owner" zh={false} pin={()=>async()=>true} onChange={change} onSignIn={jest.fn()} onError={error}/>);await fireEvent.press(view.getByLabelText('Like'));await view.unmount();await act(async()=>finish({...reaction,liked:true,likeCount:3}));expect(change).not.toHaveBeenCalled();expect(error).not.toHaveBeenCalled();});
