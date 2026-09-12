@@ -160,3 +160,12 @@ it('opens the actions menu after a stationary long press even with one photo',as
  {state:State.BEGAN,translationX:0,translationY:0},{state:State.ACTIVE,translationX:0,translationY:0},{state:State.END,translationX:0,translationY:0}]));
  expect(await view.findByText('Make cover')).toBeTruthy();expect(view.queryByLabelText('Rotate photo')).toBeNull();expect(mockPublish).not.toHaveBeenCalled();await view.unmount();
 });
+
+it('waits for the iOS actions sheet to dismiss before presenting the photo editor',async()=>{
+ const variant={width:100,height:100,byteLength:1,sha256:'a'.repeat(64)};mockSaved.images=[{id:mockDraftId,requestId:mockDraftId,thumb:variant,display:variant}];
+ const view=await render(<SocialComposer/>);const photo=await view.findByLabelText('Photo 1');
+ await fireEvent(photo,'accessibilityAction',{nativeEvent:{actionName:'longpress'}});const dismissed=view.getByTestId('photo-actions-modal').props.onDismiss;await fireEvent.press(view.getByText('Edit photo'));
+ expect(view.queryByLabelText('Rotate photo')).toBeNull();expect(view.getByLabelText('Post').props.accessibilityState.disabled).toBe(true);
+ await fireEvent.press(view.getByLabelText('Post'));expect(mockPublish).not.toHaveBeenCalled();
+ await act(async()=>dismissed());await view.findByLabelText('Rotate photo');await view.unmount();
+});

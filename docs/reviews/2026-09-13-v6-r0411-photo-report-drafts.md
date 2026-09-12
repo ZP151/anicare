@@ -16,3 +16,5 @@ Tests cover edit preview/confirm/cancel/failure, native processing cleanup, stat
 Image processing uses the existing [Expo ImageManipulator API](https://docs.expo.dev/versions/v57.0.0/sdk/imagemanipulator/); no dependencies were added. Automated tests and builds do not replace iPhone validation of touch, safe areas, keyboard and image processing.
 
 Full `pnpm verify` exited 0: mobile 132 suites / 1,167 tests, workspace lint, typecheck, tests and builds passed. Independent final review has no remaining blockers. Build, IPA integrity and hosted sample receipts follow after verification.
+
+Final iOS handoff refinement: actions that present an editor or picker wait for the action sheet onDismiss. During this interval editing, closing and publishing are disabled. Owner changes, background and unmount cancel the pending action. The 17 composer tests and typecheck pass; independent review confirmed the publication guard. A fresh full verify is running for this final source.
