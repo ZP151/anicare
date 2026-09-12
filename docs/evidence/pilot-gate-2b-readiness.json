@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "projectRef": "fhugdtpjbgiatqhvjioy",
   "projectOrigin": "https://fhugdtpjbgiatqhvjioy.supabase.co",
-  "sourceCommit": "f64af48ac2b01fb5ca896ae57e811bf186c0abd0",
+  "sourceCommit": "616fdf6c45ace0bf70adb00d280362c0f8b63f4a",
   "migrationHead": {
-    "filename": "202609110019_r3_contract_hardening.sql",
-    "sha256": "bf680e239c45087218d33c8cda7961d9c9a54cbbdf585c8c9fc30217a40de284"
+    "filename": "202609130020_profile_photos_neighbourhood.sql",
+    "sha256": "2fc363df817ed5f7c9ac610ca1fe94d7e44057d5e679baded8a2993b99ce492a"
   },
   "edgeFunctionsTreeSha256": "8363e75f5b5d81101b4d7a98720490753e3f4c13ac079cb543fc9cf520c007f9",
-  "workflowRunId": 34621202270,
+  "workflowRunId": 34714899486,
   "workflowRunAttempt": 1,
-  "createdAt": "2026-09-11T16:22:53.618Z",
-  "expiresAt": "2026-09-14T16:22:53.618Z",
+  "createdAt": "2026-09-12T19:46:23.140Z",
+  "expiresAt": "2026-09-15T19:46:23.140Z",
   "authRedirectCheck": "passed",
   "mediaStagingCheck": "passed",
   "publicKeyOriginCheck": "passed",
