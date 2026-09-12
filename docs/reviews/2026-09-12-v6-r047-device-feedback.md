@@ -18,3 +18,11 @@
 原生触控缩放、六图实际滚动与 iPhone 安全区仍需安装包复测，不能用 Jest 模拟代替设备验收。已有个人邻里编辑、独立照片服务端分页、视频及管理员/Bot 不在本次修复完成范围。
 
 本地 `pnpm verify` 全部通过：128 个移动端套件、1106 个测试，以及各工作区策略、类型检查、lint、测试与构建。独立审查定向复核通过，无剩余阻断项。
+
+## 交付
+
+- 源码 `63f626fa83e97f7622abcdc937bb50aed57a7ae1`；[精确源码 CI](https://github.com/ZP151/anicare/actions/runs/34694735593) 与 [原生构建 34694736023](https://github.com/ZP151/anicare/actions/runs/34694736023) 成功。
+- [0.4.7（15）IPA](C:/Users/15492/Downloads/WhiskerCommons-0.4.7-build15.ipa)，21,810,501 字节。
+- SHA256 `651e6d47286417ff4c5e2ee9193730afdc228be45f31f3356200f23db4799e7a`。
+- GitHub 构建证明、18 字段 manifest、三文件 allowlist、校验文件、两个源码锁文件 SHA、实际 Info.plist 版本、arm64 主程序、非空 AppIcon 和定位/相机/图库三项权限声明均已核对。
+- 使用原 Sideloadly 设置覆盖安装；不需要卸载或清除草稿。代码检查和构建通过，实际手势/布局仍待本轮五项真机复测。
