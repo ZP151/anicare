@@ -86,8 +86,7 @@ it('keeps the signed-in profile focused on account actions instead of another lo
 it('edits only the current account public name and shows the saved value', async () => {
   const view = await render(<Profile />);
   await view.findByText('Signed in');
-  await fireEvent.press(view.getByRole('button',{name:'Settings'}));
-  await fireEvent.press(view.getByRole('button', { name: 'Display name' }));
+  await fireEvent.press(view.getByRole('button', { name: 'Edit profile' }));
   await waitFor(() => expect(view.getByLabelText('Public display name').props.value).toBe('Chosen name'));
   await fireEvent.changeText(view.getByLabelText('Public display name'), 'Neighbour');
   await fireEvent.press(view.getByRole('button', { name: 'Save name' }));
@@ -101,8 +100,7 @@ it('discards an account name response after signing out', async () => {
   mockLookup.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const view = await render(<Profile />);
   await view.findByText('Signed in');
-  await fireEvent.press(view.getByRole('button',{name:'Settings'}));
-  await fireEvent.press(view.getByRole('button', { name: 'Display name' }));
+  await fireEvent.press(view.getByRole('button', { name: 'Edit profile' }));
   await waitFor(() => expect(mockLookup).toHaveBeenCalled());
   await act(async () => { mockSubject = null; mockListener(); finish({data:{public_name:'Previous private name'},error:null}); });
   await view.findByText('Browsing anonymously');
@@ -133,4 +131,16 @@ it('does not apply delayed adult status from a previous account',async()=>{
  let finish!:(x:unknown)=>void;mockAdult.mockImplementationOnce(()=>new Promise(r=>{finish=r;}));
  const view=await render(<Profile/>);await waitFor(()=>expect(mockAdult).toHaveBeenCalled());
  await act(async()=>{mockSubject=null;mockListener();finish({data:true,error:null});});await view.findByText('Browsing anonymously');expect(view.queryByText('18+ contributor confirmed')).toBeNull();
+});
+
+it('keeps profile editing out of Settings and removes the redundant Reports shortcut',async()=>{
+ const view=await render(<Profile/>);await view.findByText('Chosen name');
+ expect(view.queryByRole('button',{name:'Reports'})).toBeNull();
+ await fireEvent.press(view.getByRole('button',{name:'Edit profile'}));
+ await view.findByLabelText('Public display name');
+ expect(view.getByRole('button',{name:'Change avatar'})).toBeTruthy();
+ await fireEvent.press(view.getByRole('button',{name:'Close edit'}));
+ await fireEvent.press(view.getByRole('button',{name:'Settings'}));
+ expect(view.queryByRole('button',{name:'Display name'})).toBeNull();
+ expect(view.queryByRole('button',{name:'Avatar'})).toBeNull();
 });

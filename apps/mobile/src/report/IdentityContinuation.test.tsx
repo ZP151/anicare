@@ -1,3 +1,4 @@
+jest.mock('../api/cat-presentation',()=>({getCatPresentations:jest.fn(async()=>new Map())}));
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { IdentityContinuation } from './IdentityContinuation';
 
@@ -77,4 +78,40 @@ describe('IdentityContinuation', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Visible Cat' }));
     await waitFor(() => expect(submit).not.toHaveBeenCalled());
   });
+});
+
+it('bounds the avatar choices to eight per page and preserves each selected cat identity',async()=>{
+ const items=Array.from({length:20},(_,i)=>({sightingId,animalId:`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`,primaryAlias:`Neighbour ${i}`,verification:'reported' as const,publicCellId:'8928308280fffff',timeBucket:'today' as const,coverMediaId:null,cursor:sightingId}));
+ const submit=jest.fn(async()=>({status:'tentative'}));
+ const view=await render(<IdentityContinuation sightingId={sightingId} draft={null} locale="en" dependencies={{isOwner:async()=>true,listPublicSightings:async()=>({items,nextCursor:null}),saveIntent:async intent=>({intent,requestId}),submit}}/>);
+ await view.findByRole('button',{name:'Neighbour 0'});
+ expect(view.getAllByTestId('identity-cat-bubble')).toHaveLength(8);
+ expect(view.queryByRole('button',{name:'Neighbour 8'})).toBeNull();
+ await fireEvent.press(view.getByRole('button',{name:'Next cats'}));
+ expect(view.getAllByTestId('identity-cat-bubble')).toHaveLength(8);
+ await fireEvent.press(view.getByRole('button',{name:'Neighbour 9'}));
+ await waitFor(()=>expect(submit).toHaveBeenCalledWith(sightingId,{kind:'existing',animalId:items[9]!.animalId},requestId));
+});
+
+it('does not skip the last partial page when fetching another API page',async()=>{
+ const items=Array.from({length:28},(_,i)=>({sightingId,animalId:`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`,primaryAlias:`Cat ${i}`,verification:'reported' as const,publicCellId:'8928308280fffff',timeBucket:'today' as const,coverMediaId:null,cursor:sightingId}));
+ const list=jest.fn(async({cursor})=>cursor?{items:items.slice(20),nextCursor:null}:{items:items.slice(0,20),nextCursor:'next'});
+ const view=await render(<IdentityContinuation sightingId={sightingId} draft={null} locale="en" dependencies={{isOwner:async()=>true,listPublicSightings:list,saveIntent:async intent=>({intent,requestId}),submit:async()=>({status:'tentative'})}}/>);
+ await view.findByRole('button',{name:'Cat 0'});
+ await fireEvent.press(view.getByRole('button',{name:'Next cats'}));await fireEvent.press(view.getByRole('button',{name:'Next cats'}));
+ await fireEvent.press(view.getByRole('button',{name:'Next cats'}));
+ await view.findByRole('button',{name:'Cat 20'});expect(view.getByRole('button',{name:'Cat 23'})).toBeTruthy();
+ await fireEvent.press(view.getByRole('button',{name:'Next cats'}));expect(view.getByRole('button',{name:'Cat 24'})).toBeTruthy();
+});
+
+it('preserves loaded pages when the receipt details are toggled by its parent',async()=>{
+ const items=Array.from({length:25},(_,i)=>({sightingId,animalId:`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`,primaryAlias:`Cat ${i}`,verification:'reported' as const,publicCellId:'8928308280fffff',timeBucket:'today' as const,coverMediaId:null,cursor:sightingId}));
+ const list=jest.fn(async({cursor})=>cursor?{items:items.slice(20),nextCursor:null}:{items:items.slice(0,20),nextCursor:'next'});
+ const deps={isOwner:async()=>true,listPublicSightings:list,saveIntent:async (intent:any)=>({intent,requestId}),submit:async()=>({status:'tentative'})};
+ const view=await render(<IdentityContinuation sightingId={sightingId} draft={null} locale="en" dependencies={deps}/>);
+ await view.findByRole('button',{name:'Cat 0'});
+ for(let i=0;i<4;i++)await fireEvent.press(view.getByRole('button',{name:'Next cats'}));
+ await view.findByRole('button',{name:'Cat 24'});
+ await view.rerender(<IdentityContinuation sightingId={sightingId} draft={null} locale="en" dependencies={{...deps}}/>);
+ expect(view.getByRole('button',{name:'Cat 24'})).toBeTruthy();expect(list).toHaveBeenCalledTimes(2);
 });

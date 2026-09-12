@@ -50,6 +50,7 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
 }>) {
   const copy = getReportCopy(locale);
   const validSightingId = isOpaqueReportId(sightingId);
+  const [showDetails,setShowDetails]=useState(false);
   const [state, setState] = useState<ReceiptState | null>(null);
   const [continuationDraft, setContinuationDraft] = useState<StoredDraft | null>(null);
   const [ownerSubject, setOwnerSubject] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
     }
   };
 
-  return <ScreenScaffold subtitle={copy.receiptSubtitle} title={copy.receiptTitle}>
+  return <ScreenScaffold compact title={copy.receiptTitle} header={<View/>}>
     {state === null ? <View accessibilityLiveRegion="polite" style={styles.loading}><ActivityIndicator color={colors.leaf} /><Text style={styles.notice}>{copy.receiptLoading}</Text></View> : null}
     {state !== null && state.status === null ? <View style={styles.section}><Text accessibilityRole="header" style={styles.stateTitle}>{copy.routeUnavailableTitle}</Text><Text accessibilityLiveRegion="polite" style={styles.notice}>{state.source === 'unavailable' ? copy.receiptRemoteUnavailable : copy.receiptUnavailable}</Text><ReceiptActions copy={copy} navigate={dependencies.navigate} /></View> : null}
     {state?.status ? <View style={styles.section} accessibilityLiveRegion="polite">
@@ -202,8 +203,11 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
       {state.source === 'local_recovery' ? <Text style={styles.notice}>{copy.receiptLocalRecovery}</Text> : null}
       {retryError ? <Text accessibilityRole="alert" style={styles.notice}>{locale === 'zh-CN' ? '暂时无法继续，请重试。报告和已保存的选择仍保留。' : 'Could not continue. Retry; your report and saved choice are preserved.'}</Text> : null}
       <View style={styles.statusList}>
+        <Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'报告详情':'Report details'} accessibilityState={{expanded:showDetails}} onPress={()=>setShowDetails(value=>!value)} style={{minHeight:44,justifyContent:'center'}}><Text style={{fontSize:13,color:colors.actionPrimary}}>{locale==='zh-CN'?(showDetails?'收起详情':'报告详情'):(showDetails?'Hide details':'Report details')}</Text></Pressable>
+        {showDetails?<View style={{gap:4}}>
         <Text style={styles.notice}>{copy.receiptReference(sightingId)}</Text>
         {state.submittedAt ? <Text style={styles.notice}>{copy.receiptSubmittedAt(new Date(state.submittedAt).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG'))}</Text> : null}
+</View>:null}
         <Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text>
         <Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text>
         <Text style={styles.status}>{copy.identityStateLabel(state.status.identityState)}</Text>
@@ -238,8 +242,8 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
 function ReceiptActions({ copy, navigate }: Readonly<{ copy: ReturnType<typeof getReportCopy>; navigate(path: string): void }>) {
   return <View style={styles.actions}>
     <Pressable accessibilityLabel={copy.viewReportsAction} accessibilityRole="button" onPress={() => navigate('/report/my-reports')} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><Text style={styles.primaryActionText}>{copy.viewReportsAction}</Text></Pressable>
-    <Pressable accessibilityLabel={copy.backToReportAction} accessibilityRole="button" onPress={() => navigate('/report')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.backToReportAction}</Text></Pressable>
-    <Pressable accessibilityLabel={copy.browseNearbyAction} accessibilityRole="button" onPress={() => navigate('/')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.browseNearbyAction}</Text></Pressable>
+    <View style={{flexDirection:'row',gap:8}}><View style={{flex:1}}><Pressable accessibilityLabel={copy.backToReportAction} accessibilityRole="button" onPress={() => navigate('/report')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.backToReportAction}</Text></Pressable></View><View style={{flex:1}}>
+    <Pressable accessibilityLabel={copy.browseNearbyAction} accessibilityRole="button" onPress={() => navigate('/')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.browseNearbyAction}</Text></Pressable></View></View>
   </View>;
 }
 
@@ -249,11 +253,11 @@ const styles = StyleSheet.create({
   stateTitle: { color: colors.ink, fontSize: 19, lineHeight: 25, fontWeight: '800' },
   notice: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   statusList: { gap: 8, paddingVertical: 4 },
-  status: { color: colors.ink, fontSize: 16, lineHeight: 23, fontWeight: '700' },
+  status: { color: colors.ink, fontSize: 14, lineHeight: 20, fontWeight: '500' },
   actions: { gap: 8, marginTop: 4 },
   primaryAction: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },
-  primaryActionText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
+  primaryActionText: { color: colors.surface, fontSize: 14, fontWeight: '600' },
   secondaryAction: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.actionPrimary },
-  secondaryActionText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' },
+  secondaryActionText: { color: colors.actionPrimary, fontSize: 14, fontWeight: '600' },
   pressed: { opacity: 0.76 },
 });

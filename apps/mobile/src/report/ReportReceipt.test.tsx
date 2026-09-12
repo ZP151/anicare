@@ -63,6 +63,7 @@ describe('ReportReceipt', () => {
     const view = await render(<ReportReceipt sightingId={sightingId} dependencies={dependencies()} locale="en" />);
 
     await waitFor(() => expect(view.getByText('Report received')).toBeTruthy());
+    await fireEvent.press(view.getByRole('button',{name:'Report details'}));
     expect(view.getByText(`Report ID: ${sightingId}`)).toBeTruthy();
     expect(view.getByText(/Submitted at /)).toBeTruthy();
     expect(view.getByText('Text-only report')).toBeTruthy();
@@ -209,7 +210,9 @@ describe('ReportReceipt', () => {
       })],
     })} locale="en" />);
 
-    await waitFor(() => expect(view.getByText(`Report ID: ${sightingId}`)).toBeTruthy());
+    await view.findByRole('button',{name:'Report details'});
+    await fireEvent.press(view.getByRole('button',{name:'Report details'}));
+    expect(view.getByText(`Report ID: ${sightingId}`)).toBeTruthy();
     expect(view.getByText('Submission committed on this device')).toBeTruthy();
     expect(view.getByText(/Submitted at /)).toBeTruthy();
     expect(view.getByText('Remote status is unavailable. Showing status saved on this device.')).toBeTruthy();

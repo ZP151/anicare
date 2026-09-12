@@ -10,7 +10,7 @@ import { CatMapMarker } from './CatMapMarker';
 import { clusterCatActivity } from './map-marker-clusters';
 import { SG_COMMUNITIES } from './singapore-communities';
 
-import {singaporeOverviewCoordinates, SINGAPORE_CAMERA_ZOOM_RANGE} from './singapore-camera';
+import {singaporeOverviewRegion, SINGAPORE_CAMERA_ZOOM_RANGE} from './singapore-camera';
 
 const MAP_READINESS_TIMEOUT_MS = 8_000;
 const OFFICIAL_SINGAPORE_BOUNDARY=SG_COMMUNITIES.filter(area=>!area.parentId).flatMap(area=>area.polygons.flatMap(polygon=>polygon[0]?.map(point=>({latitude:point[1]!,longitude:point[0]!}))??[]));
@@ -22,16 +22,24 @@ export function NearbyMap({
 }: NearbyMapProps) {
   const mapRef=useRef<MapView>(null);
   const selected=areas.find(area=>area.id===selectedAreaId);
+  const [mapSize,setMapSize]=useState({width:0,height:0});
   const [viewport, setViewport] = useState<Region>(PUBLIC_MAP_REGION);
   const catMarkers = clusterCatActivity(areas, { selectedAreaId, viewport });
   const mapEnabled = Platform.OS === 'ios' || androidGoogleMapsConfigured;
   const [providerUnavailable, setProviderUnavailable] = useState(false);
   const [settledPortraits, setSettledPortraits] = useState<Record<string, string>>({});
   const [reduceMotion, setReduceMotion] = useState(false);
-  const mapReady = useRef(false),fittedRequest=useRef<number|null>(null);
+  const mapReady = useRef(false),fittedRequest=useRef<string|null>(null);
   const readinessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearReadinessTimer = useCallback(() => {if (readinessTimer.current === null) return;clearTimeout(readinessTimer.current);readinessTimer.current = null;}, []);
-  const fitOfficialSingapore=useCallback((request:number)=>{if(!mapReady.current||!fitLayoutReady||fittedRequest.current===request||(request===0&&(selected||focusPoint)))return;fittedRequest.current=request;mapRef.current?.fitToCoordinates(singaporeOverviewCoordinates(OFFICIAL_SINGAPORE_BOUNDARY),{edgePadding:fitEdgePadding,animated:!reduceMotion});},[fitEdgePadding,fitLayoutReady,focusPoint,reduceMotion,selected]);
+  const fitOfficialSingapore=useCallback((request:number)=>{
+    const fitKey=`${request}:${mapSize.width}:${mapSize.height}`;
+    if(!mapReady.current||!fitLayoutReady||fittedRequest.current===fitKey||selected||focusPoint)return;
+    const region=singaporeOverviewRegion(OFFICIAL_SINGAPORE_BOUNDARY,mapSize,fitEdgePadding);
+    if(!region)return;
+    fittedRequest.current=fitKey;
+    mapRef.current?.animateToRegion(region,reduceMotion?0:350);
+  },[fitEdgePadding,fitLayoutReady,focusPoint,mapSize,reduceMotion,selected]);
   const markMapReady = useCallback(() => {mapReady.current = true;clearReadinessTimer();fitOfficialSingapore(fitSingaporeRequest);}, [clearReadinessTimer,fitOfficialSingapore,fitSingaporeRequest]);
 
   useEffect(() => {
@@ -51,7 +59,7 @@ export function NearbyMap({
   useEffect(()=>{void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);const subscription=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduceMotion);return()=>subscription.remove();},[]);
   useEffect(()=>{setSettledPortraits({});},[publicPortraits]);
   if (!mapEnabled || providerUnavailable) return <UnavailableMap fallbackLabel={fallbackLabel} />;
-  return <View accessibilityLabel="Privacy-safe neighbourhood map" style={styles.frame}><MapView ref={mapRef} customMapStyle={Platform.OS === 'android' ? PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({...entry,stylers: entry.stylers.map((styler) => ({ ...styler }))})) : undefined} initialRegion={PUBLIC_MAP_REGION} mapPadding={fitEdgePadding} maxZoomLevel={19} cameraZoomRange={Platform.OS === 'ios' ? SINGAPORE_CAMERA_ZOOM_RANGE : undefined} onMapLoaded={Platform.OS === 'android' ? markMapReady : undefined} onMapReady={markMapReady} onRegionChangeComplete={setViewport} pitchEnabled={false} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined} rotateEnabled={false} showsBuildings showsCompass={false} showsIndoors={false} showsMyLocationButton={false} showsPointsOfInterests showsTraffic={false} showsUserLocation={false} style={StyleSheet.absoluteFill} toolbarEnabled={false}>
+  return <View accessibilityLabel="Privacy-safe neighbourhood map" style={styles.frame}><MapView ref={mapRef} customMapStyle={Platform.OS === 'android' ? PUBLIC_GOOGLE_MAP_STYLE.map((entry) => ({...entry,stylers: entry.stylers.map((styler) => ({ ...styler }))})) : undefined} initialRegion={PUBLIC_MAP_REGION} mapPadding={{top:0,right:0,bottom:0,left:0}} appleLogoInsets={{top:0,right:0,bottom:fitEdgePadding.bottom,left:16}} legalLabelInsets={{top:0,right:16,bottom:fitEdgePadding.bottom,left:0}} onLayout={event=>{const {width,height}=event.nativeEvent.layout;setMapSize(old=>old.width===width&&old.height===height?old:{width,height});}} maxZoomLevel={19} cameraZoomRange={Platform.OS === 'ios' ? SINGAPORE_CAMERA_ZOOM_RANGE : undefined} onMapLoaded={Platform.OS === 'android' ? markMapReady : undefined} onMapReady={markMapReady} onRegionChangeComplete={setViewport} pitchEnabled={false} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined} rotateEnabled={false} showsBuildings showsCompass={false} showsIndoors={false} showsMyLocationButton={false} showsPointsOfInterests showsTraffic={false} showsUserLocation={false} style={StyleSheet.absoluteFill} toolbarEnabled={false}>
     {focusPoint ? <Marker coordinate={focusPoint} title={focusPoint.title} pinColor={focusPoint.isUser ? '#3478F6' : '#E36A45'} /> : null}
     {selected?.polygons.map((polygon,index)=><Polygon key={`${selected.id}-${index}`} coordinates={polygon[0]!.map(point=>({latitude:point[1]!,longitude:point[0]!}))} holes={polygon.slice(1).map(ring=>ring.map(point=>({latitude:point[1]!,longitude:point[0]!})))} strokeColor="#2465D8" fillColor="rgba(36,101,216,0.10)" strokeWidth={2}/>) }
     {catMarkers.map(marker=>{const portraitUri=publicPortraits?.get(marker.representativeCatId)?.portraitUri ?? null;return <Marker key={`${marker.id}|${portraitUri ?? ''}`} coordinate={marker.coordinate} onPress={()=>marker.areaIds.length===1?onSelectArea?.(marker.areaIds[0]!):onSelectAreas?.(marker.areaIds)} tracksViewChanges={Boolean(portraitUri) && settledPortraits[marker.id]!==portraitUri}><CatMapMarker portraitUri={portraitUri} count={marker.catIds.length} selected={marker.areaIds.includes(selectedAreaId ?? '')} onSnapshotSettled={()=>{if(portraitUri)setSettledPortraits(old=>old[marker.id]===portraitUri?old:{...old,[marker.id]:portraitUri});}}/></Marker>;})}

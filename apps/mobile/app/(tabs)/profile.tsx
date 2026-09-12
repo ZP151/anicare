@@ -93,7 +93,7 @@ export default function ProfileScreen() {
         : await client.from('user_profiles').insert({ id: auth.owner, public_name: cn ? '社区贡献者' : 'Community contributor', locale, avatar_key: nextAvatar });
       if (!await current()) return;
       if (result.error) throw result.error;
-      setAvatarKey(nextAvatar); setAvatarPath(null); setAvatarUri(null); setShowAvatar(false);
+      setNameExists(true); setAvatarKey(nextAvatar); setAvatarPath(null); setAvatarUri(null); setShowAvatar(false);
       setStatus(cn ? '头像已保存。' : 'Avatar saved.');
     } catch { if (await current()) setStatus(cn ? '无法保存头像，请重试。' : 'Could not save your avatar. Try again.'); }
     finally { if (await current()) setSavingAvatar(false); }
@@ -129,7 +129,7 @@ export default function ProfileScreen() {
       const path = typeof profile?.data?.avatar_object_path === 'string' ? profile.data.avatar_object_path : null;
       setAvatarPath(path);
       if (path && client) { const signed = await client.storage.from('profile-avatars').createSignedUrl(path, 60); if (!await current()) return; setAvatarUri(!signed.error ? signed.data?.signedUrl ?? null : null); }
-      setPendingAvatar(null); setShowAvatar(false); setStatus(cn ? '照片头像已保存。' : 'Photo avatar saved.');
+      setNameExists(true); setPendingAvatar(null); setShowAvatar(false); setStatus(cn ? '照片头像已保存。' : 'Photo avatar saved.');
     } catch { if (await current()) setStatus(cn ? '无法保存照片头像，请重试。' : 'Could not save your photo avatar. Try again.'); }
     finally { if (await current()) setSavingAvatar(false); }
   }
@@ -313,14 +313,13 @@ export default function ProfileScreen() {
       <View style={styles.account}>
         <View style={styles.avatar}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath ? avatarUri : null} size={72} /></View>
         <View style={styles.accountCopy}>
-        {auth.owner&&publicName?<Text style={styles.label}>{publicName}</Text>:null}
+        <View style={{flexDirection:'row',alignItems:'center'}}>{auth.owner&&publicName?<Text style={[styles.label,{flexShrink:1}]}>{publicName}</Text>:null}{auth.owner&&!showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'编辑个人资料':'Edit profile'} onPress={()=>void editName()} style={styles.close}><AppIcon name="edit" size={17} color={colors.muted}/></Pressable>:null}</View>
         <Text accessibilityLiveRegion="polite" style={styles.label}>{auth.owner === undefined ? (auth.failed ? (cn?'账户状态不可用':'Account state unavailable') : (cn?'正在读取账户…':'Loading account…')) : auth.owner ? (cn?'已登录':'Signed in') : (cn?'匿名浏览':'Browsing anonymously')}</Text>
         {auth.owner ? <Text style={styles.value}>{adult === null ? (cn?'贡献者状态尚未确认':'Contributor state not confirmed') : adult ? (cn?'已确认年满 18 岁':'18+ contributor confirmed') : (cn?'需要确认年满 18 岁':'18+ confirmation required')}</Text> : <Text style={styles.value}>{cn ? '一起记录社区猫的日常' : 'A little care, shared with your community.'}</Text>}
         {auth.owner === null && !showSignIn ? <Pressable accessibilityRole="button" onPress={() => setShowSignIn(true)} style={styles.signIn}><Text style={styles.linkText}>{cn ? '登录' : 'Sign in'}</Text><AppIcon name="chevron" size={13} color={colors.actionPrimary} /></Pressable> : null}
         {auth.failed ? <Pressable accessibilityRole="button" style={styles.choice} onPress={()=>{void auth.reload();}}><Text>{cn?'重试账户状态':'Retry account state'}</Text></Pressable> : null}
         </View>
       </View>
-      {auth.owner&&!showSettings?<Pressable accessibilityRole="button" onPress={()=>setShowSettings(true)} style={[styles.choice,{alignSelf:'flex-start',minHeight:36,paddingVertical:4}]}><Text style={{fontSize:13,color:colors.ink}}>{cn?'编辑个人资料':'Edit profile'}</Text></Pressable>:null}
       {returnDraftId ? <View style={styles.card}>
         <Text style={styles.label}>{t('profile.reportReturnTitle')}</Text>
         <Text style={styles.value}>{t('profile.reportReturnCopy')}</Text>
@@ -359,9 +358,19 @@ export default function ProfileScreen() {
         </View>
         {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
       </View></ScreenScaffold></Modal>
+        {editingName ? <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={() => {if(!savingAvatar&&!savingName){setEditingName(false);setShowAvatar(false);setPendingAvatar(null);}}}><ScreenScaffold compact avoidKeyboard title={showAvatar?(cn?'选择头像':'Choose avatar'):(cn?'编辑个人资料':'Edit profile')} nativeAppearance><View style={styles.nameForm}>
+          <Pressable accessibilityRole="button" accessibilityLabel={cn?'关闭编辑':'Close edit'} disabled={savingAvatar||savingName} onPress={() => {setEditingName(false);setShowAvatar(false);setPendingAvatar(null);}} style={styles.close}><AppIcon name="close" color={colors.muted} size={18} /></Pressable>
+          {showAvatar ? <><Pressable accessibilityRole="button" accessibilityLabel={cn?'返回编辑资料':'Back to edit profile'} disabled={savingAvatar} onPress={()=>{setShowAvatar(false);setPendingAvatar(null);}} style={styles.close}><AppIcon name="back" color={colors.ink}/></Pressable><View style={styles.avatarChoices}><View style={styles.avatarPhotoActions}><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void chooseAvatar('camera'); }} style={styles.choice}><Text style={styles.choiceText}>{cn ? '拍照' : 'Take photo'}</Text></Pressable><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void chooseAvatar('library'); }} style={styles.choice}><Text style={styles.choiceText}>{cn ? '从相册选择' : 'Choose from library'}</Text></Pressable></View>{pendingAvatar ? <View style={styles.photoReview}><ProfileAvatar avatarKey={avatarKey} photoUri={pendingAvatar.uri} size={128}/><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void savePhotoAvatar(); }} style={styles.primary}><Text style={styles.primaryText}>{savingAvatar ? (cn?'正在保存…':'Saving…') : (cn?'保存照片头像':'Save photo avatar')}</Text></Pressable><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={()=>setPendingAvatar(null)} style={styles.choice}><Text style={styles.choiceText}>{cn?'取消':'Cancel'}</Text></Pressable></View> : null}<View style={styles.avatarGrid}>{PROFILE_AVATAR_KEYS.map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: avatarKey === key, disabled: savingAvatar }} disabled={savingAvatar} onPress={() => { void saveAvatar(key); }} style={[styles.avatarTile, avatarKey === key && styles.selected]}><Text style={styles.avatarOptionEmoji}>{PROFILE_AVATAR_EMOJI[key]}</Text><Text style={styles.tileLabel}>{key === 'person' ? (cn ? '默认' : 'Default') : key.startsWith('human-') ? key.slice(-2) : key}</Text></Pressable>)}</View>{status?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}</View></> : <>
+          <Pressable accessibilityRole="button" accessibilityLabel={cn?'更换头像':'Change avatar'} disabled={nameLoading||savingName} onPress={()=>{setStatus(null);setShowAvatar(true);}} style={{alignSelf:'center',alignItems:'center',gap:8,minHeight:100}}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath?avatarUri:null} size={80}/><Text style={{fontSize:13,color:colors.actionPrimary}}>{cn?'更换头像':'Change avatar'}</Text></Pressable>
+          <Text style={{fontSize:13,color:colors.muted}}>{cn?'昵称':'Display name'}</Text>
+          <TextInput accessibilityLabel={cn ? '公开昵称' : 'Public display name'} value={nameValue} onChangeText={setNameValue} editable={!nameLoading && !savingName} maxLength={120} style={styles.input} placeholder={cn ? '你的公开昵称' : 'Your public display name'} placeholderTextColor={colors.muted} />
+          <Text style={styles.value}>{cn ? '这是公开昵称，请勿填写手机号或住址。' : 'This name may be public. Leave out contact details.'}</Text>
+          <Pressable accessibilityRole="button" disabled={nameLoading || savingName} onPress={() => { void saveName(); }} style={styles.primary}><Text style={styles.primaryText}>{nameLoading ? (cn ? '正在读取…' : 'Loading…') : savingName ? (cn ? '正在保存…' : 'Saving…') : (cn ? '保存昵称' : 'Save name')}</Text></Pressable>
+          {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}</>}
+        </View></ScreenScaffold></Modal> : null}
       {!showSettings?<>
        <View style={{flexDirection:'row',paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:colors.line}}>{([
-        ['reports',cn?'报告':'Reports','/report'],['cat',cn?'关注':'Following','/following'],['reports',cn?'草稿':'Drafts','/community/drafts']
+        ['cat',cn?'关注':'Following','/following'],['reports',cn?'草稿':'Drafts','/community/drafts']
        ] as const).map(([icon,label,path])=><Pressable key={path} accessibilityRole="button" onPress={()=>router.push(path as never)} style={{flex:1,alignItems:'center',justifyContent:'center',minHeight:56,gap:6}}><AppIcon name={icon} size={20} color={colors.ink}/><Text style={{fontSize:12,color:colors.ink}}>{label}</Text></Pressable>)}</View>
        {auth.owner&&adult===false?<Pressable accessibilityRole="button" onPress={confirmAdultContributor} style={styles.choice}><Text style={styles.choiceText}>{cn?'我确认已年满 18 岁':'I confirm I am 18 or older'}</Text></Pressable>:null}
        {status&&!showSignIn?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}
@@ -387,16 +396,8 @@ export default function ProfileScreen() {
         </Pressable>
       </View> : null}
       {auth.owner ? <SettingsGroup title={cn ? '账户' : 'Account'}>
-        <SettingsRow title={cn ? '头像' : 'Avatar'} icon="account" onPress={() => setShowAvatar(true)} />
-        <Modal visible={showAvatar} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setPendingAvatar(null); setShowAvatar(false); }}><ScreenScaffold title={cn ? '选择头像' : 'Choose avatar'} nativeAppearance><View style={styles.avatarChoices}><View style={styles.avatarPhotoActions}><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void chooseAvatar('camera'); }} style={styles.choice}><Text style={styles.choiceText}>{cn ? '拍照' : 'Take photo'}</Text></Pressable><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void chooseAvatar('library'); }} style={styles.choice}><Text style={styles.choiceText}>{cn ? '从相册选择' : 'Choose from library'}</Text></Pressable></View>{pendingAvatar ? <View style={styles.photoReview}><ProfileAvatar avatarKey={avatarKey} photoUri={pendingAvatar.uri} size={128}/><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={() => { void savePhotoAvatar(); }} style={styles.primary}><Text style={styles.primaryText}>{savingAvatar ? (cn?'正在保存…':'Saving…') : (cn?'保存照片头像':'Save photo avatar')}</Text></Pressable><Pressable accessibilityRole="button" disabled={savingAvatar} onPress={()=>setPendingAvatar(null)} style={styles.choice}><Text style={styles.choiceText}>{cn?'取消':'Cancel'}</Text></Pressable></View> : null}<View style={styles.avatarGrid}>{PROFILE_AVATAR_KEYS.map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: avatarKey === key, disabled: savingAvatar }} disabled={savingAvatar} onPress={() => { void saveAvatar(key); }} style={[styles.avatarTile, avatarKey === key && styles.selected]}><Text style={styles.avatarOptionEmoji}>{PROFILE_AVATAR_EMOJI[key]}</Text><Text style={styles.tileLabel}>{key === 'person' ? (cn ? '默认' : 'Default') : key.startsWith('human-') ? key.slice(-2) : key}</Text></Pressable>)}</View>{status?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}</View></ScreenScaffold></Modal>
-        <SettingsRow title={cn ? '昵称' : 'Display name'} icon="account" value={!editingName && nameValue ? nameValue : undefined} onPress={() => { void editName(); }} />
-        {editingName ? <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditingName(false)}><ScreenScaffold title={cn?'编辑个人资料':'Edit profile'} nativeAppearance><View style={styles.nameForm}>
-          <Pressable accessibilityRole="button" accessibilityLabel={cn?'关闭编辑':'Close edit'} onPress={() => setEditingName(false)} style={styles.close}><AppIcon name="close" color={colors.muted} size={18} /></Pressable>
-          <TextInput accessibilityLabel={cn ? '公开昵称' : 'Public display name'} value={nameValue} onChangeText={setNameValue} editable={!nameLoading && !savingName} maxLength={120} style={styles.input} placeholder={cn ? '你的公开昵称' : 'Your public display name'} placeholderTextColor={colors.muted} />
-          <Text style={styles.value}>{cn ? '这是公开昵称，请勿填写手机号或住址。' : 'This name may be public. Leave out contact details.'}</Text>
-          <Pressable accessibilityRole="button" disabled={nameLoading || savingName} onPress={() => { void saveName(); }} style={styles.primary}><Text style={styles.primaryText}>{nameLoading ? (cn ? '正在读取…' : 'Loading…') : savingName ? (cn ? '正在保存…' : 'Saving…') : (cn ? '保存昵称' : 'Save name')}</Text></Pressable>
-          {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
-        </View></ScreenScaffold></Modal> : null}
+
+
         <SettingsRow title={cn?'退出登录':'Sign out'} icon="signout" destructive last disabled={loggingOut} onPress={() => { void signOut(); }} />
       </SettingsGroup> : null}
       <Text style={styles.status}>Whisker Commons {appConfig.expo.version} ({appConfig.expo.ios.buildNumber})</Text>
