@@ -5,10 +5,15 @@ export async function readProviderSettings(
   request: typeof fetch=fetch,
 ): Promise<ProviderSettings> {
   if(!url||!key) throw new Error('provider_settings_unavailable');
-  const response=await request(`${url.replace(/\/$/,'')}/auth/v1/settings`,{headers:{apikey:key},signal:AbortSignal.timeout(8000)});
-  if(!response.ok) throw new Error('provider_settings_unavailable');
-  const settings=await response.json();
-  return {apple:settings?.external?.apple===true,google:settings?.external?.google===true};
+  // React Native's AbortSignal polyfill has no static timeout() method.
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),8000);
+  try{
+    const response=await request(`${url.replace(/\/$/,'')}/auth/v1/settings`,{headers:{apikey:key},signal:controller.signal});
+    if(!response.ok) throw new Error('provider_settings_unavailable');
+    const settings=await response.json();
+    return {apple:settings?.external?.apple===true,google:settings?.external?.google===true};
+  }finally{clearTimeout(timer);}
 }
 
 type AuthClient={auth:{exchangeCodeForSession(code:string):Promise<{error:unknown}>}};
