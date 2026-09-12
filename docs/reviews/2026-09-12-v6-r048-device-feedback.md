@@ -11,6 +11,14 @@
 
 ## 验证
 
-先新增边界构图、六图网格与 Edit Profile 回归，确认旧实现失败；修复后跑目标测试。补充 20 条 API 分页跨八格页不遗漏、变更 viewport 只重算一次等场景。本地完整 `pnpm verify` 通过：128 个移动端套件、1114 项测试，以及所有工作区类型检查、lint、测试与构建。独立审查复核通过，无剩余阻断项；云端原生包待构建核验。
+先新增边界构图、六图网格与 Edit Profile 回归，确认旧实现失败；修复后跑目标测试。补充 20 条 API 分页跨八格页不遗漏、变更 viewport 只重算一次等场景。本地完整 `pnpm verify` 通过：128 个移动端套件、1114 项测试，以及所有工作区类型检查、lint、测试与构建。独立审查复核通过，无剩余阻断项；云端原生构建与包核验也已通过。
 
 这次不以截图或单元测试替代真实 iPhone 手势验收。个人邻里编辑、独立照片分页 API、评论信息层级与后台媒体清理调度继续按 R4 / v6 的既有计划推进，不称为已完成。
+
+## 交付
+
+- 源码 `d300d274cb8ce0467f2e3ee0d3e850b927894c37`；[精确源码 CI](https://github.com/ZP151/anicare/actions/runs/34698257588) 与 [原生构建](https://github.com/ZP151/anicare/actions/runs/34698257967) 成功。
+- [0.4.8（16）IPA](C:/Users/15492/Downloads/WhiskerCommons-0.4.8-build16.ipa)，21,815,022 字节。
+- SHA256 `9e63f65aaba9bcecf2bd5ff643721a21badbaeb461a1b8ab1e97c9ad9306da4c`。
+- 构建证明、严格 manifest / 三文件 allowlist、大小和校验文件、精确源码 pnpm / Pod 锁文件、包内 0.4.8（16）、arm64 主程序、非空 AppIcon 和相机/图库/定位权限声明已核对。
+- 沿用原 Sideloadly 设置覆盖安装；不卸载或清除草稿。本轮四项真机观感/交互仍待用户验收，见 [测试清单](../ios-next-device-test.md)。
