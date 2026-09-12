@@ -42,4 +42,15 @@ pg_net 扩展内部队列由 `supabase_admin` 管理，普通部署角色无法�
 
 [CI 34719719151](https://github.com/ZP151/anicare/actions/runs/34719719151) 全部成功。首次SQL和数据库lint已通过，但本地Edge容器启动退出135；仅重跑失败作业后通过，没有降低检查。凭据首次提升因Windows工作区六个文件的换行与Git中LF字节不同而拒绝；恢复相同逻辑的规范LF字节后重新通过。未修改已部署逻辑。
 
-原生构建与最终安装包校验待完成。
+## 安装包交付
+
+最终源码 `c96b273587751952b80100585d9039f3fcf83fef`；最终两条 CI [34720165796](https://github.com/ZP151/anicare/actions/runs/34720165796) / [34720165339](https://github.com/ZP151/anicare/actions/runs/34720165339) 均成功。原生 [34720166183](https://github.com/ZP151/anicare/actions/runs/34720166183) 成功，制品 `10305808523` 已下载。
+
+已验证 GitHub 来源证明、精确 manifest、三文件白名单、SHA-256/大小、对应源码的 pnpm/Pod 锁文件、包内版本0.4.13（21）、bundle `sg.animalhelper.app`、arm64可执行文件、非空图标和相机/相册/定位权限声明。
+
+- [交付IPA](C:/Users/15492/Downloads/WhiskerCommons-0.4.13-build21.ipa)
+- 大小：21926322字节。
+- SHA-256：`22dee489d674458c856da4481ce66ee331686fa0b769676501a3bf1366b82dbb`。
+- 交付副本使用不覆盖写入，与来源制品哈希一致。
+
+0.4.11、0.4.12和本版真机视觉/触控验收依用户要求继续合并后测；不把工程完成写成用户体验验收通过。
