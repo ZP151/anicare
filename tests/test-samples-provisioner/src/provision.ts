@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import { ensurePortrait } from './portrait.js';
 import { samples, legacyEnglishNames, samplePlaces } from './fixtures.js';
 import { COMMUNITY_TEST_POSTS } from '../../../apps/mobile/src/community/test-samples.js';
-import { ensureCommunitySample } from './community.js';
+import { ensureCommunitySample, readSampleExtras } from './community.js';
 import { canUpgradeNoPhotoPortrait } from './fixture-upgrade.js';
 import { validateCommunityMediaVariants, type CommunityMediaVariant } from './media.js';
 import { retrySampleRead } from './read-retry.js';
@@ -226,11 +226,10 @@ async function main() {
       visiblePostIds.push(post.id);
       if (replies.some(reply=>reply.replyId===post.reply.id && reply.body===post.reply.body.en)) visibleReplyIds.push(post.reply.id);
     }
-    const extras = await retrySampleRead(signal=>anonymous.rpc('get_public_community_post_extras', {p_post_ids: visiblePostIds}).abortSignal(signal));
-    if (extras.error || !Array.isArray(extras.data)) throw new Error('test_sample_community_media_public_read_failed');
+    const extras = await readSampleExtras(visiblePostIds,ids=>retrySampleRead(signal=>anonymous.rpc('get_public_community_post_extras', {p_post_ids: ids}).abortSignal(signal)));
     for (const fixture of mediaFixtures.filter(candidate => visiblePostIds.includes(candidate.post.id))) {
       const sequence = mediaFixtures.findIndex(candidate => candidate.fixtureKey === fixture.fixtureKey && candidate.position === fixture.position);
-      const mediaId = fixtureMediaId(sequence); const extra = extras.data.find((row: {postId?: unknown}) => row.postId === fixture.post.id) as {media?: Array<{mediaId?: unknown}>} | undefined;
+      const mediaId = fixtureMediaId(sequence); const extra = extras.find((row: {postId?: unknown}) => row.postId === fixture.post.id) as {media?: Array<{mediaId?: unknown}>} | undefined;
       if (!extra || !Array.isArray(extra.media) || extra.media[fixture.position]?.mediaId !== mediaId) throw new Error('test_sample_community_media_public_read_failed');
       const response = await retrySampleRead(async signal=>{
         const received=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey},signal});
