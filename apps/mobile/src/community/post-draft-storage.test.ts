@@ -62,3 +62,13 @@ it('reopens only the matching pending attempt after a definitive expiry rejectio
  expect(reopened).toMatchObject({phase:'editing',body:'Keep caption',requestId:other});expect(reopened.images[0]?.mediaId).toBeUndefined();
  expect((await store.readImage(owner,id,image.id)).display).toEqual(display);sqlite.close();
 });
+
+it('batch management cannot delete another owner or an editing row that became publishing',async()=>{
+ const {store,sqlite}=setup();let saved=await store.save(owner,{...createSocialDraft(owner,id,rid,now),body:'Ready',communitySlug:'sg-clsz05'});
+ await expect(store.removeEditing(other,id)).rejects.toThrow('social_draft_conflict');
+ saved=await store.save(owner,freezeSocialDraft(saved,now));
+ await expect(store.removeEditing(owner,id)).rejects.toThrow('social_draft_conflict');
+ expect((await store.read(owner,id))?.phase).toBe('publishing');
+ const second=await store.save(owner,createSocialDraft(owner,other,rid,now));await store.removeEditing(owner,second.id);
+ expect(await store.read(owner,second.id)).toBeNull();sqlite.close();
+});

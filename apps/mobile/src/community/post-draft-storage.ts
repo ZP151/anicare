@@ -77,6 +77,7 @@ export function createSocialDraftStore(getDatabase:()=>Promise<SocialDatabase>,s
    return {imageId,thumb:new Uint8Array(row.thumb),display:new Uint8Array(row.display)};
   },
   async remove(owner:string,id:string):Promise<void>{identity(owner,id);const db=await getDatabase();await db.runAsync('DELETE FROM social_drafts WHERE owner_id=? AND id=?',owner,id);},
+  async removeEditing(owner:string,id:string):Promise<void>{identity(owner,id);const db=await getDatabase();const result=await db.runAsync("DELETE FROM social_drafts WHERE owner_id=? AND id=? AND json_extract(payload_json,'$.phase')='editing'",owner,id);if(result.changes!==1)throw new Error('social_draft_conflict');},
   async reopenExpired(owner:string,id:string,requestId:string,newId:()=>string):Promise<SocialDraft>{
    identity(owner,id);const db=await getDatabase();let result:SocialDraft|undefined;
    await db.withExclusiveTransactionAsync(async tx=>{

@@ -76,7 +76,7 @@ describe('ReportWizard', () => {
     expect(view.queryByText('Private note')).toBeNull();
   });
 
-  it('exposes the active wizard stage as a five-step progress indicator', async () => {
+  it('exposes the active wizard stage as a four-step progress indicator with legacy visibility recovery', async () => {
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="safety" />);
 
     await waitFor(() => expect(view.getByRole('header', { name: 'Visibility' })).toBeTruthy());
@@ -85,8 +85,8 @@ describe('ReportWizard', () => {
     expect(stages.props.accessibilityValue).toEqual({
       min: 1,
       now: 3,
-      max: 5,
-      text: 'Step 3 of 5 · Visibility',
+      max: 4,
+      text: 'Step 3 of 4 · Area',
     });
     await view.unmount();
   });
@@ -114,7 +114,7 @@ describe('ReportWizard', () => {
       saveDraft, requestDeviceLocation,
       loadDraft: async () => draft({ report: { ...draft().report!, step: 'area', condition: null, areaSelectionMode: 'manual_required' } }),
     })} AreaPicker={ManualAreaPicker as never} />);
-    await waitFor(() => expect(view.getByRole('header', { name: 'Area' })).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('header', { name: 'Location & sharing' })).toBeTruthy());
     expect(view.queryByRole('button', { name: 'Use device location once' })).toBeNull();
     expect(requestDeviceLocation).not.toHaveBeenCalled();
     expect(view.getByRole('button', { name: 'Tap broad Singapore map' })).toBeTruthy();
@@ -122,7 +122,7 @@ describe('ReportWizard', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(view.getByRole('header', { name: 'Details' })).toBeTruthy());
     expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
-      report: expect.objectContaining({ step: 'details', manualPublicCellId: '89652636d87ffff' }),
+      report: expect.objectContaining({ step: 'area', manualPublicCellId: '89652636d87ffff' }),
     }));
   });
 
@@ -130,10 +130,11 @@ describe('ReportWizard', () => {
     const saveDraft = jest.fn(async () => undefined);
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ saveDraft })} initialStage="details" />);
     await waitFor(() => expect(view.getByRole('header', { name: 'Details' })).toBeTruthy());
+    await fireEvent.press(view.getByLabelText('Appearance (optional)'));
     await fireEvent.press(view.getByRole('button', { name: 'Tabby coat' }));
     await fireEvent.press(view.getByRole('button', { name: 'White paws marking' }));
     await fireEvent.press(view.getByRole('button', { name: 'Appears well' }));
-    await fireEvent.press(view.getByRole('button', { name: 'Continue to visibility' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue to area' }));
     await waitFor(() => expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
       report: expect.objectContaining({ coat: ['tabby'], markings: ['white-paws'] }),
     })));
@@ -207,6 +208,7 @@ describe('ReportWizard', () => {
 
   it('keeps building text and spaces before a residence type is chosen', async () => {
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies()} initialStage="area" />);
+    await fireEvent.press(await view.findByLabelText('Add public landmark'));
     const input = view.getByLabelText('Building or project name');
     await fireEvent.changeText(input, 'The Clementi Mall ');
     expect(view.getByLabelText('Building or project name').props.value).toBe('The Clementi Mall ');
@@ -414,9 +416,9 @@ describe('ReportWizard', () => {
     await waitFor(() => expect(view.getByRole('header', { name: 'Review' })).toBeTruthy());
     expect(view.getByRole('button', { name: 'Edit photo' })).toBeTruthy();
     expect(view.getByRole('button', { name: 'Edit details' })).toBeTruthy();
-    expect(view.getByRole('button', { name: 'Edit visibility' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Edit visibility' })).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Edit area' }));
-    expect(view.getByRole('header', { name: 'Area' })).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Location & sharing' })).toBeTruthy();
     await view.unmount();
   });
 
@@ -450,7 +452,7 @@ describe('ReportWizard', () => {
     await waitFor(() => expect(saveDraft).toHaveBeenCalledWith(expect.objectContaining({
       id: draftId,
       risk: 'critical',
-      report: expect.objectContaining({ step: 'safety' }),
+      report: expect.objectContaining({ step: 'area' }),
     })));
     expect(JSON.stringify(saveDraft.mock.calls)).not.toMatch(/latitude|longitude/);
     expect(exit).toHaveBeenCalledTimes(1);
@@ -486,11 +488,12 @@ it('keeps status outside appearance and preserves changes through repeated step 
  const deps=dependencies();const view=await render(<ReportWizard draftId={draftId} initialStage="details" dependencies={deps}/>);
  await view.findByRole('header',{name:'Details'});
  const {within}=require('@testing-library/react-native');
+ await fireEvent.press(view.getByLabelText('Appearance (optional)'));
  expect(within(view.getByTestId('report-appearance')).queryByText('Appears well')).toBeNull();
  expect(within(view.getByTestId('report-condition')).getByText('Appears well')).toBeTruthy();
  await fireEvent.press(view.getByRole('button',{name:'Needs attention'}));
  for(let i=0;i<3;i++){
-  await fireEvent.press(view.getByRole('button',{name:'Continue to visibility'}));
+  await fireEvent.press(view.getByRole('button',{name:'Continue to area'}));
   await view.findByRole('header',{name:'Visibility'});
   await fireEvent.press(view.getByRole('button',{name:'Previous step'}));
   await view.findByRole('header',{name:'Details'});
@@ -528,4 +531,37 @@ it('stays unavailable if the owner changes while restoring a committed anchor',a
  const deps=dependencies({getSessionSubject:jest.fn().mockResolvedValueOnce('owner-a').mockResolvedValue('owner-b'),loadDraft:async()=>draft({report:undefined,ownerSubject:'owner-a',sightingId})});
  const view=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
  await view.findByRole('button',{name:'Back to Report'});expect(deps.navigate).not.toHaveBeenCalled();await view.unmount();
+});
+
+it('lets a review progress segment return to photos and retains the filled details',async()=>{
+ const saved=draft();saved.report={...saved.report!,step:'review',manualPublicCellId:'89652636d87ffff'};
+ const deps=dependencies({loadDraft:async()=>saved});const view=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
+ await view.findByRole('header',{name:'Review'});
+ await fireEvent.press(view.getByLabelText('Go to Photo'));
+ await view.findByRole('header',{name:'Photo'});
+ expect(deps.saveDraft).toHaveBeenCalledWith(expect.objectContaining({report:expect.objectContaining({condition:'appears_well',manualPublicCellId:'89652636d87ffff'})}));
+ expect(view.getByLabelText('Report stages').props.accessibilityValue.max).toBe(4);
+ await view.unmount();
+});
+
+it.each(['review','safety'] as const)('retains the furthest %s stage when editing earlier fields then reopening',async(step)=>{
+ let stored=draft();stored.report={...stored.report!,step,manualPublicCellId:'89652636d87ffff'};
+ const deps=dependencies({loadDraft:async()=>stored,saveDraft:async value=>{stored={...stored,...value};}});
+ const view=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
+ await view.findByLabelText('Go to Photo');await fireEvent.press(view.getByLabelText('Go to Photo'));
+ await view.findByRole('header',{name:'Photo'});await fireEvent.press(view.getByLabelText('Save and exit'));await view.unmount();
+ expect(stored.report?.step).toBe(step==='safety'?'area':'review');
+ const reopened=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
+ await reopened.findByRole('header',{name:step==='safety'?'Location & sharing':'Review'});await reopened.unmount();
+});
+it('does not unlock unseen progress steps',async()=>{
+ const v=await render(<ReportWizard draftId={draftId} dependencies={dependencies()}/>);await v.findByRole('header',{name:'Photo'});
+ expect(v.getByLabelText('Go to Review').props.accessibilityState.disabled).toBe(true);
+ await fireEvent.press(v.getByLabelText('Go to Review'));expect(v.getByRole('header',{name:'Photo'})).toBeTruthy();await v.unmount();
+});
+
+it('resumes map-origin details once the manually required area was chosen',async()=>{
+ const stored=draft();stored.report={...stored.report!,step:'area',condition:null,areaSelectionMode:'manual_required',manualPublicCellId:'89652636d87ffff'};
+ const v=await render(<ReportWizard draftId={draftId} dependencies={dependencies({loadDraft:async()=>stored})}/>);
+ await v.findByRole('header',{name:'Details'});await v.unmount();
 });

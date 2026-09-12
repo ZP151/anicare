@@ -1,4 +1,5 @@
 import {Gesture,GestureDetector,GestureHandlerRootView} from 'react-native-gesture-handler';
+import {ComposerPhotoEditor} from './ComposerPhotoEditor';
 import {ComposerPhotoGrid} from './ComposerPhotoGrid';
 import {movePhoto} from './photo-order';
 import {randomUUID} from 'expo-crypto';
@@ -15,7 +16,7 @@ import {requestDeviceLocation} from '../maps/device-location';
 import {createSocialDraft,editSocialDraft,isSocialId,type SocialDraft,type SocialDraftEdit} from './post-draft';
 import {socialDraftStore} from './post-draft-store';
 import type {SocialImageBytes} from './post-draft-storage';
-import {createSocialPreviewScope,selectSocialImages} from './post-images';
+import {createSocialPreviewScope,selectSocialImages,type PreparedSocialImage} from './post-images';
 import {publishSocialDraft} from './post-publisher';
 import {createSocialTransport} from './post-transport';
 
@@ -24,6 +25,9 @@ export function SocialComposer(){
  const params=useLocalSearchParams<{draftId?:string;communitySlug?:string;catId?:string}>();
  const [draft,setDraft]=useState<SocialDraft|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[picker,setPicker]=useState(false),[search,setSearch]=useState(''),[previews,setPreviews]=useState<Record<string,string>>({}),[locating,setLocating]=useState(false),[locationNotice,setLocationNotice]=useState('');
  const [dragging,setDragging]=useState(false);
+ const [photoMenu,setPhotoMenu]=useState<string|null>(null),[photoEditor,setPhotoEditor]=useState<{image:import('./post-draft').SocialImage;uri:string}|null>(null);
+ const editorScope=useRef(createSocialPreviewScope());
+ const closePhoto=()=>{setPhotoEditor(null);editorScope.current.dispose();editorScope.current=createSocialPreviewScope();};
  const scrollGesture=useMemo(()=>Gesture.Native().withTestId('composer-scroll'),[]);
  const locatedDraft=useRef<string|null>(null),manualArea=useRef(false),pendingArea=useRef<string|null>(null);
  const live=useRef<SocialDraft|null>(null),alive=useRef(true),operation=useRef(false),queue=useRef<Promise<unknown>>(Promise.resolve()),revision=useRef(new Map<string,number>()),scope=useRef(createSocialPreviewScope()),timer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -51,9 +55,9 @@ export function SocialComposer(){
   }
   if(alive.current&&context.current===snapshot.ownerId&&scope.current===next)setPreviews(urls);
  },[]);
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;if(timer.current)clearTimeout(timer.current);const last=live.current;if(last&&last.phase==='editing'&&!operation.current)void persist(last).catch(()=>{});scope.current.dispose();};},[persist]);
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false;if(timer.current)clearTimeout(timer.current);const last=live.current;if(last&&last.phase==='editing'&&!operation.current)void persist(last).catch(()=>{});scope.current.dispose();editorScope.current.dispose();};},[persist]);
  useEffect(()=>{
-  let active=true;pendingArea.current=null;manualArea.current=false;live.current=null;setDraft(null);setDragging(false);setPreviews({});setNotice('');scope.current.dispose();scope.current=createSocialPreviewScope();
+  let active=true;pendingArea.current=null;manualArea.current=false;live.current=null;setDraft(null);setDragging(false);setPhotoMenu(null);closePhoto();setPreviews({});setNotice('');scope.current.dispose();scope.current=createSocialPreviewScope();
   if(!auth.owner)return;
   const owner=auth.owner;
   void (async()=>{
@@ -65,7 +69,7 @@ export function SocialComposer(){
   return()=>{active=false;};
  },[auth.owner,params.draftId,params.communitySlug,params.catId]);
  useEffect(()=>{const sub=AppState.addEventListener('change',state=>{
-  if(state!=='active'){scope.current.dispose();setPreviews({});const last=live.current;if(last&&last.phase==='editing'&&!operation.current)void persist(last).catch(()=>{if(alive.current)setNotice(zh?'草稿尚未保存，请重试。':'Draft is not saved yet. Please retry.');});}
+  if(state!=='active'){setPhotoMenu(null);closePhoto();scope.current.dispose();setPreviews({});const last=live.current;if(last&&last.phase==='editing'&&!operation.current)void persist(last).catch(()=>{if(alive.current)setNotice(zh?'草稿尚未保存，请重试。':'Draft is not saved yet. Please retry.');});}
   else if(live.current&&!operation.current)void reloadPreviews(live.current);
  });return()=>sub.remove();},[persist,reloadPreviews,zh]);
  const edit=(patch:SocialDraftEdit)=>{
@@ -86,17 +90,30 @@ export function SocialComposer(){
     .finally(()=>{if(active)setLocating(false);});
   return()=>{active=false;};
  },[draft?.id]);
- const add=async(source:'camera'|'library')=>{
+ const add=async(source:'camera'|'library',replaceId?:string)=>{
   const old=live.current;if(!old||old.phase!=='editing'||operation.current)return;
   operation.current=true;setBusy(true);if(timer.current)clearTimeout(timer.current);
   const owner=old.ownerId,current=()=>alive.current&&context.current===owner;
   let reloaded=false;
   try{
-   await persist(old);const selected=await selectSocialImages(source,6-old.images.length,current);if(!current()||!selected.length)return;
-   const next=editSocialDraft(live.current!,{images:[...live.current!.images,...selected.map(item=>item.image)]},new Date().toISOString());
+   await persist(old);const selected=await selectSocialImages(source,replaceId?1:6-old.images.length,current);if(!current()||!selected.length)return;
+   const next=editSocialDraft(live.current!,{images:replaceId?live.current!.images.map(image=>image.id===replaceId?selected[0]!.image:image):[...live.current!.images,...selected.map(item=>item.image)]},new Date().toISOString());
    const saved=await persist(next,selected.map(item=>item.bytes));if(!current())return;put(saved);await reloadPreviews(saved);reloaded=true;
   }catch(error){if(current())setNotice(error instanceof Error&&error.message==='camera_permission_required'?(zh?'请在系统设置中允许相机访问。':'Allow camera access in Settings.'):error instanceof Error&&error.message==='library_permission_required'?(zh?'请在系统设置中允许照片访问。':'Allow photo access in Settings.'):(zh?'照片未能加入，已保留原草稿。':'Could not add photos. Your draft is kept.'));}
   finally{if(!reloaded&&current()&&live.current)await reloadPreviews(live.current);operation.current=false;if(alive.current){setBusy(false);if(current()&&pendingArea.current&&!manualArea.current&&live.current?.ownerId===owner&&!live.current.communitySlug){edit({communitySlug:pendingArea.current});}pendingArea.current=null;}}
+ };
+ const openPhoto=async(id:string)=>{
+  const old=live.current;if(!old||old.phase!=='editing'||operation.current||context.current!==old.ownerId)return;
+  const image=old.images.find(item=>item.id===id);if(!image)return;operation.current=true;setBusy(true);setPhotoMenu(null);
+  try{const bytes=await socialDraftStore.readImage(old.ownerId,old.id,id);if(!alive.current||context.current!==old.ownerId||live.current?.id!==old.id)return;closePhoto();setPhotoEditor({image,uri:editorScope.current.preview(bytes.display)});}
+  catch{if(alive.current)setNotice(zh?'照片暂时无法打开，请重试。':'Could not open this photo. Retry.');}
+  finally{operation.current=false;if(alive.current)setBusy(false);}
+ };
+ const savePhoto=async(prepared:PreparedSocialImage)=>{
+  const old=live.current,id=photoEditor?.image.id;if(!old||!id||!old.images.some(image=>image.id===id)||context.current!==old.ownerId||operation.current||old.phase!=='editing')throw new Error('stale_photo');
+  operation.current=true;setBusy(true);if(timer.current)clearTimeout(timer.current);
+  try{const next=editSocialDraft(old,{images:old.images.map(image=>image.id===id?prepared.image:image)},new Date().toISOString());const saved=await persist(next,[prepared.bytes]);if(!alive.current||context.current!==old.ownerId)return;put(saved);closePhoto();await reloadPreviews(saved);}
+  finally{operation.current=false;if(alive.current)setBusy(false);}
  };
  const close=async()=>{
   if(operation.current)return;operation.current=true;setBusy(true);if(timer.current)clearTimeout(timer.current);
@@ -113,7 +130,7 @@ export function SocialComposer(){
   }catch{if(current()){const saved=await socialDraftStore.read(owner,initial.id).catch(()=>null);if(saved){revision.current.set(saved.id,saved.revision);put(saved);}setNotice(zh?'发布未完成，草稿已保留。请检查连接和参与资格后重试。':'Post not completed. Your draft is kept. Check connection and contributor eligibility, then retry.');}}
   finally{operation.current=false;if(alive.current)setBusy(false);}
  };
- const locked=busy||draft?.phase==='publishing';
+ const locked=busy||!!photoMenu||!!photoEditor||draft?.phase==='publishing';
  const publishDisabled=busy||dragging||!draft||!draft.body.trim()||(!draft.catId&&!draft.communitySlug)||draft.ownerId!==auth.owner;
  return <GestureHandlerRootView style={{flex:1}}><ScreenScaffold compact avoidKeyboard scrollEnabled={!dragging} wrapScroll={scroll=><GestureDetector gesture={scrollGesture}>{scroll}</GestureDetector>} title={zh?'发布帖子':'New post'} header={<View style={[s.row,{justifyContent:'space-between'}]}>
   <Pressable accessibilityRole="button" accessibilityLabel={zh?'保存并关闭':'Save and close'} disabled={busy||dragging} onPress={()=>void close()} style={s.touch}><Text style={{fontSize:15,color:c.actionPrimary}}>{zh?'取消':'Cancel'}</Text></Pressable>
@@ -124,7 +141,7 @@ export function SocialComposer(){
   {auth.failed?<Pressable onPress={()=>void auth.reload()} style={s.touch}><Text style={{color:c.actionPrimary}}>{zh?'重试账户连接':'Retry account connection'}</Text></Pressable>:null}
   {auth.owner===null?<Pressable onPress={()=>router.push('/profile' as never)} style={s.touch}><Text style={{color:c.actionPrimary}}>{zh?'登录后发布':'Sign in to post'}</Text></Pressable>:null}
   {draft&&draft.ownerId===auth.owner?<>
-   <ComposerPhotoGrid scrollGesture={scrollGesture} key={`${draft.ownerId}:${draft.id}`} images={draft.images} previews={previews} locked={locked} zh={zh} onDragging={setDragging}
+   <ComposerPhotoGrid scrollGesture={scrollGesture} key={`${draft.ownerId}:${draft.id}`} images={draft.images} previews={previews} onOpen={id=>void openPhoto(id)} onActions={id=>{if(!operation.current&&live.current?.ownerId===context.current)setPhotoMenu(id);}} locked={locked} zh={zh} onDragging={setDragging}
     onMove={(id,to)=>{const current=live.current;if(alive.current&&current&&current.ownerId===context.current)edit({images:movePhoto(current.images,current.images.findIndex(image=>image.id===id),to)});}}
     onRemove={id=>edit({images:draft.images.filter(image=>image.id!==id)})} onCover={id=>edit({images:movePhoto(draft.images,draft.images.findIndex(image=>image.id===id),0)})}
     onAdd={()=>void add('library')} onRetry={()=>void reloadPreviews(draft)} onPreviewError={id=>setPreviews(old=>{const next={...old};delete next[id];return next;})}/>
@@ -138,6 +155,18 @@ export function SocialComposer(){
 
   </>:null}
   {notice?<Text accessibilityLiveRegion="polite" style={{color:c.muted,fontSize:14}}>{notice}</Text>:null}
+  {photoEditor&&draft?.ownerId===auth.owner?<ComposerPhotoEditor key={photoEditor.image.id} image={photoEditor.image} uri={photoEditor.uri} zh={zh} onClose={closePhoto} onSave={savePhoto}/>:null}
+  <Modal visible={!!photoMenu} transparent animationType="fade" onRequestClose={()=>setPhotoMenu(null)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:'#0005'}}><Pressable accessibilityLabel={zh?'关闭照片操作':'Close photo actions'} onPress={()=>setPhotoMenu(null)} style={{flex:1}}/><View style={{backgroundColor:c.surface,borderTopLeftRadius:24,borderTopRightRadius:24,padding:20,paddingBottom:40,gap:2}}>
+   <Text style={{fontSize:16,fontWeight:'600',color:c.ink,paddingBottom:8}}>{zh?'照片操作':'Photo actions'}</Text>
+   {photoMenu&&draft?([
+    [zh?'编辑照片':'Edit photo',()=>void openPhoto(photoMenu)],
+    [zh?'设为封面':'Make cover',()=>edit({images:movePhoto(draft.images,draft.images.findIndex(image=>image.id===photoMenu),0)})],
+    [zh?'向前移动':'Move earlier',()=>edit({images:movePhoto(draft.images,draft.images.findIndex(image=>image.id===photoMenu),Math.max(0,draft.images.findIndex(image=>image.id===photoMenu)-1))})],
+    [zh?'向后移动':'Move later',()=>edit({images:movePhoto(draft.images,draft.images.findIndex(image=>image.id===photoMenu),Math.min(draft.images.length-1,draft.images.findIndex(image=>image.id===photoMenu)+1))})],
+    [zh?'替换照片':'Replace photo',()=>void add('library',photoMenu)],
+    [zh?'移除照片':'Remove photo',()=>edit({images:draft.images.filter(image=>image.id!==photoMenu)})],
+   ] as const).map(([label,action])=><Pressable key={label} accessibilityRole="button" onPress={()=>{setPhotoMenu(null);action();}} style={{minHeight:48,justifyContent:'center',borderBottomWidth:0.5,borderColor:c.line}}><Text style={{color:label===(zh?'移除照片':'Remove photo')?c.danger:c.ink,fontSize:15}}>{label}</Text></Pressable>):null}
+  </View></View></Modal>
   <Modal visible={picker} animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setPicker(false)}><ScreenScaffold title={zh?'选择邻里':'Choose neighbourhood'} trailing={<Pressable onPress={()=>setPicker(false)} style={s.touch}><AppIcon name="close" color={c.ink}/></Pressable>}><TextInput accessibilityLabel={zh?'搜索邻里':'Search neighbourhood'} value={search} onChangeText={setSearch} placeholder={zh?'西海岸、金文泰…':'West Coast, Clementi…'} placeholderTextColor={c.muted} style={[s.title,{color:c.ink}]}/>{browseSingaporeCommunities(search).map(area=><Pressable accessibilityRole="button" key={area.id} onPress={()=>{manualArea.current=true;edit({communitySlug:area.id});setPicker(false);}} style={s.touch}><Text style={{color:c.ink}}>{communityLabel(area,locale)}</Text></Pressable>)}</ScreenScaffold></Modal>
  </ScreenScaffold></GestureHandlerRootView>;
 }

@@ -3,7 +3,8 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { MyReportsCursor, MyReportsPage } from '../api/my-reports';
-import { colors, radii } from '../design/theme';
+import { radii } from '../design/theme';
+import {useNativeColors} from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
 import { mergeReportRecovery, type ReportTimelineItem } from './report-flow';
@@ -23,7 +24,8 @@ type Snapshot = Readonly<{ remote: readonly import('../api/my-reports').MyReport
 function isInvalidResponse(error: unknown): boolean { return error instanceof Error && error.message === 'invalid_my_reports_response'; }
 
 export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencies: MyReportsDependencies; locale: Locale }>) {
-  const copy = getReportCopy(locale);
+  const copy = getReportCopy(locale),colors=useNativeColors(),styles=makeStyles(colors);
+  const [filter,setFilter]=useState<'all'|'photos'|'review'>('all');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
   const requestRef = useRef(0);
@@ -105,6 +107,8 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
     void load('initial');
   }), [dependencies, load]);
   const rows = snapshot?.rows ?? [];
+  const filtered=rows.filter(row=>filter==='all'||(filter==='photos'?row.mediaState!=='none':row.reportState==='private_review'||row.identityState==='pending_review'));
+  const filters=[['all',locale==='zh-CN'?'全部':'All','All reports'],['photos',locale==='zh-CN'?'有照片':'Photos','Reports with photos'],['review',locale==='zh-CN'?'待审核':'Awaiting review','Reports awaiting review']] as const;
   const refresh = () => { void load('refresh'); };
 
   return <SafeAreaView style={styles.safeArea}>
@@ -117,7 +121,9 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
       {state === 'offline' && !snapshot ? <Text accessibilityLiveRegion="polite" style={styles.error}>{copy.offlineEmpty}</Text> : null}
       {state === 'offline' && snapshot ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.offlineSnapshot}</Text> : null}
       {(state === 'ready' || (state === 'offline' && snapshot)) && rows.length === 0 ? <View style={styles.state}><Text accessibilityRole="header" style={styles.emptyTitle}>{copy.historyEmptyTitle}</Text><Text style={styles.notice}>{copy.historyEmptyCopy}</Text></View> : null}
-      {rows.map((row) => {
+      {snapshot?<View style={{flexDirection:'row',gap:20}}>{filters.map(([key,label,a11y])=><Pressable key={key} accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?`筛选${label}`:a11y} accessibilityState={{selected:filter===key}} onPress={()=>setFilter(key)} style={{minHeight:44,justifyContent:'center',borderBottomWidth:filter===key?2:0,borderColor:colors.actionPrimary}}><Text style={{fontSize:14,color:filter===key?colors.actionPrimary:colors.muted}}>{label}</Text></Pressable>)}</View>:null}
+      {snapshot&&filter!=='all'&&!filtered.length?<Text style={styles.notice}>{locale==='zh-CN'?'已载入报告中没有符合项，可继续载入更多。':'No matches in loaded reports. You can load more below.'}</Text>:null}
+      {filtered.map((row) => {
         const content = <><Text style={styles.date}>{new Date(row.occurredAt).toLocaleDateString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG', { year: 'numeric', month: 'short', day: 'numeric' })}</Text><Text style={styles.label}>{copy.reportStateLabel(row.reportState)}</Text><Text style={styles.notice}>{copy.mediaStateLabel(row.mediaState)}</Text><Text style={styles.notice}>{copy.identityStateLabel(row.identityState)}</Text></>;
         return row.sightingId
           ? <Pressable key={row.key} accessibilityLabel={`View report ${row.sightingId}`} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/receipt?sightingId=${encodeURIComponent(row.sightingId!)}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>{content}</Pressable>
@@ -128,6 +134,6 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
   </SafeAreaView>;
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.canvas }, content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 120, gap: 14 }, heading: { gap: 6 }, title: { color: colors.ink, fontSize: 32, lineHeight: 38, fontWeight: '800' }, subtitle: { color: colors.muted, fontSize: 16, lineHeight: 23 }, refreshAction: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 }, refreshText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '800' }, loading: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 }, notice: { color: colors.muted, fontSize: 15, lineHeight: 22 }, error: { color: colors.danger, fontSize: 15, lineHeight: 22, fontWeight: '700' }, state: { gap: 9, paddingVertical: 12 }, emptyTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' }, profileAction: { minHeight: 48, borderWidth: 1, borderColor: colors.actionPrimary, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center' }, profileText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' }, row: { gap: 3, paddingVertical: 14, borderBottomWidth: 1, borderColor: colors.line }, date: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '800' }, label: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' }, loadMore: { minHeight: 48, borderRadius: radii.small, borderWidth: 1, borderColor: colors.actionPrimary, alignItems: 'center', justifyContent: 'center' }, loadMoreText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '800' }, pressed: { opacity: 0.76 },
+const makeStyles = (colors:ReturnType<typeof useNativeColors>)=>StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: colors.canvas }, content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 120, gap: 14 }, heading: { gap: 6 }, title: { color: colors.ink, fontSize: 24, lineHeight: 30, fontWeight: '600' }, subtitle: { color: colors.muted, fontSize: 14, lineHeight: 20 }, refreshAction: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 }, refreshText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '600' }, loading: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 }, notice: { color: colors.muted, fontSize: 15, lineHeight: 22 }, error: { color: colors.danger, fontSize: 15, lineHeight: 22, fontWeight: '700' }, state: { gap: 9, paddingVertical: 12 }, emptyTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '600' }, profileAction: { minHeight: 48, borderWidth: 1, borderColor: colors.actionPrimary, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center' }, profileText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '600' }, row: { gap: 3, paddingVertical: 14, borderBottomWidth: 1, borderColor: colors.line }, date: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '600' }, label: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' }, loadMore: { minHeight: 48, borderRadius: radii.small, borderWidth: 1, borderColor: colors.actionPrimary, alignItems: 'center', justifyContent: 'center' }, loadMoreText: { color: colors.actionPrimary, fontSize: 16, fontWeight: '600' }, pressed: { opacity: 0.76 },
 });

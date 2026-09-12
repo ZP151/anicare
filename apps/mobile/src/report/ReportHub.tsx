@@ -1,3 +1,4 @@
+import {ManagedDraftList} from '../components/ManagedDraftList';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -152,9 +153,13 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
     setMessage(copy.signedOutExplanation);
   }
 
+  if(allDrafts)return <ScreenScaffold compact title={locale==='zh-CN'?'目击草稿':'Sighting drafts'} trailing={onClose?<Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'关闭':'Close'} onPress={onClose} style={{width:44,height:44,justifyContent:'center'}}><AppIcon name="close" color={colors.ink}/></Pressable>:undefined}>
+   {draftStatus==='loading'?<ActivityIndicator/>:draftStatus!=='ready'?<Pressable onPress={()=>void reload()} style={styles.textAction}><Text style={styles.notice}>{copy.loadFailed} · {copy.retryAction}</Text></Pressable>:<ManagedDraftList key={ownerSubject??'anonymous'} zh={locale==='zh-CN'} items={drafts.map(draft=>({id:draft.id,accessibilityLabel:copy.continueDraftLabel(draft.step),title:draft.title==='Report draft'?copy.draftShellTitle:draft.title,detail:copy.stepLabel(draft.step),updatedAt:draft.updatedAt,kind:draft.hasReviewedMedia?'photo':'text',canDelete:!draft.claimRequired}))} isCurrent={async()=>await dependencies.getSessionSubject()===ownerSubject} onOpen={id=>{const draft=drafts.find(item=>item.id===id);if(draft)void continueDraft(id,draft.claimRequired);}} onDelete={async id=>{const draft=drafts.find(item=>item.id===id);if(!draft||draft.claimRequired||await dependencies.getSessionSubject()!==draft.ownerSubject)throw new Error('auth_ownership');await dependencies.deleteDraft(id,draft.ownerSubject);}}/>}
+  </ScreenScaffold>;
   return (
     <ScreenScaffold compact trailing={onClose?<Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'关闭':'Close'} onPress={onClose} style={{minWidth:44,minHeight:44,justifyContent:'center',alignItems:'center'}}><AppIcon name="close" color={colors.actionPrimary}/></Pressable>:undefined} title={allDrafts ? (locale === 'zh-CN' ? '草稿' : 'Drafts') : copy.title}>
       {allDrafts ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report')} style={styles.textAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? '返回报告' : 'Back to reports'}</Text></Pressable> : null}
+      <View style={{gap:8,paddingTop:8,paddingBottom:14}}><AppIcon name="paw" color={colors.actionPrimary} size={32}/><Text style={{fontSize:24,lineHeight:30,fontWeight:'600',color:colors.ink}}>{locale==='zh-CN'?'遇见一位猫邻居':'Met a neighbourhood cat?'}</Text><Text style={styles.muted}>{locale==='zh-CN'?'记录照片、状态与区域。随时保存，稍后继续。':'Add a photo, condition and area. Save and continue anytime.'}</Text></View>
       {!allDrafts ? <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={() => { void startReport(); }} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
         <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
         <Text style={styles.primaryActionText}>{starting ? copy.loading : copy.startAction}</Text>
@@ -193,28 +198,28 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
 
 const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
   primaryAction: { minHeight: 52, paddingHorizontal: 18, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: colors.leaf },
-  primaryActionText: { color: colors.surface, fontSize: 16, fontWeight: '800' },
+  primaryActionText: { color: colors.onAction, fontSize: 16, fontWeight: '600' },
   section: { gap: 10 },
-  sectionTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  sectionTitle: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '600' },
   loading: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 },
   muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   notice: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   statusRow: { gap: 8 },
   textAction: { alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center' },
-  textActionLabel: { color: colors.actionPrimary, fontSize: 14, fontWeight: '800' },
-  empty: { minHeight: 64, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
+  textActionLabel: { color: colors.actionPrimary, fontSize: 14, fontWeight: '600' },
+  empty: { minHeight: 64, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: colors.line },
   emptyCopy: { flex: 1, gap: 2 },
-  emptyTitle: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '800' },
-  draftRow: { borderBottomWidth: 1, borderColor: colors.line },
+  emptyTitle: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '600' },
+  draftRow: { borderBottomWidth: 0.5, borderColor: colors.line },
   draftMain: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 },
   draftCopy: { flex: 1, gap: 1 },
-  draftTitle: { color: colors.ink, fontSize: 16, lineHeight: 21, fontWeight: '800' },
+  draftTitle: { color: colors.ink, fontSize: 16, lineHeight: 21, fontWeight: '600' },
   deleteAction: { alignSelf: 'flex-start', minHeight: 48, paddingRight: 12, justifyContent: 'center' },
-  deleteActionText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
+  deleteActionText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
   reportsAction: { minHeight: 54, paddingHorizontal: 14, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.paper },
   reportsCopy: { flex: 1, gap: 1 },
   profileAction: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.small, borderWidth: 1, borderColor: colors.actionPrimary },
-  profileActionText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '800' },
+  profileActionText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '600' },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   pressed: { opacity: 0.76 },
   disabled: { opacity: 0.5 },

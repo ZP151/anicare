@@ -5,7 +5,8 @@ import type { MyReportSummary } from '../api/my-reports';
 import type { PublicCatSummary } from '../api/cats';
 import type { MyIdentityResult } from '../api/identity-result';
 import { ScreenScaffold } from '../components/ScreenScaffold';
-import { colors, radii } from '../design/theme';
+import { radii } from '../design/theme';
+import {useNativeColors} from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 import type { StoredDraft } from '../offline/draft-policy';
 import { mergeReceiptStatus, type ReportReceiptStatus } from './report-flow';
@@ -48,6 +49,7 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
   dependencies: ReportReceiptDependencies;
   locale: Locale;
 }>) {
+  const colors=useNativeColors(),styles=makeStyles(colors);
   const copy = getReportCopy(locale);
   const validSightingId = isOpaqueReportId(sightingId);
   const [showDetails,setShowDetails]=useState(false);
@@ -208,9 +210,9 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
         <Text style={styles.notice}>{copy.receiptReference(sightingId)}</Text>
         {state.submittedAt ? <Text style={styles.notice}>{copy.receiptSubmittedAt(new Date(state.submittedAt).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG'))}</Text> : null}
 </View>:null}
-        <Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text>
-        <Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text>
-        <Text style={styles.status}>{copy.identityStateLabel(state.status.identityState)}</Text>
+        <View style={styles.statusRow}><Text style={styles.statusKey}>{locale==='zh-CN'?'报告':'Report'}</Text><Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text></View>
+        <View style={styles.statusRow}><Text style={styles.statusKey}>{locale==='zh-CN'?'照片':'Photo'}</Text><Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text></View>
+        <View style={styles.statusRow}><Text style={styles.statusKey}>{locale==='zh-CN'?'猫咪身份':'Identity'}</Text><Text style={styles.status}>{copy.identityStateLabel(state.status.identityState)}</Text></View>
         {identityResult?.status === 'confirmed' ? <Text style={styles.notice}>{locale === 'zh-CN' ? '身份已由独立审核确认。' : 'Identity confirmed by independent review.'}</Text> : null}
         {identityResult?.status === 'confirmed' && identityResult.animalId && dependencies.getPublicCatSummary ? <Pressable
           accessibilityRole="button" accessibilityLabel={locale === 'zh-CN' ? '打开猫档案' : 'Open cat profile'}
@@ -240,6 +242,7 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
 }
 
 function ReceiptActions({ copy, navigate }: Readonly<{ copy: ReturnType<typeof getReportCopy>; navigate(path: string): void }>) {
+  const colors=useNativeColors(),styles=makeStyles(colors);
   return <View style={styles.actions}>
     <Pressable accessibilityLabel={copy.viewReportsAction} accessibilityRole="button" onPress={() => navigate('/report/my-reports')} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><Text style={styles.primaryActionText}>{copy.viewReportsAction}</Text></Pressable>
     <View style={{flexDirection:'row',gap:8}}><View style={{flex:1}}><Pressable accessibilityLabel={copy.backToReportAction} accessibilityRole="button" onPress={() => navigate('/report')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.backToReportAction}</Text></Pressable></View><View style={{flex:1}}>
@@ -247,17 +250,18 @@ function ReceiptActions({ copy, navigate }: Readonly<{ copy: ReturnType<typeof g
   </View>;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors:ReturnType<typeof useNativeColors>)=>StyleSheet.create({
   loading: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 },
   section: { gap: 12 },
-  stateTitle: { color: colors.ink, fontSize: 19, lineHeight: 25, fontWeight: '800' },
+  stateTitle: { color: colors.ink, fontSize: 19, lineHeight: 25, fontWeight: '600' },
   notice: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  statusList: { gap: 8, paddingVertical: 4 },
-  status: { color: colors.ink, fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  statusList: { gap: 8, paddingVertical: 8, borderBottomWidth:0.5,borderColor:colors.line },
+  statusRow:{flexDirection:'row',alignItems:'baseline',gap:16},statusKey:{width:64,fontSize:12,color:colors.muted},
+  status: { flex:1,color: colors.ink, fontSize: 14, lineHeight: 20, fontWeight: '500' },
   actions: { gap: 8, marginTop: 4 },
   primaryAction: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },
-  primaryActionText: { color: colors.surface, fontSize: 14, fontWeight: '600' },
-  secondaryAction: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.actionPrimary },
+  primaryActionText: { color: colors.onAction, fontSize: 14, fontWeight: '600' },
+  secondaryAction: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor:colors.canvas },
   secondaryActionText: { color: colors.actionPrimary, fontSize: 14, fontWeight: '600' },
   pressed: { opacity: 0.76 },
 });

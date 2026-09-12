@@ -178,3 +178,11 @@ describe('MyReportsScreen', () => {
     expect(view.queryByText('Private review')).toBeNull();
   });
 });
+
+it('filters loaded history by photos or pending review without losing pagination',async()=>{
+ const v=await render(<MyReportsScreen locale="en" dependencies={dependencies({listReports:async()=>page([first,second],cursor)})}/>);
+ await v.findByText('Private review');await fireEvent.press(v.getByLabelText('Reports with photos'));
+ expect(v.queryByText('Delayed after review')).toBeNull();expect(v.getByLabelText('Load more reports')).toBeTruthy();
+ await fireEvent.press(v.getByLabelText('All reports'));expect(v.getByText('Delayed after review')).toBeTruthy();
+ await fireEvent.press(v.getByLabelText('Reports awaiting review'));expect(v.queryByText('Delayed after review')).toBeNull();await v.unmount();
+});

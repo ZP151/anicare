@@ -4,6 +4,7 @@ import { ComponentProps } from 'react';
 import { ColorValue, Platform, View } from 'react-native';
 
 const symbols = {
+  rotate: ['rotate.right', 'rotate-right'], flip: ['arrow.left.and.right.righttriangle.left.righttriangle.right', 'flip-horizontal'], reset: ['arrow.counterclockwise', 'restore'], trash: ['trash', 'trash-can-outline'],
   edit: ['pencil', 'pencil-outline'],
   settings: ['gearshape', 'cog-outline'],
   home: ['house', 'home-outline'],

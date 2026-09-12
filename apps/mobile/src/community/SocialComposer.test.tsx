@@ -1,3 +1,4 @@
+jest.mock('react-native-safe-area-context',()=>require('react-native-safe-area-context/jest/mock').default);
 import 'react-native-gesture-handler/jestSetup';
 jest.mock('react-native-reanimated',()=>require('react-native-reanimated/mock'));
 jest.mock('react-native-worklets',()=>({...require('react-native-worklets/src/mock'),scheduleOnRN:(fn:Function,...args:unknown[])=>fn(...args)}));
@@ -30,11 +31,14 @@ it('restores the draft and saves the latest text before closing',async()=>{
 it('restores six photos, changes the cover and persists removal in that order',async()=>{
  const images=Array.from({length:6},(_,n)=>({id:`00000000-0000-4000-8000-00000000430${n}`,requestId:`00000000-0000-4000-8000-00000000440${n}`,thumb:{width:320,height:240,byteLength:100,sha256:'a'.repeat(64)},display:{width:1280,height:960,byteLength:400,sha256:'b'.repeat(64)}}));
  mockSaved={...mockSaved,images};const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');
- expect(view.getAllByRole('button',{name:'Remove photo'})).toHaveLength(6);
+ expect(view.queryByText('Make cover')).toBeNull();
  expect(view.getByTestId('composer-photos').props.style).toMatchObject({flexDirection:'row',flexWrap:'wrap'});
  expect(view.getAllByTestId('composer-photo-cell')).toHaveLength(6);
- await fireEvent.press(view.getAllByRole('button',{name:'Make cover'})[5]!);
- await fireEvent.press(view.getAllByRole('button',{name:'Remove photo'})[1]!);
+ await view.findByLabelText('Photo 6');
+ await fireEvent(view.getByLabelText('Photo 6'),'accessibilityAction',{nativeEvent:{actionName:'longpress'}});
+ await fireEvent.press(view.getByText('Make cover'));
+ await fireEvent(view.getByLabelText('Photo 2'),'accessibilityAction',{nativeEvent:{actionName:'longpress'}});
+ await fireEvent.press(view.getByText('Remove photo'));
  await fireEvent.press(view.getByLabelText('Save and close'));
  await waitFor(()=>expect(mockBack).toHaveBeenCalled());expect(mockSaved.images.map((image:any)=>image.id)).toEqual([5,1,2,3,4].map(n=>images[n]!.id));await view.unmount();
 });
@@ -124,8 +128,8 @@ it.each([['drop',State.END,[5,0,1,2,3,4]],['cancel',State.CANCELLED,[0,1,2,3,4,5
  await act(async()=>fireGestureHandler(gesture,[
   {state:State.BEGAN,translationX:0,translationY:0},
   {state:State.ACTIVE,translationX:0,translationY:0},
-  {state:State.ACTIVE,translationX:-224,translationY:-156},
-  {state:end,translationX:-224,translationY:-156},
+  {state:State.ACTIVE,translationX:-224,translationY:-112},
+  {state:end,translationX:-224,translationY:-112},
  ]));
  expect(view.getByTestId('screen-scroll').props.scrollEnabled).toBe(true);
  await fireEvent.press(view.getByLabelText('Save and close'));await waitFor(()=>expect(mockBack).toHaveBeenCalled());
@@ -136,4 +140,23 @@ it('ignores an old photo move callback after sign-out',async()=>{
  const view=await render(<SocialComposer/>);const image=await view.findByLabelText('Photo 1');const lateMove=image.props.onAccessibilityAction;
  mockOwner=null;await view.rerender(<SocialComposer/>);const previous=JSON.stringify(mockSaved.images);
  await act(async()=>lateMove({nativeEvent:{actionName:'increment'}}));expect(JSON.stringify(mockSaved.images)).toBe(previous);expect(view.queryByTestId('composer-photos')).toBeNull();await view.unmount();
+});
+
+it('opens photo details by tapping, with no persistent cover button',async()=>{
+ const variant={width:100,height:100,byteLength:1,sha256:'a'.repeat(64)};
+ mockSaved.images=[{id:mockDraftId,requestId:mockDraftId,thumb:variant,display:variant}];
+ const view=await render(<SocialComposer/>);await waitFor(()=>expect(view.getByLabelText('Photo 1')).toBeTruthy());
+ expect(view.queryByText('Cover')).toBeNull();expect(view.queryByText('Make cover')).toBeNull();
+ await fireEvent.press(view.getByLabelText('Photo 1'));
+ await waitFor(()=>expect(view.getByLabelText('Rotate photo')).toBeTruthy());
+ await fireEvent.press(view.getByLabelText('Close photo'));await view.unmount();
+});
+
+it('opens the actions menu after a stationary long press even with one photo',async()=>{
+ const variant={width:100,height:100,byteLength:1,sha256:'a'.repeat(64)};
+ mockSaved.images=[{id:mockDraftId,requestId:mockDraftId,thumb:variant,display:variant}];
+ const view=await render(<SocialComposer/>);await view.findByLabelText('Photo 1');
+ await act(async()=>fireGestureHandler(getByGestureTestId(`photo-drag-${mockDraftId}`),[
+ {state:State.BEGAN,translationX:0,translationY:0},{state:State.ACTIVE,translationX:0,translationY:0},{state:State.END,translationX:0,translationY:0}]));
+ expect(await view.findByText('Make cover')).toBeTruthy();expect(view.queryByLabelText('Rotate photo')).toBeNull();expect(mockPublish).not.toHaveBeenCalled();await view.unmount();
 });

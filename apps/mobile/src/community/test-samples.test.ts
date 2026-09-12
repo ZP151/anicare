@@ -1,8 +1,8 @@
 import { COMMUNITY_TEST_POSTS, communitySampleAuthor, communitySampleText } from './test-samples';
 
-it('defines forty-eight persisted fixture conversations with local demo profiles', () => {
-  expect(COMMUNITY_TEST_POSTS).toHaveLength(48);
-  expect(new Set(COMMUNITY_TEST_POSTS.map(post => post.id)).size).toBe(48);
+it('defines fifty-six persisted fixture conversations with local demo profiles', () => {
+  expect(COMMUNITY_TEST_POSTS).toHaveLength(56);
+  expect(new Set(COMMUNITY_TEST_POSTS.map(post => post.id)).size).toBe(56);
   expect(COMMUNITY_TEST_POSTS.every(post => /^C\d{2}$/.test(post.code) && /^Demo /.test(post.profile.name) && /^human-(?:0[1-9]|1[0-5])$/.test(post.profile.avatarKey))).toBe(true);
   expect(COMMUNITY_TEST_POSTS.every(post => post.media.length <= 6)).toBe(true);
   expect(COMMUNITY_TEST_POSTS.find(post => post.code === 'C09')?.media).toEqual(['garden-pair.jpg', 'shelter-trio.jpg']);

@@ -9,7 +9,8 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PublicSighting, PublicSightingPage } from '../api/feed';
 import type { StoredDraft } from '../offline/draft-policy';
 import type { ReportIdentityIntent } from './report-draft';
-import { colors, radii } from '../design/theme';
+import { radii } from '../design/theme';
+import {useNativeColors} from '../design/native-colors';
 
 export type IdentityContinuationDependencies = Readonly<{
   listPublicSightings(input: Readonly<{ cursor?: string | null; limit?: number }>): Promise<PublicSightingPage>;
@@ -28,6 +29,7 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   const [preview,setPreview]=useState(false);
   const [pageIndex,setPageIndex]=useState(0);
   const [portraits,setPortraits]=useState<ReadonlyMap<string,CatPresentation>>(new Map());
+  const colors=useNativeColors(),styles=makeStyles(colors);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -116,7 +118,7 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
         <Pressable accessibilityRole="button" accessibilityLabel={confirmLabel} disabled={busy} onPress={()=>void submit({kind:'existing',animalId:selected.animalId})} style={styles.primary}><Text style={styles.primaryText}>{confirmLabel}</Text></Pressable>
       </View>:null}
       {selectedUri&&preview?<CatPhotoPreview uri={selectedUri} name={selectedPresentation?.alias??''} locale={locale} onClose={()=>setPreview(false)}/>:null}
-      <Pressable accessibilityRole="button" accessibilityLabel={copy.new} disabled={busy} onPress={() => { void submit({ kind: 'new' }); }} style={styles.primary}><Text style={styles.primaryText}>{copy.new}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={copy.new} disabled={busy} onPress={() => { void submit({ kind: 'new' }); }} style={styles.option}><Text style={styles.optionText}>{copy.new}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={copy.skip} disabled={busy} onPress={onSkip} style={styles.option}><Text style={styles.optionText}>{copy.skip}</Text></Pressable>
     </>}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
@@ -124,6 +126,7 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
 }
 
 function IdentityBubble({name,uri,disabled,selected,onPress}:Readonly<{name:string;uri?:string;disabled:boolean;selected:boolean;onPress():void}>){
+ const colors=useNativeColors(),styles=makeStyles(colors);
  const [failed,setFailed]=useState(false);
  useEffect(()=>setFailed(false),[uri]);
  return <Pressable testID="identity-cat-bubble" accessibilityRole="button" accessibilityLabel={name} accessibilityState={{disabled,selected}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.bubble,{opacity:disabled?0.55:1,transform:[{scale:pressed?0.94:1}]}]}>
@@ -132,11 +135,11 @@ function IdentityBubble({name,uri,disabled,selected,onPress}:Readonly<{name:stri
  </Pressable>;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors:ReturnType<typeof useNativeColors>)=>StyleSheet.create({
   selection:{gap:12,padding:12,borderRadius:14,backgroundColor:colors.leafSoft},selectionDetails:{flexDirection:'row',alignItems:'center',gap:12},detailPhoto:{width:80,height:80,borderRadius:12,alignItems:'center',justifyContent:'center'},portraitRing:{padding:3,borderWidth:2,borderColor:'transparent',borderRadius:32},selectedRing:{borderColor:colors.actionPrimary},
   bubbles:{flexDirection:'row',flexWrap:'wrap',rowGap:12},bubble:{width:'25%',minHeight:82,alignItems:'center',gap:6,paddingHorizontal:3},portrait:{width:52,height:52,borderRadius:26,backgroundColor:colors.leafSoft,alignItems:'center',justifyContent:'center'},catName:{fontSize:12,color:colors.ink},pager:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:12},pageButton:{minHeight:44,minWidth:44,alignItems:'center',justifyContent:'center'},
-  panel: { gap: 10, padding: 14, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
-  title: { color: colors.ink, fontSize: 17, lineHeight: 23, fontWeight: '800' }, copy: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  primary: { minHeight: 48, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.actionPrimary }, primaryText: { color: colors.surface, fontSize: 15, fontWeight: '800' },
+  panel: { gap: 12, paddingVertical: 16 },
+  title: { color: colors.ink, fontSize: 17, lineHeight: 23, fontWeight: '600' }, copy: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  primary: { minHeight: 48, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.actionPrimary }, primaryText: { color: colors.onAction, fontSize: 15, fontWeight: '600' },
   option: { minHeight: 46, borderRadius: radii.small, paddingHorizontal: 12, justifyContent: 'center', borderWidth: 1, borderColor: colors.line }, optionText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '700' }, message: { color: colors.muted, fontSize: 14, lineHeight: 20 },
 });

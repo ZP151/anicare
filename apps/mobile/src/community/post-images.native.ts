@@ -1,3 +1,5 @@
+import {ImageManipulator,SaveFormat,FlipType} from 'expo-image-manipulator';
+import {photoEditPlan,type PhotoEdit} from './photo-edit';
 import * as ImagePicker from 'expo-image-picker';
 import {Directory,File,Paths} from 'expo-file-system';
 import {randomUUID} from 'expo-crypto';
@@ -50,4 +52,28 @@ export function createSocialPreviewScope(){
   },
   dispose(){disposed=true;for(const file of files){try{if(file.exists)file.delete();}catch{/* OS cache reclamation remains available. */}}files.length=0;},
  };
+}
+
+/** Re-render from this edit session's original; only the confirmed new asset enters the encrypted draft. */
+export async function editSocialImage(uri:string,width:number,height:number,edit:PhotoEdit,current:()=>boolean):Promise<PreparedSocialImage>{
+ if(!current())throw new Error('stale_account');
+ const plan=photoEditPlan(width,height,edit),context=ImageManipulator.manipulate(uri);
+ const temporary:string[]=[];let rendered:Awaited<ReturnType<typeof context.renderAsync>>|undefined;let manipulated:string|undefined;
+ try{
+  if(plan.rotation)context.rotate(plan.rotation);if(plan.mirror)context.flip(FlipType.Horizontal);if(plan.crop)context.crop(plan.crop);
+  rendered=await context.renderAsync();const result=await rendered.saveAsync({format:SaveFormat.JPEG,compress:0.95});manipulated=result.uri;
+  if(!current())throw new Error('stale_account');
+  const display=await prepareCommunityImage(result.uri,'display');temporary.push(display.uri);
+  if(!current())throw new Error('stale_account');
+  const thumb=await prepareCommunityImage(display.uri,'thumb');temporary.push(thumb.uri);
+  const metadata=(value:typeof thumb):SocialVariant=>({width:value.width,height:value.height,sha256:value.sha256,byteLength:value.byteLength});
+  if(!isSocialVariant(metadata(thumb),'thumb')||!isSocialVariant(metadata(display),'display'))throw new Error('social_image_too_large');
+  const thumbBytes=await new File(thumb.uri).bytes(),displayBytes=await new File(display.uri).bytes();
+  if(!current())throw new Error('stale_account');
+  const id=randomUUID();return {image:{id,requestId:randomUUID(),thumb:metadata(thumb),display:metadata(display)},bytes:{imageId:id,thumb:thumbBytes,display:displayBytes}};
+ }finally{
+  temporary.forEach(discardCommunityImage);
+  if(manipulated){try{const file=new File(manipulated);if(file.exists)file.delete();}catch{/* A failed temporary write never replaces the draft. */}}
+  rendered?.release();context.release();
+ }
 }

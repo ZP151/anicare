@@ -26,7 +26,7 @@ export function earliestIncompleteStep(draft: StoredDraft): ReportDraftStep {
   const payload = draft.report;
   if (!payload) return 'photo';
   if (payload.step === 'photo') return 'photo';
-  if (payload.step === 'area' && payload.condition === null) return 'area';
+  if (payload.step === 'area' && payload.condition === null && payload.manualPublicCellId === null) return 'area';
   if (payload.condition === null) return 'details';
   if (payload.step === 'details') return 'details';
   if (payload.step === 'safety') return 'safety';

@@ -13,7 +13,7 @@ const settle={duration:400,dampingRatio:0.8,overshootClamping:true,reduceMotion:
 type Props=Readonly<{
  scrollGesture:ReturnType<typeof Gesture.Native>;
  images:readonly SocialImage[];previews:Readonly<Record<string,string>>;locked:boolean;zh:boolean;
- onMove(id:string,to:number):void;onRemove(id:string):void;onCover(id:string):void;
+ onOpen(id:string):void;onActions(id:string):void;onMove(id:string,to:number):void;onRemove(id:string):void;onCover(id:string):void;
  onAdd():void;onRetry():void;onPreviewError(id:string):void;onDragging(active:boolean):void;
 }>;
 type Motion=Readonly<{order:SharedValue<string[]>;active:SharedValue<string>;target:SharedValue<number>}>;
@@ -24,7 +24,7 @@ export function ComposerPhotoGrid(props:Props){
  const [dragging,setDragging]=useState(false);
  const ids=props.images.map(image=>image.id),signature=ids.join(',');
  const order=useSharedValue(ids),active=useSharedValue(''),target=useSharedValue(-1);
- const cellWidth=Math.max(1,(width-2*GAP)/3),cellHeight=cellWidth+44;
+ const cellWidth=Math.max(1,(width-2*GAP)/3),cellHeight=cellWidth;
  const {onDragging}=props;
  const notifyDragging=(value:boolean)=>{setDragging(value);onDragging(value);};
  useEffect(()=>{
@@ -38,7 +38,7 @@ export function ComposerPhotoGrid(props:Props){
    {Array.from({length:6},(_,index)=><PhotoSlot key={index} index={index} occupied={index<props.images.length} width={cellWidth} height={cellHeight} motion={motion} locked={props.locked||dragging} zh={props.zh} onAdd={props.onAdd}/>)}
    {props.images.map((image,index)=><PhotoCard key={image.id} {...props} image={image} index={index} width={cellWidth} height={cellHeight} motion={motion} dragging={dragging} notifyDragging={notifyDragging}/>)}
   </View>
-  <Text style={{fontSize:12,lineHeight:18,color:c.muted}}>{props.zh?'长按照片拖动排序 · 第一张为封面':'Hold a photo to reorder · First photo is the cover'}</Text>
+  <Text style={{fontSize:12,lineHeight:18,color:c.muted}}>{props.zh?'轻点编辑 · 长按操作或拖动排序':'Tap to edit · Hold for actions or drag to reorder'}</Text>
  </View>;
 }
 
@@ -55,8 +55,8 @@ function PhotoCard({image,index,width,height,motion,dragging,notifyDragging,...p
  const dx=useSharedValue(0),dy=useSharedValue(0),from=useSharedValue(index),started=useSharedValue(false);
  const {order,active,target}=motion;
  const stepX=width+GAP,stepY=height+GAP;
- const id=image.id,locked=props.locked,count=props.images.length,onMove=props.onMove;
- const pan=Gesture.Pan().withTestId(`photo-drag-${id}`).enabled(!locked&&count>1).activateAfterLongPress(280).maxPointers(1).blocksExternalGesture(props.scrollGesture)
+ const id=image.id,locked=props.locked,count=props.images.length,onMove=props.onMove,onActions=props.onActions;
+ const pan=Gesture.Pan().withTestId(`photo-drag-${id}`).enabled(!locked).activateAfterLongPress(280).maxPointers(1).blocksExternalGesture(props.scrollGesture)
   .onStart(()=>{
    if(active.get())return;
    from.set(order.get().indexOf(id));dx.set(0);dy.set(0);started.set(true);active.set(id);target.set(from.get());
@@ -72,6 +72,7 @@ function PhotoCard({image,index,width,height,motion,dragging,notifyDragging,...p
    const destination=photoDropIndex(from.get(),event.translationX,event.translationY,stepX,stepY,count);
    order.set([...movePhoto(order.get(),from.get(),destination)]);active.set('');target.set(-1);
    if(destination!==from.get())scheduleOnRN(onMove,id,destination);
+   else if(Math.hypot(event.translationX,event.translationY)<8)scheduleOnRN(onActions,id);
   })
   .onFinalize(()=>{
    if(!started.get())return;
@@ -91,19 +92,22 @@ function PhotoCard({image,index,width,height,motion,dragging,notifyDragging,...p
   ]};
  });
  const controlsLocked=locked||dragging;
- const actions=[{name:'decrement',label:props.zh?'向前移动':'Move earlier'},{name:'increment',label:props.zh?'向后移动':'Move later'}];
+ const actions=[{name:'activate',label:props.zh?'编辑照片':'Edit photo'},{name:'longpress',label:props.zh?'照片操作':'Photo actions'},{name:'decrement',label:props.zh?'向前移动':'Move earlier'},{name:'increment',label:props.zh?'向后移动':'Move later'}];
  const onAccessibilityAction=(event:{nativeEvent:{actionName:string}})=>{
   if(controlsLocked)return;
+  if(event.nativeEvent.actionName==='activate'){props.onOpen(id);return;}
+  if(event.nativeEvent.actionName==='longpress'){props.onActions(id);return;}
   const offset=event.nativeEvent.actionName==='increment'?1:event.nativeEvent.actionName==='decrement'?-1:0;
   if(offset&&index+offset>=0&&index+offset<count)onMove(id,index+offset);
  };
  const imageStyle={width:width-16,height:width-16,borderRadius:10};
  return <Animated.View testID="composer-photo-cell" style={[styles.card,{width,height,backgroundColor:c.surface,borderColor:c.line},animated]}>
   <GestureDetector gesture={pan}><View collapsable={false}>
-   {props.previews[id]?<Image accessibilityLabel={props.zh?`照片 ${index+1}`:`Photo ${index+1}`} accessibilityRole="adjustable" accessibilityActions={actions} onAccessibilityAction={onAccessibilityAction} source={{uri:props.previews[id]}} style={imageStyle} onError={()=>props.onPreviewError(id)}/>:<Pressable accessibilityRole="button" accessibilityLabel={props.zh?`重新加载照片 ${index+1}`:`Retry photo ${index+1}`} accessibilityActions={actions} onAccessibilityAction={onAccessibilityAction} disabled={controlsLocked} onPress={props.onRetry} style={[imageStyle,styles.empty,{backgroundColor:c.canvas}]}><AppIcon name="photo" color={c.muted}/><Text style={{fontSize:11,color:c.muted}}>{props.zh?'点此重试':'Tap to retry'}</Text></Pressable>}
+   <Pressable accessibilityRole={props.previews[id]?"imagebutton":"button"} accessibilityLabel={props.previews[id]?(props.zh?`照片 ${index+1}`:`Photo ${index+1}`):(props.zh?`重新加载照片 ${index+1}`:`Retry photo ${index+1}`)} accessibilityActions={actions} onAccessibilityAction={onAccessibilityAction} disabled={controlsLocked} onPress={()=>props.previews[id]?props.onOpen(id):props.onRetry()} style={imageStyle}>
+    {props.previews[id]?<Image source={{uri:props.previews[id]}} style={imageStyle} onError={()=>props.onPreviewError(id)}/>:<View style={[imageStyle,styles.empty,{backgroundColor:c.canvas}]}><AppIcon name="photo" color={c.muted}/><Text style={{fontSize:11,color:c.muted}}>{props.zh?'点此重试':'Tap to retry'}</Text></View>}
+   </Pressable>
   </View></GestureDetector>
-  <Pressable accessibilityRole="button" accessibilityLabel={props.zh?'移除照片':'Remove photo'} disabled={controlsLocked} onPress={()=>props.onRemove(id)} style={styles.remove}><View style={styles.removeIcon}><AppIcon name="close" size={14} color="#fff"/></View></Pressable>
-  <Pressable accessibilityRole="button" accessibilityLabel={props.zh?'设为封面':'Make cover'} disabled={controlsLocked||index===0} onPress={()=>props.onCover(id)} style={styles.cover}><Text numberOfLines={1} style={{fontSize:12,color:c.actionPrimary}}>{index===0?(props.zh?'封面':'Cover'):(props.zh?'设为封面':'Make cover')}</Text></Pressable>
+
  </Animated.View>;
 }
 
