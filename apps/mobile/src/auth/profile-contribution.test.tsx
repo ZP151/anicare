@@ -79,12 +79,14 @@ it('keeps the signed-in profile focused on account actions instead of another lo
   expect(view.queryByLabelText('Email address')).toBeNull();
   expect(view.queryByText('Continue with Apple')).toBeNull();
   expect(view.queryByText('AI training consent')).toBeNull();
+  await fireEvent.press(view.getByRole('button',{name:'Settings'}));
   expect(view.getByRole('button', { name: 'My care records' })).toBeTruthy();
 });
 
 it('edits only the current account public name and shows the saved value', async () => {
   const view = await render(<Profile />);
   await view.findByText('Signed in');
+  await fireEvent.press(view.getByRole('button',{name:'Settings'}));
   await fireEvent.press(view.getByRole('button', { name: 'Display name' }));
   await waitFor(() => expect(view.getByLabelText('Public display name').props.value).toBe('Chosen name'));
   await fireEvent.changeText(view.getByLabelText('Public display name'), 'Neighbour');
@@ -99,6 +101,7 @@ it('discards an account name response after signing out', async () => {
   mockLookup.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const view = await render(<Profile />);
   await view.findByText('Signed in');
+  await fireEvent.press(view.getByRole('button',{name:'Settings'}));
   await fireEvent.press(view.getByRole('button', { name: 'Display name' }));
   await waitFor(() => expect(mockLookup).toHaveBeenCalled());
   await act(async () => { mockSubject = null; mockListener(); finish({data:{public_name:'Previous private name'},error:null}); });
@@ -121,7 +124,7 @@ it('reveals email sign-in on request and clears it when the account changes', as
 });
 
 it('shows truthful session/adult state, keeps login on failed logout and clears after successful logout',async()=>{
- const view=await render(<Profile/>);await view.findByText('Signed in');await view.findByText('18+ confirmation required');
+ const view=await render(<Profile/>);await view.findByText('Signed in');await view.findByText('18+ confirmation required');await fireEvent.press(view.getByRole('button',{name:'Settings'}));
  await fireEvent.press(view.getByRole('button',{name:'Sign out'}));await view.findByText('Could not sign out. Your session is still active.');expect(view.getByText('Signed in')).toBeTruthy();
  mockSignOut.mockImplementation(async()=>{mockSubject=null;mockListener();return {error:null};});
  await fireEvent.press(view.getByRole('button',{name:'Sign out'}));await view.findByText('Browsing anonymously');expect(view.queryByText('Signed in')).toBeNull();

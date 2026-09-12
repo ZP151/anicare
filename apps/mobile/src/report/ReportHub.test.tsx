@@ -193,3 +193,15 @@ describe('ReportHub', () => {
     expect(view.getByRole('button', { name: 'Continue report draft from details' })).toBeTruthy();
   });
 });
+
+it('creates one report when Start is tapped again before the save settles',async()=>{
+ let finish!:(v:any)=>void;const deps=dependencies({saveDraft:jest.fn(input=>new Promise(resolve=>{finish=()=>resolve(input as never);}))});
+ const view=await render(<ReportHub dependencies={deps} locale="en"/>);
+ await view.findByText('No saved reports yet');
+ const button=view.getByRole('button',{name:'Start a report'});
+ await fireEvent.press(button);
+ await fireEvent.press(button);
+ expect(deps.saveDraft).toHaveBeenCalledTimes(1);
+ await act(async()=>{finish(undefined);});
+ expect(deps.navigate).toHaveBeenCalledTimes(1);await view.unmount();
+});

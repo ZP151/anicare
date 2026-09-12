@@ -255,7 +255,7 @@ export default function RedactionReviewScreen() {
       await cacheLifecycle.abandonAll();
       setPending(null);
       setStatus(copy.savedPrivately);
-      router.replace({ pathname: '/report/new', params: { draftId } } as never);
+      router.dismissTo({ pathname: '/report/new', params: { draftId } } as never);
     } catch (error) {
       const authenticationRequired = error instanceof Error && error.message === 'authentication_required';
       // Keep this screen's prepared copy for retry. Unmount, replacement and

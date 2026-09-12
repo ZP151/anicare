@@ -93,7 +93,7 @@ export default function NewReportRoute() {
       },
       now: () => new Date(),
       navigate: (path) => router.push(path as never),
-      exit: () => router.replace('/report'),
+      exit: () => router.dismissTo('/report'),
     };
   }, [router]);
 

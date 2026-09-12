@@ -307,8 +307,9 @@ export default function ProfileScreen() {
     }
   }
 
+  const [showSettings,setShowSettings]=useState(false);
   return (
-    <ScreenScaffold compact title={cn?'我的':'Me'} nativeAppearance>
+    <ScreenScaffold compact title={cn?'我的':'Me'} nativeAppearance header={<View style={{flexDirection:'row',alignItems:'center',minHeight:44}}>{showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回个人页':'Back to profile'} onPress={()=>setShowSettings(false)} style={styles.close}><AppIcon name="back" color={colors.ink}/></Pressable>:null}<Text style={{flex:1,color:colors.ink,fontSize:20,fontWeight:'700'}}>{showSettings?(cn?'设置':'Settings'):(cn?'我的':'Me')}</Text>{!showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'设置':'Settings'} onPress={()=>setShowSettings(true)} style={styles.close}><AppIcon name="settings" size={21} color={colors.ink}/></Pressable>:null}</View>}>
       <View style={styles.account}>
         <View style={styles.avatar}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath ? avatarUri : null} size={72} /></View>
         <View style={styles.accountCopy}>
@@ -319,6 +320,7 @@ export default function ProfileScreen() {
         {auth.failed ? <Pressable accessibilityRole="button" style={styles.choice} onPress={()=>{void auth.reload();}}><Text>{cn?'重试账户状态':'Retry account state'}</Text></Pressable> : null}
         </View>
       </View>
+      {auth.owner&&!showSettings?<Pressable accessibilityRole="button" onPress={()=>setShowSettings(true)} style={[styles.choice,{alignSelf:'flex-start',minHeight:36,paddingVertical:4}]}><Text style={{fontSize:13,color:colors.ink}}>{cn?'编辑个人资料':'Edit profile'}</Text></Pressable>:null}
       {returnDraftId ? <View style={styles.card}>
         <Text style={styles.label}>{t('profile.reportReturnTitle')}</Text>
         <Text style={styles.value}>{t('profile.reportReturnCopy')}</Text>
@@ -357,7 +359,15 @@ export default function ProfileScreen() {
         </View>
         {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
       </View></ScreenScaffold></Modal>
-      {auth.owner?<ProfilePosts owner={auth.owner} pin={auth.pin}/>:null}
+      {!showSettings?<>
+       <View style={{flexDirection:'row',paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:colors.line}}>{([
+        ['reports',cn?'报告':'Reports','/report'],['cat',cn?'关注':'Following','/following'],['reports',cn?'草稿':'Drafts','/community/drafts']
+       ] as const).map(([icon,label,path])=><Pressable key={path} accessibilityRole="button" onPress={()=>router.push(path as never)} style={{flex:1,alignItems:'center',justifyContent:'center',minHeight:56,gap:6}}><AppIcon name={icon} size={20} color={colors.ink}/><Text style={{fontSize:12,color:colors.ink}}>{label}</Text></Pressable>)}</View>
+       {auth.owner&&adult===false?<Pressable accessibilityRole="button" onPress={confirmAdultContributor} style={styles.choice}><Text style={styles.choiceText}>{cn?'我确认已年满 18 岁':'I confirm I am 18 or older'}</Text></Pressable>:null}
+       {status&&!showSignIn?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}
+       {auth.owner?<ProfilePosts owner={auth.owner} pin={auth.pin}/>:null}
+      </>:null}
+      {showSettings?<>
       <SettingsGroup title={cn ? '我的记录' : 'Your activity'}>
         <SettingsRow title={cn?'我的报告与草稿':'My reports and drafts'} icon="reports" onPress={() => router.push('/report' as never)} />
         <SettingsRow title={cn?'我的帖子':'My posts'} icon="community" onPress={() => router.push('/community/mine' as never)} />
@@ -391,6 +401,7 @@ export default function ProfileScreen() {
       </SettingsGroup> : null}
       <Text style={styles.status}>Whisker Commons {appConfig.expo.version} ({appConfig.expo.ios.buildNumber})</Text>
       {status && !showSignIn && !editingName ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
+      </>:null}
     </ScreenScaffold>
   );
 }

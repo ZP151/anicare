@@ -49,7 +49,8 @@ describe('NearbyMap native privacy contract', () => {
     expect(props.showsUserLocation).toBe(false);
     expect(props.showsMyLocationButton).toBe(false);
     expect(props.maxZoomLevel).toBe(19);
-    expect(props.cameraZoomRange).toEqual({minCenterCoordinateDistance:150,maxCenterCoordinateDistance:120000});
+    expect(props.cameraZoomRange).toEqual({minCenterCoordinateDistance:150});
+    expect(props.minZoomLevel).toBeUndefined();
     expect(props.showsBuildings).toBe(true);
     await view.unmount();
   });

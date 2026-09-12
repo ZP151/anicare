@@ -334,7 +334,7 @@ export function ReportWizard({
     : prerequisiteIssues[0] === 'review_required' ? copy.wizardReviewRequired : copy.wizardSubmitDisabledReason;
 
   return (
-    <ScreenScaffold title={copy.wizardTitle} subtitle={copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage))} trailing={
+    <ScreenScaffold compact footer={stage === 'photo' && photoReady ? <Pressable accessibilityRole="button" accessibilityLabel={copy.wizardContinue} onPress={() => { void advance(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardContinue}</Text></Pressable> : undefined} title={copy.wizardTitle} subtitle={copy.wizardProgress(stages.indexOf(stage) + 1, stages.length, copy.stepLabel(stage))} trailing={
       <Pressable accessibilityLabel={copy.wizardSaveAndExit} accessibilityRole="button" onPress={() => { void saveAndExit(); }} style={styles.exit}><Text style={styles.exitText}>{copy.wizardSaveAndExit}</Text></Pressable>
     }>
       <View

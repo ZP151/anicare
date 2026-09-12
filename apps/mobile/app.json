@@ -8,14 +8,14 @@
         "projectId": "f9b84744-77c7-4b2b-8631-f107a8b98af8"
       }
     },
-    "version": "0.4.6",
+    "version": "0.4.7",
     "orientation": "portrait",
     "scheme": "animalhelper",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "14",
+      "buildNumber": "15",
       "bundleIdentifier": "sg.animalhelper.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Choose photos for a community post, a report, or your public profile avatar. Review your selection before uploading.",

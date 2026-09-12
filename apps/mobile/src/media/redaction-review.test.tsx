@@ -13,7 +13,7 @@ jest.mock('../components/ScreenScaffold', () => {
   };
 });
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), replace: jest.fn() },
+  router: { back: jest.fn(), replace: jest.fn(), dismissTo: jest.fn() },
   useLocalSearchParams: () => ({ draftId: '00000000-0000-4000-8000-000000000606' }),
 }));
 jest.mock('expo-image-picker', () => ({
@@ -185,12 +185,12 @@ describe('private redaction review screen', () => {
 
     await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Use this photo' })); });
 
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith({
+    await waitFor(() => expect(router.dismissTo).toHaveBeenCalledWith({
       pathname: '/report/new',
       params: { draftId: '00000000-0000-4000-8000-000000000606' },
     }));
     expect(router.back).not.toHaveBeenCalled();
-    expect(JSON.stringify(jest.mocked(router.replace).mock.calls)).not.toMatch(/file:|media-|status|uri/);
+    expect(JSON.stringify(jest.mocked(router.dismissTo).mock.calls)).not.toMatch(/file:|media-|status|uri/);
   });
 
   it('cleans every owned plaintext output when the review screen unmounts', async () => {

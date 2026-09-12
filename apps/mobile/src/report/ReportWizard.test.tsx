@@ -457,3 +457,13 @@ describe('ReportWizard', () => {
     await view.unmount();
   });
 });
+
+it('continues from a saved reviewed photo to details with a visible action',async()=>{
+ const deps=dependencies({loadDraft:async()=>draft({mediaId:'photo',encryptedReviewedRef:'encrypted:photo'})});
+ const view=await render(<ReportWizard draftId={draftId} dependencies={deps} initialStage="photo"/>);
+ await view.findByText('Private photo ready');
+ await fireEvent.press(view.getByRole('button',{name:'Continue'}));
+ await view.findByRole('header',{name:'Details'});
+ expect(deps.saveDraft).toHaveBeenCalledWith(expect.objectContaining({report:expect.objectContaining({step:'details'})}));
+ await view.unmount();
+});

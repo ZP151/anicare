@@ -1,10 +1,13 @@
 import {singaporeOverviewCoordinates,SINGAPORE_CAMERA_ZOOM_RANGE} from './singapore-camera';
-it('widens the accepted overview by 10% without changing the geographic centre or source boundary',()=>{
- const points=[{latitude:1.2,longitude:103.6},{latitude:1.5,longitude:104.1}];
+import {SG_COMMUNITIES} from './singapore-communities';
+it('fits every official land boundary including western Singapore and Changi / Tekong',()=>{
+ const points=SG_COMMUNITIES.filter(a=>!a.parentId).flatMap(a=>a.polygons.flatMap(p=>p[0]!.map(([longitude,latitude])=>({latitude:latitude!,longitude:longitude!}))));
  const result=singaporeOverviewCoordinates(points);
- expect(result[1]!.longitude-result[0]!.longitude).toBeCloseTo(.5/(1.3*.9));
- expect(result[1]!.latitude-result[0]!.latitude).toBeCloseTo(.3/(1.3*.9));
- expect((result[1]!.longitude+result[0]!.longitude)/2).toBeCloseTo(103.85);
- expect(points[0]).toEqual({latitude:1.2,longitude:103.6});
- expect(SINGAPORE_CAMERA_ZOOM_RANGE.maxCenterCoordinateDistance).toBe(120000);
+ for(const axis of ['latitude','longitude'] as const){
+  expect(Math.min(...result.map(p=>p[axis]))).toBeLessThanOrEqual(Math.min(...points.map(p=>p[axis])));
+  expect(Math.max(...result.map(p=>p[axis]))).toBeGreaterThanOrEqual(Math.max(...points.map(p=>p[axis])));
+ }
+ expect(Math.min(...result.map(p=>p.longitude))).toBeLessThan(103.62);
+ expect(Math.max(...result.map(p=>p.longitude))).toBeGreaterThan(104.08);
+ expect(SINGAPORE_CAMERA_ZOOM_RANGE).not.toHaveProperty('maxCenterCoordinateDistance');
 });

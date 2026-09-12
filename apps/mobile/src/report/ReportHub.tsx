@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenScaffold } from '../components/ScreenScaffold';
@@ -59,6 +59,7 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
   const [signedIn, setSignedIn] = useState(false);
   const [ownerSubject, setOwnerSubject] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const startInFlight = useRef(false);
   const [starting, setStarting] = useState(false);
 
   const reload = useCallback(async () => {
@@ -94,6 +95,8 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
   }), [dependencies, reload]);
 
   async function startReport() {
+    if (startInFlight.current) return;
+    startInFlight.current = true;
     setStarting(true);
     setMessage(null);
     try {
@@ -107,6 +110,7 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
     } catch {
       setMessage(copy.startFailed);
     } finally {
+      startInFlight.current = false;
       setStarting(false);
     }
   }
@@ -151,7 +155,7 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
   return (
     <ScreenScaffold compact trailing={onClose?<Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'关闭':'Close'} onPress={onClose} style={{minWidth:44,minHeight:44,justifyContent:'center',alignItems:'center'}}><AppIcon name="close" color={colors.actionPrimary}/></Pressable>:undefined} title={allDrafts ? (locale === 'zh-CN' ? '草稿' : 'Drafts') : copy.title}>
       {allDrafts ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report')} style={styles.textAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? '返回报告' : 'Back to reports'}</Text></Pressable> : null}
-      {!allDrafts ? <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={startReport} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
+      {!allDrafts ? <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={() => { void startReport(); }} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
         <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
         <Text style={styles.primaryActionText}>{starting ? copy.loading : copy.startAction}</Text>
       </Pressable> : null}

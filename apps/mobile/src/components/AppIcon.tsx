@@ -4,6 +4,7 @@ import { ComponentProps } from 'react';
 import { ColorValue, Platform, View } from 'react-native';
 
 const symbols = {
+  settings: ['gearshape', 'cog-outline'],
   home: ['house', 'home-outline'],
   search: ['magnifyingglass', 'magnify'],
   map: ['map', 'map-outline'],
