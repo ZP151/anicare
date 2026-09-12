@@ -1,4 +1,4 @@
-import { PropsWithChildren, ReactNode } from 'react';
+import { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,6 +19,8 @@ interface ScreenScaffoldProps extends PropsWithChildren {
   header?: ReactNode;
   avoidKeyboard?: boolean;
   hasNativeHeader?: boolean;
+  scrollEnabled?: boolean;
+  wrapScroll?: (scroll: ReactElement) => ReactElement;
 }
 
 export function ScreenScaffold({
@@ -33,17 +35,12 @@ export function ScreenScaffold({
   refreshing = false,
   onRefresh,
   refreshLabel = 'Refresh',
-  footer, header, avoidKeyboard = false, hasNativeHeader = false,
+  footer, header, avoidKeyboard = false, hasNativeHeader = false, scrollEnabled = true, wrapScroll,
 }: ScreenScaffoldProps) {
   const palette = useNativeColors();
   const nativeStyle = nativeAppearance ? { backgroundColor: palette.canvas } : undefined;
-  return (
-    <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer || avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.fill, nativeStyle]}>
-      {/* Measure keyboard overlap in the full screen coordinate space. Placing
-          this container inside SafeAreaView can subtract the top inset twice. */}
-      <SafeAreaView edges={hasNativeHeader ? (footer ? ['left','right','bottom'] : ['left','right']) : footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
-      {header ? <View testID="screen-fixed-header" style={{paddingHorizontal:16,paddingTop:6,paddingBottom:6}}>{header}</View> : null}
-      <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior={hasNativeHeader ? "never" : "automatic"} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
+  const scrollContent = (
+      <ScrollView scrollEnabled={scrollEnabled} testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior={hasNativeHeader ? "never" : "automatic"} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
         {!header ? <View style={styles.headingRow}>
           {leading ? <View testID="screen-header-leading">{leading}</View> : null}
           <View style={[styles.headingCopy, !!leading && styles.leadingHeading]}>
@@ -57,6 +54,14 @@ export function ScreenScaffold({
         </View> : null}
         {children}
       </ScrollView>
+  );
+  return (
+    <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer || avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.fill, nativeStyle]}>
+      {/* Measure keyboard overlap in the full screen coordinate space. Placing
+          this container inside SafeAreaView can subtract the top inset twice. */}
+      <SafeAreaView edges={hasNativeHeader ? (footer ? ['left','right','bottom'] : ['left','right']) : footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
+      {header ? <View testID="screen-fixed-header" style={{paddingHorizontal:16,paddingTop:6,paddingBottom:6}}>{header}</View> : null}
+      {wrapScroll ? wrapScroll(scrollContent) : scrollContent}
       {footer ? <View style={styles.footer}>{footer}</View> : null}
       </SafeAreaView>
     </KeyboardAvoidingView>
