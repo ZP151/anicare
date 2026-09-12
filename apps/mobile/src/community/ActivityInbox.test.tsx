@@ -76,3 +76,9 @@ it('offers a sign-in path instead of showing activity for a signed-out account',
  expect(mockPush).toHaveBeenCalledWith('/profile');
  expect(mockList).not.toHaveBeenCalled();await view.unmount();
 });
+
+it('opens a top-level comment directly instead of losing it below the post',async()=>{
+ const replyId='00000000-0000-4000-8000-000000000008',event={...activity('8'),replyId};mockContext.mockResolvedValue({replyId,postId:event.postId,parentReplyId:null});mockList.mockResolvedValue({items:[event],nextCursor:null});
+ const view=await render(<ActivityInbox/>);await fireEvent.press(await view.findByRole('button',{name:'Commenter replied to you, unread'}));
+ await waitFor(()=>expect(mockPush).toHaveBeenCalledWith(`/community/comments/${replyId}`));await view.unmount();
+});

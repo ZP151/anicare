@@ -85,36 +85,34 @@ export function ActivityInbox() {
     }
   }, [auth.owner]);
 
+  const opening = useRef(false);
+  const [openNotice, setOpenNotice] = useState('');
   const open = useCallback(async (item: CommunityActivity) => {
-    const owner = auth.owner;
-    if (!owner) return;
-    const current = auth.pin();
-    if (!alive.current || !await current()) return;
-    if (!item.readAt) {
-      try {
-        await markCommunityActivityRead([item.eventId]);
-      } catch {
-        if (alive.current && await current()) {
-          if (!item.replyId) router.push(`/community/${item.postId}` as never);
-          else {
-            try {
-              const resolved = await getCommunityCommentContext(item.replyId);
-              if (alive.current && await current()) router.push(resolved.parentReplyId ? `/community/comments/${resolved.parentReplyId}?childId=${item.replyId}` as never : `/community/${resolved.postId}` as never);
-            } catch { /* hidden content must not reopen stale detail */ }
-          }
-        }
-        return;
-      }
-      if (!alive.current || !await current()) return;
-      setItems(existing => existing.map(value => value.eventId === item.eventId ? { ...value, readAt: new Date().toISOString() } : value));
-    }
-    if (!alive.current || !await current()) return;
-    if (!item.replyId) { router.push(`/community/${item.postId}` as never); return; }
+    if (!auth.owner || opening.current) return;
+    opening.current = true;
+    const current = auth.pin(), epoch = generation.current;
+    const valid = async () => alive.current && epoch === generation.current && await current();
+    setOpenNotice('');
     try {
-      const resolved = await getCommunityCommentContext(item.replyId);
-      if (alive.current && await current()) router.push(resolved.parentReplyId ? `/community/comments/${resolved.parentReplyId}?childId=${item.replyId}` as never : `/community/${resolved.postId}` as never);
-    } catch { /* deleted, hidden, or blocked activity cannot navigate */ }
-  }, [auth.owner, auth.pin, router]);
+      if (!await valid()) return;
+      let destination = `/community/${item.postId}`;
+      if (item.replyId) {
+        const resolved = await getCommunityCommentContext(item.replyId);
+        if (resolved.replyId !== item.replyId || resolved.postId !== item.postId) throw new Error('unavailable');
+        destination = resolved.parentReplyId ? `/community/comments/${resolved.parentReplyId}?childId=${item.replyId}` : `/community/comments/${resolved.replyId}`;
+      }
+      if (!await valid()) return;
+      if (!item.readAt) {
+        try {
+          await markCommunityActivityRead([item.eventId]);
+          if (await valid()) setItems(existing => existing.map(value => value.eventId === item.eventId ? { ...value, readAt: new Date().toISOString() } : value));
+        } catch { /* A failed read marker must not prevent opening visible content. */ }
+      }
+      if (await valid()) router.push(destination as never);
+    } catch {
+      if (await valid()) setOpenNotice(cn ? '这条互动暂不可用，请刷新后重试。' : 'This activity is unavailable. Refresh and try again.');
+    } finally { opening.current = false; }
+  }, [auth.owner, auth.pin, router, cn]);
 
   if (auth.owner === null) {
     return <ScreenScaffold compact title={cn ? '消息' : 'Messages'}>
@@ -132,6 +130,7 @@ export function ActivityInbox() {
   const filterLabel = (value: Filter) => value === 'all' ? (cn ? '全部' : 'All') : value === 'comment' ? (cn ? '评论' : 'Comments') : (cn ? '点赞' : 'Likes');
 
   return <ScreenScaffold compact title={cn ? '互动' : 'Activity'} leading={<BackButton onPress={()=>router.back()}/>} refreshing={refreshing} refreshLabel={cn ? '刷新消息' : 'Refresh messages'} onRefresh={() => void load('refresh')}>
+    {openNotice ? <Text accessibilityLiveRegion="polite" style={{color:colors.muted,fontSize:13}}>{openNotice}</Text> : null}
     <View style={styles.filters}>{(['all', 'comment', 'like'] as const).map(value => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }} accessibilityLabel={filterLabel(value)} onPress={() => setFilter(value)} style={[styles.filter, { backgroundColor: filter === value ? colors.leafSoft : colors.surface }]}><Text style={{ color: colors.actionPrimary, fontWeight: '600' }}>{filterLabel(value)}</Text></Pressable>)}</View>
     {loading && !items.length ? <ActivityIndicator color={colors.actionPrimary} /> : null}
     {failed ? <Text accessibilityLiveRegion="polite" style={{ color: colors.muted }}>{cn ? '互动暂不可用，下拉重试。' : 'Activity unavailable. Pull to retry.'}</Text> : null}

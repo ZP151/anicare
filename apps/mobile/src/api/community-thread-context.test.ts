@@ -1,0 +1,9 @@
+const mockContext=jest.fn(),mockReply=jest.fn(),mockPost=jest.fn();
+jest.mock('./community',()=>({getCommunityCommentContext:(...a:unknown[])=>mockContext(...a),getCommunityPost:(...a:unknown[])=>mockPost(...a)}));
+jest.mock('./community-reply-detail',()=>({getCommunityReply:(...a:unknown[])=>mockReply(...a)}));
+import {getCommunityThreadContext} from './community-thread-context';
+beforeEach(()=>{jest.clearAllMocks();mockContext.mockImplementation(async(id:string)=>({replyId:id,postId:'post',parentReplyId:id==='parent'?null:'parent'}));mockReply.mockImplementation(async(id:string)=>({replyId:id,body:id}));mockPost.mockResolvedValue({postId:'post',body:'Story'});});
+it('resolves a parent and a late-page target directly',async()=>{const result=await getCommunityThreadContext('parent','target');expect(result.parent.body).toBe('parent');expect(result.target?.body).toBe('target');expect(result.post.body).toBe('Story');});
+it('does not show a target that belongs to another discussion',async()=>{mockContext.mockImplementation(async(id:string)=>({replyId:id,postId:'post',parentReplyId:id==='parent'?null:'other-parent'}));const result=await getCommunityThreadContext('parent','target');expect(result.target).toBeNull();expect(result.targetUnavailable).toBe(true);expect(mockReply).not.toHaveBeenCalledWith('target');});
+it('rejects starting a thread from a child comment',async()=>{await expect(getCommunityThreadContext('child')).rejects.toThrow('community_reply_hidden');});
+it('keeps the discussion usable when a notification target has been deleted',async()=>{mockContext.mockImplementation(async(id:string)=>{if(id==='target')throw new Error('hidden');return{replyId:id,postId:'post',parentReplyId:null};});const result=await getCommunityThreadContext('parent','target');expect(result.parent.body).toBe('parent');expect(result.targetUnavailable).toBe(true);});

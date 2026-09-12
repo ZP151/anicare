@@ -2,6 +2,7 @@ import {act,fireEvent,render,waitFor,within} from '@testing-library/react-native
 import {DeviceEventEmitter,StyleSheet} from 'react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
 const mockGet=jest.fn(),mockList=jest.fn(),mockReply=jest.fn();
+let mockFocus:()=>void;
 const mockAuthor=jest.fn(),mockReactions=jest.fn(),mockLike=jest.fn(),mockPush=jest.fn();
 jest.mock('./community-reactions',()=>({getCommunityReactions:(...args:unknown[])=>mockReactions(...args),setCommunityLike:(...args:unknown[])=>mockLike(...args)}));
 jest.mock('./cats',()=>({getPublicCatSummary:async()=>({primaryAlias:'Mochi'})}));
@@ -11,7 +12,7 @@ jest.mock('./community',()=>({getCommunityPost:(...a:unknown[])=>mockGet(...a),l
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:'owner-a',failed:false,reload:jest.fn(),pin:()=>async()=>true})}));
 jest.mock('../community/CommunityContentActions',()=>({CommunityContentActions:()=>null}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
-jest.mock('expo-router',()=>({useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
+jest.mock('expo-router',()=>({useFocusEffect:(fn:()=>void)=>{mockFocus=fn;},useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
 const mockExtras=jest.fn();
 jest.mock('./community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args),communityMediaUrl:(postId:string,mediaId:string)=>`https://media.test/${postId}/${mediaId}`}));
 import CommunityDetailScreen from '../../app/community/[id]';
@@ -85,4 +86,9 @@ it('binds the author action to the displayed post identity',async()=>{
  const shownId='00000000-0000-4000-8000-000000000099';mockGet.mockResolvedValue({postId:shownId,body:'Shown story',createdAt:'2026-09-09T00:00:00Z',author:{name:'Shown author',avatarKey:'cat'},canDelete:false});
  const view=await render(<CommunityDetailScreen/>);await fireEvent.press(await view.findByLabelText('发送私信'));
  expect(mockPush).toHaveBeenCalledWith(`/messages/new?type=community_post&contentId=${shownId}`);await view.unmount();
+});
+
+it('refreshes the post after returning from a comment discussion',async()=>{
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');mockGet.mockRejectedValueOnce(new Error('community_post_hidden'));
+ await act(async()=>{mockFocus();});await view.findByText('讨论暂不可用，点此重试');expect(view.queryByText('Neighbour question')).toBeNull();await view.unmount();
 });

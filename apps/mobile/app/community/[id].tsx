@@ -11,8 +11,8 @@ import { getCommunityAvatars } from '../../src/api/community-avatar';
 import { getCommunityAuthor } from '../../src/api/direct-messages';
 import { getCatPresentations } from '../../src/api/cat-presentation';
 import { getCommunityPostExtras,type CommunityPostExtra } from '../../src/api/community-extras';
-import {useLocalSearchParams,useRouter} from 'expo-router';
-import {useEffect,useRef,useState} from 'react';
+import {useLocalSearchParams,useRouter,useFocusEffect} from 'expo-router';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {randomUUID} from 'expo-crypto';
 import {ActivityIndicator,Image,Pressable,ScrollView,StyleSheet,Text,TextInput,View} from 'react-native';
 import {createCommunityReply,getCommunityPost,listCommunityReplies,type CommunityPost,type CommunityReply} from '../../src/api/community';
@@ -29,19 +29,21 @@ export default function CommunityDetailScreen(){
  const {id,mediaId}=useLocalSearchParams<{id:string;mediaId?:string}>(),router=useRouter(),auth=useAccountSession();const {locale}=useLocale();const zh=locale==='zh-CN',c=useNativeColors(),s=styles(c);
  const [post,setPost]=useState<CommunityPost|null>(null),[replies,setReplies]=useState<readonly CommunityReply[]>([]),[cursor,setCursor]=useState<string|null>(null),[body,setBody]=useState(''),[loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[failed,setFailed]=useState(false),[notice,setNotice]=useState(''),[writing,setWriting]=useState(false);
  const [avatars,setAvatars]=useState(new Map<string,string>());const [portrait,setPortrait]=useState<string>();const [extra,setExtra]=useState<CommunityPostExtra|null>(null);
- const generation=useRef(0),busy=useRef(false),loadingRequest=useRef(false),alive=useRef(true),context=useRef('');context.current=`${auth.owner??''}|${id}`;
+ const generation=useRef(0),busy=useRef(false),loadingRequest=useRef<number|null>(null),alive=useRef(true),context=useRef('');context.current=`${auth.owner??''}|${id}`;
  const pending=useRef<{key:string;id:string}|null>(null);
  const [canMessage,setCanMessage]=useState(false);
  const [reaction,setReaction]=useState<CommunityReaction|null>(null),[catName,setCatName]=useState<string>(),[showAuthor,setShowAuthor]=useState(false);
  const input=useRef<TextInput>(null);
  const load=async(more=false,refresh=false)=>{
-   if(!alive.current||loadingRequest.current)return;loadingRequest.current=true;const token=++generation.current,current=auth.pin();if(refresh)setRefreshing(true);else setLoading(true);setFailed(false);
+   if(!alive.current||loadingRequest.current!==null)return;const token=++generation.current,current=auth.pin();loadingRequest.current=token;if(refresh)setRefreshing(true);else setLoading(true);setFailed(false);
    try{const [parent,page,extras,publicAuthor,reactions]=await Promise.all([getCommunityPost(id),listCommunityReplies(id,more?cursor:null),getCommunityPostExtras([id]),Promise.resolve(getCommunityAuthor('community_post',id)).catch(()=>null),getCommunityReactions([id]).catch(()=>new Map<string,CommunityReaction>())]);const [postAvatars,replyAvatars,pictures,cat]=await Promise.all([getCommunityAvatars('community_post',[id]).catch(()=>new Map<string,string>()),getCommunityAvatars('community_reply',page.items.map(r=>r.replyId)).catch(()=>new Map<string,string>()),getCatPresentations(parent.catId?[parent.catId]:[]),parent.catId?getPublicCatSummary(parent.catId).catch(()=>null):null]);if(alive.current&&token===generation.current&&await current()){setReaction(reactions.get(id)??null);setCatName(cat?.primaryAlias);setCanMessage(!!(publicAuthor?.canMessage||publicAuthor?.conversationId));setPost(parent);setExtra(extras.get(id)??null);setAvatars(old=>new Map([...(more?old:[]),...postAvatars,...replyAvatars]));setPortrait(parent.catId?pictures.get(parent.catId)?.portraitUri:undefined);setReplies(old=>more?[...old,...page.items]:page.items);setCursor(page.nextCursor);}}
    catch(error){if(alive.current&&token===generation.current&&await current()){setFailed(true);if(!refresh||(error instanceof Error&&error.message==='community_post_hidden')){setShowAuthor(false);setReaction(null);setCatName(undefined);setCanMessage(false);setPost(null);setExtra(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);}}}
-   finally{loadingRequest.current=false;if(alive.current&&token===generation.current&&await current()){if(refresh)setRefreshing(false);else setLoading(false);}}
+   finally{if(loadingRequest.current===token)loadingRequest.current=null;if(alive.current&&token===generation.current&&await current()){if(refresh)setRefreshing(false);else setLoading(false);}}
  };
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++;};},[]);
- useEffect(()=>{generation.current++;busy.current=false;loadingRequest.current=false;setWriting(false);setShowAuthor(false);setReaction(null);setCatName(undefined);setCanMessage(false);setPost(null);setExtra(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);setBody('');setNotice('');pending.current=null;if(auth.owner!==undefined)void load();},[id,auth.owner]);
+ useEffect(()=>{generation.current++;busy.current=false;loadingRequest.current=null;setWriting(false);setShowAuthor(false);setReaction(null);setCatName(undefined);setCanMessage(false);setPost(null);setExtra(null);setAvatars(new Map());setPortrait(undefined);setReplies([]);setCursor(null);setBody('');setNotice('');pending.current=null;if(auth.owner!==undefined)void load();},[id,auth.owner]);
+ const loadRef=useRef(load);loadRef.current=load;
+ useFocusEffect(useCallback(()=>{void loadRef.current(false,true);},[id,auth.owner]));
  const reply=async()=>{
    if(!post||!auth.owner||!body.trim()||busy.current)return;busy.current=true;setWriting(true);const current=auth.pin(),scope=context.current;
    try{if(!await current())return;const key=JSON.stringify([scope,body.trim()]);if(pending.current?.key!==key)pending.current={key,id:randomUUID()};await createCommunityReply(id,body,undefined,pending.current.id);if(alive.current&&scope===context.current&&await current()){pending.current=null;setBody('');setNotice(zh?'回复已发布':'Reply posted');await load();}}
