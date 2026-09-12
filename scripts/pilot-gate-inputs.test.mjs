@@ -39,10 +39,10 @@ test('discovers the complete repository source contract', () => {
   const repoRoot = path.resolve(import.meta.dirname, '..');
   const inputs = discoverPilotGateInputs(repoRoot);
 
-  assert.equal(inputs.sqlTests.length, 42);
+  assert.equal(inputs.sqlTests.length, 44);
   assert.equal(
     inputs.sqlTests.at(-1),
-    'supabase/tests/042_profile_photos_neighbourhood.sql',
+    'supabase/tests/044_community_media_schedule.sql',
   );
   assert.equal(inputs.edgeHandlers.length, 10);
   assert.deepEqual(inputs.edgeHandlers, [

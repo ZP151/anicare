@@ -1,0 +1,47 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select no_plan();
+select is(encode(extensions.hmac(convert_to(E'animalhelper-community-media-cleanup-v1\n1789315200\n00000000-0000-4000-8000-000000000001\n{}','UTF8'),convert_to(repeat('a',43),'UTF8'),'sha256'),'hex'),'d8fb5a174d4d9f79a4e1c091faa1612fff6653fa0936181b45bc13b4bb81e92f','SQL and Edge share the same HMAC vector');
+select has_function('private','invoke_community_media_cleanup',array[]::text[],'private scheduler wrapper exists');
+select ok(not has_function_privilege('anon','private.invoke_community_media_cleanup()','execute'),'anonymous cannot invoke scheduler');
+select ok(not has_function_privilege('authenticated','private.invoke_community_media_cleanup()','execute'),'members cannot invoke scheduler');
+select ok(not has_function_privilege('service_role','private.invoke_community_media_cleanup()','execute'),'service role cannot invoke scheduler wrapper');
+select ok(not has_table_privilege('anon','vault.decrypted_secrets','select'),'anonymous cannot read capability');
+select ok(not has_table_privilege('authenticated','vault.decrypted_secrets','select'),'members cannot read capability');
+select is((select count(*) from cron.job where jobname='animalhelper-community-media-cleanup-v1'),1::bigint,'one named schedule');
+select is((select schedule from cron.job where jobname='animalhelper-community-media-cleanup-v1'),'*/15 * * * *','fifteen minute cadence');
+select is((select command from cron.job where jobname='animalhelper-community-media-cleanup-v1'),'select private.invoke_community_media_cleanup()','command has no credentials or target overrides');
+select ok((select active and username='postgres' from cron.job where jobname='animalhelper-community-media-cleanup-v1'),'private owner and active schedule');
+select cron.schedule('animalhelper-community-media-cleanup-v1','*/15 * * * *','select private.invoke_community_media_cleanup()');
+select is((select count(*) from cron.job where jobname='animalhelper-community-media-cleanup-v1'),1::bigint,'rescheduling does not duplicate');
+delete from vault.secrets where name='animalhelper-community-media-cleanup-v1';
+select is(private.invoke_community_media_cleanup(),null::bigint,'missing capability safely disables invocation');
+select vault.create_secret(repeat('a',43),'animalhelper-community-media-cleanup-v1');
+create temp table queued_cleanup as select private.invoke_community_media_cleanup() request_id;
+select ok((select headers::text not like '%'||repeat('a',43)||'%' from net.http_request_queue where id=(select request_id from queued_cleanup)),'queue never contains reusable capability');
+select is((select (select count(*) from jsonb_object_keys(headers)) from net.http_request_queue where id=(select request_id from queued_cleanup)),4::bigint,'only content type and signed invocation headers');
+select ok((select headers->>'x-cleanup-signature' = encode(extensions.hmac(convert_to(E'animalhelper-community-media-cleanup-v1\n'||(headers->>'x-cleanup-time')||E'\n'||(headers->>'x-cleanup-nonce')||E'\n{}','UTF8'),convert_to(repeat('a',43),'UTF8'),'sha256'),'hex') from net.http_request_queue where id=(select request_id from queued_cleanup)),'signature binds purpose time nonce and exact empty JSON');
+
+select is((select array(select jsonb_object_keys(headers) order by 1) from net.http_request_queue where id=(select request_id from queued_cleanup)),array['Content-Type','x-cleanup-nonce','x-cleanup-signature','x-cleanup-time'],'exact signed header keys');
+select is((select headers->>'Content-Type' from net.http_request_queue where id=(select request_id from queued_cleanup)),'application/json','canonical JSON type');
+select ok((select headers->>'x-cleanup-time' ~ '^[0-9]{10}$' and headers->>'x-cleanup-nonce' ~ '^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$' and headers->>'x-cleanup-signature' ~ '^[a-f0-9]{64}$' from net.http_request_queue where id=(select request_id from queued_cleanup)),'canonical time nonce signature shapes');
+select is((select convert_from(body,'UTF8') from net.http_request_queue where id=(select request_id from queued_cleanup)),'{}','no caller-selected cleanup body');
+select is((select url from net.http_request_queue where id=(select request_id from queued_cleanup)),'https://fhugdtpjbgiatqhvjioy.supabase.co/functions/v1/cleanup-community-media','fixed hosted target');
+insert into private.community_media_jobs(id,owner_id,request_id,payload_hash,thumb_sha256,thumb_byte_length,thumb_width,thumb_height,display_sha256,display_byte_length,display_width,display_height,created_at,reservation_expires_at,upload_token_expires_at)
+values('00000000-0000-4000-8000-000000004401',null,'00000000-0000-4000-8000-000000004402',repeat('a',64),repeat('a',64),100,10,10,repeat('b',64),100,10,10,now()-interval '3 hours',now()-interval '2 hours 50 minutes',now()-interval '50 minutes');
+insert into private.community_media_cleanup_jobs(id,media_id,owner_id,not_before,created_at)
+values('00000000-0000-4000-8000-000000004403','00000000-0000-4000-8000-000000004401',null,now()-interval '30 minutes',now()-interval '10 years');
+create temp table cleanup_claim as select * from public.claim_community_media_cleanup_jobs(1);
+select is((select job_id from cleanup_claim),'00000000-0000-4000-8000-000000004403'::uuid,'claim keeps cleanup row id');
+select is((select media_id from cleanup_claim),'00000000-0000-4000-8000-000000004401'::uuid,'claim carries the separate media id');
+select is((select thumb_path from cleanup_claim),'media/00000000-0000-4000-8000-000000004401/thumb.jpg','thumbnail binds to media id');
+select is((select display_path from cleanup_claim),'media/00000000-0000-4000-8000-000000004401/display.jpg','display binds to media id');
+select is_empty($$select * from public.claim_community_media_cleanup_jobs(1) where media_id='00000000-0000-4000-8000-000000004401'$$,'live lease prevents duplicate work');
+update private.community_media_cleanup_jobs set claimed_at=now()-interval '6 minutes' where id='00000000-0000-4000-8000-000000004403';
+create temp table retried_claim as select * from public.claim_community_media_cleanup_jobs(1);
+select isnt((select claim_id from retried_claim),(select claim_id from cleanup_claim),'expired lease receives a fresh claim');
+select throws_ok($$select public.complete_community_media_cleanup_job(job_id,claim_id) from cleanup_claim$$,'P0001','invalid_community_media_cleanup_claim','stale completion rejected');
+select lives_ok($$select public.complete_community_media_cleanup_job(job_id,claim_id) from retried_claim$$,'current claim completes');
+select is((select status from private.community_media_jobs where id='00000000-0000-4000-8000-000000004401'),'completed','media completion recorded');
+select * from finish();
+rollback;

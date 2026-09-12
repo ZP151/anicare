@@ -15,7 +15,7 @@
     "test": "turbo run test",
     "test:product-core": "pnpm --filter @animalhelper/mobile exec jest --runInBand --runTestsByPath src/report/report-submission.test.ts src/report/ReportWizard.test.tsx src/report/ReportReceipt.test.tsx src/report/MyReportsScreen.test.tsx src/api/feed-screens.test.tsx src/auth/profile-report-return.test.ts src/media/media-upload-runtime.test.ts src/api/safety.test.ts src/report/identity-route-journey.test.tsx src/report/IdentityContinuation.test.tsx src/auth/profile-contribution.test.tsx src/offline/draft-store.native.test.ts src/api/identity.test.ts src/api/identity-result.test.ts src/api/cats.test.ts src/api/cat-route.test.tsx src/api/care.test.ts src/care/CareEntry.test.tsx src/care/care-route.test.tsx src/care/care-pending.test.ts src/api/follows.test.ts src/following/following-journey.test.tsx src/safety/rights-journey.test.tsx src/api/rights.test.ts && pnpm --filter @animalhelper/admin exec vitest run src/lib/identity-api.test.ts src/lib/identity-media.test.ts src/app/identity/[proposalId]/media/route.test.ts src/app/actions/identity.test.ts src/app/identity/page.test.tsx src/lib/erasure.test.ts src/app/actions/rights.test.ts",
     "test:pilot-gate-2a-ci": "node --test scripts/pilot-gate-2a-inputs.test.mjs scripts/run-pilot-gate-2a.test.mjs",
-    "test:pilot-gate-2b-ci": "node --test scripts/pilot-gate-2b-inputs.test.mjs scripts/run-pilot-gate-2b.test.mjs scripts/promote-pilot-gate-2b-evidence.test.mjs",
+    "test:pilot-gate-2b-ci": "node --test scripts/community-cleanup-provision.test.mjs scripts/pilot-gate-2b-inputs.test.mjs scripts/run-pilot-gate-2b.test.mjs scripts/promote-pilot-gate-2b-evidence.test.mjs",
     "test:pilot-gate-2b-promotion": "node --test scripts/promote-pilot-gate-2b-evidence.test.mjs",
     "test:pilot-source-inventory": "node --test scripts/pilot-gate-inputs.test.mjs",
     "test:root-contracts": "node --test scripts/root-verify-contract.test.mjs",
@@ -31,6 +31,7 @@
   "devDependencies": {
     "@types/node": "26.2.0",
     "cross-env": "10.1.0",
+    "postgres": "3.4.9",
     "turbo": "2.10.11",
     "typescript": "7.0.2",
     "vitest": "4.1.11",

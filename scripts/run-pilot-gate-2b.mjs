@@ -1,3 +1,4 @@
+import { cleanupProvisioner } from './community-cleanup-provision.mjs';
 import { spawn } from 'node:child_process';
 import { chmod, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,7 +15,7 @@ const DIAGNOSTIC_PATH = path.join(tmpdir(), 'animalhelper-pilot-gate-2b-failure.
 const SAFE_ENV = ['PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TMP', 'TEMP', 'CI', 'GITHUB_ACTIONS'];
 const PRODUCER_STAGES = new Set([
   'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
-  'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
+  'database_dry_run', 'database_push', 'auth_configuration', 'community_cleanup_prepare', 'community_cleanup_activation', 'community_media_cleanup_validation', 'edge_secret_configuration',
   'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'performance_characterization',
   'temporary_cleanup',
 ]);
@@ -275,6 +276,7 @@ export function createDefaultProcessAdapter({ runId, runAttempt, temporaryRoot }
       const target = path.join(secretDirectory, 'edge.env');
       await writeFile(target, [
         `PRECISE_LOCATION_ENCRYPTION_KEY=${values.PRECISE_LOCATION_ENCRYPTION_KEY}`,
+        `COMMUNITY_MEDIA_CLEANUP_TOKEN=${values.COMMUNITY_MEDIA_CLEANUP_TOKEN}`,
         'MEDIA_ALLOWED_ORIGIN=https://fhugdtpjbgiatqhvjioy.supabase.co',
         'MEDIA_PUBLIC_SUPABASE_ORIGIN=https://fhugdtpjbgiatqhvjioy.supabase.co',
       ].join('\n').concat('\n'), { mode: 0o600 });
@@ -349,6 +351,7 @@ export async function runPilotGate2B({
   repoRoot,
   processAdapter,
   fetchAdapter = fetch,
+  cleanupAdapter = cleanupProvisioner(),
   parentEnvironment = process.env,
   outputAdapter = process.stdout,
   discoverInputs = discoverPilotGate2BInputs,
@@ -438,8 +441,10 @@ export async function runPilotGate2B({
     await processAdapter.run('supabase', ['db', 'push'], { cwd: sourceRoot, env: dbCli, timeoutMs: 300_000 });
     stageAdapter.enter('auth_configuration');
     await configureHostedAuth({ fetchAdapter, accessToken });
+    stageAdapter.enter('community_cleanup_prepare');
+    const cleanupToken = await cleanupAdapter.prepare(databaseUrl);
     stageAdapter.enter('edge_secret_configuration');
-    edgeSecretFile = await processAdapter.writeEdgeSecretFile({ PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey });
+    edgeSecretFile = await processAdapter.writeEdgeSecretFile({ PRECISE_LOCATION_ENCRYPTION_KEY: encryptionKey, COMMUNITY_MEDIA_CLEANUP_TOKEN: cleanupToken });
     await processAdapter.run('supabase', ['secrets', 'set', '--env-file', edgeSecretFile, '--project-ref', PROJECT_REF],
       { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
     stageAdapter.enter('function_deployment');
@@ -457,6 +462,8 @@ export async function runPilotGate2B({
       'functions', 'list', '--project-ref', PROJECT_REF, '--output', 'json',
     ], { cwd: sourceRoot, env: cli, timeoutMs: 60_000 });
     validateRemoteFunctionInventory(remoteFunctions.stdout);
+    stageAdapter.enter('community_cleanup_activation');
+    await cleanupAdapter.activate(databaseUrl, cleanupToken);
     stageAdapter.enter('source_reverification');
     if (discoverInputs(sourceRoot)?.deploymentTreeSha256 !== initialInputs?.deploymentTreeSha256 ||
         discoverInputs(repoRoot)?.deploymentTreeSha256 !== initialInputs?.deploymentTreeSha256) {
@@ -493,6 +500,10 @@ export async function runPilotGate2B({
         if (control !== undefined && typeof stageAdapter.control === 'function') stageAdapter.control(control);
       }
       throw error;
+    }
+    if (runtime.mode === 'correctness') {
+      stageAdapter.enter('community_media_cleanup_validation');
+      await processAdapter.run('pnpm', ['--filter', '@animalhelper/pilot-gate-2b', 'validate:community-cleanup'], {cwd:repoRoot,env:harness,timeoutMs:180_000});
     }
     outputAdapter.write('pilot_gate_2b_deployment_passed\n');
   } finally {

@@ -75,8 +75,12 @@ function assertContract(source, value) {
   assert.equal(cleanup.env.PILOT_GATE_2B_FINALIZE_TIMEOUT_MS,
     "${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize' && '30000' || '10000' }}");
 
+  const communityCleanup = step(producer, 'Recover community media validation fixtures');
+  assert.equal(communityCleanup.id,'community_cleanup');
+  assert.equal(communityCleanup.if,'always()');
+  assert.equal(communityCleanup.run,'pnpm --filter @animalhelper/pilot-gate-2b cleanup:community-fixture');
   const evidence = step(producer, 'Write canonical readiness evidence');
-  const correctnessCondition = "steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'";
+  const correctnessCondition = "steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success' && steps.community_cleanup.outcome == 'success'";
   assert.equal(evidence.if, correctnessCondition);
   assert.equal(evidence.run, 'pnpm --filter @animalhelper/pilot-gate-2b evidence:write');
   assert.equal(evidence.env.PILOT_GATE_2B_MODE, 'correctness');
@@ -89,7 +93,7 @@ function assertContract(source, value) {
   assert.equal(readinessUpload.with['retention-days'], 3);
   const performanceUpload = step(producer, 'Upload latency characterization');
   assert.equal(performanceUpload.if,
-    "steps.characterize.outcome == 'success' && steps.cleanup.outcome == 'success'");
+    "steps.characterize.outcome == 'success' && steps.cleanup.outcome == 'success' && steps.community_cleanup.outcome == 'success'");
   assert.match(performanceUpload.with.path, /hosted-gate-2b-performance\.json$/);
   assert.equal(performanceUpload.with['retention-days'], 3);
   assert.equal(step(producer, 'Upload sanitized failure diagnostic').if,

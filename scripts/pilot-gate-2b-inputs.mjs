@@ -44,6 +44,8 @@ export const REVIEWED_MIGRATIONS = Object.freeze([
   '202609110018_direct_messages_and_comment_replies.sql',
   '202609110019_r3_contract_hardening.sql',
   '202609130020_profile_photos_neighbourhood.sql',
+  '202609130021_community_reply_detail.sql',
+  '202609130022_community_media_schedule.sql',
 ]);
 
 export const DEPLOYED_FUNCTIONS = Object.freeze([

@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "validate:community-cleanup": "tsx src/validate-community-cleanup.ts",
+    "cleanup:community-fixture": "tsx src/validate-community-cleanup.ts --cleanup",
     "build": "tsc -p tsconfig.json --noEmit",
     "characterize:hosted": "tsx src/characterize-hosted.ts",
     "cleanup:hosted": "tsx src/cleanup-hosted.ts",

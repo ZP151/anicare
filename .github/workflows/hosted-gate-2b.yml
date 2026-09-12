@@ -123,8 +123,27 @@ jobs:
           PILOT_GATE_2B_CHECKS_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-checks.json
           PILOT_GATE_2B_CLEANUP_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-cleanup.json
         run: pnpm --filter @animalhelper/pilot-gate-2b cleanup:hosted
+      - name: Recover community media validation fixtures
+        id: community_cleanup
+        if: always()
+        timeout-minutes: 3
+        env:
+          SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_PUBLIC_KEY: ${{ secrets.SUPABASE_PUBLIC_KEY }}
+          PRECISE_LOCATION_ENCRYPTION_KEY: ${{ secrets.PRECISE_LOCATION_ENCRYPTION_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PILOT_GATE_2B_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'correctness' }}
+          PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'characterize' && '30000' || '10000' }}
+          PILOT_GATE_2B_LEDGER_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/animalhelper-pilot-gate-2b-ledger-${{ github.run_id }}-${{ github.run_attempt }}.json
+          PILOT_GATE_2B_CHECKS_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-checks.json
+          PILOT_GATE_2B_CLEANUP_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-cleanup.json
+        run: pnpm --filter @animalhelper/pilot-gate-2b cleanup:community-fixture
       - name: Write canonical readiness evidence
-        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'
+        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success' && steps.community_cleanup.outcome == 'success'
         env:
           SUPABASE_URL: https://fhugdtpjbgiatqhvjioy.supabase.co
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
@@ -140,10 +159,10 @@ jobs:
           PILOT_GATE_2B_CLEANUP_PATH: ${{ runner.temp }}/animalhelper-gate-2b-${{ github.run_id }}-${{ github.run_attempt }}/hosted-gate-2b-cleanup.json
         run: pnpm --filter @animalhelper/pilot-gate-2b evidence:write
       - name: Validate canonical readiness evidence
-        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'
+        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success' && steps.community_cleanup.outcome == 'success'
         run: pnpm --filter @animalhelper/mobile validate:gate-2b-readiness
       - name: Upload canonical readiness evidence
-        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success'
+        if: steps.correctness.outcome == 'success' && steps.cleanup.outcome == 'success' && steps.community_cleanup.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pilot-gate-2b-readiness-${{ github.run_id }}-${{ github.run_attempt }}
@@ -151,7 +170,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Upload latency characterization
-        if: steps.characterize.outcome == 'success' && steps.cleanup.outcome == 'success'
+        if: steps.characterize.outcome == 'success' && steps.cleanup.outcome == 'success' && steps.community_cleanup.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pilot-gate-2b-performance-${{ github.run_id }}-${{ github.run_attempt }}

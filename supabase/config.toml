@@ -30,3 +30,6 @@ file_size_limit = "20MiB"
 enabled = true
 deno_version = 2
 
+
+[functions.cleanup-community-media]
+verify_jwt = false

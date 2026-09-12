@@ -13,10 +13,10 @@ function env(): HostedGateEnvironment {
 }
 
 describe('remote hosted deployment state', () => {
-  it('requires the profile photos and neighbourhood migration at the remote head', () => {
+  it('requires the community cleanup schedule migration at the remote head', () => {
     expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
-      version: '202609130020',
-      name: 'profile_photos_neighbourhood',
+      version: '202609130022',
+      name: 'community_media_schedule',
     });
   });
 

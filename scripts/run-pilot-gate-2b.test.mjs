@@ -7,8 +7,9 @@ import test from 'node:test';
 import {
   buildProducerFailureDiagnostic, cleanupRunnerTemporary, configureHostedAuth, hostedCheckDiagnosticPath,
   readHostedGateControl, createDefaultProcessAdapter, hostedGateRuntime,
-  runPilotGate2B, validHostedApiKeys, validateRemoteFunctionInventory,
+  runPilotGate2B as runProducer, validHostedApiKeys, validateRemoteFunctionInventory,
 } from './run-pilot-gate-2b.mjs';
+const runPilotGate2B = options => runProducer({cleanupAdapter:{prepare:async()=> 'a'.repeat(43),activate:async()=>{}},...options});
 import { DEPLOYED_FUNCTIONS } from './pilot-gate-2b-inputs.mjs';
 
 test('configures and reads back the exact Auth redirects', async () => {
@@ -110,6 +111,10 @@ test('deploys incrementally in fixed order without privileged command arguments'
   const runtimeDigest = 'public.ecr.aws/supabase/edge-runtime@sha256:3775cdbe86dab8cd7495157af69377dfedf208ba3cb4165031b58ed691514c22';
   const commands = [];
   const stages = [];
+  const cleanupCalls = [];
+  const cleanupToken = 'T'.repeat(43);
+  let writtenSecrets;
+  const cleanupAdapter = {prepare:async url=>{cleanupCalls.push(['prepare',url,stages.at(-1)]);return cleanupToken;},activate:async(url,token)=>{cleanupCalls.push(['activate',url,token,stages.at(-1)]);assert.ok(commands.some(x=>x.args[0]==='functions'&&x.args[1]==='list'));}};
   const processAdapter = {
     run: async (command, args, options) => {
       commands.push({ command, args, options });
@@ -123,7 +128,7 @@ test('deploys incrementally in fixed order without privileged command arguments'
       return { stdout: '' };
     },
     createSourceDirectory: async () => 'C:/temp/source',
-    writeEdgeSecretFile: async () => 'C:/temp/edge.env',
+    writeEdgeSecretFile: async values => {writtenSecrets=values;return 'C:/temp/edge.env';},
     removeTemporaryFiles: async () => undefined,
   };
   const fetchAdapter = async () => new Response(JSON.stringify({
@@ -139,7 +144,7 @@ test('deploys incrementally in fixed order without privileged command arguments'
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
     PILOT_GATE_2B_MODE: 'correctness', PILOT_GATE_2B_FINALIZE_TIMEOUT_MS: '15000',
   };
-  await runPilotGate2B({ repoRoot: 'C:/repo', processAdapter, fetchAdapter, parentEnvironment: values,
+  await runPilotGate2B({ repoRoot: 'C:/repo', processAdapter, fetchAdapter, cleanupAdapter, parentEnvironment: values,
     discoverInputs: () => ({ deploymentTreeSha256: 'b'.repeat(64) }), outputAdapter: { write: () => undefined },
     stageAdapter: { enter: (stage) => stages.push(stage) } });
   assert.deepEqual(commands.map(({ command, args }) => [command, ...args]), [
@@ -160,7 +165,11 @@ test('deploys incrementally in fixed order without privileged command arguments'
     ...DEPLOYED_FUNCTIONS.map((name) => ['supabase', 'functions', 'deploy', name, '--project-ref', 'fhugdtpjbgiatqhvjioy', '--use-docker']),
     ['supabase', 'functions', 'list', '--project-ref', 'fhugdtpjbgiatqhvjioy', '--output', 'json'],
     ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'test:integration'],
+    ['pnpm', '--filter', '@animalhelper/pilot-gate-2b', 'validate:community-cleanup'],
   ]);
+  assert.deepEqual(cleanupCalls,[['prepare',values.SUPABASE_DATABASE_URL,'community_cleanup_prepare'],['activate',values.SUPABASE_DATABASE_URL,cleanupToken,'community_cleanup_activation']]);
+  assert.equal(writtenSecrets.COMMUNITY_MEDIA_CLEANUP_TOKEN,cleanupToken);
+  assert.equal(JSON.stringify(commands).includes(cleanupToken),false);
   const commandText = JSON.stringify(commands.map(({ command, args }) => [command, args]));
   assert.equal(commandText.includes('access-secret') || commandText.includes('db-secret') ||
     commandText.includes('sb_secret_service'), false);
@@ -178,8 +187,8 @@ test('deploys incrementally in fixed order without privileged command arguments'
   assert.equal('PILOT_GATE_2B_CLEANUP_PATH' in integration.options.env, false);
   assert.deepEqual(stages, [
     'environment_validation', 'source_verification', 'docker_bundler_verification', 'public_key_origin', 'supabase_link',
-    'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
-    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks',
+    'database_dry_run', 'database_push', 'auth_configuration', 'community_cleanup_prepare', 'edge_secret_configuration',
+    'function_deployment', 'function_inventory', 'community_cleanup_activation', 'source_reverification', 'hosted_checks', 'community_media_cleanup_validation',
   ]);
 });
 
@@ -226,7 +235,7 @@ test('runs the command selected by the explicit fixed runtime mode', async () =>
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_ENVIRONMENT: 'hosted-gate-2b',
   };
   for (const [eventName, ref, mode, timeout, commandName, stage] of [
-    ['push', 'refs/heads/codex/hosted-gate-2b', 'correctness', '15000', 'test:integration', 'hosted_checks'],
+    ['push', 'refs/heads/codex/hosted-gate-2b', 'correctness', '15000', 'test:integration', 'community_media_cleanup_validation'],
     ['workflow_dispatch', 'refs/heads/codex/hosted-gate-2b', 'characterize', '30000', 'characterize:hosted', 'performance_characterization'],
   ]) {
     const commands = [];
@@ -368,8 +377,8 @@ test('serializes only allowlisted producer diagnostics with canonical bytes', as
   const allowed = [
     'environment_validation', 'source_verification', 'public_key_origin', 'supabase_link',
     'docker_bundler_verification',
-    'database_dry_run', 'database_push', 'auth_configuration', 'edge_secret_configuration',
-    'function_deployment', 'function_inventory', 'source_reverification', 'hosted_checks', 'performance_characterization',
+    'database_dry_run', 'database_push', 'auth_configuration', 'community_cleanup_prepare', 'edge_secret_configuration',
+    'function_deployment', 'function_inventory', 'community_cleanup_activation', 'source_reverification', 'hosted_checks', 'community_media_cleanup_validation', 'performance_characterization',
     'temporary_cleanup',
   ];
   for (const stage of allowed) {
