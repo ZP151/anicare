@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {usesNativeLiquidTabs} from '../../src/navigation/native-tabs-policy';
 import {tabBarOcclusion} from '../../src/navigation/tab-layout';
 import { listPublicSightings, type PublicSighting, type NarrowRpcClient } from '../../src/api/feed';
 import { getCatPresentations } from '../../src/api/cat-presentation';
@@ -20,7 +21,7 @@ import { NearbyMap } from '../../src/maps/NearbyMap';
 import { buildSingaporeAreas, filterSingaporeAreas, communityLabel, SG_COMMUNITIES, SG_REGIONS, type SingaporeArea } from '../../src/maps/singapore-communities';
 
 export default function MapScreen(){
- const insets=useSafeAreaInsets(); const overlayBottom=10+tabBarOcclusion(insets.bottom);
+ const insets=useSafeAreaInsets(); const overlayBottom=10+(usesNativeLiquidTabs(Platform.OS,Platform.Version)?insets.bottom:tabBarOcclusion(insets.bottom));
  const {locale}=useLocale(); const cn=locale==='zh-CN'; const router=useRouter(); const colors=useNativeColors(); const styles=makeStyles(colors);
  const localeRef=useRef(locale);localeRef.current=locale;
  const params=useLocalSearchParams<{communityId?:string}>();

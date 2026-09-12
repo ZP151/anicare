@@ -9,7 +9,7 @@ const mockEq = jest.fn();
 let mockLocale = 'en';
 let mockSubject:string|null=mockOwner;let mockListener:()=>void=()=>{};const mockSignOut=jest.fn();const mockAdult=jest.fn();
 jest.mock('./session-subject',()=>({readSessionSubjectStrict:async()=>mockSubject,subscribeSessionSubject:(f:()=>void)=>{mockListener=f;return()=>{};}}));
-jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }), useLocalSearchParams: () => ({}) }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn(),push:jest.fn() }), useFocusEffect:(fn:any)=>require('react').useEffect(fn,[fn]), useLocalSearchParams: () => ({}) }));
 jest.mock('../media/processor', () => ({ prepareAvatar: jest.fn(), discardAvatar: jest.fn() }));
 jest.mock('../api/profile-avatar-upload', () => ({ uploadProfileAvatar: jest.fn() }));
 jest.mock('expo-web-browser', () => ({ maybeCompleteAuthSession: jest.fn() }));

@@ -18,6 +18,7 @@ it('keeps the editable reply and send action outside the long post scroll, insid
  const view=await render(<CommunityDetailScreen/>);
  const input=await view.findByLabelText('写回复');
  expect(within(view.getByTestId('screen-scroll')).queryByLabelText('写回复')).toBeNull();
+ expect((view.toJSON() as any).props.testID).toBe('screen-keyboard-layout');
  await fireEvent(view.getByTestId('screen-keyboard-layout'),'layout',{persist:()=>{},nativeEvent:{layout:{x:0,y:0,width:390,height:800}}});
  await act(async()=>{DeviceEventEmitter.emit('keyboardWillShow',{duration:250,easing:'keyboard',endCoordinates:{screenY:500,height:300,width:390,screenX:0}});});
  expect(StyleSheet.flatten(view.getByTestId('screen-keyboard-layout').props.style).paddingBottom).toBe(300);

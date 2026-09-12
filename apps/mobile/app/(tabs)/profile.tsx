@@ -1,3 +1,6 @@
+import {readProviderSettings,exchangeAuthCodeOnce,type ProviderSettings} from '../../src/auth/provider-settings';
+import {ProfilePosts} from '../../src/profile/ProfilePosts';
+import appConfig from '../../app.json';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,12 +37,15 @@ export default function ProfileScreen() {
   const { locale, setLocale, t } = useLocale();
   const auth = useAccountSession();
   const cn = locale === 'zh-CN';
+  const [publicName,setPublicName]=useState('');
   const [adult, setAdult] = useState<boolean|null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
+  const [providers,setProviders]=useState<ProviderSettings|null>(null);
+  useEffect(()=>{if(!showSignIn)return;let active=true;setProviders(null);void readProviderSettings().then(value=>{if(active)setProviders(value);}).catch(()=>undefined);return()=>{active=false;};},[showSignIn]);
   const [showLanguage, setShowLanguage] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
@@ -55,7 +61,7 @@ export default function ProfileScreen() {
   useEffect(() => () => { if (pendingAvatar) discardAvatar(pendingAvatar.uri); }, [pendingAvatar]);
 
   useEffect(() => {
-    setAdult(null); setStatus(null); setEmail(''); setLoggingOut(false); setShowSignIn(false);
+    setPublicName(''); setAdult(null); setStatus(null); setEmail(''); setLoggingOut(false); setShowSignIn(false);
     setEditingName(false); setNameValue(''); setNameExists(false); setNameLoading(false); setSavingName(false); setAvatarKey('person'); setAvatarPath(null); setAvatarUri(null); setShowAvatar(false); setSavingAvatar(false); setPendingAvatar(null);
     if (!auth.owner) return;
     const current = auth.pin(); let active = true;
@@ -63,9 +69,10 @@ export default function ProfileScreen() {
     void Promise.resolve(client?.rpc('is_adult_contributor')).then(async result => {
       if (active && await current() && result && !result.error && typeof result.data === 'boolean') setAdult(result.data);
     }).catch(() => undefined);
-    void Promise.resolve(client?.from('user_profiles').select('avatar_key,avatar_object_path').eq('id', auth.owner).maybeSingle()).then(async result => {
+    void Promise.resolve(client?.from('user_profiles').select('avatar_key,avatar_object_path,public_name').eq('id', auth.owner).maybeSingle()).then(async result => {
       if (active && await current() && result && !result.error) {
         const path = typeof result.data?.avatar_object_path === 'string' ? result.data.avatar_object_path : null;
+        setPublicName(typeof result.data?.public_name==='string'?result.data.public_name:'');
         setAvatarKey(profileAvatarKey(result.data?.avatar_key)); setAvatarPath(path);
         if (path && client) { const signed = await client.storage.from('profile-avatars').createSignedUrl(path, 60); if (active && await current() && !signed.error) setAvatarUri(signed.data?.signedUrl ?? null); }
       }
@@ -160,7 +167,7 @@ export default function ProfileScreen() {
         : await client.from('user_profiles').insert({ id: auth.owner, public_name: name, locale });
       if (!await current()) return;
       if (result.error) throw result.error;
-      setNameValue(name); setNameExists(true); setEditingName(false);
+      setPublicName(name); setNameValue(name); setNameExists(true); setEditingName(false);
       setStatus(cn ? '昵称已保存。' : 'Name saved.');
     } catch { if (await current()) setStatus(cn ? '未能保存昵称，请重试。' : 'Could not save your name. Try again.'); }
     finally { if (await current()) setSavingName(false); }
@@ -273,6 +280,9 @@ export default function ProfileScreen() {
 
     setSending(true);
     try {
+      const available=await readProviderSettings();
+      setProviders(available);
+      if(!available[provider]) {setStatus(cn?'此登录方式尚未开通，请使用邮箱登录。':'This sign-in method is not available yet. Please use email.');return;}
       const redirectTo = makeRedirectUri({ scheme: 'animalhelper', path: 'auth/callback' });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -287,8 +297,7 @@ export default function ProfileScreen() {
       }
       const code = extractAuthCode(result.url);
       if (!code) throw new Error('missing_callback_code');
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      if (exchangeError) throw exchangeError;
+      await exchangeAuthCodeOnce(supabase, code);
       setStatus(cn?'登录完成。':'Sign-in complete.');
       await resumeReport();
     } catch (error) {
@@ -299,10 +308,11 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScreenScaffold title={t('profile.title')} nativeAppearance>
+    <ScreenScaffold compact title={cn?'我的':'Me'} nativeAppearance>
       <View style={styles.account}>
         <View style={styles.avatar}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath ? avatarUri : null} size={72} /></View>
         <View style={styles.accountCopy}>
+        {auth.owner&&publicName?<Text style={styles.label}>{publicName}</Text>:null}
         <Text accessibilityLiveRegion="polite" style={styles.label}>{auth.owner === undefined ? (auth.failed ? (cn?'账户状态不可用':'Account state unavailable') : (cn?'正在读取账户…':'Loading account…')) : auth.owner ? (cn?'已登录':'Signed in') : (cn?'匿名浏览':'Browsing anonymously')}</Text>
         {auth.owner ? <Text style={styles.value}>{adult === null ? (cn?'贡献者状态尚未确认':'Contributor state not confirmed') : adult ? (cn?'已确认年满 18 岁':'18+ contributor confirmed') : (cn?'需要确认年满 18 岁':'18+ confirmation required')}</Text> : <Text style={styles.value}>{cn ? '一起记录社区猫的日常' : 'A little care, shared with your community.'}</Text>}
         {auth.owner === null && !showSignIn ? <Pressable accessibilityRole="button" onPress={() => setShowSignIn(true)} style={styles.signIn}><Text style={styles.linkText}>{cn ? '登录' : 'Sign in'}</Text><AppIcon name="chevron" size={13} color={colors.actionPrimary} /></Pressable> : null}
@@ -336,17 +346,18 @@ export default function ProfileScreen() {
           <Text style={styles.primaryText}>{sending ? (cn?'正在发送…':'Sending…') : (cn?'发送登录链接':'Send magic link')}</Text>
         </Pressable>
         <View style={styles.row}>
-          <Pressable accessibilityRole="button" disabled={sending} onPress={() => signInWithProvider('apple')} style={styles.provider}>
+          <Pressable accessibilityRole="button" disabled={sending || providers?.apple === false} onPress={() => signInWithProvider('apple')} style={styles.provider}>
             <AppIcon name="apple" size={18} color="#FFFFFF" />
-            <Text style={styles.providerText}>{cn?'使用 Apple 登录':'Continue with Apple'}</Text>
+            <Text style={styles.providerText}>{providers?.apple===false?(cn?'Apple · 尚未开通':'Apple · Coming later'):(cn?'使用 Apple 登录':'Continue with Apple')}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" disabled={sending} onPress={() => signInWithProvider('google')} style={styles.provider}>
+          <Pressable accessibilityRole="button" disabled={sending || providers?.google === false} onPress={() => signInWithProvider('google')} style={styles.provider}>
             <AppIcon name="google" size={18} color="#FFFFFF" />
-            <Text style={styles.providerText}>{cn?'使用 Google 登录':'Continue with Google'}</Text>
+            <Text style={styles.providerText}>{providers?.google===false?(cn?'Google · 尚未开通':'Google · Coming later'):(cn?'使用 Google 登录':'Continue with Google')}</Text>
           </Pressable>
         </View>
         {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
       </View></ScreenScaffold></Modal>
+      {auth.owner?<ProfilePosts owner={auth.owner} pin={auth.pin}/>:null}
       <SettingsGroup title={cn ? '我的记录' : 'Your activity'}>
         <SettingsRow title={cn?'我的报告与草稿':'My reports and drafts'} icon="reports" onPress={() => router.push('/report' as never)} />
         <SettingsRow title={cn?'我的帖子':'My posts'} icon="community" onPress={() => router.push('/community/mine' as never)} />
@@ -378,6 +389,7 @@ export default function ProfileScreen() {
         </View></ScreenScaffold></Modal> : null}
         <SettingsRow title={cn?'退出登录':'Sign out'} icon="signout" destructive last disabled={loggingOut} onPress={() => { void signOut(); }} />
       </SettingsGroup> : null}
+      <Text style={styles.status}>Whisker Commons {appConfig.expo.version} ({appConfig.expo.ios.buildNumber})</Text>
       {status && !showSignIn && !editingName ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </ScreenScaffold>
   );
@@ -388,7 +400,7 @@ const makeStyles = (colors: InterfaceColors) => StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.leafSoft, alignItems: 'center', justifyContent: 'center' },
   accountCopy: { flex: 1, gap: 6 },
   card: { padding: 18, borderRadius: 16, backgroundColor: colors.surface, gap: 14 },
-  label: { color: colors.ink, fontWeight: '600', fontSize: 20, lineHeight: 26 },
+  label: { color: colors.ink, fontWeight: '600', fontSize: 18, lineHeight: 24 },
   value: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   formHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   close: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },

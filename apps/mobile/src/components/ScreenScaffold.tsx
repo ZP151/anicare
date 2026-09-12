@@ -33,8 +33,10 @@ export function ScreenScaffold({
   const palette = useNativeColors();
   const nativeStyle = nativeAppearance ? { backgroundColor: palette.canvas } : undefined;
   return (
-    <SafeAreaView edges={footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
-      <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+    <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.fill, nativeStyle]}>
+      {/* Measure keyboard overlap in the full screen coordinate space. Placing
+          this container inside SafeAreaView can subtract the top inset twice. */}
+      <SafeAreaView edges={footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
       <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
@@ -49,8 +51,8 @@ export function ScreenScaffold({
         {children}
       </ScrollView>
       {footer ? <View style={styles.footer}>{footer}</View> : null}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
