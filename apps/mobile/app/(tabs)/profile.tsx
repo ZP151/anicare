@@ -1,3 +1,5 @@
+import {ProfileNeighbourhoodField,profileNeighbourhood} from '../../src/profile/ProfileNeighbourhoodField';
+import {SG_COMMUNITIES,communityLabel} from '../../src/maps/singapore-communities';
 import {readProviderSettings,exchangeAuthCodeOnce,type ProviderSettings} from '../../src/auth/provider-settings';
 import {ProfilePosts} from '../../src/profile/ProfilePosts';
 import appConfig from '../../app.json';
@@ -38,6 +40,9 @@ export default function ProfileScreen() {
   const auth = useAccountSession();
   const cn = locale === 'zh-CN';
   const [publicName,setPublicName]=useState('');
+  const [neighbourhood,setNeighbourhood]=useState<string|null>(null),[neighbourhoodValue,setNeighbourhoodValue]=useState<string|null>(null);
+  const [refreshToken,setRefreshToken]=useState(0),[collectionLoading,setCollectionLoading]=useState(false);
+  const profileArea=SG_COMMUNITIES.find(area=>area.id===neighbourhood);
   const [adult, setAdult] = useState<boolean|null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [email, setEmail] = useState('');
@@ -61,7 +66,7 @@ export default function ProfileScreen() {
   useEffect(() => () => { if (pendingAvatar) discardAvatar(pendingAvatar.uri); }, [pendingAvatar]);
 
   useEffect(() => {
-    setPublicName(''); setAdult(null); setStatus(null); setEmail(''); setLoggingOut(false); setShowSignIn(false);
+    setPublicName(''); setNeighbourhood(null); setNeighbourhoodValue(null); setCollectionLoading(false); setAdult(null); setStatus(null); setEmail(''); setLoggingOut(false); setShowSignIn(false);
     setEditingName(false); setNameValue(''); setNameExists(false); setNameLoading(false); setSavingName(false); setAvatarKey('person'); setAvatarPath(null); setAvatarUri(null); setShowAvatar(false); setSavingAvatar(false); setPendingAvatar(null);
     if (!auth.owner) return;
     const current = auth.pin(); let active = true;
@@ -69,10 +74,11 @@ export default function ProfileScreen() {
     void Promise.resolve(client?.rpc('is_adult_contributor')).then(async result => {
       if (active && await current() && result && !result.error && typeof result.data === 'boolean') setAdult(result.data);
     }).catch(() => undefined);
-    void Promise.resolve(client?.from('user_profiles').select('avatar_key,avatar_object_path,public_name').eq('id', auth.owner).maybeSingle()).then(async result => {
+    void Promise.resolve(client?.from('user_profiles').select('avatar_key,avatar_object_path,public_name,neighbourhood_id').eq('id', auth.owner).maybeSingle()).then(async result => {
       if (active && await current() && result && !result.error) {
         const path = typeof result.data?.avatar_object_path === 'string' ? result.data.avatar_object_path : null;
         setPublicName(typeof result.data?.public_name==='string'?result.data.public_name:'');
+        setNeighbourhood(profileNeighbourhood(result.data?.neighbourhood_id));
         setAvatarKey(profileAvatarKey(result.data?.avatar_key)); setAvatarPath(path);
         if (path && client) { const signed = await client.storage.from('profile-avatars').createSignedUrl(path, 60); if (active && await current() && !signed.error) setAvatarUri(signed.data?.signedUrl ?? null); }
       }
@@ -142,10 +148,10 @@ export default function ProfileScreen() {
       const client = getSupabaseClient();
       if (!await current()) return;
       if (!client) throw new Error('profile_unavailable');
-      const { data, error } = await client.from('user_profiles').select('public_name').eq('id', auth.owner).maybeSingle();
+      const { data, error } = await client.from('user_profiles').select('public_name,neighbourhood_id').eq('id', auth.owner).maybeSingle();
       if (!await current()) return;
       if (error) throw error;
-      setNameExists(Boolean(data)); setNameValue(data?.public_name ?? '');
+      setNameExists(Boolean(data)); setNameValue(data?.public_name ?? ''); setNeighbourhoodValue(profileNeighbourhood(data?.neighbourhood_id)); setNeighbourhood(profileNeighbourhood(data?.neighbourhood_id));
     } catch {
       if (await current()) { setEditingName(false); setStatus(cn ? '暂时无法读取昵称，请重试。' : 'Could not load your name. Try again.'); }
     } finally { if (await current()) setNameLoading(false); }
@@ -163,13 +169,13 @@ export default function ProfileScreen() {
       if (!await current()) return;
       if (!client) throw new Error('profile_unavailable');
       const result = nameExists
-        ? await client.from('user_profiles').update({ public_name: name }).eq('id', auth.owner)
-        : await client.from('user_profiles').insert({ id: auth.owner, public_name: name, locale });
+        ? await client.from('user_profiles').update({ public_name: name, ...(neighbourhoodValue!==neighbourhood?{neighbourhood_id:neighbourhoodValue}:{}) }).eq('id', auth.owner)
+        : await client.from('user_profiles').insert({ id: auth.owner, public_name: name, locale, ...(neighbourhoodValue?{neighbourhood_id:neighbourhoodValue}:{}) });
       if (!await current()) return;
       if (result.error) throw result.error;
-      setPublicName(name); setNameValue(name); setNameExists(true); setEditingName(false);
-      setStatus(cn ? '昵称已保存。' : 'Name saved.');
-    } catch { if (await current()) setStatus(cn ? '未能保存昵称，请重试。' : 'Could not save your name. Try again.'); }
+      setPublicName(name); setNeighbourhood(neighbourhoodValue); setNameValue(name); setNameExists(true); setEditingName(false);
+      setStatus(cn ? '资料已保存。' : 'Profile saved.');
+    } catch { if (await current()) setStatus(cn ? '未能保存资料，请重试。' : 'Could not save your profile. Try again.'); }
     finally { if (await current()) setSavingName(false); }
   }
 
@@ -309,12 +315,13 @@ export default function ProfileScreen() {
 
   const [showSettings,setShowSettings]=useState(false);
   return (
-    <ScreenScaffold compact title={cn?'我的':'Me'} nativeAppearance header={<View style={{flexDirection:'row',alignItems:'center',minHeight:44}}>{showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回个人页':'Back to profile'} onPress={()=>setShowSettings(false)} style={styles.close}><AppIcon name="back" color={colors.ink}/></Pressable>:null}<Text style={{flex:1,color:colors.ink,fontSize:20,fontWeight:'700'}}>{showSettings?(cn?'设置':'Settings'):(cn?'我的':'Me')}</Text>{!showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'设置':'Settings'} onPress={()=>setShowSettings(true)} style={styles.close}><AppIcon name="settings" size={21} color={colors.ink}/></Pressable>:null}</View>}>
+    <ScreenScaffold compact title={cn?'我的':'Me'} nativeAppearance refreshing={collectionLoading} onRefresh={auth.owner&&!showSettings?()=>setRefreshToken(value=>value+1):undefined} refreshLabel={cn?'刷新':'Refresh'} header={<View style={{flexDirection:'row',alignItems:'center',minHeight:44}}>{showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'返回个人页':'Back to profile'} onPress={()=>setShowSettings(false)} style={styles.close}><AppIcon name="back" color={colors.ink}/></Pressable>:null}<Text style={{flex:1,color:colors.ink,fontSize:20,fontWeight:'700'}}>{showSettings?(cn?'设置':'Settings'):(cn?'我的':'Me')}</Text>{!showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'设置':'Settings'} onPress={()=>setShowSettings(true)} style={styles.close}><AppIcon name="settings" size={21} color={colors.ink}/></Pressable>:null}</View>}>
       <View style={styles.account}>
         <View style={styles.avatar}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath ? avatarUri : null} size={72} /></View>
         <View style={styles.accountCopy}>
         <View style={{flexDirection:'row',alignItems:'center'}}>{auth.owner&&publicName?<Text style={[styles.label,{flexShrink:1}]}>{publicName}</Text>:null}{auth.owner&&!showSettings?<Pressable accessibilityRole="button" accessibilityLabel={cn?'编辑个人资料':'Edit profile'} onPress={()=>void editName()} style={styles.close}><AppIcon name="edit" size={17} color={colors.muted}/></Pressable>:null}</View>
         <Text accessibilityLiveRegion="polite" style={styles.label}>{auth.owner === undefined ? (auth.failed ? (cn?'账户状态不可用':'Account state unavailable') : (cn?'正在读取账户…':'Loading account…')) : auth.owner ? (cn?'已登录':'Signed in') : (cn?'匿名浏览':'Browsing anonymously')}</Text>
+        {auth.owner&&profileArea&&!showSettings?<Text style={{fontSize:13,color:colors.muted}}>{communityLabel(profileArea,locale)}</Text>:null}
         {auth.owner ? <Text style={styles.value}>{adult === null ? (cn?'贡献者状态尚未确认':'Contributor state not confirmed') : adult ? (cn?'已确认年满 18 岁':'18+ contributor confirmed') : (cn?'需要确认年满 18 岁':'18+ confirmation required')}</Text> : <Text style={styles.value}>{cn ? '一起记录社区猫的日常' : 'A little care, shared with your community.'}</Text>}
         {auth.owner === null && !showSignIn ? <Pressable accessibilityRole="button" onPress={() => setShowSignIn(true)} style={styles.signIn}><Text style={styles.linkText}>{cn ? '登录' : 'Sign in'}</Text><AppIcon name="chevron" size={13} color={colors.actionPrimary} /></Pressable> : null}
         {auth.failed ? <Pressable accessibilityRole="button" style={styles.choice} onPress={()=>{void auth.reload();}}><Text>{cn?'重试账户状态':'Retry account state'}</Text></Pressable> : null}
@@ -364,8 +371,8 @@ export default function ProfileScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel={cn?'更换头像':'Change avatar'} disabled={nameLoading||savingName} onPress={()=>{setStatus(null);setShowAvatar(true);}} style={{alignSelf:'center',alignItems:'center',gap:8,minHeight:100}}><ProfileAvatar avatarKey={avatarKey} photoUri={avatarPath?avatarUri:null} size={80}/><Text style={{fontSize:13,color:colors.actionPrimary}}>{cn?'更换头像':'Change avatar'}</Text></Pressable>
           <Text style={{fontSize:13,color:colors.muted}}>{cn?'昵称':'Display name'}</Text>
           <TextInput accessibilityLabel={cn ? '公开昵称' : 'Public display name'} value={nameValue} onChangeText={setNameValue} editable={!nameLoading && !savingName} maxLength={120} style={styles.input} placeholder={cn ? '你的公开昵称' : 'Your public display name'} placeholderTextColor={colors.muted} />
-          <Text style={styles.value}>{cn ? '这是公开昵称，请勿填写手机号或住址。' : 'This name may be public. Leave out contact details.'}</Text>
-          <Pressable accessibilityRole="button" disabled={nameLoading || savingName} onPress={() => { void saveName(); }} style={styles.primary}><Text style={styles.primaryText}>{nameLoading ? (cn ? '正在读取…' : 'Loading…') : savingName ? (cn ? '正在保存…' : 'Saving…') : (cn ? '保存昵称' : 'Save name')}</Text></Pressable>
+          <ProfileNeighbourhoodField value={neighbourhoodValue} onChange={setNeighbourhoodValue} disabled={nameLoading||savingName}/><Text style={styles.value}>{cn ? '这是公开昵称，请勿填写手机号或住址。' : 'This name may be public. Leave out contact details.'}</Text>
+          <Pressable accessibilityRole="button" disabled={nameLoading || savingName} onPress={() => { void saveName(); }} style={styles.primary}><Text style={styles.primaryText}>{nameLoading ? (cn ? '正在读取…' : 'Loading…') : savingName ? (cn ? '正在保存…' : 'Saving…') : (cn ? '保存资料' : 'Save profile')}</Text></Pressable>
           {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}</>}
         </View></ScreenScaffold></Modal> : null}
       {!showSettings?<>
@@ -373,8 +380,8 @@ export default function ProfileScreen() {
         ['cat',cn?'关注':'Following','/following'],['reports',cn?'草稿':'Drafts','/community/drafts']
        ] as const).map(([icon,label,path])=><Pressable key={path} accessibilityRole="button" onPress={()=>router.push(path as never)} style={{flex:1,alignItems:'center',justifyContent:'center',minHeight:56,gap:6}}><AppIcon name={icon} size={20} color={colors.ink}/><Text style={{fontSize:12,color:colors.ink}}>{label}</Text></Pressable>)}</View>
        {auth.owner&&adult===false?<Pressable accessibilityRole="button" onPress={confirmAdultContributor} style={styles.choice}><Text style={styles.choiceText}>{cn?'我确认已年满 18 岁':'I confirm I am 18 or older'}</Text></Pressable>:null}
-       {status&&!showSignIn?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}
-       {auth.owner?<ProfilePosts owner={auth.owner} pin={auth.pin}/>:null}
+       {status&&!showSignIn&&!editingName?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}
+       {auth.owner?<ProfilePosts owner={auth.owner} pin={auth.pin} refreshToken={refreshToken} onLoadingChange={setCollectionLoading}/>:null}
       </>:null}
       {showSettings?<>
       <SettingsGroup title={cn ? '我的记录' : 'Your activity'}>

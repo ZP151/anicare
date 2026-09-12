@@ -7,14 +7,14 @@ import type {CommunityPostExtra} from '../api/community-extras';
 import {useLocale} from '../i18n/LocaleContext';
 import {AppIcon} from '../components/AppIcon';
 type Media=CommunityPostExtra['media'];
-export function PostGallery({postId,media}:{postId:string;media:Media}){
+export function PostGallery({postId,media,initialMediaId}:{postId:string;media:Media;initialMediaId?:string}){
  const {width:screenWidth}=useWindowDimensions(),{locale}=useLocale(),zh=locale==='zh-CN';
- const [width,setWidth]=useState(Math.max(240,screenWidth-32)),[page,setPage]=useState(0),[full,setFull]=useState(false);
+ const [width,setWidth]=useState(Math.max(240,screenWidth-32)),[page,setPage]=useState(()=>Math.max(0,media.findIndex(item=>item.mediaId===initialMediaId))),[full,setFull]=useState(false);
  const activePage=Math.min(page,Math.max(0,media.length-1));
  const ratio=media[activePage]?media[activePage]!.height/Math.max(1,media[activePage]!.width):1;
  const galleryHeight=Math.min(460,width*ratio);
  return <View onLayout={event=>{if(event.nativeEvent.layout.width>0)setWidth(event.nativeEvent.layout.width);}} style={{gap:8}}>
-  <ScrollView testID={`community-gallery-${postId}`} horizontal pagingEnabled style={{height:galleryHeight,flexGrow:0}} showsHorizontalScrollIndicator={false} onMomentumScrollEnd={event=>setPage(Math.round(event.nativeEvent.contentOffset.x/width))}>
+  <ScrollView testID={`community-gallery-${postId}`} horizontal pagingEnabled contentOffset={{x:activePage*width,y:0}} style={{height:galleryHeight,flexGrow:0}} showsHorizontalScrollIndicator={false} onMomentumScrollEnd={event=>setPage(Math.round(event.nativeEvent.contentOffset.x/width))}>
    {media.map((item,index)=><Pressable accessibilityRole="button" accessibilityLabel={zh?`打开照片 ${index+1}`:`Open photo ${index+1}`} key={item.mediaId} onPress={()=>{setPage(index);setFull(true);}} style={{width,height:galleryHeight}}><CommunityPostImage postId={postId} mediaId={item.mediaId} variant="display" resizeMode="cover" label={zh?`照片 ${index+1}`:`Photo ${index+1}`} style={{width,height:galleryHeight,borderRadius:14}}/></Pressable>)}
   </ScrollView>
   {media.length>1?<Text style={{fontSize:12,color:'#73737B',textAlign:'center'}}>{activePage+1} / {media.length}</Text>:null}

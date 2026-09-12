@@ -76,7 +76,7 @@ test('discovers only the exact reviewed hosted deployment inventory', () => {
 test('accepts the exact current repository deployment inventory', () => {
   const discovered = discoverPilotGate2BInputs(repositoryRoot);
   assert.match(discovered.deploymentTreeSha256, /^[a-f0-9]{64}$/);
-  assert.equal(discovered.migrations.at(-1), '202609110019_r3_contract_hardening.sql');
+  assert.equal(discovered.migrations.at(-1), '202609130020_profile_photos_neighbourhood.sql');
 });
 
 test('hashes every deployable migration, config, function, and shared source file', () => {

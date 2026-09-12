@@ -13,10 +13,10 @@ function env(): HostedGateEnvironment {
 }
 
 describe('remote hosted deployment state', () => {
-  it('requires the direct messages and comment replies migration at the remote head', () => {
+  it('requires the profile photos and neighbourhood migration at the remote head', () => {
     expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
-      version: '202609110019',
-      name: 'r3_contract_hardening',
+      version: '202609130020',
+      name: 'profile_photos_neighbourhood',
     });
   });
 

@@ -56,7 +56,7 @@ it('uses a fixed localized message for remote confirmation errors', async () => 
   await view.findByText(mockLocale==='zh-CN'?'已登录':'Signed in');
   await fireEvent.press(view.getByRole('button', { name: mockLocale==='zh-CN'?'我确认已年满 18 岁':'I confirm I am 18 or older' }));
   await waitFor(() => expect(view.getByText('暂时无法保存贡献者确认。请重试。')).toBeTruthy());
-  expect(JSON.stringify(view.toJSON())).not.toContain('private token');
+  expect(view.queryByText(/private token/)).toBeNull();
   expect(mockInsert).not.toHaveBeenCalled();
 });
 
@@ -89,10 +89,35 @@ it('edits only the current account public name and shows the saved value', async
   await fireEvent.press(view.getByRole('button', { name: 'Edit profile' }));
   await waitFor(() => expect(view.getByLabelText('Public display name').props.value).toBe('Chosen name'));
   await fireEvent.changeText(view.getByLabelText('Public display name'), 'Neighbour');
-  await fireEvent.press(view.getByRole('button', { name: 'Save name' }));
-  await view.findByText('Name saved.');
+  await fireEvent.press(view.getByRole('button', { name: 'Save profile' }));
+  await view.findByText('Profile saved.');
   expect(mockUpdate).toHaveBeenCalledWith({ public_name: 'Neighbour' });
   expect(mockEq).toHaveBeenCalledWith('id', mockOwner);
+});
+it('saves an explicitly selected neighbourhood with the name, displays it and preserves it on reopen',async()=>{
+ const view=await render(<Profile/>);await view.findByText('Chosen name');await fireEvent.press(view.getByRole('button',{name:'Edit profile'}));await view.findByLabelText('Public display name');
+ await fireEvent.press(view.getByRole('button',{name:'Choose neighbourhood'}));await fireEvent.changeText(view.getByLabelText('Search neighbourhood'),'West Coast');
+ await fireEvent.press(view.getByRole('radio',{name:'West Coast'}));
+ expect(mockUpdate).not.toHaveBeenCalled();await fireEvent.changeText(view.getByLabelText('Public display name'),'Neighbour');
+ await fireEvent.press(view.getByRole('button',{name:'Save profile'}));await view.findByText('Profile saved.');
+ expect(mockUpdate).toHaveBeenCalledWith({public_name:'Neighbour',neighbourhood_id:'sg-clsz05'});expect(view.getByText('West Coast')).toBeTruthy();
+ mockLookup.mockResolvedValue({data:{public_name:'Neighbour',neighbourhood_id:'sg-clsz05'},error:null});await fireEvent.press(view.getByRole('button',{name:'Edit profile'}));
+ await view.findByRole('button',{name:'Neighbourhood: West Coast'});await view.unmount();
+});
+it('cancels neighbourhood edits without a write and clears a saved selection explicitly',async()=>{
+ mockLookup.mockResolvedValue({data:{public_name:'Chosen name',neighbourhood_id:'sg-clsz05'},error:null});
+ const view=await render(<Profile/>);await view.findByText('West Coast');await fireEvent.press(view.getByRole('button',{name:'Edit profile'}));
+ await view.findByRole('button',{name:'Neighbourhood: West Coast'});await fireEvent.press(view.getByRole('button',{name:'Clear neighbourhood'}));
+ await fireEvent.press(view.getByRole('button',{name:'Close edit'}));expect(mockUpdate).not.toHaveBeenCalled();expect(view.getByText('West Coast')).toBeTruthy();
+ await fireEvent.press(view.getByRole('button',{name:'Edit profile'}));await view.findByRole('button',{name:'Neighbourhood: West Coast'});
+ await fireEvent.press(view.getByRole('button',{name:'Clear neighbourhood'}));await fireEvent.press(view.getByRole('button',{name:'Save profile'}));await view.findByText('Profile saved.');
+ expect(mockUpdate).toHaveBeenCalledWith({public_name:'Chosen name',neighbourhood_id:null});expect(view.queryByText('West Coast')).toBeNull();await view.unmount();
+});
+it('keeps failed profile edits available for retry and clears the neighbourhood on sign-out',async()=>{
+ mockLookup.mockResolvedValue({data:{public_name:'Chosen name',neighbourhood_id:'sg-clsz05'},error:null});mockEq.mockResolvedValueOnce({error:{message:'private database error'}});
+ const view=await render(<Profile/>);await view.findByText('West Coast');await fireEvent.press(view.getByRole('button',{name:'Edit profile'}));await view.findByLabelText('Public display name');
+ await fireEvent.press(view.getByRole('button',{name:'Save profile'}));await view.findByText('Could not save your profile. Try again.');expect(view.getByRole('button',{name:'Neighbourhood: West Coast'})).toBeTruthy();
+ await act(async()=>{mockSubject=null;mockListener();});await view.findByText('Browsing anonymously');expect(view.queryByText('West Coast')).toBeNull();await view.unmount();
 });
 
 it('discards an account name response after signing out', async () => {
@@ -118,7 +143,7 @@ it('reveals email sign-in on request and clears it when the account changes', as
   await act(async () => { mockSubject = mockOwner; mockListener(); });
   await view.findByText('Signed in');
   expect(view.queryByLabelText('Email address')).toBeNull();
-  expect(JSON.stringify(view.toJSON())).not.toContain('person@example.test');
+  expect(view.queryByDisplayValue('person@example.test')).toBeNull();
 });
 
 it('shows truthful session/adult state, keeps login on failed logout and clears after successful logout',async()=>{

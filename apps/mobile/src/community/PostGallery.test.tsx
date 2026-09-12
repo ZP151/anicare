@@ -4,6 +4,13 @@ jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'en'})}));
 jest.mock('./CommunityPostImage',()=>({CommunityPostImage:()=>null}));
 import {PostGallery} from './PostGallery';
 const media=[{mediaId:'one',width:1200,height:800},{mediaId:'two',width:800,height:1200}];
+it('opens an album deep link at the selected photo and falls back for an unavailable ID',async()=>{
+ const view=await render(<PostGallery postId="post" media={media} initialMediaId="two"/>);
+ expect(view.getByText('2 / 2')).toBeTruthy();
+ expect(view.getByTestId('community-gallery-post').props.contentOffset.x).toBeGreaterThan(0);
+ await view.unmount();const fallback=await render(<PostGallery postId="post" media={media} initialMediaId="removed"/>);
+ expect(fallback.getByText('1 / 2')).toBeTruthy();await fallback.unmount();
+});
 it('opens the selected photo with a reachable close action and supports tap dismissal',async()=>{
  const view=await render(<PostGallery postId="post" media={media as never}/>);
  await fireEvent.press(view.getByRole('button',{name:'Open photo 2'}));
