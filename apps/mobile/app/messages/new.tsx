@@ -1,3 +1,4 @@
+import {BackButton} from '../../src/components/BackButton';
 import {useCallback,useRef,useState} from 'react';
 import {ActivityIndicator,KeyboardAvoidingView,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -54,7 +55,7 @@ export default function NewMessage(){
   }catch{if(await valid())setError(saved?'send':'storage');}finally{if(ticket===generation.current&&scopeRef.current===captured){mutation.current=false;setBusy(false);}}
  };
  return <SafeAreaView style={{flex:1,backgroundColor:c.canvas}}><KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}>
-  <View style={s.header}><Pressable accessibilityRole="button" accessibilityLabel={cn?'返回':'Back'} onPress={()=>router.back()} style={s.touch}><AppIcon name="back" size={21} color={c.ink}/></Pressable><Text accessibilityRole="header" style={{fontSize:16,fontWeight:'600',color:c.ink}}>{cn?'发起私信':'New message'}</Text><View style={s.touch}/></View>
+  <View style={s.header}><BackButton onPress={()=>router.back()}/><Text accessibilityRole="header" style={{fontSize:16,fontWeight:'600',color:c.ink}}>{cn?'发起私信':'New message'}</Text><View style={s.touch}/></View>
   <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
    {loading?<ActivityIndicator/>:null}
    {shown?<><View style={s.person}><ProfileAvatar avatarKey={shown.author.avatarKey} photoUri={photo} size={64}/><Text style={{fontSize:18,fontWeight:'600',color:c.ink}}>{shown.author.name}</Text></View>

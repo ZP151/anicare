@@ -8,6 +8,7 @@ interface ScreenScaffoldProps extends PropsWithChildren {
   eyebrow?: string;
   title: string;
   subtitle?: string;
+  leading?: ReactNode;
   trailing?: ReactNode;
   nativeAppearance?: boolean;
   compact?: boolean;
@@ -21,6 +22,7 @@ export function ScreenScaffold({
   eyebrow,
   title,
   subtitle,
+  leading,
   trailing,
   children,
   nativeAppearance = true,
@@ -39,7 +41,8 @@ export function ScreenScaffold({
       <SafeAreaView edges={footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
       <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
         <View style={styles.headingRow}>
-          <View style={styles.headingCopy}>
+          {leading ? <View testID="screen-header-leading">{leading}</View> : null}
+          <View style={[styles.headingCopy, !!leading && styles.leadingHeading]}>
             <Text accessibilityRole="header" style={[styles.title, compact && styles.compactTitle, nativeAppearance && { color: palette.ink }]}>
               {title}
             </Text>
@@ -66,6 +69,7 @@ const styles = StyleSheet.create({
   pullable: { flexGrow: 1 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   headingCopy: { flex: 1, gap: 6 },
+  leadingHeading: { minHeight: 44, justifyContent: 'center' },
   contextNote: { color: '#62626A', fontSize: 13, lineHeight: 18 },
   title: { color: '#1C1C1E', fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.4 },
   compactTitle: { fontSize: 20, lineHeight: 25, letterSpacing: -0.2 },

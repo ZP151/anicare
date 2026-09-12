@@ -1,3 +1,4 @@
+import {BackButton} from '../../src/components/BackButton';
 import { useRouter } from 'expo-router';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { ScreenScaffold } from '../../src/components/ScreenScaffold';
@@ -13,7 +14,7 @@ export default function CommunityGeography() {
     {title:zh?'CDC 与选区':'CDCs and constituencies',body:zh?'CDC 的五个社区发展理事会辖区与地图上的五个规划区域是不同体系。选区也有独立边界。应用不会根据一个社区名字猜测居民所属的 CDC、选区或居民联系网。':'The five CDC districts are separate from the five planning regions. Electoral divisions have their own boundaries too. We do not infer a resident’s CDC, constituency or Residents’ Network from a neighbourhood name.',link:'https://www.cdc.gov.sg/about-us/five-districts/',source:'CDC Singapore · Five Districts'},
     {title:zh?'地图数据与猫的位置':'Map sources and cat locations',body:zh?'规划区使用 URA MP2025，邻里使用公开的 MP2019 分区数据（数据集更新于 2025-12-03）。边界为示意，不代表最新居民组织辖区。猫活动按延迟公开的粗略位置归类；楼栋名称是报告者提供的背景，并非固定住址。':'Planning areas use URA MP2025; neighbourhoods use the public MP2019 subzone dataset (updated 3 Dec 2025). Boundaries are indicative, not current resident-organisation jurisdictions. Cats are grouped approximately from delayed public locations. Reported building names are context, not fixed homes.',link:'https://data.gov.sg/datasets/d_2cc750190544007400b2cfd5d7f53209/view',source:'URA · MP2025 planning areas'},
   ];
-  return <ScreenScaffold title={zh?'认识你的社区':'Know your neighbourhood'} trailing={<Pressable accessibilityRole="button" accessibilityLabel={zh?'返回':'Back'} onPress={()=>router.canGoBack()?router.back():router.replace('/map' as never)} style={{width:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="close" color={c.actionPrimary}/></Pressable>}>
+  return <ScreenScaffold title={zh?'认识你的社区':'Know your neighbourhood'} leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/map' as never)}/>}>
     {rows.map(row=><View key={row.link} style={{padding:20,borderRadius:24,backgroundColor:c.surface,gap:12}}><Text style={{fontSize:19,fontWeight:'600',color:c.ink}}>{row.title}</Text><Text style={{fontSize:15,lineHeight:24,color:c.muted}}>{row.body}</Text><Pressable accessibilityRole="link" onPress={()=>void Linking.openURL(row.link)} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:c.actionPrimary,fontSize:14}}>{row.source} ↗</Text></Pressable></View>)}
   </ScreenScaffold>;
 }

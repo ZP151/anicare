@@ -1,3 +1,4 @@
+import {BackButton} from '../../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -77,7 +78,7 @@ export default function CatRoute() {
   return <ScreenScaffold
     subtitle={locale === 'zh-CN' ? '公开档案仅显示可公开的身份摘要与粗略活动。' : 'Public profiles show eligible identity summaries and coarse activity.'}
     title={status === 'loading' ? (locale === 'zh-CN' ? '正在加载猫档案' : 'Loading cat profile') : (locale === 'zh-CN' ? '猫档案不可用' : 'Cat profile unavailable')}
-    trailing={<Pressable accessibilityRole="button" accessibilityLabel={locale === 'zh-CN' ? '返回' : 'Back'} onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{color:colors.ink}}>{locale === 'zh-CN' ? '返回' : 'Back'}</Text></Pressable>}
+    leading={<BackButton onPress={() => router.back()}/>}
   ><Text accessibilityLiveRegion="polite" style={styles.status}>
     {status === 'loading' ? (locale === 'zh-CN' ? '正在读取公开档案…' : 'Loading the public profile…')
       : (locale === 'zh-CN' ? '该档案当前不可公开访问。' : 'This profile is currently unavailable.')}
