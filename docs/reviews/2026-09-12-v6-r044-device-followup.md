@@ -12,7 +12,14 @@
 
 ## 回归与交付
 
-相关测试按失败再修复运行；独立审查核对了安装依赖中的原生 tabPress 和 MapKit 距离接口。完整回归、构建与 IPA 下载结果在交付后补记。
+相关测试按失败再修复运行；独立审查核对了安装依赖中的原生 tabPress 和 MapKit 距离接口。完整本地回归通过，原生超时接口兼容修正后再次通过相关测试及类型检查；最终源码 CI 的完整 pnpm verify 与数据库契约通过，移动端 124 组、1081 项测试通过。
+
+- [安装 0.4.4（12）](C:/Users/15492/Downloads/WhiskerCommons-0.4.4-build12.ipa)。Sideloadly 使用原 Apple ID 覆盖安装。版本也显示在“我的”底部。
+- 包内源码 `6c017af410cf8acde93e2ef24bcf564b67895437`；[CI 34680370646](https://github.com/ZP151/anicare/actions/runs/34680370646) 和 [iOS 34680370662](https://github.com/ZP151/anicare/actions/runs/34680370662) 均成功。
+- 包内版本 0.4.4 / 12，标识 sg.animalhelper.app；arm64 主程序、图标资源、三项权限说明正常。两张 AppIcon PNG 与 0.4.3 相同，未引入空白图标。
+- 来源证明、manifest、SHA-256、两份源码锁文件摘要均核对通过；清楚命名的下载副本与构建产物逐字节一致。
+- 大小 21791637 bytes；SHA-256 `ae101ea5fbe45b95735a0a97230e393884de2521275ab0de0bd6eb36f5db20db`。
+- 实际玻璃滑动、键盘交互和地图比例仍待用户在 iPhone 上确认；本记录不将自动检查标为真机通过。
 
 ## 本次真机只需关注
 
