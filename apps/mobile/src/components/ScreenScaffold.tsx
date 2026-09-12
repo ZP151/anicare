@@ -16,6 +16,8 @@ interface ScreenScaffoldProps extends PropsWithChildren {
   onRefresh?: () => void;
   refreshLabel?: string;
   footer?: ReactNode;
+  header?: ReactNode;
+  avoidKeyboard?: boolean;
 }
 
 export function ScreenScaffold({
@@ -30,17 +32,18 @@ export function ScreenScaffold({
   refreshing = false,
   onRefresh,
   refreshLabel = 'Refresh',
-  footer,
+  footer, header, avoidKeyboard = false,
 }: ScreenScaffoldProps) {
   const palette = useNativeColors();
   const nativeStyle = nativeAppearance ? { backgroundColor: palette.canvas } : undefined;
   return (
-    <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.fill, nativeStyle]}>
+    <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer || avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.fill, nativeStyle]}>
       {/* Measure keyboard overlap in the full screen coordinate space. Placing
           this container inside SafeAreaView can subtract the top inset twice. */}
       <SafeAreaView edges={footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
+      {header ? <View testID="screen-fixed-header" style={{paddingHorizontal:16,paddingTop:6,paddingBottom:6}}>{header}</View> : null}
       <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
-        <View style={styles.headingRow}>
+        {!header ? <View style={styles.headingRow}>
           {leading ? <View testID="screen-header-leading">{leading}</View> : null}
           <View style={[styles.headingCopy, !!leading && styles.leadingHeading]}>
             <Text accessibilityRole="header" style={[styles.title, compact && styles.compactTitle, nativeAppearance && { color: palette.ink }]}>
@@ -50,7 +53,7 @@ export function ScreenScaffold({
             {subtitle ? <Text style={[styles.subtitle, nativeAppearance && { color: palette.muted }]}>{subtitle}</Text> : null}
           </View>
           {trailing}
-        </View>
+        </View> : null}
         {children}
       </ScrollView>
       {footer ? <View style={styles.footer}>{footer}</View> : null}

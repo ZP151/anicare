@@ -12,6 +12,6 @@ export function singaporeOverviewCoordinates(boundary: readonly Coordinate[]): C
   const latitude=(Math.min(...latitudes)+Math.max(...latitudes))/2;
   const longitude=(Math.min(...longitudes)+Math.max(...longitudes))/2;
   // Tighten the fitted overview only; official polygons and public cat positions
-  // remain unchanged. 1 / 1.3 gives the requested 30% increase in visual scale.
-  return boundary.map(point=>({latitude:latitude+(point.latitude-latitude)/1.3,longitude:longitude+(point.longitude-longitude)/1.3}));
+  // remain unchanged. Reduce the accepted 0.4.5 visual scale by 10%.
+  return boundary.map(point=>({latitude:latitude+(point.latitude-latitude)/(1.3*.9),longitude:longitude+(point.longitude-longitude)/(1.3*.9)}));
 }

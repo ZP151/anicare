@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
+import {installEncryptedTransactions} from '../offline/encrypted-transactions';
 import {createRetryableSingleFlight,loadOrCreateDatabaseKey,openEncryptedDatabaseWithDependencies} from '../offline/draft-database-initialization';
 import {createSocialDraftStore,initializeSocialDatabase} from './post-draft-storage';
 
@@ -14,7 +15,10 @@ const database=createRetryableSingleFlight(()=>openEncryptedDatabaseWithDependen
   randomBytes:Crypto.getRandomBytes,
  }),
  openDatabase:()=>SQLite.openDatabaseAsync('whisker-social-drafts-v1.db'),
- applyKey:(db,key)=>db.execAsync(`PRAGMA key = "x'${key}'";`),
+ applyKey:async(db,key)=>{
+  await db.execAsync(`PRAGMA key = "x'${key}'";`);
+  installEncryptedTransactions(db,key,()=>SQLite.openDatabaseAsync('whisker-social-drafts-v1.db',{useNewConnection:true}));
+ },
  initialize:initializeSocialDatabase,
  closeDatabase:db=>db.closeAsync(),
 }));

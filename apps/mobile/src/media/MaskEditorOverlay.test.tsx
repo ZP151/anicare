@@ -342,3 +342,13 @@ describe('MaskEditorOverlay', () => {
     expect(view.onMutationCommit).not.toHaveBeenCalled();
   });
 });
+
+it('provides an explicit add action and keeps fine controls collapsed in the compact editor',async()=>{
+ const view=await renderOverlay({compactControls:true,locale:'zh-CN'});
+ expect(view.queryByLabelText('向左移动')).toBeNull();
+ await fireEvent.press(view.getByRole('button',{name:'添加遮挡'}));
+ expect(view.onMutationCommit).toHaveBeenCalledWith([expect.objectContaining({id:'mask-created'})]);
+ expect(view.onSelectionChange).toHaveBeenCalledWith('mask-created');
+ await fireEvent.press(view.getByRole('button',{name:'精细调整'}));
+ expect(view.getByLabelText('向左移动')).toBeTruthy();
+});

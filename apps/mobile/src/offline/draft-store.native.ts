@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
+import { installEncryptedTransactions } from './encrypted-transactions';
 import { Platform } from 'react-native';
 
 import { deleteReviewedMediaReference } from '../media/draft-media';
@@ -336,6 +337,7 @@ async function openDraftDatabase() {
     openDatabase: () => SQLite.openDatabaseAsync(DATABASE_NAME),
     applyKey: async (database, key) => {
       await database.execAsync(`PRAGMA key = "x'${key}'";`);
+      installEncryptedTransactions(database, key, () => SQLite.openDatabaseAsync(DATABASE_NAME, { useNewConnection: true }));
     },
     initialize: initializeDraftDatabaseSchema,
     closeDatabase: (database) => database.closeAsync(),

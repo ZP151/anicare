@@ -101,7 +101,7 @@ async function renderPreparedReview(output: RenderedMedia = rendered) {
   jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(output);
   const view = await render(<RedactionReviewScreen />);
 
-  await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
+  await act(async () => { fireEvent.press(view.getByText('Photo library')); });
   await waitFor(() => expect(mockMaskEditorOverlay).toHaveBeenCalled());
   return view;
 }
@@ -132,7 +132,7 @@ describe('private redaction review screen', () => {
     jest.mocked(prepareCanonical).mockResolvedValue(canonical);
     jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(rendered);
     const view = await render(<RedactionReviewScreen />);
-    await fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Camera' }));
     await waitFor(() => expect(prepareCanonical).toHaveBeenCalledWith('file:///camera/retake.jpg'));
     expect(launchCameraAsync).toHaveBeenCalledWith(expect.objectContaining({ exif: false }));
   });
@@ -143,7 +143,7 @@ describe('private redaction review screen', () => {
     jest.mocked(launchCameraAsync).mockImplementationOnce(() => cameraPicker.promise);
     const view = await render(<RedactionReviewScreen />);
 
-    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Take photo for private review' })); });
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Camera' })); });
     await waitFor(() => expect(launchCameraAsync).toHaveBeenCalledTimes(1));
     await act(async () => { view.unmount(); });
     await act(async () => {
@@ -163,23 +163,19 @@ describe('private redaction review screen', () => {
     jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
     const view = await render(<RedactionReviewScreen />);
 
-    expect(view.getByText('私密照片复核')).toBeTruthy();
-    expect(view.getByText('人物检测：不可用')).toBeTruthy();
-    expect(view.getByText('车牌检测：不可用')).toBeTruthy();
-    expect(view.getByText('猫咪检测：不可用')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: '选择照片进行私密复核' }));
-    await waitFor(() => expect(view.getByText('添加、选择并调整不透明遮挡，然后在确认前检查每个像素。')).toBeTruthy());
-    expect(view.getByRole('button', { name: '确认精确像素并加密' })).toBeTruthy();
-    expect(JSON.stringify(view.toJSON())).not.toMatch(/Private photo review|People detection|Licence-plate detection|Cat detection|Choose photo|Clear all masks|Confirm exact pixels/i);
+    expect(view.getByText('添加目击照片')).toBeTruthy();
+    expect(view.getByText('自动识别暂不可用，请自行检查人脸和车牌。')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: '从相册选择' }));
+    await waitFor(() => expect(view.getByText('轻点添加遮挡，拖动遮挡或角点调整。')).toBeTruthy());
+    expect(view.getByRole('button', { name: '使用这张照片' })).toBeTruthy();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(/Add sighting photo|People detection|Licence-plate detection|Cat detection|Choose photo|Clear all masks|Confirm exact pixels/i);
   });
 
-  it('states that every automatic detector is unavailable and offers no publication action', async () => {
+  it('briefly explains unavailable automatic detection and offers no publication action', async () => {
     const view = await render(<RedactionReviewScreen />);
 
-    expect(view.getByText('People detection: unavailable')).toBeTruthy();
-    expect(view.getByText('Licence-plate detection: unavailable')).toBeTruthy();
-    expect(view.getByText('Cat detection: unavailable')).toBeTruthy();
-    expect(view.getByRole('button', { name: 'Choose photo for private review' })).toBeTruthy();
+    expect(view.getByText('Automatic detection is unavailable. Check faces and plates yourself.')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Photo library' })).toBeTruthy();
     expect(view.queryByText(/public upload|publish/i)).toBeNull();
   });
 
@@ -187,7 +183,7 @@ describe('private redaction review screen', () => {
     jest.mocked(verifyReviewedMedia).mockResolvedValueOnce('absent').mockResolvedValueOnce('valid');
     const view = await renderPreparedReview();
 
-    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Use this photo' })); });
 
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith({
       pathname: '/report/new',
@@ -203,8 +199,8 @@ describe('private redaction review screen', () => {
     jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
     const view = await render(<RedactionReviewScreen />);
 
-    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
-    await waitFor(() => expect(view.getByText(/Add, select and adjust opaque masks/)).toBeTruthy());
+    await act(async () => { fireEvent.press(view.getByText('Photo library')); });
+    await waitFor(() => expect(view.getByText(/Tap to add a mask/)).toBeTruthy());
     view.unmount();
 
     await waitFor(() => expect(cleanupProcessorCacheUris).toHaveBeenCalledWith([
@@ -219,7 +215,7 @@ describe('private redaction review screen', () => {
     jest.mocked(renderOpaqueMasks).mockRejectedValue(new Error('invalid_rendered_jpeg'));
     const view = await render(<RedactionReviewScreen />);
 
-    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
+    await act(async () => { fireEvent.press(view.getByText('Photo library')); });
     await waitFor(() => expect(cleanupProcessorCacheUris).toHaveBeenCalledWith([canonical.uri]));
     expect(view.getByText('The photo could not be prepared safely. Nothing was staged.')).toBeTruthy();
   });
@@ -228,9 +224,9 @@ describe('private redaction review screen', () => {
     jest.mocked(launchImageLibraryAsync).mockResolvedValue({ canceled: true, assets: [] } as never);
     const view = await render(<RedactionReviewScreen />);
 
-    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
+    await act(async () => { fireEvent.press(view.getByText('Photo library')); });
 
-    expect(view.getByText('Choose photo for private review')).toBeTruthy();
+    expect(view.getByText('Photo library')).toBeTruthy();
     expect(cleanupProcessorCacheUris).not.toHaveBeenCalled();
   });
 
@@ -248,9 +244,9 @@ describe('private redaction review screen', () => {
     jest.mocked(deleteReviewedMediaReference).mockImplementation(async (reference) => { events.push(`delete:${reference}`); });
     const view = await render(<RedactionReviewScreen />);
 
-    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
-    await waitFor(() => expect(view.getByText(/Add, select and adjust opaque masks/)).toBeTruthy());
-    await act(async () => { fireEvent.press(view.getByText('Confirm exact pixels and encrypt')); });
+    await act(async () => { fireEvent.press(view.getByText('Photo library')); });
+    await waitFor(() => expect(view.getByText(/Tap to add a mask/)).toBeTruthy());
+    await act(async () => { fireEvent.press(view.getByText('Use this photo')); });
 
     await waitFor(() => expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(2));
     expect(events).toEqual(['durable']);
@@ -265,9 +261,9 @@ describe('private redaction review screen', () => {
     jest.mocked(prepareCanonical).mockResolvedValue(canonical);
     jest.mocked(renderOpaqueMasks).mockResolvedValue(rendered);
     const view = await render(<RedactionReviewScreen />);
-    await act(async () => { fireEvent.press(view.getByText('Choose photo for private review')); });
-    await waitFor(() => expect(view.getByText(/Add, select and adjust opaque masks/)).toBeTruthy());
-    await act(async () => { fireEvent.press(view.getByText('Confirm exact pixels and encrypt')); });
+    await act(async () => { fireEvent.press(view.getByText('Photo library')); });
+    await waitFor(() => expect(view.getByText(/Tap to add a mask/)).toBeTruthy());
+    await act(async () => { fireEvent.press(view.getByText('Use this photo')); });
     expect(saveReviewedMediaJournal).not.toHaveBeenCalled();
     expect(view.getByText('Sign in again before saving reviewed media. No media was staged.')).toBeTruthy();
   });
@@ -275,7 +271,7 @@ describe('private redaction review screen', () => {
   it('invalidates a confirmed receipt on the first edit preview without rendering', async () => {
     jest.mocked(verifyReviewedMedia).mockResolvedValueOnce('absent').mockResolvedValueOnce('valid');
     const view = await renderPreparedReview();
-    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Use this photo' })); });
     await waitFor(() => expect(view.getByText('Encrypted reviewed media saved privately. It has not been uploaded or published.')).toBeTruthy());
     const renderCallsBeforePreview = jest.mocked(renderOpaqueMasks).mock.calls.length;
 
@@ -283,7 +279,7 @@ describe('private redaction review screen', () => {
 
     expect(jest.mocked(renderOpaqueMasks)).toHaveBeenCalledTimes(renderCallsBeforePreview);
     expect(latestOverlayProps().masks).toEqual([firstMask]);
-    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('button', { name: 'Use this photo' }).props.accessibilityState.disabled).toBe(true);
   });
 
   it('restores rendered masks after gesture cancellation but still requires confirmation again', async () => {
@@ -293,28 +289,28 @@ describe('private redaction review screen', () => {
       .mockResolvedValueOnce('absent')
       .mockResolvedValueOnce('valid');
     const view = await renderPreparedReview();
-    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Use this photo' })); });
     await waitFor(() => expect(persistReviewedMedia).toHaveBeenCalledTimes(1));
     const renderCalls = jest.mocked(renderOpaqueMasks).mock.calls.length;
     const journalCalls = jest.mocked(saveReviewedMediaJournal).mock.calls.length;
 
     await act(async () => { latestOverlayProps().onMutationPreview([firstMask]); });
-    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('button', { name: 'Use this photo' }).props.accessibilityState.disabled).toBe(true);
     await act(async () => { latestOverlayProps().onMutationCancel([]); });
 
     expect(latestOverlayProps().masks).toEqual([]);
     expect(renderOpaqueMasks).toHaveBeenCalledTimes(renderCalls);
     expect(saveReviewedMediaJournal).toHaveBeenCalledTimes(journalCalls);
-    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(false);
+    expect(view.getByRole('button', { name: 'Use this photo' }).props.accessibilityState.disabled).toBe(false);
 
-    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' })); });
+    await act(async () => { fireEvent.press(view.getByRole('button', { name: 'Use this photo' })); });
     await waitFor(() => expect(persistReviewedMedia).toHaveBeenCalledTimes(2));
   });
 
   it('blocks confirmation synchronously when a preview and confirmation occur in the same act', async () => {
     const view = await renderPreparedReview();
     const overlay = latestOverlayProps();
-    const confirm = view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.onClick as (event: unknown) => void;
+    const confirm = view.getByRole('button', { name: 'Use this photo' }).props.onClick as (event: unknown) => void;
 
     await act(async () => {
       overlay.onMutationPreview([firstMask]);
@@ -324,7 +320,7 @@ describe('private redaction review screen', () => {
 
     expect(saveReviewedMediaJournal).not.toHaveBeenCalled();
     expect(persistReviewedMedia).not.toHaveBeenCalled();
-    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('button', { name: 'Use this photo' }).props.accessibilityState.disabled).toBe(true);
   });
 
   it('renders a committed exact snapshot from canonical and enables confirmation only after current pixels complete', async () => {
@@ -344,7 +340,7 @@ describe('private redaction review screen', () => {
     await waitFor(() => expect(view.getByText('Mask applied to final pixels. Review again before confirming.')).toBeTruthy());
 
     expect(latestOverlayProps().disabled).toBe(false);
-    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(false);
+    expect(view.getByRole('button', { name: 'Use this photo' }).props.accessibilityState.disabled).toBe(false);
     expect(view.getByLabelText('Reviewed private image').props.source).toEqual({ uri: updated.uri });
   });
 
@@ -359,7 +355,7 @@ describe('private redaction review screen', () => {
     await act(async () => { latestOverlayProps().onMutationCancel([]); });
 
     expect(latestOverlayProps().masks).toEqual([]);
-    expect(view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('button', { name: 'Use this photo' }).props.accessibilityState.disabled).toBe(true);
     expect(persistReviewedMedia).not.toHaveBeenCalled();
   });
 
@@ -373,7 +369,7 @@ describe('private redaction review screen', () => {
     const view = await renderPreparedReview();
     jest.mocked(renderOpaqueMasks).mockImplementationOnce(() => unexpectedRender.promise);
     const overlay = latestOverlayProps();
-    const confirm = view.getByRole('button', { name: 'Confirm exact pixels and encrypt' }).props.onClick as (event: unknown) => void;
+    const confirm = view.getByRole('button', { name: 'Use this photo' }).props.onClick as (event: unknown) => void;
 
     await act(async () => {
       confirm(clickEvent());
@@ -441,7 +437,7 @@ describe('private redaction review screen', () => {
     jest.mocked(prepareCanonical).mockResolvedValueOnce(replacementCanonical);
     jest.mocked(renderOpaqueMasks).mockResolvedValueOnce(replacementRendered);
     const view = await render(<RedactionReviewScreen />);
-    const chooseButton = view.getByRole('button', { name: 'Choose photo for private review' });
+    const chooseButton = view.getByRole('button', { name: 'Photo library' });
     const onClick = chooseButton.props.onClick as (event: unknown) => void;
     const target = {};
     const click = { currentTarget: target, target, nativeEvent: {}, stopPropagation: () => undefined };
@@ -475,4 +471,18 @@ describe('private redaction review screen', () => {
 
     await waitFor(() => expect(cleanupProcessorCacheUris).toHaveBeenCalledWith([staleRendered.uri]));
   });
+});
+
+it('retains the prepared photo after a journal failure so retry can save it',async()=>{
+ jest.mocked(saveReviewedMediaJournal).mockRejectedValueOnce(new Error('database temporarily locked'));
+ const view=await renderPreparedReview();
+ jest.mocked(cleanupProcessorCacheUris).mockClear();
+ await fireEvent.press(view.getByRole('button',{name:'Use this photo'}));
+ await view.findByText('Private encrypted storage failed. The media was not staged.');
+ expect(cleanupProcessorCacheUris).not.toHaveBeenCalled();
+ jest.mocked(verifyReviewedMedia).mockResolvedValueOnce('absent').mockResolvedValueOnce('valid');
+ await fireEvent.press(view.getByRole('button',{name:'Use this photo'}));
+ await view.findByText('Encrypted reviewed media saved privately. It has not been uploaded or published.');
+ expect(launchImageLibraryAsync).toHaveBeenCalledTimes(1);
+ await view.unmount();
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -24,6 +24,8 @@ import {
 } from './redaction-geometry';
 
 export type MaskEditorOverlayProps = Readonly<{
+  compactControls?: boolean;
+  locale?: string;
   imageWidth: number;
   imageHeight: number;
   frameWidth: number;
@@ -90,6 +92,7 @@ function sameMaskSnapshots(left: readonly PrivacyMask[], right: readonly Privacy
 }
 
 export function MaskEditorOverlay({
+  compactControls = false, locale = 'en',
   imageWidth,
   imageHeight,
   frameWidth,
@@ -217,6 +220,9 @@ export function MaskEditorOverlay({
     onSelectionChange(null);
   }
 
+  const [fineControls,setFineControls]=useState(false);
+  const zh=locale==='zh-CN';
+  const localizedActions:Record<string,string>={move_left:'向左移动',move_right:'向右移动',move_up:'向上移动',move_down:'向下移动',wider:'加宽',narrower:'收窄',taller:'增高',shorter:'减高'};
   const selectedIndex = selectedMask ? masks.findIndex((mask) => mask.id === selectedMask.id) : -1;
 
   return (
@@ -258,15 +264,18 @@ export function MaskEditorOverlay({
       </View>
 
       <Text accessibilityLiveRegion="polite" style={styles.selectionText}>
-        {selectedIndex >= 0
-          ? `Mask ${selectedIndex + 1} of ${masks.length} selected.`
-          : `${masks.length} manual opaque masks. No mask selected.`}
+        {zh ? (selectedIndex>=0 ? `已选遮挡 ${selectedIndex+1} · 拖动移动，拖动角点缩放` : '轻点照片或点“添加遮挡”，盖住人脸、车牌等信息') : compactControls ? (selectedIndex>=0 ? 'Drag to move; drag a corner to resize.' : 'Tap the photo or Add mask to cover faces or plates.') : selectedIndex >= 0 ? `Mask ${selectedIndex + 1} of ${masks.length} selected.` : `${masks.length} manual opaque masks. No mask selected.`}
       </Text>
 
-      <GlassSurface interactive style={styles.controlsPanel}>
+      {compactControls ? <View style={styles.controlRow}>
+        <Pressable accessibilityRole="button" disabled={disabled} style={styles.control} onPress={()=>{if(disabled)return;const mask=createDefaultMask(createMaskId(),{x:.5,y:.5});onSelectionChange(mask.id);onMutationCommit([...masks,mask]);}}><Text style={styles.controlText}>{zh?'添加遮挡':'Add mask'}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{expanded:fineControls}} onPress={()=>setFineControls(value=>!value)} style={styles.control}><Text style={styles.controlText}>{zh?'精细调整':'Fine adjustments'}</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={disabled||!selectedMask} onPress={deleteSelectedMask} style={[styles.control,(disabled||!selectedMask)&&styles.controlDisabled]}><Text style={styles.controlText}>{zh?'删除遮挡':'Delete mask'}</Text></Pressable>
+      </View> : null}
+      {!compactControls||fineControls ? <GlassSurface interactive style={styles.controlsPanel}>
         {(['position', 'size'] as const).map((group) => (
           <View key={group} style={styles.controlGroup}>
-            <Text style={styles.groupLabel}>{group === 'position' ? 'Position' : 'Size'}</Text>
+            <Text style={styles.groupLabel}>{zh ? (group==='position'?'位置':'大小') : group === 'position' ? 'Position' : 'Size'}</Text>
             <View style={styles.controlRow}>
               {controlActions.filter((control) => control.group === group).map(({ label, visibleLabel, action }) => {
                 const noChange = !selectedMask || adjustMask(selectedMask, action) === selectedMask;
@@ -275,7 +284,7 @@ export function MaskEditorOverlay({
                   <Pressable
                     key={action}
                     accessibilityRole="button"
-                    accessibilityLabel={label}
+                    accessibilityLabel={zh?localizedActions[action]:label}
                     accessibilityState={{ disabled: controlDisabled }}
                     disabled={controlDisabled}
                     onPress={() => commitAdjustment(action)}
@@ -285,7 +294,7 @@ export function MaskEditorOverlay({
                       controlDisabled && styles.controlDisabled,
                     ]}
                   >
-                    <Text numberOfLines={1} style={styles.controlText}>{visibleLabel}</Text>
+                    <Text numberOfLines={1} style={styles.controlText}>{zh?localizedActions[action]:visibleLabel}</Text>
                   </Pressable>
                 );
               })}
@@ -294,15 +303,15 @@ export function MaskEditorOverlay({
         ))}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Delete selected mask"
+          accessibilityLabel={zh?'删除所选遮挡':'Delete selected mask'}
           accessibilityState={{ disabled: disabled || !selectedMask }}
           disabled={disabled || !selectedMask}
           onPress={deleteSelectedMask}
           style={[styles.control, styles.deleteControl, (disabled || !selectedMask) && styles.controlDisabled]}
         >
-          <Text style={styles.controlText}>Delete selected mask</Text>
+          <Text style={styles.controlText}>{zh?'删除所选遮挡':'Delete selected mask'}</Text>
         </Pressable>
-      </GlassSurface>
+      </GlassSurface> : null}
     </View>
   );
 }
@@ -346,5 +355,5 @@ const styles = StyleSheet.create({
     borderColor: colors.danger, backgroundColor: 'rgba(158, 61, 56, 0.08)',
   },
   controlDisabled: { opacity: 0.45 },
-  controlText: { color: colors.ink, fontWeight: '700', textAlign: 'center' },
+  controlText: { color: colors.ink, fontSize: 13, fontWeight: '500', textAlign: 'center' },
 });

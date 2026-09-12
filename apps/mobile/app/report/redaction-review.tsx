@@ -257,10 +257,12 @@ export default function RedactionReviewScreen() {
       setStatus(copy.savedPrivately);
       router.replace({ pathname: '/report/new', params: { draftId } } as never);
     } catch (error) {
-      await cacheLifecycle.abandonAll();
+      const authenticationRequired = error instanceof Error && error.message === 'authentication_required';
+      // Keep this screen's prepared copy for retry. Unmount, replacement and
+      // successful save still remove it through the owned-cache lifecycle.
+      if (authenticationRequired) await cacheLifecycle.abandonAll();
       if (mountedRef.current) {
         if (!pending) setReview((current) => ({ ...current, status: 'needs_review', receipt: null }));
-        const authenticationRequired = error instanceof Error && error.message === 'authentication_required';
         setStatus(authenticationRequired ? copy.signInAgain : copy.privateStorageFailed);
         if (authenticationRequired) {
           router.replace(`/profile?returnDraftId=${encodeURIComponent(draftId)}` as never);
@@ -296,11 +298,8 @@ export default function RedactionReviewScreen() {
   const confirmationDisabled = busy || (!pending && (!renderCurrent || !renderedMasksAreCurrent));
 
   return (
-    <ScreenScaffold title={copy.title} subtitle={copy.subtitle}>
+    <ScreenScaffold compact title={copy.title} subtitle={copy.subtitle}>
       <View style={styles.detectors}>
-        <Text style={styles.detector}>{copy.peopleUnavailable}</Text>
-        <Text style={styles.detector}>{copy.platesUnavailable}</Text>
-        <Text style={styles.detector}>{copy.catsUnavailable}</Text>
         <Text style={styles.warning}>{copy.detectorWarning}</Text>
       </View>
 
@@ -310,6 +309,7 @@ export default function RedactionReviewScreen() {
             <Image accessibilityLabel={copy.reviewedImageLabel} resizeMode="contain" source={{ uri: review.rendered.uri }} style={styles.preview} />
           </View>
           <MaskEditorOverlay
+            compactControls locale={locale}
             imageWidth={review.rendered.width}
             imageHeight={review.rendered.height}
             frameWidth={previewWidth}
@@ -354,15 +354,15 @@ const styles = StyleSheet.create({
   detectors: { padding: 16, gap: 6, borderRadius: radii.medium, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
   detector: { color: colors.danger, fontWeight: '700' },
   warning: { color: colors.muted, lineHeight: 19, marginTop: 4 },
-  photoButton: { minHeight: 180, alignItems: 'center', justifyContent: 'center', borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, backgroundColor: colors.leafSoft },
+  photoButton: { minHeight: 130, alignItems: 'center', justifyContent: 'center', borderRadius: radii.large, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.leaf, backgroundColor: colors.leafSoft },
   photoChoices: { gap: 10 },
-  photoButtonText: { color: colors.leaf, fontWeight: '800' },
+  photoButtonText: { color: colors.leaf, fontWeight: '600' },
   editor: { position: 'relative', alignSelf: 'stretch' },
   previewFrame: { position: 'absolute', top: 0, right: 0, left: 0, height: PREVIEW_HEIGHT, overflow: 'hidden', borderRadius: radii.large, backgroundColor: '#111111' },
   preview: { width: '100%', height: '100%' },
   secondary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.leaf },
-  secondaryText: { color: colors.leaf, fontWeight: '800' },
+  secondaryText: { color: colors.leaf, fontWeight: '600' },
   action: { minHeight: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },
-  actionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  actionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   status: { color: colors.muted, lineHeight: 20, textAlign: 'center' },
 });
