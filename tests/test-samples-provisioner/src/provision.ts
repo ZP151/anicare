@@ -10,6 +10,7 @@ import { COMMUNITY_TEST_POSTS } from '../../../apps/mobile/src/community/test-sa
 import { ensureCommunitySample } from './community.js';
 import { canUpgradeNoPhotoPortrait } from './fixture-upgrade.js';
 import { validateCommunityMediaVariants, type CommunityMediaVariant } from './media.js';
+import { retrySampleRead } from './read-retry.js';
 
 const project = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
 
@@ -157,6 +158,7 @@ async function main() {
     const visiblePostIds: string[] = [];
     const visibleReplyIds: string[] = [];
     for (const post of COMMUNITY_TEST_POSTS) {
+      process.stdout.write(`test_sample_post_started ${post.code}\n`);
       const visible = await db.begin(async sql => {
         await sql`select pg_advisory_xact_lock(hashtext(${post.id}))`;
         const expected = {id:post.id,author_id:null,body:post.body.en,cat_id:post.catId,community_slug:post.communitySlug};
@@ -208,25 +210,30 @@ async function main() {
         });
       }
       const [{data:detail,error:detailError},{data:replies,error:replyError},{data:reaction,error:reactionError}] = await Promise.all([
-        anonymous.rpc('get_public_community_post',{p_post_id:post.id}),
-        anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30}),
-        anonymous.rpc('get_community_post_reactions',{p_post_ids:[post.id]}),
+        retrySampleRead(()=>anonymous.rpc('get_public_community_post',{p_post_id:post.id})),
+        retrySampleRead(()=>anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30})),
+        retrySampleRead(()=>anonymous.rpc('get_community_post_reactions',{p_post_ids:[post.id]})),
       ]);
       if (detailError || !Array.isArray(detail) || detail.length!==1 || detail[0].body!==post.body.en ||
-          replyError || !Array.isArray(replies) || reactionError || !Array.isArray(reaction) || reaction.length!==1)
+          replyError || !Array.isArray(replies) || reactionError || !Array.isArray(reaction) || reaction.length!==1) {
+        process.stderr.write(JSON.stringify({sample:post.code,detailError:!!detailError,replyError:!!replyError,reactionError:!!reactionError,detailRows:Array.isArray(detail)?detail.length:null,reactionRows:Array.isArray(reaction)?reaction.length:null,bodyMatches:Array.isArray(detail)&&detail[0]?.body===post.body.en})+'\n');
         throw new Error('test_sample_community_journey_failed');
+      }
       visiblePostIds.push(post.id);
       if (replies.some(reply=>reply.replyId===post.reply.id && reply.body===post.reply.body.en)) visibleReplyIds.push(post.reply.id);
     }
-    const extras = await anonymous.rpc('get_public_community_post_extras', {p_post_ids: visiblePostIds});
+    const extras = await retrySampleRead(()=>anonymous.rpc('get_public_community_post_extras', {p_post_ids: visiblePostIds}));
     if (extras.error || !Array.isArray(extras.data)) throw new Error('test_sample_community_media_public_read_failed');
     for (const fixture of mediaFixtures.filter(candidate => visiblePostIds.includes(candidate.post.id))) {
       const sequence = mediaFixtures.findIndex(candidate => candidate.fixtureKey === fixture.fixtureKey && candidate.position === fixture.position);
       const mediaId = fixtureMediaId(sequence); const extra = extras.data.find((row: {postId?: unknown}) => row.postId === fixture.post.id) as {media?: Array<{mediaId?: unknown}>} | undefined;
       if (!extra || !Array.isArray(extra.media) || extra.media[fixture.position]?.mediaId !== mediaId) throw new Error('test_sample_community_media_public_read_failed');
-      const response = await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey}});
+      const response = await retrySampleRead(async()=>{
+        const received=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey}});
+        return {error:!received.ok,contentType:received.headers.get('content-type'),bytes:new Uint8Array(await received.arrayBuffer())};
+      });
       const expected = await readFile(assetPath(fixture.sourceFile));
-      if (!response.ok || !response.headers.get('content-type')?.startsWith('image/jpeg') || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_community_media_public_read_failed');
+      if (response.error || !response.contentType?.startsWith('image/jpeg') || sha256(response.bytes) !== sha256(expected)) throw new Error('test_sample_community_media_public_read_failed');
     }
     const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds, communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => visiblePostIds.includes(post.id) && post.media.length > 0).map(post => post.id), communityMediaCount: mediaFixtures.filter(fixture=>visiblePostIds.includes(fixture.post.id)).length, gallerySizes: [...new Set(COMMUNITY_TEST_POSTS.filter(post=>visiblePostIds.includes(post.id)).map(post=>post.media.length))].sort() };
     await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });

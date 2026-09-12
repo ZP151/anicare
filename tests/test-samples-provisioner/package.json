@@ -5,7 +5,7 @@
   "scripts": {
     "provision": "tsx src/provision.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/portrait.test.ts src/fixtures.test.ts src/community.test.ts src/fixture-upgrade.test.ts src/media.test.ts"
+    "test": "tsx --test src/portrait.test.ts src/fixtures.test.ts src/community.test.ts src/fixture-upgrade.test.ts src/media.test.ts src/read-retry.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.98.0",
