@@ -162,12 +162,12 @@ async function main() {
         const expected = {id:post.id,author_id:null,body:post.body.en,cat_id:post.catId,community_slug:post.communitySlug};
         const available = await ensureCommunitySample({
           read:async()=> (await sql`select * from public.community_posts where id=${post.id}::uuid`)[0] ?? null,
-          insert:()=>sql`insert into public.community_posts(id,author_id,body,cat_id,community_slug,created_at) values(${post.id}::uuid,null,${post.body.en},${post.catId}::uuid,${post.communitySlug},now()-interval '8 hours')`,
+          insert:()=>sql`insert into public.community_posts(id,author_id,body,cat_id,community_slug,created_at) values(${post.id}::uuid,null,${post.body.en},${post.catId}::uuid,${post.communitySlug},now()-${post.ageHours}*interval '1 hour')`,
         },expected);
         if (!available) return false;
         await ensureCommunitySample({
           read:async()=> (await sql`select * from public.community_replies where id=${post.reply.id}::uuid`)[0] ?? null,
-          insert:()=>sql`insert into public.community_replies(id,post_id,author_id,body,created_at) values(${post.reply.id}::uuid,${post.id}::uuid,null,${post.reply.body.en},now()-interval '7 hours')`,
+          insert:()=>sql`insert into public.community_replies(id,post_id,author_id,body,created_at) values(${post.reply.id}::uuid,${post.id}::uuid,null,${post.reply.body.en},now()-${post.ageHours-1}*interval '1 hour')`,
         },{id:post.reply.id,post_id:post.id,author_id:null,body:post.reply.body.en});
         return true;
       });
@@ -228,7 +228,7 @@ async function main() {
       const expected = await readFile(assetPath(fixture.sourceFile));
       if (!response.ok || !response.headers.get('content-type')?.startsWith('image/jpeg') || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_community_media_public_read_failed');
     }
-    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds, communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => post.media.length > 0).map(post => post.id) };
+    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds, communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => visiblePostIds.includes(post.id) && post.media.length > 0).map(post => post.id), communityMediaCount: mediaFixtures.filter(fixture=>visiblePostIds.includes(fixture.post.id)).length, gallerySizes: [...new Set(COMMUNITY_TEST_POSTS.filter(post=>visiblePostIds.includes(post.id)).map(post=>post.media.length))].sort() };
     await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
     process.stdout.write('ios26_test_samples_provisioned\n');
   } finally { await db.end({ timeout: 5 }); }

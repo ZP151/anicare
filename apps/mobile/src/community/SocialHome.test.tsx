@@ -6,6 +6,7 @@ jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'en'})}));
 jest.mock('expo-router',()=>({useRouter:()=>({push:mockPush})}));
 jest.mock('../api/community',()=>({listCommunityPosts:(...args:unknown[])=>mockList(...args)}));
 jest.mock('../api/community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args)}));
+jest.mock('./CommunityPostImage',()=>({CommunityPostImage:()=>null}));
 jest.mock('../api/community-reactions',()=>({getCommunityReactions:async()=>new Map()}));
 jest.mock('../api/community-avatar',()=>({getCommunityAvatars:async()=>new Map()}));
 jest.mock('../api/cat-presentation',()=>({getCatPresentations:async()=>new Map()}));
@@ -15,6 +16,11 @@ import {SocialHome} from './SocialHome';
 import {SG_COMMUNITIES} from '../maps/singapore-communities';
 const post={postId:'00000000-0000-4000-8000-000000004255',body:'A cat in the garden',catId:null,communitySlug:'sg-clsz05',createdAt:'2026-09-11T00:00:00.000Z',author:{name:'Neighbour',avatarKey:'person'},replyCount:0,canDelete:false,cursor:'00000000-0000-4000-8000-000000004255'};
 beforeEach(()=>{jest.clearAllMocks();mockScale=1;mockOwner=null;mockExtras.mockResolvedValue(new Map());mockList.mockResolvedValue({items:[post],nextCursor:null});mockLocation.mockResolvedValue({kind:'granted',latitude:1.3021,longitude:103.7651});});
+it('marks an actual multi-photo cover without changing the post entry',async()=>{
+ mockExtras.mockResolvedValue(new Map([[post.postId,{postId:post.postId,title:null,media:[{mediaId:'m1',width:320,height:240},{mediaId:'m2',width:320,height:240}]}]]));
+ const view=await render(<SocialHome/>);await view.findByText('2 photos');
+ await fireEvent.press(view.getByRole('button',{name:`Open post: ${post.body}`}));expect(mockPush).toHaveBeenCalledWith(`/community/${post.postId}`);await view.unmount();
+});
 it('loads the public feed when the initial session check resolves to guest',async()=>{
  mockOwner=undefined;const view=await render(<SocialHome/>);expect(mockList).not.toHaveBeenCalled();mockOwner=null;await view.rerender(<SocialHome/>);await view.findByText(post.body);await view.unmount();
 });

@@ -1,4 +1,5 @@
 import type { Locale } from '../i18n/catalog';
+import { sampleStories } from './sample-stories';
 
 // One source for the hosted provisioner and the UI. These are persisted test
 // conversations, never fallback posts injected when a real feed is empty.
@@ -45,12 +46,14 @@ const replyProfiles = [
   {name: 'Demo Bo', avatarKey: 'human-12'}, {name: 'Demo Qi', avatarKey: 'human-13'},
 ] as const;
 
-export const COMMUNITY_TEST_POSTS = scenarios.map(([communitySlug, catId, en, zh, replyEn, replyZh, profileName, avatarKey], index) => {
+const allScenarios = [...scenarios, ...sampleStories.map(([area,en,zh,replyEn,replyZh,name,avatar]) => [area,null,en,zh,replyEn,replyZh,name,avatar] as const)];
+export const COMMUNITY_TEST_POSTS = allScenarios.map(([communitySlug, catId, en, zh, replyEn, replyZh, profileName, avatarKey], index) => {
   const code = `C${String(index + 1).padStart(2, '0')}`;
   return {
     id: `00000000-0000-4000-8000-00000000c${101 + index}`,
-    code, communitySlug, catId, media: mediaByCode[code] ?? [],
-    profile: {name: profileName, avatarKey, photo: index === 0 || index === 8 ? 'woman' as const : index === 1 || index === 15 ? 'man' as const : null},
+    code, communitySlug, catId, media: index >= 24 ? sampleStories[index-24]![7] : mediaByCode[code] ?? [],
+    ageHours: index < 24 ? 8 : 2 + ((index-24)*7)%72,
+    profile: {name: profileName, avatarKey, photo: profileName === 'Demo Mei' ? 'woman' as const : profileName === 'Demo Kai' ? 'man' as const : null},
     replyProfile: {...replyProfiles[index % replyProfiles.length]!},
     body: {en: `[Test sample ${code}] ${en}`, zh},
     reply: {id: `00000000-0000-4000-8000-00000000d${101 + index}`, code,

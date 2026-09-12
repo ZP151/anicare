@@ -1,13 +1,22 @@
 import { COMMUNITY_TEST_POSTS, communitySampleAuthor, communitySampleText } from './test-samples';
 
-it('defines twenty-four persisted fixture conversations with local demo profiles', () => {
-  expect(COMMUNITY_TEST_POSTS).toHaveLength(24);
-  expect(new Set(COMMUNITY_TEST_POSTS.map(post => post.id)).size).toBe(24);
+it('defines forty-eight persisted fixture conversations with local demo profiles', () => {
+  expect(COMMUNITY_TEST_POSTS).toHaveLength(48);
+  expect(new Set(COMMUNITY_TEST_POSTS.map(post => post.id)).size).toBe(48);
   expect(COMMUNITY_TEST_POSTS.every(post => /^C\d{2}$/.test(post.code) && /^Demo /.test(post.profile.name) && /^human-(?:0[1-9]|1[0-5])$/.test(post.profile.avatarKey))).toBe(true);
   expect(COMMUNITY_TEST_POSTS.every(post => post.media.length <= 6)).toBe(true);
   expect(COMMUNITY_TEST_POSTS.find(post => post.code === 'C09')?.media).toEqual(['garden-pair.jpg', 'shelter-trio.jpg']);
   expect(COMMUNITY_TEST_POSTS.find(post => post.code === 'C12')?.media).toEqual(['side-tabby.jpg', 'rear-ginger.jpg', 'motion-black.jpg', 'hidden-calico.jpg']);
-  expect(COMMUNITY_TEST_POSTS.filter(post => post.communitySlug === 'sg-clsz05' && post.media.length > 0)).toHaveLength(6);
+  expect(COMMUNITY_TEST_POSTS.slice(0,24).filter(post => post.communitySlug === 'sg-clsz05' && post.media.length > 0)).toHaveLength(6);
+});
+
+it('adds every gallery size without shifting any legacy media identifier', () => {
+  expect(COMMUNITY_TEST_POSTS.slice(0,24).flatMap(post=>post.media)).toEqual(['garden-pair.jpg','shelter-trio.jpg','side-tabby.jpg','garden-pair.jpg','shelter-trio.jpg','biscuit.jpg','willow.jpg','side-tabby.jpg','rear-ginger.jpg','motion-black.jpg','hidden-calico.jpg','shelter-trio.jpg','garden-pair.jpg']);
+  expect([...new Set(COMMUNITY_TEST_POSTS.slice(24).map(post=>post.media.length))].sort()).toEqual([1,2,3,4,5,6]);
+  for(const post of COMMUNITY_TEST_POSTS.slice(24)) {
+    expect(new Set(post.media).size).toBe(post.media.length);
+    expect(post.body.en).not.toMatch(/fixture|loading|synthetic|test asset/i);
+  }
 });
 it('returns distinct local-only demo authors for a known conversation and never for resident content', () => {
   expect(communitySampleAuthor('00000000-0000-4000-8000-00000000c101', 'en')).toEqual({name: 'Demo Mei', avatarKey: 'human-01', photo: 'woman'});

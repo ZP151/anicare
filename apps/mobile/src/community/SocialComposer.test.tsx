@@ -19,6 +19,15 @@ it('restores the draft and saves the latest text before closing',async()=>{
  await fireEvent.changeText(view.getByLabelText('Caption'),'Updated before leaving');await fireEvent.press(view.getByLabelText('Save and close'));
  await waitFor(()=>expect(mockBack).toHaveBeenCalled());expect(mockSaved.body).toBe('Updated before leaving');await view.unmount();
 });
+it('restores six photos, changes the cover and persists removal in that order',async()=>{
+ const images=Array.from({length:6},(_,n)=>({id:`00000000-0000-4000-8000-00000000430${n}`,requestId:`00000000-0000-4000-8000-00000000440${n}`,thumb:{width:320,height:240,byteLength:100,sha256:'a'.repeat(64)},display:{width:1280,height:960,byteLength:400,sha256:'b'.repeat(64)}}));
+ mockSaved={...mockSaved,images};const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');
+ expect(view.getAllByRole('button',{name:'Remove photo'})).toHaveLength(6);
+ await fireEvent.press(view.getAllByRole('button',{name:'Make cover'})[5]!);
+ await fireEvent.press(view.getAllByRole('button',{name:'Remove photo'})[1]!);
+ await fireEvent.press(view.getByLabelText('Save and close'));
+ await waitFor(()=>expect(mockBack).toHaveBeenCalled());expect(mockSaved.images.map((image:any)=>image.id)).toEqual([5,1,2,3,4].map(n=>images[n]!.id));await view.unmount();
+});
 it('clears private text and preview scopes when signed out',async()=>{
  const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');const disposals=mockDispose.mock.calls.length;
  mockOwner=null;await view.rerender(<SocialComposer/>);expect(view.queryByDisplayValue('Saved caption')).toBeNull();expect(mockDispose.mock.calls.length).toBeGreaterThan(disposals);await view.unmount();

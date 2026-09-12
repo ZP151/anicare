@@ -20,7 +20,7 @@ jobs:
   provision:
     runs-on: ubuntu-latest
     # Expanded fixtures verify every public image after import; allow the receipt upload to finish.
-    timeout-minutes: 20
+    timeout-minutes: 35
     environment: hosted-gate-2b
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
