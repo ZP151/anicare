@@ -14,12 +14,12 @@ insert into public.community_posts(id,author_id,body,community_slug,created_at) 
 insert into public.community_posts(author_id,body,community_slug,created_at)
  select '00000000-0000-4000-8000-000000004201','Newer text '||n,'clementi','2026-09-11T00:00:00Z' from generate_series(1,25) n;
 insert into private.community_media_jobs(id,owner_id,request_id,payload_hash,thumb_sha256,thumb_byte_length,thumb_width,thumb_height,display_sha256,display_byte_length,display_width,display_height,reservation_expires_at,upload_token_expires_at,status)
- select ('00000000-0000-4000-8000-'||lpad((4230+n)::text,12,'0'))::uuid,
+ select format('00000000-0000-4000-8000-%s',lpad((4230+n)::text,12,'0'))::uuid,
  case when n<6 then '00000000-0000-4000-8000-000000004201'::uuid else '00000000-0000-4000-8000-000000004202'::uuid end,
  extensions.gen_random_uuid(),repeat('a',64),repeat('b',64),100,48,48,repeat('c',64),1000,480,640,now()+interval '10 minutes',now()+interval '2 hours','attached' from generate_series(0,6) n;
 insert into private.community_post_media(post_id,media_id,position)
  select case when n<6 then '00000000-0000-4000-8000-000000004210'::uuid else '00000000-0000-4000-8000-000000004211'::uuid end,
- ('00000000-0000-4000-8000-'||lpad((4230+n)::text,12,'0'))::uuid,case when n<6 then n else 0 end from generate_series(0,6) n;
+ format('00000000-0000-4000-8000-%s',lpad((4230+n)::text,12,'0'))::uuid,case when n<6 then n else 0 end from generate_series(0,6) n;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000004201',true);
 select is((select count(*) from public.list_my_community_photos()),6::bigint,'finds all photos behind 25 text posts, excludes foreign media');
