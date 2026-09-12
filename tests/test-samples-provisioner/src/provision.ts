@@ -126,32 +126,36 @@ async function main() {
       });
     }
     const ids = samples.map(([, id]) => id);
-    const presentations = await anonymous.rpc('get_public_cat_presentations', { p_animal_ids: ids });
+    const presentations = await retrySampleRead(signal=>anonymous.rpc('get_public_cat_presentations', { p_animal_ids: ids }).abortSignal(signal));
     if (presentations.error || !Array.isArray(presentations.data) || presentations.data.length !== samples.length) throw new Error('test_sample_public_read_failed');
     const rows = presentations.data as Array<{ animalId: string; portraitPath: string | null; sampleLabel: string }>;
     if (new Set(rows.map((row) => row.animalId)).size !== samples.length || new Set(rows.map((row) => row.sampleLabel)).size !== samples.length) throw new Error('test_sample_public_projection_invalid');
     const portraitRows = rows.filter(row => row.portraitPath !== null);
     if (portraitRows.length !== samples.filter(sample=>sample[3]).length || ids.some(id => !rows.some(row => row.animalId === id))) throw new Error('test_sample_public_projection_invalid');
     for (const row of portraitRows) {
-      const signed = await anonymous.storage.from('cat-portraits').createSignedUrl(row.portraitPath!, 60);
-      const response = signed.data?.signedUrl ? await fetch(signed.data.signedUrl) : null;
+      const signed = await retrySampleRead(() => anonymous.storage.from('cat-portraits').createSignedUrl(row.portraitPath!, 60));
+      const portraitUrl=signed.data?.signedUrl;
+      const response = portraitUrl ? await retrySampleRead(async signal=>{
+        const received=await fetch(portraitUrl,{signal});
+        return {error:!received.ok,contentType:received.headers.get('content-type'),bytes:new Uint8Array(await received.arrayBuffer())};
+      }) : null;
       const filename = samples.find(sample => sample[1] === row.animalId)?.[3];
       if (!filename || row.portraitPath !== `synthetic-test/${row.animalId}/portrait.jpg`) throw new Error('test_sample_public_projection_invalid');
       const expected = await readFile(assetPath(filename));
-      if (signed.error || !response?.ok || !response.headers.get('content-type')?.startsWith('image/jpeg') || sha256(new Uint8Array(await response.arrayBuffer())) !== sha256(expected)) throw new Error('test_sample_signed_portrait_failed');
+      if (signed.error || !response || response.error || !response.contentType?.startsWith('image/jpeg') || sha256(response.bytes) !== sha256(expected)) throw new Error('test_sample_signed_portrait_failed');
     }
     for (const id of ids) {
-      const summary = await anonymous.rpc('get_public_cat_summary', { p_animal_id: id });
-      const care = await anonymous.rpc('list_public_care_history', { p_animal_id: id, p_cursor: null, p_limit: 20 });
+      const summary = await retrySampleRead(signal=>anonymous.rpc('get_public_cat_summary', { p_animal_id: id }).abortSignal(signal));
+      const care = await retrySampleRead(signal=>anonymous.rpc('list_public_care_history', { p_animal_id: id, p_cursor: null, p_limit: 20 }).abortSignal(signal));
       if (summary.error || !Array.isArray(summary.data) || summary.data.length !== 1 || care.error || !Array.isArray(care.data) || care.data.length < 1) throw new Error('test_sample_public_journey_failed');
       const fixture=samples.find(sample=>sample[1]===id)!;
-      const activity=await anonymous.rpc('list_public_cat_community_activity',{p_animal_id:id});
+      const activity=await retrySampleRead(signal=>anonymous.rpc('list_public_cat_community_activity',{p_animal_id:id}).abortSignal(signal));
       if(activity.error || !Array.isArray(activity.data) || !activity.data.some(row=>row.publicCellId===fixture[4])) throw new Error('test_sample_map_activity_failed');
       const expectedPlace=samplePlaces[fixture[0]];
       if(expectedPlace && !activity.data.some(row=>row.residenceName===expectedPlace.name && row.residenceType===expectedPlace.residenceType))throw new Error('test_sample_building_context_failed');
     }
     for (const cell of new Set(samples.map(([, , , , cell]) => cell))) {
-      const discovery = await anonymous.rpc('list_public_cat_discovery', { p_public_cell_id: cell, p_verifications: null, p_cursor: null, p_limit: 50 });
+      const discovery = await retrySampleRead(signal=>anonymous.rpc('list_public_cat_discovery', { p_public_cell_id: cell, p_verifications: null, p_cursor: null, p_limit: 50 }).abortSignal(signal));
       if (discovery.error || !Array.isArray(discovery.data) || discovery.data.length < 1) throw new Error('test_sample_discovery_failed');
     }
     const mediaFixtures = COMMUNITY_TEST_POSTS.flatMap((post) => post.media.map((sourceFile, position) => ({post, sourceFile, position, fixtureKey: `ios26-${post.code.toLowerCase()}`})));
@@ -210,9 +214,9 @@ async function main() {
         });
       }
       const [{data:detail,error:detailError},{data:replies,error:replyError},{data:reaction,error:reactionError}] = await Promise.all([
-        retrySampleRead(()=>anonymous.rpc('get_public_community_post',{p_post_id:post.id})),
-        retrySampleRead(()=>anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30})),
-        retrySampleRead(()=>anonymous.rpc('get_community_post_reactions',{p_post_ids:[post.id]})),
+        retrySampleRead(signal=>anonymous.rpc('get_public_community_post',{p_post_id:post.id}).abortSignal(signal)),
+        retrySampleRead(signal=>anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30}).abortSignal(signal)),
+        retrySampleRead(signal=>anonymous.rpc('get_community_post_reactions',{p_post_ids:[post.id]}).abortSignal(signal)),
       ]);
       if (detailError || !Array.isArray(detail) || detail.length!==1 || detail[0].body!==post.body.en ||
           replyError || !Array.isArray(replies) || reactionError || !Array.isArray(reaction) || reaction.length!==1) {
@@ -222,14 +226,14 @@ async function main() {
       visiblePostIds.push(post.id);
       if (replies.some(reply=>reply.replyId===post.reply.id && reply.body===post.reply.body.en)) visibleReplyIds.push(post.reply.id);
     }
-    const extras = await retrySampleRead(()=>anonymous.rpc('get_public_community_post_extras', {p_post_ids: visiblePostIds}));
+    const extras = await retrySampleRead(signal=>anonymous.rpc('get_public_community_post_extras', {p_post_ids: visiblePostIds}).abortSignal(signal));
     if (extras.error || !Array.isArray(extras.data)) throw new Error('test_sample_community_media_public_read_failed');
     for (const fixture of mediaFixtures.filter(candidate => visiblePostIds.includes(candidate.post.id))) {
       const sequence = mediaFixtures.findIndex(candidate => candidate.fixtureKey === fixture.fixtureKey && candidate.position === fixture.position);
       const mediaId = fixtureMediaId(sequence); const extra = extras.data.find((row: {postId?: unknown}) => row.postId === fixture.post.id) as {media?: Array<{mediaId?: unknown}>} | undefined;
       if (!extra || !Array.isArray(extra.media) || extra.media[fixture.position]?.mediaId !== mediaId) throw new Error('test_sample_community_media_public_read_failed');
-      const response = await retrySampleRead(async()=>{
-        const received=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey}});
+      const response = await retrySampleRead(async signal=>{
+        const received=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey},signal});
         return {error:!received.ok,contentType:received.headers.get('content-type'),bytes:new Uint8Array(await received.arrayBuffer())};
       });
       const expected = await readFile(assetPath(fixture.sourceFile));

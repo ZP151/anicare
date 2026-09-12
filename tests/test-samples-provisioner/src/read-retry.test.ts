@@ -15,3 +15,8 @@ test('does not convert persistent failures into success',async()=>{
  assert.equal(calls,3);assert.deepEqual(result.error,{code:'unavailable'});
  let thrown=0;await assert.rejects(retrySampleRead(async()=>{thrown++;throw new Error('offline');},async()=>{}),/offline/);assert.equal(thrown,3);
 });
+test('aborts a hung read and gives each bounded attempt a fresh signal',async()=>{
+ const signals:AbortSignal[]=[];
+ await assert.rejects(retrySampleRead(signal=>{signals.push(signal);return new Promise<{error:unknown}>(()=>{});},async()=>{},5),/test_sample_read_timeout/);
+ assert.equal(signals.length,3);assert.equal(new Set(signals).size,3);assert.ok(signals.every(signal=>signal.aborted));
+});
