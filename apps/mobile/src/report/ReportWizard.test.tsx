@@ -254,7 +254,7 @@ describe('ReportWizard', () => {
     const saveDraft = jest.fn(async () => undefined);
     const view = await render(<ReportWizard draftId={draftId} dependencies={dependencies({ saveDraft })} initialStage="area" AreaPicker={ManualAreaPicker as never} />);
 
-    await fireEvent.press(view.getByRole('button', { name: 'Choose an area manually' }));
+    await view.findByText('Location permission was not granted. Choose an area manually instead.');
     await fireEvent.press(view.getByRole('button', { name: 'Tap broad Singapore map' }));
     await fireEvent.press(view.getByRole('button', { name: 'Continue to review' }));
 
@@ -466,4 +466,66 @@ it('continues from a saved reviewed photo to details with a visible action',asyn
  await view.findByRole('header',{name:'Details'});
  expect(deps.saveDraft).toHaveBeenCalledWith(expect.objectContaining({report:expect.objectContaining({step:'details'})}));
  await view.unmount();
+});
+
+it('automatically requests device location on entering Area, only once',async()=>{
+ const requestDeviceLocation=jest.fn(async()=>({kind:'granted' as const,latitude:1.35,longitude:103.82}));
+ const saveDraft=jest.fn(async()=>undefined);
+ const view=await render(<ReportWizard draftId={draftId} initialStage="area" dependencies={dependencies({requestDeviceLocation,saveDraft})}/>);
+ await waitFor(()=>expect(requestDeviceLocation).toHaveBeenCalledTimes(1));
+
+ expect(JSON.stringify(saveDraft.mock.calls)).not.toMatch(/latitude|longitude/);
+});
+it('recovers an owner-matched committed anchor to its receipt instead of the missing editor',async()=>{
+ const navigate=jest.fn();const view=await render(<ReportWizard draftId={draftId} dependencies={dependencies({navigate,getSessionSubject:async()=> 'owner-12345678',loadDraft:async()=>draft({report:undefined,ownerSubject:'owner-12345678',sightingId})})}/>);
+ await waitFor(()=>expect(navigate).toHaveBeenCalledWith(`/report/receipt?sightingId=${sightingId}`));await view.unmount();
+});
+
+
+it('keeps status outside appearance and preserves changes through repeated step returns',async()=>{
+ const deps=dependencies();const view=await render(<ReportWizard draftId={draftId} initialStage="details" dependencies={deps}/>);
+ await view.findByRole('header',{name:'Details'});
+ const {within}=require('@testing-library/react-native');
+ expect(within(view.getByTestId('report-appearance')).queryByText('Appears well')).toBeNull();
+ expect(within(view.getByTestId('report-condition')).getByText('Appears well')).toBeTruthy();
+ await fireEvent.press(view.getByRole('button',{name:'Needs attention'}));
+ for(let i=0;i<3;i++){
+  await fireEvent.press(view.getByRole('button',{name:'Continue to visibility'}));
+  await view.findByRole('header',{name:'Visibility'});
+  await fireEvent.press(view.getByRole('button',{name:'Previous step'}));
+  await view.findByRole('header',{name:'Details'});
+  expect(view.getByRole('button',{name:'Needs attention'}).props.accessibilityState.selected).toBe(true);
+ }
+ await view.unmount();
+});
+it('ignores late automatic GPS after the user chooses a manual area',async()=>{
+ const pending=deferredLocation();const requestDeviceLocation=jest.fn(()=>pending.promise);
+ const deps=dependencies({requestDeviceLocation});
+ const view=await render(<ReportWizard draftId={draftId} initialStage="area" AreaPicker={ManualAreaPicker} dependencies={deps}/>);
+ await waitFor(()=>expect(requestDeviceLocation).toHaveBeenCalledTimes(1));
+ await fireEvent.press(view.getByRole('button',{name:'Choose an area manually'}));
+ await fireEvent.press(view.getByRole('button',{name:'Tap broad Singapore map'}));
+ await act(async()=>pending.resolve({kind:'granted',latitude:1.35,longitude:103.82}));
+ await fireEvent.press(view.getByRole('button',{name:'Continue to review'}));
+ await view.findByRole('header',{name:'Review'});
+ await fireEvent.press(view.getByRole('button',{name:'Submit report'}));
+ await waitFor(()=>expect(deps.submit).toHaveBeenCalledWith(expect.objectContaining({location:{kind:'manual_area',publicCellId:'89652636d87ffff'}})));
+ await view.unmount();
+});
+it('never redirects a receipt anchor owned by another account',async()=>{
+ const deps=dependencies({getSessionSubject:async()=> 'owner-b',loadDraft:async()=>draft({report:undefined,ownerSubject:'owner-a',sightingId})});
+ const view=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
+ await view.findByRole('button',{name:'Back to Report'});
+ expect(deps.navigate).not.toHaveBeenCalled();await view.unmount();
+});
+it('keeps media recovery drafts with a committed sighting editable',async()=>{
+ const deps=dependencies({getSessionSubject:async()=> 'owner-a',loadDraft:async()=>draft({ownerSubject:'owner-a',sightingId})});
+ const view=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
+ await view.findByRole('header',{name:'Photo'});expect(deps.navigate).not.toHaveBeenCalled();await view.unmount();
+});
+
+it('stays unavailable if the owner changes while restoring a committed anchor',async()=>{
+ const deps=dependencies({getSessionSubject:jest.fn().mockResolvedValueOnce('owner-a').mockResolvedValue('owner-b'),loadDraft:async()=>draft({report:undefined,ownerSubject:'owner-a',sightingId})});
+ const view=await render(<ReportWizard draftId={draftId} dependencies={deps}/>);
+ await view.findByRole('button',{name:'Back to Report'});expect(deps.navigate).not.toHaveBeenCalled();await view.unmount();
 });

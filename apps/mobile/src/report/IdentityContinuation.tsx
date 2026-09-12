@@ -1,5 +1,7 @@
 import {AppIcon} from '../components/AppIcon';
 import {getCatPresentations,type CatPresentation} from '../api/cat-presentation';
+import { CatPhotoPreview } from './CatPhotoPreview';
+import { toPublicMapPresentation } from '../maps/public-map-policy';
 import { localizedCatName } from '../i18n/cat-name';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -22,6 +24,8 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   onSkip?(): void;
 }>) {
   const [candidates, setCandidates] = useState<readonly PublicSighting[]>([]);
+  const [selected,setSelected]=useState<PublicSighting|null>(null);
+  const [preview,setPreview]=useState(false);
   const [pageIndex,setPageIndex]=useState(0);
   const [portraits,setPortraits]=useState<ReadonlyMap<string,CatPresentation>>(new Map());
   const [cursor, setCursor] = useState<string | null>(null);
@@ -33,8 +37,8 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   const attempt = useRef(0);
   const existing = saved ?? draft?.identityContinuation;
   const copy = locale === 'zh-CN'
-    ? { title: '认出这只猫了吗？', intro: '点选头像提交身份建议，审核后才会关联。也可以选择新猫或跳过。', new: '作为新猫提交', skip: '暂不选择', retry: '重试身份提案', more: '显示更多公开档案', failed: '身份提案尚未提交，报告已安全保存。', pending: '身份提案正在等待独立审核。', closed: '该身份提案已结束。' }
-    : { title: 'Recognise this cat?', intro: 'Choose a portrait to suggest an identity. Linking requires independent review; you can also choose a new cat or skip.', new: 'Submit as a new cat', skip: 'Skip for now', retry: 'Retry identity proposal', more: 'Show more public profiles', failed: 'The identity proposal is still pending. Your report is safely saved.', pending: 'The identity proposal is awaiting independent review.', closed: 'This identity proposal is closed.' };
+    ? { title: '认出这只猫了吗？', intro: '先选择头像并查看资料，再确认是否是同一只猫。关联需要审核。', new: '作为新猫提交', skip: '暂不选择', retry: '重试身份提案', more: '显示更多公开档案', failed: '身份提案尚未提交，报告已安全保存。', pending: '身份提案正在等待独立审核。', closed: '该身份提案已结束。' }
+    : { title: 'Recognise this cat?', intro: 'Select a portrait, check the details, then confirm your choice. Linking requires review.', new: 'Submit as a new cat', skip: 'Skip for now', retry: 'Retry identity proposal', more: 'Show more public profiles', failed: 'The identity proposal is still pending. Your report is safely saved.', pending: 'The identity proposal is awaiting independent review.', closed: 'This identity proposal is closed.' };
 
   useEffect(() => {
     let active = true;
@@ -50,7 +54,7 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   const visibleIds=visible.map(cat=>cat.animalId).join(',');
   useEffect(()=>{
     let active=true;
-    if(visibleIds)void getCatPresentations(visibleIds.split(',')).then(result=>{if(active)setPortraits(result);}).catch(()=>{if(active)setPortraits(new Map());});
+    if(visibleIds)void getCatPresentations(visibleIds.split(',')).then(result=>{if(active)setPortraits(current=>new Map([...current,...result]));}).catch(()=>undefined);
     return()=>{active=false;};
   },[visibleIds]);
 
@@ -89,17 +93,29 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
     } catch { if (mounted.current) setMessage(copy.failed); } finally { inFlight.current = false; if (mounted.current) setBusy(false); }
   }
 
+  const selectedPresentation=selected?toPublicMapPresentation(selected,locale):null;
+  const selectedUri=selected?portraits.get(selected.animalId)?.portraitUri:undefined;
+  const confirmLabel=locale==='zh-CN'?'确认选择这只猫':'Confirm selected cat';
+  const photoLabel=locale==='zh-CN'?'放大猫咪照片':'Enlarge cat photo';
   return <View style={styles.panel}>
     <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
     <Text style={styles.copy}>{copy.intro}</Text>
     {existing ? <Pressable accessibilityRole="button" accessibilityLabel={copy.retry} disabled={busy} onPress={() => { void submit(existing.intent, existing.requestId); }} style={styles.primary}><Text style={styles.primaryText}>{copy.retry}</Text></Pressable> : <>
-      <View style={styles.bubbles}>{visible.map(candidate=><IdentityBubble key={candidate.animalId} name={localizedCatName(candidate.animalId,candidate.primaryAlias,locale)} uri={portraits.get(candidate.animalId)?.portraitUri} disabled={busy} onPress={()=>void submit({kind:'existing',animalId:candidate.animalId})}/>)}</View>
+      <View style={styles.bubbles}>{visible.map(candidate=><IdentityBubble key={candidate.animalId} name={localizedCatName(candidate.animalId,candidate.primaryAlias,locale)} uri={portraits.get(candidate.animalId)?.portraitUri} disabled={busy} selected={selected?.animalId===candidate.animalId} onPress={()=>setSelected(candidate)}/>)}</View>
       {candidates.length>8||cursor?<View style={styles.pager}>
        <Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'上一组猫':'Previous cats'} disabled={busy||pageIndex===0} onPress={()=>setPageIndex(index=>index-1)} style={styles.pageButton}><AppIcon name="back" size={16} color={pageIndex===0?colors.muted:colors.actionPrimary}/></Pressable>
        <Text style={styles.copy}>{pageIndex+1} / {Math.max(1,Math.ceil(candidates.length/8))}{cursor?' +':''}</Text>
        <Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'下一组猫':'Next cats'} disabled={busy||((pageIndex+1)*8>=candidates.length&&!cursor)} onPress={()=>{if((pageIndex+1)*8<candidates.length)setPageIndex(index=>index+1);else void more();}} style={styles.pageButton}><AppIcon name="chevron" size={16} color={colors.actionPrimary}/></Pressable>
       </View>:null}
       {cursor&&(pageIndex+1)*8>=candidates.length?<Pressable accessibilityRole="button" accessibilityLabel={copy.more} disabled={busy} onPress={()=>void more()} style={styles.pageButton}><Text style={styles.optionText}>{copy.more}</Text></Pressable>:null}
+      {selected&&selectedPresentation?<View testID="identity-selection" style={styles.selection}>
+        <View style={styles.selectionDetails}>
+          {selectedUri?<Pressable accessibilityRole="button" accessibilityLabel={photoLabel} onPress={()=>setPreview(true)} style={styles.detailPhoto}><Image source={{uri:selectedUri}} style={styles.detailPhoto}/></Pressable>:<View style={styles.detailPhoto}><AppIcon name="cat" size={32} color={colors.actionPrimary}/></View>}
+          <View style={{flex:1,gap:4}}><Text style={styles.title}>{selectedPresentation.alias}</Text><Text style={styles.copy}>{selectedPresentation.verificationLabel} · {selectedPresentation.timeLabel}</Text>{selectedUri?<Text style={styles.copy}>{locale==='zh-CN'?'轻点照片可放大':'Tap the photo to enlarge'}</Text>:null}</View>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={confirmLabel} disabled={busy} onPress={()=>void submit({kind:'existing',animalId:selected.animalId})} style={styles.primary}><Text style={styles.primaryText}>{confirmLabel}</Text></Pressable>
+      </View>:null}
+      {selectedUri&&preview?<CatPhotoPreview uri={selectedUri} name={selectedPresentation?.alias??''} locale={locale} onClose={()=>setPreview(false)}/>:null}
       <Pressable accessibilityRole="button" accessibilityLabel={copy.new} disabled={busy} onPress={() => { void submit({ kind: 'new' }); }} style={styles.primary}><Text style={styles.primaryText}>{copy.new}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={copy.skip} disabled={busy} onPress={onSkip} style={styles.option}><Text style={styles.optionText}>{copy.skip}</Text></Pressable>
     </>}
@@ -107,16 +123,17 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   </View>;
 }
 
-function IdentityBubble({name,uri,disabled,onPress}:Readonly<{name:string;uri?:string;disabled:boolean;onPress():void}>){
+function IdentityBubble({name,uri,disabled,selected,onPress}:Readonly<{name:string;uri?:string;disabled:boolean;selected:boolean;onPress():void}>){
  const [failed,setFailed]=useState(false);
  useEffect(()=>setFailed(false),[uri]);
- return <Pressable testID="identity-cat-bubble" accessibilityRole="button" accessibilityLabel={name} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.bubble,{opacity:disabled?0.55:1,transform:[{scale:pressed?0.94:1}]}]}>
-  <View style={styles.portrait}>{uri&&!failed?<Image source={{uri}} onError={()=>setFailed(true)} style={styles.portrait}/>:<AppIcon name="cat" size={26} color={colors.actionPrimary}/>}</View>
+ return <Pressable testID="identity-cat-bubble" accessibilityRole="button" accessibilityLabel={name} accessibilityState={{disabled,selected}} disabled={disabled} onPress={onPress} style={({pressed})=>[styles.bubble,{opacity:disabled?0.55:1,transform:[{scale:pressed?0.94:1}]}]}>
+  <View style={[styles.portraitRing,selected&&styles.selectedRing]}><View style={styles.portrait}>{uri&&!failed?<Image source={{uri}} onError={()=>setFailed(true)} style={styles.portrait}/>:<AppIcon name="cat" size={26} color={colors.actionPrimary}/>}</View></View>
   <Text numberOfLines={1} style={styles.catName}>{name}</Text>
  </Pressable>;
 }
 
 const styles = StyleSheet.create({
+  selection:{gap:12,padding:12,borderRadius:14,backgroundColor:colors.leafSoft},selectionDetails:{flexDirection:'row',alignItems:'center',gap:12},detailPhoto:{width:80,height:80,borderRadius:12,alignItems:'center',justifyContent:'center'},portraitRing:{padding:3,borderWidth:2,borderColor:'transparent',borderRadius:32},selectedRing:{borderColor:colors.actionPrimary},
   bubbles:{flexDirection:'row',flexWrap:'wrap',rowGap:12},bubble:{width:'25%',minHeight:82,alignItems:'center',gap:6,paddingHorizontal:3},portrait:{width:52,height:52,borderRadius:26,backgroundColor:colors.leafSoft,alignItems:'center',justifyContent:'center'},catName:{fontSize:12,color:colors.ink},pager:{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:12},pageButton:{minHeight:44,minWidth:44,alignItems:'center',justifyContent:'center'},
   panel: { gap: 10, padding: 14, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper },
   title: { color: colors.ink, fontSize: 17, lineHeight: 23, fontWeight: '800' }, copy: { color: colors.muted, fontSize: 14, lineHeight: 20 },

@@ -130,7 +130,7 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
   }, [authEpoch, dependencies, sightingId, validSightingId]);
 
   if (!validSightingId) {
-    return <ScreenScaffold subtitle={copy.invalidReceiptId} title={copy.receiptTitle}>
+    return <ScreenScaffold hasNativeHeader subtitle={copy.invalidReceiptId} title={copy.receiptTitle}>
       <View style={styles.section}><Text accessibilityRole="header" style={styles.stateTitle}>{copy.routeUnavailableTitle}</Text><Text style={styles.notice}>{copy.receiptUnavailable}</Text><ReceiptActions copy={copy} navigate={dependencies.navigate} /></View>
     </ScreenScaffold>;
   }
@@ -194,7 +194,7 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
     }
   };
 
-  return <ScreenScaffold compact title={copy.receiptTitle} header={<View/>}>
+  return <ScreenScaffold hasNativeHeader compact title={copy.receiptTitle} header={<View/>}>
     {state === null ? <View accessibilityLiveRegion="polite" style={styles.loading}><ActivityIndicator color={colors.leaf} /><Text style={styles.notice}>{copy.receiptLoading}</Text></View> : null}
     {state !== null && state.status === null ? <View style={styles.section}><Text accessibilityRole="header" style={styles.stateTitle}>{copy.routeUnavailableTitle}</Text><Text accessibilityLiveRegion="polite" style={styles.notice}>{state.source === 'unavailable' ? copy.receiptRemoteUnavailable : copy.receiptUnavailable}</Text><ReceiptActions copy={copy} navigate={dependencies.navigate} /></View> : null}
     {state?.status ? <View style={styles.section} accessibilityLiveRegion="polite">

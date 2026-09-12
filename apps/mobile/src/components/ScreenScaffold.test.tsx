@@ -13,3 +13,9 @@ it('keeps its content visible while an accessible pull refresh is requested', as
   expect(view.getByText('Existing post remains visible')).toBeTruthy();
   await view.unmount();
 });
+
+it('does not add an automatic scroll inset beneath an existing native header',async()=>{
+ const view=await render(<ScreenScaffold hasNativeHeader compact title="Receipt"><Text>Report received</Text></ScreenScaffold>);
+ expect(view.getByTestId('screen-scroll').props.contentInsetAdjustmentBehavior).toBe('never');
+ await view.unmount();
+});

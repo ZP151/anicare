@@ -1,3 +1,4 @@
+jest.mock('react-native-safe-area-context',()=>require('react-native-safe-area-context/jest/mock').default);
 jest.mock('../api/cat-presentation',()=>({getCatPresentations:jest.fn(async()=>new Map())}));
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { IdentityContinuation } from './IdentityContinuation';
@@ -47,6 +48,8 @@ describe('IdentityContinuation', () => {
     }} />);
     await waitFor(() => expect(view.getByRole('button', { name: 'Visible Cat' })).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Visible Cat' }));
+    expect(submit).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByRole('button',{name:'Confirm selected cat'}));
     await waitFor(() => expect(view.getByRole('button', { name: 'Retry identity proposal' })).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Retry identity proposal' }));
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
@@ -76,6 +79,8 @@ describe('IdentityContinuation', () => {
     }} />);
     await waitFor(() => expect(view.getByRole('button', { name: 'Visible Cat' })).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Visible Cat' }));
+    expect(submit).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByRole('button',{name:'Confirm selected cat'}));
     await waitFor(() => expect(submit).not.toHaveBeenCalled());
   });
 });
@@ -90,6 +95,9 @@ it('bounds the avatar choices to eight per page and preserves each selected cat 
  await fireEvent.press(view.getByRole('button',{name:'Next cats'}));
  expect(view.getAllByTestId('identity-cat-bubble')).toHaveLength(8);
  await fireEvent.press(view.getByRole('button',{name:'Neighbour 9'}));
+ expect(submit).not.toHaveBeenCalled();
+ expect(view.getByRole('button',{name:'Neighbour 9'}).props.accessibilityState.selected).toBe(true);
+ await fireEvent.press(view.getByRole('button',{name:'Confirm selected cat'}));
  await waitFor(()=>expect(submit).toHaveBeenCalledWith(sightingId,{kind:'existing',animalId:items[9]!.animalId},requestId));
 });
 
@@ -114,4 +122,24 @@ it('preserves loaded pages when the receipt details are toggled by its parent',a
  await view.findByRole('button',{name:'Cat 24'});
  await view.rerender(<IdentityContinuation sightingId={sightingId} draft={null} locale="en" dependencies={{...deps}}/>);
  expect(view.getByRole('button',{name:'Cat 24'})).toBeTruthy();expect(list).toHaveBeenCalledTimes(2);
+});
+
+
+it('previews a selected cat without saving, and confirms only the final selection',async()=>{
+ const {getCatPresentations}=require('../api/cat-presentation');
+ getCatPresentations.mockResolvedValueOnce(new Map([[animalId,{portraitUri:'https://example.test/cat.jpg'}]]));
+ const second='87654321-1234-1234-1234-123456789abd';
+ const items=[animalId,second].map((id,i)=>({sightingId,animalId:id,primaryAlias:i?'Other cat':'Preview cat',verification:'reported' as const,publicCellId:'8928308280fffff',timeBucket:'today' as const,coverMediaId:null,cursor:sightingId}));
+ const saveIntent=jest.fn(async intent=>({intent,requestId}));const submit=jest.fn(async()=>({status:'tentative'}));
+ const view=await render(<IdentityContinuation sightingId={sightingId} draft={null} locale="en" dependencies={{isOwner:async()=>true,listPublicSightings:async()=>({items,nextCursor:null}),saveIntent,submit}}/>);
+ await fireEvent.press(await view.findByRole('button',{name:'Preview cat'}));
+ await fireEvent.press(await view.findByRole('button',{name:'Enlarge cat photo'}));
+ expect(view.getByTestId('cat-photo-zoom').props.maximumZoomScale).toBe(4);
+ await fireEvent.press(view.getByRole('button',{name:'Close photo'}));
+ expect(view.queryByTestId('cat-photo-zoom')).toBeNull();expect(saveIntent).not.toHaveBeenCalled();expect(submit).not.toHaveBeenCalled();
+ await fireEvent.press(view.getByRole('button',{name:'Other cat'}));
+ expect(view.getByRole('button',{name:'Preview cat'}).props.accessibilityState.selected).toBe(false);
+ await fireEvent.press(view.getByRole('button',{name:'Confirm selected cat'}));
+ await waitFor(()=>expect(submit).toHaveBeenCalledWith(sightingId,{kind:'existing',animalId:second},requestId));
+ await view.unmount();
 });

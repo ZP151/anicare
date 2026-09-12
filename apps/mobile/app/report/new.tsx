@@ -92,7 +92,7 @@ export default function NewReportRoute() {
         return { sightingId: result.sightingId, state: result.state };
       },
       now: () => new Date(),
-      navigate: (path) => router.push(path as never),
+      navigate: (path) => path.startsWith('/report/receipt?') ? router.replace(path as never) : router.push(path as never),
       exit: () => router.dismissTo('/report'),
     };
   }, [router]);

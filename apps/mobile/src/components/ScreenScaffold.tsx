@@ -18,6 +18,7 @@ interface ScreenScaffoldProps extends PropsWithChildren {
   footer?: ReactNode;
   header?: ReactNode;
   avoidKeyboard?: boolean;
+  hasNativeHeader?: boolean;
 }
 
 export function ScreenScaffold({
@@ -32,7 +33,7 @@ export function ScreenScaffold({
   refreshing = false,
   onRefresh,
   refreshLabel = 'Refresh',
-  footer, header, avoidKeyboard = false,
+  footer, header, avoidKeyboard = false, hasNativeHeader = false,
 }: ScreenScaffoldProps) {
   const palette = useNativeColors();
   const nativeStyle = nativeAppearance ? { backgroundColor: palette.canvas } : undefined;
@@ -40,9 +41,9 @@ export function ScreenScaffold({
     <KeyboardAvoidingView testID="screen-keyboard-layout" enabled={!!footer || avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.fill, nativeStyle]}>
       {/* Measure keyboard overlap in the full screen coordinate space. Placing
           this container inside SafeAreaView can subtract the top inset twice. */}
-      <SafeAreaView edges={footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
+      <SafeAreaView edges={hasNativeHeader ? (footer ? ['left','right','bottom'] : ['left','right']) : footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
       {header ? <View testID="screen-fixed-header" style={{paddingHorizontal:16,paddingTop:6,paddingBottom:6}}>{header}</View> : null}
-      <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
+      <ScrollView testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior={hasNativeHeader ? "never" : "automatic"} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
         {!header ? <View style={styles.headingRow}>
           {leading ? <View testID="screen-header-leading">{leading}</View> : null}
           <View style={[styles.headingCopy, !!leading && styles.leadingHeading]}>

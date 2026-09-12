@@ -12,10 +12,11 @@ let mockParams: Record<string, string> = {};
 let mockDraft: StoredDraft | null = null;
 let mockWizard: ReportWizardDependencies;
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 const mockRpc = jest.fn();
 const mockCreateSighting = jest.fn();
 const mockIds = jest.fn();
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, replace: mockPush }), useLocalSearchParams: () => mockParams, useFocusEffect: () => {} }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, replace: mockReplace }), useLocalSearchParams: () => mockParams, useFocusEffect: () => {} }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => mockIds() }));
 jest.mock('../api/supabase', () => ({ getSupabaseClient: () => ({ rpc: mockRpc, auth: { getSession: async () => ({ data: { session: { user: { id: mockOwner }, access_token: 'test-token' } } }) } }) }));
 jest.mock('../auth/session-subject', () => ({ readSessionSubjectStrict: async () => mockOwner, subscribeSessionSubject: () => () => {} }));
@@ -94,4 +95,16 @@ it('resumes a remote-only owner receipt after response loss using its newly pers
   expect(calls[0]).toEqual(calls[1]);
   expect(mockIds).toHaveBeenCalledTimes(2);
   await reopened.unmount();
+});
+
+
+it('replaces the editor on receipt navigation, but keeps photo review returnable', async () => {
+  jest.clearAllMocks(); mockParams={draftId:mockDraftId};
+  const view=await render(<NewReportRoute/>);
+  mockWizard.navigate(`/report/redaction-review?draftId=${mockDraftId}`);
+  expect(mockPush).toHaveBeenCalledWith(`/report/redaction-review?draftId=${mockDraftId}`);
+  mockWizard.navigate(`/report/receipt?sightingId=${mockSighting}`);
+  expect(mockReplace).toHaveBeenCalledWith(`/report/receipt?sightingId=${mockSighting}`);
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  await view.unmount();
 });
