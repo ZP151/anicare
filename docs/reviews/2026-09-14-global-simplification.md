@@ -29,3 +29,11 @@ Independent review identified ambiguous location choices, hidden identity review
 5. On post/cat/message/profile screens, verify icons are reachable in Chinese/English, dark mode and large text. VoiceOver announces each action, selection and busy state.
 
 Previous acceptance records remain unchanged. No new sample fixtures are part of this candidate.
+
+## Build provenance
+
+- Source: `74e3b492f5fbf2112e43e4195609b3c8378a6429` (includes the help control alongside the identity heading, avoiding an extra full row). The final heading change passed typecheck and 34 focused tests.
+- CI `34770682097`, attempt 2: application verification and database contracts passed. Attempt 1 passed pgTAP and database lint but its environment-readiness test timed out at 5 seconds; the failed job was rerun without changing or skipping a gate.
+- Native candidate run: `34771236179`, source pinned as above; passed. Artifact `10322805224`; exact three-file manifest, GitHub provenance, SHA-256/byte count, pinned pnpm/Pod locks, native arm64 executable, version/build and app icons all verified.
+- Delivered file: `C:/Users/15492/Downloads/WhiskerCommons-0.4.18-build26.ipa`; 21,968,980 bytes; SHA-256 `e0430cf74014773779da7f0ed41ebe1fcf13d5b5e8746192642d0ed1f03ca0d6`.
+- Device acceptance remains pending; native glass and interaction quality are not inferred from CI.
