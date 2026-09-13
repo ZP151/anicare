@@ -1,3 +1,4 @@
+import {InfoDisclosure} from '../components/InfoDisclosure';
 import {AppIcon} from '../components/AppIcon';
 import {getCatPresentations,type CatPresentation} from '../api/cat-presentation';
 import { CatPhotoPreview } from './CatPhotoPreview';
@@ -101,7 +102,8 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   const photoLabel=locale==='zh-CN'?'放大猫咪照片':'Enlarge cat photo';
   return <View style={styles.panel}>
     <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
-    <Text style={styles.copy}>{copy.intro}</Text>
+    <Text style={styles.copy}>{locale==='zh-CN'?'关联需审核':'Linking requires review'}</Text>
+    <InfoDisclosure label={locale==='zh-CN'?'关于身份关联':'About identity linking'}>{copy.intro}</InfoDisclosure>
     {existing ? <Pressable accessibilityRole="button" accessibilityLabel={copy.retry} disabled={busy} onPress={() => { void submit(existing.intent, existing.requestId); }} style={styles.primary}><Text style={styles.primaryText}>{copy.retry}</Text></Pressable> : <>
       <View style={styles.bubbles}>{visible.map(candidate=><IdentityBubble key={candidate.animalId} name={localizedCatName(candidate.animalId,candidate.primaryAlias,locale)} uri={portraits.get(candidate.animalId)?.portraitUri} disabled={busy} selected={selected?.animalId===candidate.animalId} onPress={()=>setSelected(candidate)}/>)}</View>
       {candidates.length>8||cursor?<View style={styles.pager}>
@@ -109,17 +111,17 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
        <Text style={styles.copy}>{pageIndex+1} / {Math.max(1,Math.ceil(candidates.length/8))}{cursor?' +':''}</Text>
        <Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'下一组猫':'Next cats'} disabled={busy||((pageIndex+1)*8>=candidates.length&&!cursor)} onPress={()=>{if((pageIndex+1)*8<candidates.length)setPageIndex(index=>index+1);else void more();}} style={styles.pageButton}><AppIcon name="chevron" size={16} color={colors.actionPrimary}/></Pressable>
       </View>:null}
-      {cursor&&(pageIndex+1)*8>=candidates.length?<Pressable accessibilityRole="button" accessibilityLabel={copy.more} disabled={busy} onPress={()=>void more()} style={styles.pageButton}><Text style={styles.optionText}>{copy.more}</Text></Pressable>:null}
+      {cursor&&(pageIndex+1)*8>=candidates.length?<Pressable accessibilityRole="button" accessibilityLabel={copy.more} disabled={busy} onPress={()=>void more()} style={styles.pageButton}><AppIcon name="collapse" color={colors.actionPrimary}/></Pressable>:null}
       {selected&&selectedPresentation?<View testID="identity-selection" style={styles.selection}>
         <View style={styles.selectionDetails}>
-          {selectedUri?<Pressable accessibilityRole="button" accessibilityLabel={photoLabel} onPress={()=>setPreview(true)} style={styles.detailPhoto}><Image source={{uri:selectedUri}} style={styles.detailPhoto}/></Pressable>:<View style={styles.detailPhoto}><AppIcon name="cat" size={32} color={colors.actionPrimary}/></View>}
-          <View style={{flex:1,gap:4}}><Text style={styles.title}>{selectedPresentation.alias}</Text><Text style={styles.copy}>{selectedPresentation.verificationLabel} · {selectedPresentation.timeLabel}</Text>{selectedUri?<Text style={styles.copy}>{locale==='zh-CN'?'轻点照片可放大':'Tap the photo to enlarge'}</Text>:null}</View>
+          {selectedUri?<Pressable accessibilityRole="button" accessibilityLabel={photoLabel} onPress={()=>setPreview(true)} style={styles.detailPhoto}><Image source={{uri:selectedUri}} style={styles.detailPhoto}/><View style={{position:'absolute',right:4,bottom:4,backgroundColor:colors.paper,borderRadius:10,padding:3}}><AppIcon name="fit" size={14} color={colors.ink}/></View></Pressable>:<View style={styles.detailPhoto}><AppIcon name="cat" size={32} color={colors.actionPrimary}/></View>}
+          <View style={{flex:1,gap:4}}><Text style={styles.title}>{selectedPresentation.alias}</Text><Text style={styles.copy}>{selectedPresentation.verificationLabel} · {selectedPresentation.timeLabel}</Text></View>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={confirmLabel} disabled={busy} onPress={()=>void submit({kind:'existing',animalId:selected.animalId})} style={styles.primary}><Text style={styles.primaryText}>{confirmLabel}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={confirmLabel} disabled={busy} onPress={()=>void submit({kind:'existing',animalId:selected.animalId})} style={styles.primary}><View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon name="check" color={colors.onAction}/><Text style={styles.primaryText}>{locale==='zh-CN'?'确认':'Confirm'}</Text></View></Pressable>
       </View>:null}
       {selectedUri&&preview?<CatPhotoPreview uri={selectedUri} name={selectedPresentation?.alias??''} locale={locale} onClose={()=>setPreview(false)}/>:null}
-      <Pressable accessibilityRole="button" accessibilityLabel={copy.new} disabled={busy} onPress={() => { void submit({ kind: 'new' }); }} style={styles.option}><Text style={styles.optionText}>{copy.new}</Text></Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={copy.skip} disabled={busy} onPress={onSkip} style={styles.option}><Text style={styles.optionText}>{copy.skip}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={copy.new} disabled={busy} onPress={() => { void submit({ kind: 'new' }); }} style={styles.option}><View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon name="plus" color={colors.actionPrimary}/><Text style={styles.optionText}>{locale==='zh-CN'?'新猫':'New cat'}</Text></View></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={copy.skip} disabled={busy} onPress={onSkip} style={styles.option}><View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={styles.optionText}>{locale==='zh-CN'?'跳过':'Skip'}</Text><AppIcon name="chevron" color={colors.actionPrimary}/></View></Pressable>
     </>}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
   </View>;

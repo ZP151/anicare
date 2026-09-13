@@ -1,3 +1,4 @@
+import {IconAction} from '../../src/components/IconAction';
 import {BackButton} from '../../src/components/BackButton';
 import {useCallback,useRef,useState} from 'react';
 import {ActivityIndicator,KeyboardAvoidingView,Platform,Pressable,ScrollView,StyleSheet,Text,TextInput,View} from 'react-native';
@@ -62,10 +63,10 @@ export default function NewMessage(){
     {!auth.owner?<Pressable accessibilityRole="button" onPress={()=>router.push('/profile' as never)} style={s.touch}><Text style={{color:c.actionPrimary}}>{cn?'登录后发起私信':'Sign in to message'}</Text></Pressable>:(shown.canMessage||pending&&shown.conversationId)?<>
      <Text style={{color:c.muted,fontSize:13,lineHeight:19,textAlign:'center'}}>{cn?'先打个招呼，对方接受后即可继续聊天。':'Say hello. You can keep chatting once they accept.'}</Text>
      <TextInput accessibilityLabel={cn?'消息':'Message'} placeholder={cn?'说点什么…':'Write a message…'} placeholderTextColor={c.muted} value={same?body:''} onChangeText={setBody} editable={!pending&&!busy} maxLength={2000} multiline style={[s.input,{backgroundColor:c.surface,color:c.ink}]}/>
-     <Pressable accessibilityRole="button" disabled={busy||!body.trim()} onPress={()=>void send()} style={[s.button,{backgroundColor:c.actionPrimary,opacity:busy||!body.trim()?0.5:1}]}><Text style={{color:c.onAction,fontSize:14,fontWeight:'600'}}>{busy?(cn?'发送中…':'Sending…'):pending?(cn?'重试请求':'Retry request'):(cn?'发送请求':'Send request')}</Text></Pressable>
+     <Pressable accessibilityRole="button" accessibilityLabel={pending?(cn?'重试请求':'Retry request'):(cn?'发送请求':'Send request')} accessibilityState={{busy}} disabled={busy||!body.trim()} onPress={()=>void send()} style={[s.button,{backgroundColor:c.actionPrimary,opacity:busy||!body.trim()?0.5:1}]}><View style={{flexDirection:'row',alignItems:'center',gap:8}}>{busy?<ActivityIndicator color={c.onAction}/>:<AppIcon name={pending?'reset':'send'} color={c.onAction}/>}<Text style={{color:c.onAction,fontSize:14}}>{pending?(cn?'重试':'Retry'):(cn?'发送':'Send')}</Text></View></Pressable>
     </>:<Text style={{color:c.muted,fontSize:13,textAlign:'center'}}>{cn?'暂时无法向这位用户发送私信。':'Messaging is unavailable for this person.'}</Text>}
    </>:null}
-   {error?<View><Text style={{color:c.muted,fontSize:13,lineHeight:19}}>{error==='send'?(cn?'请求未发送。文字已保存，可在下方重试。':'Request not sent. Your text is saved; retry below.'):error==='storage'?(cn?'无法保存消息，请稍后重试。':'Could not save your message. Please try again.'):(cn?'暂时无法加载。':'Could not load this person.')}</Text>{error==='load'?<Pressable accessibilityRole="button" onPress={()=>void loadRef.current()} style={s.touch}><Text style={{color:c.actionPrimary}}>{cn?'重试':'Retry'}</Text></Pressable>:null}</View>:null}
+   {error?<View><Text style={{color:c.muted,fontSize:13,lineHeight:19}}>{error==='send'?(cn?'请求未发送。文字已保存，可在下方重试。':'Request not sent. Your text is saved; retry below.'):error==='storage'?(cn?'无法保存消息，请稍后重试。':'Could not save your message. Please try again.'):(cn?'暂时无法加载。':'Could not load this person.')}</Text>{error==='load'?<IconAction icon="reset" label={cn?'重试':'Retry'} onPress={()=>void loadRef.current()}/>:null}</View>:null}
   </ScrollView>
  </KeyboardAvoidingView></SafeAreaView>;
 }

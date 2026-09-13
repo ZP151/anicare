@@ -14,8 +14,8 @@ beforeEach(()=>{mockEpoch++;mockOwner=id;jest.clearAllMocks();mockPending.mockRe
 it('reopens an existing conversation directly from an author',async()=>{mockGet.mockResolvedValue({author:{name:'Mei',avatarKey:'person'},canMessage:false,conversationId:id});const view=await render(<NewMessage/>);await waitFor(()=>expect(mockReplace).toHaveBeenCalledWith(`/messages/${id}`));expect(mockCreate).not.toHaveBeenCalled();await view.unmount();});
 it('retains a durable first request identity after a failed acknowledgement',async()=>{
  mockCreate.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({conversationId:id});
- const view=await render(<NewMessage/>);await view.findByText('Mei');await fireEvent.changeText(view.getByLabelText('Message'),'Hello Mei');await fireEvent.press(view.getByText('Send request'));
- await view.findByText('Request not sent. Your text is saved; retry below.');await fireEvent.press(view.getByText('Retry request'));
+ const view=await render(<NewMessage/>);await view.findByText('Mei');await fireEvent.changeText(view.getByLabelText('Message'),'Hello Mei');await fireEvent.press(view.getByLabelText('Send request'));
+ await view.findByText('Request not sent. Your text is saved; retry below.');await fireEvent.press(view.getByLabelText('Retry request'));
  await waitFor(()=>expect(mockCreate).toHaveBeenCalledTimes(2));expect(mockCreate.mock.calls[1]).toEqual(mockCreate.mock.calls[0]);expect(mockSave).toHaveBeenCalled();await view.unmount();
 });
 it('recovers a first request with a lost acknowledgement when reopening its author',async()=>{

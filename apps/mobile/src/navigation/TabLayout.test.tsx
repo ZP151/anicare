@@ -28,7 +28,7 @@ it('keeps native sliding selection and opens Create without selecting its action
   expect(create.props.role).toBe('search');
   await fireEvent(create,'tabPress');
   expect(mockPush).toHaveBeenCalledWith('/create');
-  expect(view.getByTestId('native-map')).toBeTruthy();
+  expect(view.getByTestId('native-map').props.accessibilityLabel).toBe('Map');
   await view.unmount();
  }finally{if(descriptor)Object.defineProperty(Platform,'Version',descriptor);}
 });

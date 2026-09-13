@@ -1,3 +1,4 @@
+import {AppIcon} from '../components/AppIcon';
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -53,23 +54,23 @@ export function CatStoryList({ catId, locale }: { catId: string; locale: Locale 
   const visible = loadedScope === scope && auth.owner !== undefined ? items : [];
   const name = (item: CatStory) => communitySampleAuthor(item.postId, locale)?.name ?? item.author.name;
   return <View style={{ gap: 14 }}>
-    <View style={{ gap: 4 }}><Text accessibilityRole="header" style={{ color: c.ink, fontSize: 20, fontWeight: '700' }}>{zh ? '共同故事' : 'Shared stories'}</Text><Text style={{ color: c.muted, fontSize: 12 }}>{zh ? '来自认识它的邻居' : 'From neighbours who know this cat'}</Text></View>
+    <View style={{ gap: 4 }}><Text accessibilityRole="header" style={{ color: c.ink, fontSize: 20, fontWeight: '700' }}>{zh ? '共同故事' : 'Shared stories'}</Text></View>
     {visible.map(item => {
       const sample = communitySampleText(item.postId, item.body, locale), title = communitySampleTitle(item.postId,item.title,locale) || sample.body, photo = item.media[0];
       return <View key={item.postId} style={{ backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.line }}>
         <Pressable accessibilityRole="button" accessibilityLabel={`${zh ? '查看作者' : 'View author'} ${name(item)}`} onPress={() => setAuthor(item)} style={{ minHeight: 56, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
           <CommunityAuthorAvatar id={item.postId} avatarKey={item.author.avatarKey} photoUri={avatars.get(item.postId)} size={30} linkToProfile={false} />
-          <View style={{ flex: 1, gap: 2 }}><Text style={{ fontSize: 13, color: c.ink, fontWeight: '600' }}>{name(item)}</Text><Text style={{ fontSize: 11, color: c.muted }}>{zh ? '发布于 ' : 'Published '}{new Date(item.publishedAt).toLocaleDateString(zh ? 'zh-SG' : 'en-SG', { month: 'short', day: 'numeric' })}</Text></View>
+          <View style={{ flex: 1, gap: 2 }}><Text style={{ fontSize: 13, color: c.ink, fontWeight: '600' }}>{name(item)}</Text><Text style={{ fontSize: 11, color: c.muted }}>{new Date(item.publishedAt).toLocaleDateString(zh ? 'zh-SG' : 'en-SG', { month: 'short', day: 'numeric' })}</Text></View>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={`${zh ? '打开帖子' : 'Open post'}: ${title}`} onPress={() => router.push(`/community/${item.postId}` as never)}>
           {photo ? <View><CommunityPostImage key={photo.mediaId} postId={item.postId} mediaId={photo.mediaId} label={zh ? '故事照片' : 'Story photo'} retryLabel={zh ? '重试照片' : 'Retry photo'} style={{ width: '100%', aspectRatio: Math.max(.9, Math.min(1.8, photo.width / photo.height)) }} />{item.media.length > 1 ? <View style={{ position: 'absolute', top: 8, right: 8, backgroundColor: '#00000099', borderRadius: 10, padding: 5 }}><Text style={{ color: '#fff', fontSize: 11 }}>1/{item.media.length}</Text></View> : null}</View> : null}
-          <View style={{ padding: 12, gap: 6 }}><Text numberOfLines={3} style={{ fontSize: 15, lineHeight: 21, fontWeight: '600', color: c.ink }}>{title}</Text>{item.title ? <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 19, color: c.muted }}>{sample.body}</Text> : null}{sample.label ? <Text style={{ color: c.muted, fontSize: 11 }}>{sample.label}</Text> : null}<Text style={{ color: c.muted, fontSize: 12 }}>{zh ? `${item.replyCount} 条评论 · 查看原帖` : `${item.replyCount} comments · View original post`}</Text></View>
+          <View style={{ padding: 12, gap: 6 }}><Text numberOfLines={3} style={{ fontSize: 15, lineHeight: 21, fontWeight: '600', color: c.ink }}>{title}</Text>{item.title ? <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 19, color: c.muted }}>{sample.body}</Text> : null}{sample.label ? <Text style={{ color: c.muted, fontSize: 11 }}>{sample.label}</Text> : null}<View style={{flexDirection:'row',alignItems:'center',gap:6}}><AppIcon name="reply" size={16} color={c.muted}/><Text style={{color:c.muted,fontSize:12}}>{item.replyCount}</Text><View style={{flex:1}}/><AppIcon name="chevron" size={16} color={c.muted}/></View></View>
         </Pressable>
       </View>;
     })}
     {loading ? <ActivityIndicator accessibilityLabel={zh ? '正在读取故事' : 'Loading stories'} color={c.actionPrimary} /> : null}
-    {error ? <View style={{ gap: 6 }}><Text style={{ color: c.muted }}>{error === 'unavailable' ? (zh ? '这只猫的故事暂不可用。' : 'Stories for this cat are unavailable.') : (zh ? '故事暂未加载成功。' : 'Stories could not be loaded.')}</Text><Pressable accessibilityRole="button" accessibilityLabel={zh ? '重试故事' : 'Retry stories'} onPress={() => void load(visible.length > 0)} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: c.actionPrimary }}>{zh ? '重试' : 'Retry'}</Text></Pressable></View> : !loading && !visible.length ? <Text style={{ fontSize: 14, color: c.muted }}>{zh ? '分享它的第一个故事吧。' : 'Be the first to share a story.'}</Text> : null}
-    {hasMore && !loading && !error ? <Pressable accessibilityRole="button" onPress={() => void load(true)} style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: c.actionPrimary }}>{zh ? '更多故事' : 'More stories'}</Text></Pressable> : null}
+    {error ? <View style={{ gap: 6 }}><Text style={{ color: c.muted }}>{error === 'unavailable' ? (zh ? '这只猫的故事暂不可用。' : 'Stories for this cat are unavailable.') : (zh ? '故事暂未加载成功。' : 'Stories could not be loaded.')}</Text><Pressable accessibilityRole="button" accessibilityLabel={zh ? '重试故事' : 'Retry stories'} onPress={() => void load(visible.length > 0)} style={{ minHeight: 44, justifyContent: 'center' }}><AppIcon name="reset" color={c.actionPrimary}/></Pressable></View> : !loading && !visible.length ? <Text style={{ fontSize: 14, color: c.muted }}>{zh ? '分享它的第一个故事吧。' : 'Be the first to share a story.'}</Text> : null}
+    {hasMore && !loading && !error ? <Pressable accessibilityRole="button" accessibilityLabel={zh?'更多故事':'More stories'} onPress={() => void load(true)} style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}><AppIcon name="collapse" color={c.actionPrimary}/></Pressable> : null}
     {author && loadedScope === scope && auth.owner !== undefined ? <CommunityAuthorSheet id={author.postId} name={name(author)} avatarKey={author.author.avatarKey} photoUri={avatars.get(author.postId)} zh={zh} onClose={() => setAuthor(null)} onMessage={auth.owner && !author.canEditLink ? () => { setAuthor(null); router.push(`/messages/new?type=community_post&contentId=${author.postId}` as never); } : undefined} /> : null}
   </View>;
 }

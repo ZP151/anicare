@@ -1,3 +1,4 @@
+import {IconAction} from '../src/components/IconAction';
 import {BackButton} from '../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
@@ -50,12 +51,12 @@ export default function PrivacyRoute(){
  <View style={styles.box}><Text style={styles.title}>{cn?'删除账户':'Delete account'}</Text><Text>{cn?'提交后由受信服务删除登录账户、关联媒体及涉及该账户的私信会话，可能需要重试。请保存回执；账户移除后不能继续登录查询状态。':'The trusted service removes your sign-in account, related media, and private conversations involving this account; retries may be needed. Save the receipt: signed-in status tracking ends when the account is removed.'}</Text>
  {!confirmDelete?<Pressable accessibilityRole="button" disabled={blocked} style={styles.choice} onPress={()=>setConfirmDelete(true)}><Text>{cn?'申请删除账户':'Request account deletion'}</Text></Pressable>:<><Text>{cn?'确认申请删除此账户及按规则清理关联资料？':'Confirm removal of this account and cleanup of associated data under the retention policy?'}</Text><Pressable accessibilityRole="button" disabled={blocked} style={styles.choice} onPress={()=>{void requests.submit({kind:'erase',requestId:Crypto.randomUUID()});}}><Text>{cn?'确认删除申请':'Confirm deletion request'}</Text></Pressable><Pressable accessibilityRole="button" style={styles.choice} onPress={()=>setConfirmDelete(false)}><Text>{cn?'取消':'Cancel'}</Text></Pressable></>}
  </View>
- <Pressable accessibilityRole="button" disabled={loading} style={styles.choice} onPress={()=>{void load();}}><Text>{cn?'刷新请求状态':'Refresh request status'}</Text></Pressable>
+ <IconAction icon="reset" label={cn?'刷新请求状态':'Refresh request status'} busy={loading} onPress={()=>void load()}/>
  {failed?<Text accessibilityRole="alert">{cn?'无法读取请求，请刷新重试。':'Could not load requests. Refresh to retry.'}</Text>:null}
  {rights.items.map(row=><View key={row.requestId} style={styles.box}><Text>{cn?'请求：':'Request: '}{row.kind==='account_erasure'?(cn?'删除账户':'Account deletion'):(kinds.find(item=>item[0]===row.kind)?.[cn?2:1]??row.kind)}</Text><Text>{status(row.status)}</Text><Text selectable>{row.requestId}</Text>{row.status==='needs_new_proposal'?<Pressable accessibilityRole="button" style={styles.choice} onPress={()=>router.push('/report' as never)}><Text>{cn?'打开报告与草稿':'Open reports and drafts'}</Text></Pressable>:null}</View>)}
- {rights.nextCursor?<Pressable accessibilityRole="button" disabled={loading} style={styles.choice} onPress={()=>{void load('rights',rights.nextCursor);}}><Text>{cn?'更多权利请求':'More rights requests'}</Text></Pressable>:null}
+ {rights.nextCursor?<IconAction icon="collapse" label={cn?'更多权利请求':'More rights requests'} disabled={loading} onPress={()=>void load('rights',rights.nextCursor)}/>:null}
  <Text style={styles.title}>{cn?'我的内容举报':'My content reports'}</Text>{moderation.items.map(row=><View key={row.requestId} style={styles.box}><Text>{status(row.status)}</Text><Text selectable>{row.requestId}</Text></View>)}
- {moderation.nextCursor?<Pressable accessibilityRole="button" disabled={loading} style={styles.choice} onPress={()=>{void load('moderation',moderation.nextCursor);}}><Text>{cn?'更多内容举报':'More content reports'}</Text></Pressable>:null}
+ {moderation.nextCursor?<IconAction icon="collapse" label={cn?'更多内容举报':'More content reports'} disabled={loading} onPress={()=>void load('moderation',moderation.nextCursor)}/>:null}
  {!loading&&!failed&&rights.items.length===0&&moderation.items.length===0?<Text>{cn?'暂无已受理请求。':'No received requests yet.'}</Text>:null}
  </>}
  </ScreenScaffold>;

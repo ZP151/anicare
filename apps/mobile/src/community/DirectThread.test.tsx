@@ -1,3 +1,5 @@
+import {Alert} from 'react-native';
+import {blockDirectConversation} from '../api/direct-messages';
 import {act,fireEvent,render,waitFor} from '@testing-library/react-native';
 import Thread from '../../app/messages/[id]';
 const id='00000000-0000-4000-8000-000000000001',rid='00000000-0000-4000-8000-000000000002';
@@ -36,4 +38,18 @@ it('hides messages and ignores a late load after switching account',async()=>{
  const view=await render(<Thread/>);mockOwner=null;mockEpoch++;await view.rerender(<Thread/>);
  await act(async()=>resolve({items:[{messageId:rid,body:'Private old text',sentAt:'2026-09-11T01:00:00Z',isMine:false,requestId:null,cursor:rid}],nextCursor:null}));
  expect(view.queryByText('Private old text')).toBeNull();await view.unmount();
+});
+
+it('opens conversation options before a separate destructive block confirmation',async()=>{
+ const alert=jest.spyOn(Alert,'alert').mockImplementation(()=>{});
+ const view=await render(<Thread/>);await view.findByText('Mei');
+ await fireEvent.press(view.getByLabelText('Conversation options'));
+ expect(alert.mock.calls[0][0]).toBe('Conversation options');
+ expect(blockDirectConversation).not.toHaveBeenCalled();
+ const blockOption=alert.mock.calls[0][2]!.find(option=>option.text==='Block person')!;
+ await act(async()=>blockOption.onPress!());
+ expect(alert.mock.calls[1][0]).toBe('Block this person?');
+ expect(alert.mock.calls[1][1]).toContain('no longer see or send messages');
+ expect(blockDirectConversation).not.toHaveBeenCalled();
+ await view.unmount();alert.mockRestore();
 });

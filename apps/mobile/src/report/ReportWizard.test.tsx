@@ -490,7 +490,7 @@ it('keeps status outside appearance and preserves changes through repeated step 
  const {within}=require('@testing-library/react-native');
  await fireEvent.press(view.getByLabelText('Appearance (optional)'));
  expect(within(view.getByTestId('report-appearance')).queryByText('Appears well')).toBeNull();
- expect(within(view.getByTestId('report-condition')).getByText('Appears well')).toBeTruthy();
+ expect(within(view.getByTestId('report-condition')).getByLabelText('Appears well')).toBeTruthy();
  await fireEvent.press(view.getByRole('button',{name:'Needs attention'}));
  for(let i=0;i<3;i++){
   await fireEvent.press(view.getByRole('button',{name:'Continue to area'}));

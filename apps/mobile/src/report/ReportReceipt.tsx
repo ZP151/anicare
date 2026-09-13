@@ -1,3 +1,6 @@
+import {IconAction} from '../components/IconAction';
+import {GlassSurface} from '../design/GlassSurface';
+import {AppIcon} from '../components/AppIcon';
 import {BackButton} from '../components/BackButton';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -206,14 +209,14 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
       {state.source === 'local_recovery' ? <Text style={styles.notice}>{copy.receiptLocalRecovery}</Text> : null}
       {retryError ? <Text accessibilityRole="alert" style={styles.notice}>{locale === 'zh-CN' ? '暂时无法继续，请重试。报告和已保存的选择仍保留。' : 'Could not continue. Retry; your report and saved choice are preserved.'}</Text> : null}
       <View style={styles.statusList}>
-        <Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'报告详情':'Report details'} accessibilityState={{expanded:showDetails}} onPress={()=>setShowDetails(value=>!value)} style={{minHeight:44,justifyContent:'center'}}><Text style={{fontSize:13,color:colors.actionPrimary}}>{locale==='zh-CN'?(showDetails?'收起详情':'报告详情'):(showDetails?'Hide details':'Report details')}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'报告详情':'Report details'} accessibilityState={{expanded:showDetails}} onPress={()=>setShowDetails(value=>!value)} style={{minHeight:44,justifyContent:'center'}}><AppIcon name="info" color={colors.actionPrimary}/></Pressable>
         {showDetails?<View style={{gap:4}}>
         <Text style={styles.notice}>{copy.receiptReference(sightingId)}</Text>
         {state.submittedAt ? <Text style={styles.notice}>{copy.receiptSubmittedAt(new Date(state.submittedAt).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-SG'))}</Text> : null}
 </View>:null}
-        <View style={styles.statusRow}><Text style={styles.statusKey}>{locale==='zh-CN'?'报告':'Report'}</Text><Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text></View>
-        <View style={styles.statusRow}><Text style={styles.statusKey}>{locale==='zh-CN'?'照片':'Photo'}</Text><Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text></View>
-        <View style={styles.statusRow}><Text style={styles.statusKey}>{locale==='zh-CN'?'猫咪身份':'Identity'}</Text><Text style={styles.status}>{copy.identityStateLabel(state.status.identityState)}</Text></View>
+        <View style={styles.statusRow}><AppIcon name="reports" size={18} color={colors.muted}/><Text style={styles.status}>{copy.reportStateLabel(state.status.reportState)}</Text></View>
+        <View style={styles.statusRow}><AppIcon name="photo" size={18} color={colors.muted}/><Text style={styles.status}>{copy.mediaStateLabel(state.status.mediaState)}</Text></View>
+        <View style={styles.statusRow}><AppIcon name="cat" size={18} color={colors.muted}/><Text style={styles.status}>{copy.identityStateLabel(state.status.identityState)}</Text></View>
         {identityResult?.status === 'confirmed' ? <Text style={styles.notice}>{locale === 'zh-CN' ? '身份已由独立审核确认。' : 'Identity confirmed by independent review.'}</Text> : null}
         {identityResult?.status === 'confirmed' && identityResult.animalId && dependencies.getPublicCatSummary ? <Pressable
           accessibilityRole="button" accessibilityLabel={locale === 'zh-CN' ? '打开猫档案' : 'Open cat profile'}
@@ -244,11 +247,11 @@ export function ReportReceipt({ sightingId, dependencies, locale }: Readonly<{
 
 function ReceiptActions({ copy, navigate }: Readonly<{ copy: ReturnType<typeof getReportCopy>; navigate(path: string): void }>) {
   const colors=useNativeColors(),styles=makeStyles(colors);
-  return <View style={styles.actions}>
-    <Pressable accessibilityLabel={copy.viewReportsAction} accessibilityRole="button" onPress={() => navigate('/report/my-reports')} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}><Text style={styles.primaryActionText}>{copy.viewReportsAction}</Text></Pressable>
-    <View style={{flexDirection:'row',gap:8}}><View style={{flex:1}}><Pressable accessibilityLabel={copy.backToReportAction} accessibilityRole="button" onPress={() => navigate('/report')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.backToReportAction}</Text></Pressable></View><View style={{flex:1}}>
-    <Pressable accessibilityLabel={copy.browseNearbyAction} accessibilityRole="button" onPress={() => navigate('/')} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}><Text style={styles.secondaryActionText}>{copy.browseNearbyAction}</Text></Pressable></View></View>
-  </View>;
+  return <GlassSurface style={{alignSelf:'center',borderRadius:28,padding:4,marginTop:12}}><View style={{flexDirection:'row',gap:24}}>
+    <IconAction icon="reports" label={copy.viewReportsAction} onPress={() => navigate('/report/my-reports')} />
+    <IconAction icon="plus" label={copy.backToReportAction} onPress={() => navigate('/report')} />
+    <IconAction icon="map" label={copy.browseNearbyAction} onPress={() => navigate('/')} />
+  </View></GlassSurface>;
 }
 
 const makeStyles = (colors:ReturnType<typeof useNativeColors>)=>StyleSheet.create({
@@ -257,7 +260,7 @@ const makeStyles = (colors:ReturnType<typeof useNativeColors>)=>StyleSheet.creat
   stateTitle: { color: colors.ink, fontSize: 19, lineHeight: 25, fontWeight: '600' },
   notice: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   statusList: { gap: 8, paddingVertical: 8, borderBottomWidth:0.5,borderColor:colors.line },
-  statusRow:{flexDirection:'row',alignItems:'baseline',gap:16},statusKey:{width:64,fontSize:12,color:colors.muted},
+  statusRow:{flexDirection:'row',alignItems:'center',gap:16},statusKey:{width:64,fontSize:12,color:colors.muted},
   status: { flex:1,color: colors.ink, fontSize: 14, lineHeight: 20, fontWeight: '500' },
   actions: { gap: 8, marginTop: 4 },
   primaryAction: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.leaf },

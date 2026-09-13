@@ -1,3 +1,4 @@
+import {IconAction} from '../../src/components/IconAction';
 import {BackButton} from '../../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
@@ -35,13 +36,13 @@ export default function MyCareRoute() {
     try { await auth.perform(auth.session.pending); setEditing(null); await load(); } catch { /* Retained request remains retryable. */ }
   };
   return <ScreenScaffold collapseTitle leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/profile' as never)}/>} title={cn ? '我的照护记录' : 'My care records'} subtitle={cn ? '查看、更正或撤回自己的完成记录。' : 'View, correct or withdraw your completed records.'}>
-    {!auth.session ? <><Text>{auth.failed ? (cn ? '无法读取账户状态。' : 'Could not load account state.') : (cn ? '正在加载…' : 'Loading…')}</Text>{auth.failed ? <Pressable accessibilityRole="button" onPress={() => { void auth.reload(); }} style={styles.choice}><Text>{cn ? '重试' : 'Retry'}</Text></Pressable> : null}</>
+    {!auth.session ? <><Text>{auth.failed ? (cn ? '无法读取账户状态。' : 'Could not load account state.') : (cn ? '正在加载…' : 'Loading…')}</Text>{auth.failed ? <IconAction icon="reset" label={cn?'重试':'Retry'} onPress={()=>void auth.reload()}/> : null}</>
       : !auth.session.owner ? <><Text>{cn ? '登录后可查看自己的照护记录。' : 'Sign in to view your care records.'}</Text><Pressable accessibilityRole="button" onPress={() => router.push('/profile' as never)} style={styles.choice}><Text>{cn ? '登录' : 'Sign in'}</Text></Pressable></>
       : <>
         {auth.session.pending ? <PendingCareNotice locale={locale} busy={auth.busy} failed={auth.failed} retry={() => { void retry(); }} stop={() => { void auth.stopRetrying().catch(() => undefined); }} /> : null}
         {editing && !auth.session.pending ? <CareEntry key={editing.careEventId} animalId={editing.animalId} locale={locale} signedIn={auth.session.adult} initial={editing} createId={Crypto.randomUUID}
           onSubmit={async input => { await auth.perform({ kind: 'correct', targetId: editing.careEventId, input }); setEditing(null); await load(); }} /> : null}
-        {editing && !auth.session.pending ? <Pressable accessibilityRole="button" onPress={() => setEditing(null)} style={styles.choice}><Text>{cn ? '取消更正' : 'Cancel correction'}</Text></Pressable> : null}
+        {editing && !auth.session.pending ? <IconAction icon="close" label={cn?'取消更正':'Cancel correction'} onPress={()=>setEditing(null)}/> : null}
         <CareTimeline locale={locale} items={page.items} loading={loading} failed={failed} hasMore={!!page.nextCursor} busy={auth.busy || !!auth.session.pending || !!editing}
           refresh={() => { void load(); }} more={() => { void load(page.nextCursor); }} correct={auth.session.adult ? setEditing : undefined}
           withdraw={item => { void auth.perform({ kind: 'withdraw', targetId: item.careEventId, requestId: Crypto.randomUUID() }).then(() => load()).catch(() => undefined); }} />

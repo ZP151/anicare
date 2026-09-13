@@ -159,10 +159,10 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
   return (
     <ScreenScaffold pinHeading compact trailing={onClose?<Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'关闭':'Close'} onPress={onClose} style={{minWidth:44,minHeight:44,justifyContent:'center',alignItems:'center'}}><AppIcon name="close" color={colors.actionPrimary}/></Pressable>:undefined} title={allDrafts ? (locale === 'zh-CN' ? '草稿' : 'Drafts') : copy.title}>
       {allDrafts ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report')} style={styles.textAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? '返回报告' : 'Back to reports'}</Text></Pressable> : null}
-      <View style={{gap:8,paddingTop:8,paddingBottom:14}}><AppIcon name="paw" color={colors.actionPrimary} size={32}/><Text style={{fontSize:24,lineHeight:30,fontWeight:'600',color:colors.ink}}>{locale==='zh-CN'?'遇见一位猫邻居':'Met a neighbourhood cat?'}</Text><Text style={styles.muted}>{locale==='zh-CN'?'记录照片、状态与区域。随时保存，稍后继续。':'Add a photo, condition and area. Save and continue anytime.'}</Text></View>
+      <View style={{gap:8,paddingTop:8,paddingBottom:14}}><AppIcon name="paw" color={colors.actionPrimary} size={32}/><Text style={{fontSize:24,lineHeight:30,fontWeight:'600',color:colors.ink}}>{locale==='zh-CN'?'遇见一位猫邻居':'Met a neighbourhood cat?'}</Text></View>
       {!allDrafts ? <Pressable accessibilityLabel={copy.startAction} accessibilityRole="button" disabled={starting || draftStatus === 'storage_unavailable'} onPress={() => { void startReport(); }} style={({ pressed }) => [styles.primaryAction, (pressed || starting) && styles.pressed, (starting || draftStatus === 'storage_unavailable') && styles.disabled]}>
-        <MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={20} />
-        <Text style={styles.primaryActionText}>{starting ? copy.loading : copy.startAction}</Text>
+        {starting?<ActivityIndicator color={colors.onAction}/>:<MaterialCommunityIcons color={colors.surface} name="camera-plus-outline" size={26} />}
+        <AppIcon name="chevron" color={colors.onAction}/>
       </Pressable> : null}
 
       <View style={styles.section}>
@@ -170,7 +170,7 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
         {draftStatus === 'loading' ? <View accessibilityLiveRegion="polite" style={styles.loading}><ActivityIndicator color={colors.leaf} /><Text style={styles.muted}>{copy.loading}</Text></View> : null}
         {draftStatus === 'storage_unavailable' ? <Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.storageUnavailable}</Text> : null}
         {draftStatus === 'error' ? <View style={styles.statusRow}><Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.loadFailed}</Text><Pressable accessibilityRole="button" onPress={() => { void reload(); }} style={styles.textAction}><Text style={styles.textActionLabel}>{copy.retryAction}</Text></Pressable></View> : null}
-        {draftStatus === 'ready' && drafts.length === 0 ? <View style={styles.empty}><MaterialCommunityIcons color={colors.aquaDeep} name="file-document-outline" size={22} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>{copy.emptyTitle}</Text><Text style={styles.muted}>{copy.emptyCopy}</Text></View></View> : null}
+        {draftStatus === 'ready' && drafts.length === 0 ? <View style={styles.empty}><MaterialCommunityIcons color={colors.aquaDeep} name="file-document-outline" size={22} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>{copy.emptyTitle}</Text></View></View> : null}
         {draftStatus === 'ready' ? (allDrafts ? drafts : drafts.slice(0, 1)).map((draft) => (
           <View key={draft.id} style={styles.draftRow}>
             <Pressable accessibilityLabel={draft.claimRequired ? copy.claimContinueDraftLabel(draft.step) : copy.continueDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void continueDraft(draft.id, draft.claimRequired); }} style={({ pressed }) => [styles.draftMain, pressed && styles.pressed]}>
@@ -178,7 +178,7 @@ export function ReportHub({ dependencies, locale, allDrafts = false, onClose }: 
               <View style={styles.draftCopy}><Text style={styles.draftTitle}>{draft.title === 'Report draft' ? copy.draftShellTitle : draft.title}</Text><Text style={styles.muted}>{new Date(draft.updatedAt).toLocaleString(locale === 'zh-CN' ? 'zh-SG' : 'en-SG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {copy.stepLabel(draft.step)}</Text></View>
               <MaterialCommunityIcons color={colors.actionPrimary} name="chevron-right" size={22} />
             </Pressable>
-            <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id, draft.ownerSubject); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><Text style={styles.deleteActionText}>{copy.deleteAction}</Text></Pressable>
+            <Pressable accessibilityLabel={copy.deleteDraftLabel(draft.step)} accessibilityRole="button" onPress={() => { void deleteDraft(draft.id, draft.ownerSubject); }} style={({ pressed }) => [styles.deleteAction, pressed && styles.pressed]}><AppIcon name="trash" color={colors.danger}/></Pressable>
           </View>
         )) : null}
         {!allDrafts && drafts.length > 0 ? <Pressable accessibilityRole="button" onPress={() => dependencies.navigate('/report/drafts')} style={styles.reportsAction}><Text style={styles.textActionLabel}>{locale === 'zh-CN' ? `全部草稿 (${drafts.length})` : `All drafts (${drafts.length})`}</Text><MaterialCommunityIcons name="chevron-right" color={colors.muted} size={20}/></Pressable> : null}

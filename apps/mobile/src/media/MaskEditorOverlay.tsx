@@ -1,3 +1,4 @@
+import {AppIcon} from '../components/AppIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
@@ -268,9 +269,9 @@ export function MaskEditorOverlay({
       </Text>
 
       {compactControls ? <View style={styles.controlRow}>
-        <Pressable accessibilityRole="button" disabled={disabled} style={styles.control} onPress={()=>{if(disabled)return;const mask=createDefaultMask(createMaskId(),{x:.5,y:.5});onSelectionChange(mask.id);onMutationCommit([...masks,mask]);}}><Text style={styles.controlText}>{zh?'添加遮挡':'Add mask'}</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityState={{expanded:fineControls}} onPress={()=>setFineControls(value=>!value)} style={styles.control}><Text style={styles.controlText}>{zh?'精细调整':'Fine adjustments'}</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={disabled||!selectedMask} onPress={deleteSelectedMask} style={[styles.control,(disabled||!selectedMask)&&styles.controlDisabled]}><Text style={styles.controlText}>{zh?'删除遮挡':'Delete mask'}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={zh?'添加遮挡':'Add mask'} disabled={disabled} style={styles.control} onPress={()=>{if(disabled)return;const mask=createDefaultMask(createMaskId(),{x:.5,y:.5});onSelectionChange(mask.id);onMutationCommit([...masks,mask]);}}><AppIcon name="plus" color={colors.actionPrimary}/></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={zh?'精细调整':'Fine adjustments'} accessibilityState={{expanded:fineControls}} onPress={()=>setFineControls(value=>!value)} style={styles.control}><AppIcon name="filters" color={colors.actionPrimary}/></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={zh?'删除遮挡':'Delete mask'} disabled={disabled||!selectedMask} onPress={deleteSelectedMask} style={[styles.control,(disabled||!selectedMask)&&styles.controlDisabled]}><AppIcon name="trash" color={colors.actionPrimary}/></Pressable>
       </View> : null}
       {!compactControls||fineControls ? <GlassSurface interactive style={styles.controlsPanel}>
         {(['position', 'size'] as const).map((group) => (

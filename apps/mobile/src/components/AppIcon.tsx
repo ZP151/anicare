@@ -5,6 +5,13 @@ import { ColorValue, Platform, View } from 'react-native';
 
 const symbols = {
   rotate: ['rotate.right', 'rotate-right'], flip: ['arrow.left.and.right.righttriangle.left.righttriangle.right', 'flip-horizontal'], reset: ['arrow.counterclockwise', 'restore'], trash: ['trash', 'trash-can-outline'],
+  info: ['info.circle', 'information-outline'],
+  save: ['square.and.arrow.down', 'content-save-outline'],
+  select: ['checkmark.circle', 'checkbox-marked-circle-outline'],
+  selectAll: ['checkmark.circle.fill', 'checkbox-multiple-marked-circle-outline'],
+  grid: ['square.grid.2x2', 'view-grid-outline'],
+  warning: ['exclamationmark.triangle', 'alert-outline'],
+  lock: ['lock', 'lock-outline'],
   edit: ['pencil', 'pencil-outline'],
   settings: ['gearshape', 'cog-outline'],
   home: ['house', 'home-outline'],

@@ -68,7 +68,8 @@ describe('ReportHub', () => {
     const view = await render(<ReportHub dependencies={dependencies()} locale="en" />);
 
     await waitFor(() => expect(view.getByText('No saved reports yet')).toBeTruthy());
-    expect(view.getByText('Start a report and you can return to it on this device.')).toBeTruthy();
+    expect(view.queryByText('Start a report and you can return to it on this device.')).toBeNull();
+    expect(view.getByRole('button', {name: 'Start a report'})).toBeTruthy();
     expect(JSON.stringify(view.toJSON())).not.toMatch(/\bAI\b|candidate|model|exact location|media path|token/i);
   });
 

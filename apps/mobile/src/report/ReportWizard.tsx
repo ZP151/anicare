@@ -2,7 +2,7 @@ import {GlassSurface} from '../design/GlassSurface';
 import {AppIcon} from '../components/AppIcon';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
-import { AppState, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { SightingRisk } from '../api/sightings';
 import { ScreenScaffold } from '../components/ScreenScaffold';
@@ -369,10 +369,10 @@ export function ReportWizard({
   const footerLabel=stage==='review'?copy.wizardSubmit:stage==='area'?areaContinueLabel:stage==='photo'&&!photoReady?copy.wizardPhotoSkip:copy.wizardContinue;
   const footerDisabled=submitting||(stage==='details'&&!draft.report.condition)||(stage==='area'&&!canContinueFromArea)||(stage==='review'&&!canSubmit);
   return (
-    <ScreenScaffold compact avoidKeyboard title={copy.wizardTitle} header={<View style={{flexDirection:'row',alignItems:'center',gap:8}}><GlassSurface style={{borderRadius:24}}><Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'上一步':'Previous step'} disabled={submitting} onPress={()=>void backStep()} style={styles.back}><AppIcon name="back" size={18} color={palette.ink}/></Pressable></GlassSurface><View style={{flex:1,minWidth:0,alignItems:'center'}}><GlassSurface style={{borderRadius:24,paddingHorizontal:12,paddingVertical:6,maxWidth:'100%'}}><Text numberOfLines={1} style={{fontSize:17,fontWeight:'600',color:palette.ink,textAlign:'center'}}>{copy.wizardTitle}</Text><Text numberOfLines={1} style={styles.stageCounter}>{copy.wizardProgress(stages.indexOf(stage)+1,stages.length,copy.stepLabel(stage))}</Text></GlassSurface></View><GlassSurface style={{borderRadius:24}}><Pressable accessibilityLabel={copy.wizardSaveAndExit} accessibilityRole="button" disabled={submitting} onPress={()=>void saveAndExit()} style={styles.exit}><Text style={styles.exitText}>{copy.wizardSaveAndExit}</Text></Pressable></GlassSurface></View>} footer={<GlassSurface style={{borderRadius:32,padding:6}}><Pressable accessibilityRole="button" accessibilityLabel={stage==='details'?copy.wizardContinueToArea:footerLabel} accessibilityState={{disabled:footerDisabled,busy:submitting}} disabled={footerDisabled} onPress={()=>void (stage==='review'?submit():advance())} style={[styles.primary,footerDisabled&&styles.disabled]}><Text style={styles.primaryText}>{submitting?(locale==='zh-CN'?'正在提交…':'Submitting…'):footerLabel}</Text></Pressable></GlassSurface>}>
+    <ScreenScaffold compact avoidKeyboard title={copy.wizardTitle} header={<View style={{flexDirection:'row',alignItems:'center',gap:8}}><GlassSurface style={{borderRadius:24}}><Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'上一步':'Previous step'} disabled={submitting} onPress={()=>void backStep()} style={styles.back}><AppIcon name="back" size={18} color={palette.ink}/></Pressable></GlassSurface><View style={{flex:1,minWidth:0,alignItems:'center'}}><GlassSurface style={{borderRadius:24,paddingHorizontal:12,paddingVertical:6,maxWidth:'100%'}}><Text numberOfLines={1} style={{fontSize:17,fontWeight:'600',color:palette.ink,textAlign:'center'}}>{copy.wizardTitle}</Text><Text numberOfLines={1} style={styles.stageCounter}>{stages.indexOf(stage)+1} / {stages.length}</Text></GlassSurface></View><GlassSurface style={{borderRadius:24}}><Pressable accessibilityLabel={copy.wizardSaveAndExit} accessibilityRole="button" disabled={submitting} onPress={()=>void saveAndExit()} style={styles.exit}><AppIcon name="save" color={palette.actionPrimary}/></Pressable></GlassSurface></View>} footer={<GlassSurface style={{borderRadius:32,padding:6}}><Pressable accessibilityRole="button" accessibilityLabel={stage==='details'?copy.wizardContinueToArea:footerLabel} accessibilityState={{disabled:footerDisabled,busy:submitting}} disabled={footerDisabled} onPress={()=>void (stage==='review'?submit():advance())} style={[styles.primary,footerDisabled&&styles.disabled]}><View style={{flexDirection:'row',alignItems:'center',gap:8}}>{submitting?<ActivityIndicator color={palette.onAction}/>:<AppIcon name={stage==='review'?'send':'chevron'} color={palette.onAction}/>}<Text style={styles.primaryText}>{stage==='review'?(locale==='zh-CN'?'提交':'Submit'):stage==='photo'&&!photoReady?(locale==='zh-CN'?'跳过':'Skip'):''}</Text></View></Pressable></GlassSurface>}>
       <Text accessibilityLabel={copy.wizardStagesLabel} accessibilityRole="progressbar" accessibilityValue={{min:1,now:stages.indexOf(stage)+1,max:stages.length,text:copy.wizardProgress(stages.indexOf(stage)+1,stages.length,copy.stepLabel(stage))}} style={{height:0,overflow:'hidden'}}/>
       <View style={styles.progressTrack}>
-        {stages.map((item,index)=><Pressable key={item} accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?`返回${copy.stepLabel(item)}`:`Go to ${copy.stepLabel(item)}`} accessibilityState={{disabled:index>furthest||submitting,selected:item===stage}} disabled={index>furthest||submitting} onPress={()=>{if(navigationInFlightRef.current||submitInFlightRef.current)return;navigationInFlightRef.current=true;void save(draft,item).then(()=>setStatus(null)).catch(()=>setStatus(copy.wizardSaveFailed)).finally(()=>{navigationInFlightRef.current=false;});}} style={{flex:1,minHeight:44,gap:7,justifyContent:'center'}}><View style={[styles.progressSegment,index<=stages.indexOf(stage)&&styles.progressSegmentActive]}/><Text numberOfLines={1} style={{color:item===stage?palette.actionPrimary:palette.muted,fontSize:12,fontWeight:item===stage?'600':'400'}}>{item==='area'?(locale==='zh-CN'?'位置与可见性':'Location & sharing'):copy.stepLabel(item)}</Text></Pressable>)}
+        {stages.map((item,index)=><Pressable key={item} accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?`返回${copy.stepLabel(item)}`:`Go to ${copy.stepLabel(item)}`} accessibilityState={{disabled:index>furthest||submitting,selected:item===stage}} disabled={index>furthest||submitting} onPress={()=>{if(navigationInFlightRef.current||submitInFlightRef.current)return;navigationInFlightRef.current=true;void save(draft,item).then(()=>setStatus(null)).catch(()=>setStatus(copy.wizardSaveFailed)).finally(()=>{navigationInFlightRef.current=false;});}} style={{flex:1,minHeight:44,gap:7,justifyContent:'center'}}><View style={[styles.progressSegment,index<=stages.indexOf(stage)&&styles.progressSegmentActive]}/><View style={{alignItems:'center'}}><AppIcon name={item==='photo'?'photo':item==='details'?'cat':item==='area'?'location':'check'} color={item===stage?palette.actionPrimary:palette.muted} size={20}/></View></Pressable>)}
       </View>
       <Text accessibilityRole="header" style={styles.sectionTitle}>{stage==='area'?(locale==='zh-CN'?'位置与可见性':'Location & sharing'):copy.stepLabel(stage)}</Text>
 
@@ -380,14 +380,14 @@ export function ReportWizard({
         <Pressable accessibilityLabel={photoReady ? copy.wizardPhotoReplace : copy.wizardPhotoAdd} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/redaction-review?draftId=${draftId}`)} style={{minHeight:180,borderRadius:16,borderWidth:1,borderStyle:photoReady?'solid':'dashed',borderColor:palette.line,alignItems:'center',justifyContent:'center',gap:12,padding:20,backgroundColor:palette.paper}}>
           <AppIcon name={photoReady?'check':'photo'} size={32} color={palette.actionPrimary}/>
           <Text style={{color:palette.ink,fontSize:16,fontWeight:'600'}}>{photoReady?copy.wizardPhotoReady:copy.wizardPhotoAdd}</Text>
-          <Text style={{color:palette.muted,fontSize:13,textAlign:'center'}}>{photoReady?(locale==='zh-CN'?'点按更换照片':'Tap to replace photo'):(locale==='zh-CN'?'选择照片并检查遮挡，也可跳过':'Choose a photo and check masking, or skip for now')}</Text>
+
         </Pressable>
-        {photoReady?<View style={{flexDirection:'row',justifyContent:'space-between'}}><Pressable accessibilityLabel={copy.wizardPhotoRetake} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/redaction-review?draftId=${draftId}`)} style={styles.editLink}><Text style={styles.editLinkText}>{locale==='zh-CN'?'重新拍摄':'Retake'}</Text></Pressable><Pressable accessibilityLabel={copy.wizardPhotoRemove} accessibilityRole="button" onPress={() => { void removePhoto(); }} style={styles.editLink}><Text style={{color:palette.danger,fontSize:14}}>{locale==='zh-CN'?'移除照片':'Remove photo'}</Text></Pressable></View>:null}
+        {photoReady?<View style={{flexDirection:'row',justifyContent:'space-between'}}><Pressable accessibilityLabel={copy.wizardPhotoRetake} accessibilityRole="button" onPress={() => dependencies.navigate(`/report/redaction-review?draftId=${draftId}`)} style={styles.editLink}><AppIcon name="camera" color={palette.actionPrimary}/></Pressable><Pressable accessibilityLabel={copy.wizardPhotoRemove} accessibilityRole="button" onPress={() => { void removePhoto(); }} style={styles.editLink}><AppIcon name="trash" color={palette.danger}/></Pressable></View>:null}
       </View> : null}
 
       {stage === 'details' ? <View style={styles.group}>
 <View testID="report-condition" style={styles.group}><Text accessibilityRole="header" style={styles.cardTitle}>{locale==='zh-CN'?'当前状态':'Current condition'}</Text>
-        {(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityLabel={conditionLabels[condition]} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={[styles.option, draft.report!.condition === condition && styles.optionSelected]}><Text style={styles.optionText}>{conditionLabels[condition]}</Text>{draft.report!.condition === condition ? <MaterialCommunityIcons accessibilityElementsHidden color={colors.actionPrimary} name="check-circle" size={20} /> : null}</Pressable>)}
+        <View style={{flexDirection:'row',gap:8}}>{(['appears_well', 'needs_attention', 'urgent'] as const).map((condition) => <Pressable key={condition} accessibilityLabel={conditionLabels[condition]} accessibilityRole="button" accessibilityState={{ selected: draft.report!.condition === condition }} onPress={() => setCondition(condition)} style={[styles.conditionChoice, draft.report!.condition === condition && styles.optionSelected]}><AppIcon name={condition==='appears_well'?'check':condition==='needs_attention'?'heart':'warning'} color={draft.report!.condition===condition?palette.actionPrimary:palette.muted}/><Text style={styles.optionText}>{condition==='appears_well'?(locale==='zh-CN'?'良好':'Well'):condition==='needs_attention'?(locale==='zh-CN'?'需关注':'Concern'):(locale==='zh-CN'?'紧急':'Urgent')}</Text></Pressable>)}</View>
 </View><Pressable accessibilityRole="button" accessibilityLabel={locale==='zh-CN'?'外观特征（选填）':'Appearance (optional)'} accessibilityState={{expanded:showAppearance}} onPress={()=>setShowAppearance(value=>!value)} style={{minHeight:52,flexDirection:'row',alignItems:'center',gap:10,borderTopWidth:0.5,borderColor:palette.line,marginTop:8}}><AppIcon name="cat" color={palette.muted} size={20}/><Text style={{flex:1,color:palette.ink,fontSize:15,fontWeight:'600'}}>{locale==='zh-CN'?'外观特征（选填）':'Appearance (optional)'}</Text><AppIcon name={showAppearance?'collapse':'plus'} color={palette.muted} size={16}/></Pressable>
         {showAppearance?        <View testID="report-appearance" style={styles.group}>
         <Text accessibilityRole="header" style={styles.traitTitle}>{copy.wizardCoatTitle}</Text>
@@ -398,10 +398,10 @@ export function ReportWizard({
       </View> : null}
 
       {stage === 'area' || (stage === 'review' && !validationLocation) ? <View style={styles.group}>
-        <Text style={styles.copy}>{locale==='zh-CN'?'优先使用当前位置，也可手动选择目击区域。':'Use your current location, or choose where you saw the cat.'}</Text>
+
         {!captureAvailable || manualAreaRequired ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <>
-          <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={() => { void selectDeviceArea(); }} style={styles.primary}><Text style={styles.primaryText}>{copy.wizardDeviceLocation}</Text></Pressable>
-          {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => { clearActiveDeviceLocation(); setManualSelectionRequested(true); }} style={styles.secondary}><Text style={styles.secondaryText}>{copy.wizardManualArea}</Text></Pressable>}
+          <Pressable accessibilityLabel={copy.wizardDeviceLocation} accessibilityRole="button" accessibilityState={{ disabled: locationPromptedRef.current }} disabled={locationPromptedRef.current} onPress={() => { void selectDeviceArea(); }} style={styles.primary}><View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon name="locationFill" color={palette.onAction}/><Text style={styles.primaryText}>{locale==='zh-CN'?'当前位置':'Current location'}</Text></View></Pressable>
+          {manualSelectionRequested ? <AreaPicker locale={locale} onSelect={selectManualArea} /> : <Pressable accessibilityLabel={copy.wizardManualArea} accessibilityRole="button" onPress={() => { clearActiveDeviceLocation(); setManualSelectionRequested(true); }} style={styles.secondary}><View style={{flexDirection:'row',alignItems:'center',gap:8}}><AppIcon name="map" color={palette.actionPrimary}/><Text style={styles.secondaryText}>{locale==='zh-CN'?'手动选择':'Choose on map'}</Text></View></Pressable>}
         </>}
         {status?<Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>:null}
 
@@ -418,7 +418,7 @@ export function ReportWizard({
       </View> : null}
 
       {stage === 'review' ? <View style={styles.group}>
-        <Text style={styles.copy}>{copy.wizardReviewIntro}</Text>
+
         <View style={[styles.card,styles.reviewSummary]}>
           <Text style={styles.summaryItem}>{photoReady ? copy.wizardPhotoReady : copy.wizardPhotoSkip}</Text>
           {draft.report.condition ? <Text style={styles.summaryItem}>{conditionLabels[draft.report.condition]}</Text> : null}
@@ -431,7 +431,7 @@ export function ReportWizard({
         <View style={styles.reviewLinks}>
           {(['photo', 'details', 'area'] as const).map((item) => {
             const label = locale === 'en' ? copy.stepLabel(item).toLowerCase() : copy.stepLabel(item);
-            return <Pressable key={item} accessibilityLabel={copy.wizardEdit(label)} accessibilityRole="button" onPress={() => setStage(item)} style={styles.editLink}><Text style={styles.editLinkText}>{copy.wizardEdit(label)}</Text></Pressable>;
+            return <Pressable key={item} accessibilityLabel={copy.wizardEdit(label)} accessibilityRole="button" onPress={() => setStage(item)} style={styles.editLink}><AppIcon name={item==='photo'?'photo':item==='details'?'cat':'location'} color={palette.actionPrimary}/></Pressable>;
           })}
         </View>
         {!canSubmit ? <Text style={styles.disabledReason}>{disabledReason}</Text> : null}
@@ -443,8 +443,8 @@ export function ReportWizard({
 }
 
 const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({
-  back:{width:44,height:44,justifyContent:'center'},card:{padding:12,gap:10,borderRadius:16,backgroundColor:colors.surface},cardTitle:{fontSize:16,fontWeight:'600',color:colors.ink},
-  exit: { minHeight: Platform.OS === 'android' ? 48 : 44, justifyContent: 'center', paddingHorizontal: 6 },
+  back:{width:48,height:48,justifyContent:'center',alignItems:'center'},card:{padding:12,gap:10,borderRadius:16,backgroundColor:colors.surface},cardTitle:{fontSize:16,fontWeight:'600',color:colors.ink},
+  exit: { width:48, minHeight:48, justifyContent:'center',alignItems:'center' },
   exitText: { color: colors.actionPrimary, fontWeight: '700' },
   progressTrack: { flexDirection: 'row', gap: 8 },
   progressSegment: { height: 4, borderRadius: 3, backgroundColor: colors.line },
@@ -459,6 +459,7 @@ const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.cr
   secondary: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.actionPrimary },
   secondaryText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '600' },
   option: { minHeight: 48, paddingHorizontal: 16, borderRadius: radii.small, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
+  conditionChoice:{flex:1,minHeight:84,padding:8,gap:8,borderRadius:16,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.line,backgroundColor:colors.surface},
   optionSelected: { borderColor: colors.actionPrimary, borderWidth: 2 },
   optionText: { color: colors.ink, fontSize: 14, textTransform: 'capitalize' },
   traitTitle: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '600' },
@@ -472,6 +473,6 @@ const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.cr
   reviewLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   reviewSummary: { gap: 4, paddingVertical: 4 },
   summaryItem: { color: colors.ink, fontSize: 15, lineHeight: 21, fontWeight: '700' },
-  editLink: { minHeight: Platform.OS === 'android' ? 48 : 44, justifyContent: 'center', paddingHorizontal: 10, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line },
+  editLink: { minWidth:48,minHeight:48,alignItems:'center', justifyContent: 'center', paddingHorizontal: 10, borderRadius: radii.small, borderWidth: 1, borderColor: colors.line },
   editLinkText: { color: colors.actionPrimary, fontSize: 15, fontWeight: '700' },
 });

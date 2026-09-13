@@ -8,10 +8,10 @@ import { useLocale } from '../../src/i18n/LocaleContext';
 export default function TabLayout() {
   const router = useRouter(), {locale} = useLocale(), cn = locale === 'zh-CN';
   if (usesNativeLiquidTabs(Platform.OS, Platform.Version)) return <NativeTabs tintColor="#2465D8" disableTransparentOnScrollEdge>
-    <NativeTabs.Trigger name="index"><NativeTabs.Trigger.Icon sf={{default:'house',selected:'house.fill'}}/><NativeTabs.Trigger.Label>{cn?'首页':'Home'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
-    <NativeTabs.Trigger name="map"><NativeTabs.Trigger.Icon sf={{default:'map',selected:'map.fill'}}/><NativeTabs.Trigger.Label>{cn?'地图':'Map'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
-    <NativeTabs.Trigger name="discuss"><NativeTabs.Trigger.Icon sf={{default:'bubble.left.and.bubble.right',selected:'bubble.left.and.bubble.right.fill'}}/><NativeTabs.Trigger.Label>{cn?'消息':'Messages'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
-    <NativeTabs.Trigger name="profile"><NativeTabs.Trigger.Icon sf={{default:'person.crop.circle',selected:'person.crop.circle.fill'}}/><NativeTabs.Trigger.Label>{cn?'我的':'Me'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+    <NativeTabs.Trigger name="index" accessibilityLabel={cn?'首页':'Home'}><NativeTabs.Trigger.Icon sf={{default:'house',selected:'house.fill'}}/><NativeTabs.Trigger.Label hidden>{cn?'首页':'Home'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+    <NativeTabs.Trigger name="map" accessibilityLabel={cn?'地图':'Map'}><NativeTabs.Trigger.Icon sf={{default:'map',selected:'map.fill'}}/><NativeTabs.Trigger.Label hidden>{cn?'地图':'Map'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+    <NativeTabs.Trigger name="discuss" accessibilityLabel={cn?'消息':'Messages'}><NativeTabs.Trigger.Icon sf={{default:'bubble.left.and.bubble.right',selected:'bubble.left.and.bubble.right.fill'}}/><NativeTabs.Trigger.Label hidden>{cn?'消息':'Messages'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+    <NativeTabs.Trigger name="profile" accessibilityLabel={cn?'我的':'Me'}><NativeTabs.Trigger.Icon sf={{default:'person.crop.circle',selected:'person.crop.circle.fill'}}/><NativeTabs.Trigger.Label hidden>{cn?'我的':'Me'}</NativeTabs.Trigger.Label></NativeTabs.Trigger>
     {/* The search role gives iOS 26 its same-row detached circle. A custom plus
         overrides the system glyph; prevented selection still emits tabPress. */}
     <NativeTabs.Trigger name="compose" role="search" disabled accessibilityLabel={cn?'创建':'Create'} listeners={{tabPress:()=>router.push('/create' as never)}}>

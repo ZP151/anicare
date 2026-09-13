@@ -19,6 +19,7 @@ it('renders four destinations and opens the central create sheet',async()=>{
  expect(view.getByRole('tab',{name:'Map'})).toBeTruthy();
  expect(view.getByRole('tab',{name:'Messages'})).toBeTruthy();
  expect(view.getByRole('tab',{name:'Me'})).toBeTruthy();
+ expect(view.queryByText('Home')).toBeNull();
  await fireEvent.press(view.getByRole('button',{name:'Create'}));
  expect(mockPush).toHaveBeenCalledWith('/create');
  await fireEvent.press(view.getByRole('tab',{name:'Messages'}));
