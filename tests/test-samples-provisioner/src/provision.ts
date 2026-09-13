@@ -1,3 +1,4 @@
+import { verifyDiscoverableSamples } from './discovery.js';
 import {validateFixtureActor} from './actor.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -174,10 +175,7 @@ async function main() {
       const expectedPlace=samplePlaces[fixture[0]];
       if(expectedPlace && !activity.data.some(row=>row.residenceName===expectedPlace.name && row.residenceType===expectedPlace.residenceType))throw new Error('test_sample_building_context_failed');
     }
-    for (const cell of new Set(samples.map(([, , , , cell]) => cell))) {
-      const discovery = await retrySampleRead(signal=>anonymous.rpc('list_public_cat_discovery', { p_public_cell_id: cell, p_verifications: null, p_cursor: null, p_limit: 50 }).abortSignal(signal));
-      if (discovery.error || !Array.isArray(discovery.data) || discovery.data.length < 1) throw new Error('test_sample_discovery_failed');
-    }
+    await verifyDiscoverableSamples(ids,cursor=>retrySampleRead(signal=>anonymous.rpc('list_public_cat_discovery', {p_public_cell_id:null,p_verifications:null,p_cursor:cursor,p_limit:50}).abortSignal(signal)));
     const mediaFixtures = COMMUNITY_TEST_POSTS.flatMap((post) => post.media.map((sourceFile, position) => ({post, sourceFile, position, fixtureKey: `ios26-${post.code.toLowerCase()}`})));
     const visiblePostIds: string[] = [];
     const visibleReplyIds: string[] = [];

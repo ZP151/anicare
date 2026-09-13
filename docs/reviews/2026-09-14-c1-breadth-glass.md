@@ -28,3 +28,7 @@ Follow docs/ios-next-device-test.md: varied Home, cat/story loading, one user Ba
 ## Data lifecycle
 
 The existing exact-ID retirement and real-reference guards remain. Four older posts and eight older cat identities were retained by prior guards; no broad purge is authorized by this repair and no real author data is removed. Old provenance stays to make migration auditable. New identities do not represent real animals or sightings.
+
+## Hosted verifier follow-up
+
+Run 34767662923 stopped before new posts at `test_sample_discovery_failed`: the old verifier sent new cells to a filtered RPC limited to thirteen legacy fallback cells. All twelve portraits, summaries and exact-cell community activity had already passed. The verifier now pages the supported unfiltered discovery API and requires every fixture identity, with bounded pagination and repeated-cursor rejection. Exact-cell activity remains separately verified; no schema, read policy or user data was changed. The main map reads sightings, while the cat detail uses community activity. Independent SQL review approved this approach; provisioner 23 tests and typecheck pass. App source remains d1cd729ea3effc7371355d88e9118c197f8051de.
