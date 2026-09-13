@@ -12,7 +12,7 @@ import { retireLegacySamples } from './retire-legacy.js';
 import { COMMUNITY_TEST_POSTS as legacyPosts } from '../../../apps/mobile/src/community/test-samples.js';
 import { ensureCommunitySample, readSampleExtras } from './community.js';
 import { canUpgradeNoPhotoPortrait } from './fixture-upgrade.js';
-import { validateCommunityMediaVariants, type CommunityMediaVariant } from './media.js';
+import { validateCommunityMediaVariants, prepareFixtureJpeg, type CommunityMediaVariant } from './media.js';
 import { retrySampleRead } from './read-retry.js';
 
 const project = 'https://fhugdtpjbgiatqhvjioy.supabase.co';
@@ -64,6 +64,10 @@ async function main() {
     const approved = provenance.assets.find(asset => asset.file === `assets/${filename}` && asset.source === 'synthetic_test');
     const bytes = await readFile(filename.endsWith('-thumb.jpg') ? thumbAssetPath(filename.replace(/-thumb\.jpg$/, '.jpg')) : assetPath(filename));
     if (!approved || sha256(bytes) !== approved.sha256) throw new Error('test_sample_asset_not_approved');
+  }
+  // Validate the exact delivery encoding before any remote mutation (including dry runs).
+  for(const filename of new Set(COMMUNITY_TEST_POSTS.flatMap(post=>post.media))){
+    await validateCommunityMediaVariants(prepareFixtureJpeg(await readFile(assetPath(filename))),prepareFixtureJpeg(await readFile(thumbAssetPath(filename))));
   }
   if (process.env.IOS26_TEST_SAMPLES_DRY_RUN === 'yes') {
     const manifest = {projectRef: 'fhugdtpjbgiatqhvjioy', dryRun: true, fixtureKeys: samples.map(([key]) => key), portraitCount: samples.filter(sample => sample[3]).length, communityPostIds: COMMUNITY_TEST_POSTS.map(post => post.id), communityReplyIds: COMMUNITY_TEST_POSTS.map(post => post.reply.id), communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => post.media.length > 0).map(post => post.id)};
@@ -199,7 +203,7 @@ async function main() {
         const mediaId = fixtureMediaId(sequence); const requestId = fixtureMediaRequestId(sequence);
         const displayBytes = new Uint8Array(await readFile(assetPath(fixture.sourceFile)));
         const thumbBytes = new Uint8Array(await readFile(thumbAssetPath(fixture.sourceFile)));
-        const variants = await validateCommunityMediaVariants(displayBytes, thumbBytes);
+        const variants = await validateCommunityMediaVariants(prepareFixtureJpeg(displayBytes), prepareFixtureJpeg(thumbBytes));
         const payloadHash = mediaPayloadHash(fixture.fixtureKey, fixture.position, variants.display, variants.thumb);
         await db.begin(async sql => {
           await sql`select pg_advisory_xact_lock(hashtext(${fixture.fixtureKey+':'+fixture.position}))`;
@@ -251,10 +255,10 @@ async function main() {
         const received=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=display`, {headers: {apikey: publicKey},signal});
         return {error:!received.ok,contentType:received.headers.get('content-type'),bytes:new Uint8Array(await received.arrayBuffer())};
       });
-      const expected = await readFile(assetPath(fixture.sourceFile));
+      const expected = prepareFixtureJpeg(await readFile(assetPath(fixture.sourceFile)));
       if (response.error || !response.contentType?.startsWith('image/jpeg') || sha256(response.bytes) !== sha256(expected)) throw new Error('test_sample_community_media_public_read_failed');
       const thumb=await retrySampleRead(async signal=>{const r=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=thumb`,{headers:{apikey:publicKey},signal});return {error:!r.ok,bytes:new Uint8Array(await r.arrayBuffer())};});
-      if(thumb.error || sha256(thumb.bytes)!==sha256(await readFile(thumbAssetPath(fixture.sourceFile))))throw new Error('test_sample_community_thumb_read_failed');
+      if(thumb.error || sha256(thumb.bytes)!==sha256(prepareFixtureJpeg(await readFile(thumbAssetPath(fixture.sourceFile)))))throw new Error('test_sample_community_thumb_read_failed');
     }
     for(const cat of samples){
       const result=await retrySampleRead(signal=>anonymous.rpc('list_public_cat_stories',{p_cat_id:cat[1],p_cursor:null,p_limit:30}).abortSignal(signal));

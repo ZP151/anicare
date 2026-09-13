@@ -14,3 +14,5 @@ Each later photo was generated with its first image as a reference, preserving t
 Delivery variants use only proportional resizing (display max2048, thumb max480) and JPEG encoding in sRGB with metadata stripped. No cropping or retouching was applied during encoding. There are16 distinct source images and32 delivery files; only identity thumbnails intentionally reuse the corresponding cat's first photo.
 
 V1 files and ledger IDs are retained as historical provenance. The hosted retirement receipt, not deletion of this folder, determines which old fixtures remain public because of real references.
+
+Before upload, the fixture provisioner adds the minimal 18-byte JFIF APP0 header when the source encoder omitted it. Compressed image pixels stay unchanged. Both variants must then pass the unmodified production JPEG decoder before any database/storage mutation. Repository provenance hashes identify the approved source files; media-ledger and public-read hashes identify these final delivery bytes. Cat portraits retain their original approved JPEG bytes.

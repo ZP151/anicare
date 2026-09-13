@@ -40,3 +40,7 @@ Replacement portraits, post details, cat story lists, display JPEGs and thumbnai
 3. Scroll a long post: back, author, follow-cat, share and overflow stay at the top; the reply composer stays above the keyboard.
 4. Scroll cat profile, Messages, sample conversation and neighbour profile; verify fixed header and safe-area placement, including Chinese and large text.
 5. Share a public post/cat through the native sheet; cancelling does not send anything. Check own previous posts remain accessible.
+
+## Hosted import follow-up
+
+Preflight run 34757626076 passed source-file hashes. Apply run 34757723203 attempt 1 stopped on a transient portrait-directory read. Attempt 2 passed portraits and stopped at C57 because the encoder omitted the JFIF APP0 header required by the production JPEG decoder. No historical retirement ran. The provisioner now prepares a minimal JFIF container header without changing compressed pixels, checks every real V2 display/thumb through the unchanged production decoder before remote writes (also in dry run), and verifies delivered bytes against the prepared hashes. Actor/cat ledgers and source portrait bytes remain unchanged. Provisioner tests: 20 passed; typecheck and full-catalogue dry run passed. Backend-only follow-up; no app-bundle changes.
