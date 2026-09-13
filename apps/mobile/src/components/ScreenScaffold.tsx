@@ -9,6 +9,7 @@ interface ScreenScaffoldProps extends PropsWithChildren {
   title: string;
   subtitle?: string;
   leading?: ReactNode;
+  pinHeading?: boolean;
   trailing?: ReactNode;
   nativeAppearance?: boolean;
   compact?: boolean;
@@ -27,7 +28,7 @@ export function ScreenScaffold({
   eyebrow,
   title,
   subtitle,
-  leading,
+  leading, pinHeading=false,
   trailing,
   children,
   nativeAppearance = true,
@@ -39,19 +40,23 @@ export function ScreenScaffold({
 }: ScreenScaffoldProps) {
   const palette = useNativeColors();
   const nativeStyle = nativeAppearance ? { backgroundColor: palette.canvas } : undefined;
-  const scrollContent = (
-      <ScrollView scrollEnabled={scrollEnabled} testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior={hasNativeHeader ? "never" : "automatic"} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
-        {!header ? <View style={styles.headingRow}>
+  const heading = (
+<View style={[styles.headingRow, (!!leading || pinHeading) && styles.fixedHeadingRow]}>
           {leading ? <View testID="screen-header-leading">{leading}</View> : null}
-          <View style={[styles.headingCopy, !!leading && styles.leadingHeading]}>
-            <Text accessibilityRole="header" style={[styles.title, compact && styles.compactTitle, nativeAppearance && { color: palette.ink }]}>
+          <View style={[styles.headingCopy, (!!leading || pinHeading) && styles.leadingHeading]}>
+            <Text accessibilityRole="header" style={[styles.title, compact && styles.compactTitle, (!!leading || pinHeading) && styles.fixedTitle, nativeAppearance && { color: palette.ink }]}>
               {title}
             </Text>
             {eyebrow ? <Text style={[styles.contextNote, nativeAppearance && { color: palette.muted }]}>{eyebrow}</Text> : null}
-            {subtitle ? <Text style={[styles.subtitle, nativeAppearance && { color: palette.muted }]}>{subtitle}</Text> : null}
+            {subtitle ? <Text style={[styles.subtitle, (!!leading || pinHeading) && styles.fixedSubtitle, nativeAppearance && { color: palette.muted }]}>{subtitle}</Text> : null}
           </View>
           {trailing}
-        </View> : null}
+        </View>
+  );
+  const fixedHeader = header ?? (leading || pinHeading ? heading : null);
+  const scrollContent = (
+      <ScrollView scrollEnabled={scrollEnabled} testID="screen-scroll" style={styles.fill} alwaysBounceVertical accessibilityActions={onRefresh ? [{ name: 'refresh', label: refreshLabel }] : undefined} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'refresh') onRefresh?.(); }} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined} contentInsetAdjustmentBehavior={hasNativeHeader || fixedHeader ? "never" : "automatic"} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={[styles.content, styles.pullable, compact && styles.compactContent, !!footer && styles.footerContent]}>
+        {!fixedHeader ? heading : null}
         {children}
       </ScrollView>
   );
@@ -60,7 +65,7 @@ export function ScreenScaffold({
       {/* Measure keyboard overlap in the full screen coordinate space. Placing
           this container inside SafeAreaView can subtract the top inset twice. */}
       <SafeAreaView edges={hasNativeHeader ? (footer ? ['left','right','bottom'] : ['left','right']) : footer ? ['top', 'left', 'right', 'bottom'] : ['top', 'left', 'right']} style={[styles.safeArea, nativeStyle]}>
-      {header ? <View testID="screen-fixed-header" style={{paddingHorizontal:16,paddingTop:6,paddingBottom:6}}>{header}</View> : null}
+      {fixedHeader ? <View testID="screen-fixed-header" style={{paddingHorizontal:12,paddingTop:4,paddingBottom:6,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:palette.line}}>{fixedHeader}</View> : null}
       {wrapScroll ? wrapScroll(scrollContent) : scrollContent}
       {footer ? <View style={styles.footer}>{footer}</View> : null}
       </SafeAreaView>
@@ -77,7 +82,10 @@ const styles = StyleSheet.create({
   compactContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 112, gap: 12 },
   pullable: { flexGrow: 1 },
   headingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  headingCopy: { flex: 1, gap: 6 },
+  headingCopy: { flex: 1, minWidth: 0, gap: 4 },
+  fixedHeadingRow: { alignItems: 'center', minHeight: 48, gap: 8 },
+  fixedTitle: { fontSize: 17, lineHeight: 23, letterSpacing: 0 },
+  fixedSubtitle: { fontSize: 12, lineHeight: 17 },
   leadingHeading: { minHeight: 44, justifyContent: 'center' },
   contextNote: { color: '#62626A', fontSize: 13, lineHeight: 18 },
   title: { color: '#1C1C1E', fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.4 },

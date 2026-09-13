@@ -1,3 +1,4 @@
+import { ACTIVE_COMMUNITY_TEST_POSTS } from './sample-catalog-v2';
 import type { Locale } from '../i18n/catalog';
 import { sampleStories } from './sample-stories';
 
@@ -62,7 +63,7 @@ export const COMMUNITY_TEST_POSTS = allScenarios.map(([communitySlug, catId, en,
 });
 
 export function communitySampleText(id: string, body: string, locale: Locale): {body: string; label: string | null} {
-  const sample = COMMUNITY_TEST_POSTS.flatMap(post => [post, post.reply]).find(item => item.id === id);
+  const sample = [...COMMUNITY_TEST_POSTS, ...ACTIVE_COMMUNITY_TEST_POSTS].flatMap(post => [post, post.reply]).find(item => item.id === id);
   if (!sample) return {body, label: null};
   return {
     body: body === sample.body.en ? (locale === 'zh-CN' ? sample.body.zh : sample.body.en.replace(/^\[Test sample C\d{2}\] /, '')) : body,
@@ -72,7 +73,12 @@ export function communitySampleText(id: string, body: string, locale: Locale): {
 
 /** Local fixture display metadata only; it never represents an authenticated account. */
 export function communitySampleAuthor(id: string, _locale: Locale): Readonly<{name: string; avatarKey: string; photo: 'woman' | 'man' | null}> | null {
-  const post = COMMUNITY_TEST_POSTS.find(candidate => candidate.id === id || candidate.reply.id === id);
+  const post = [...COMMUNITY_TEST_POSTS, ...ACTIVE_COMMUNITY_TEST_POSTS].find(candidate => candidate.id === id || candidate.reply.id === id);
   if (!post) return null;
   return post.id === id ? post.profile : {...post.replyProfile, photo: null};
+}
+
+export function communitySampleTitle(id:string,title:string|null|undefined,locale:Locale):string|null|undefined{
+ const sample=ACTIVE_COMMUNITY_TEST_POSTS.find(post=>post.id===id);
+ return sample&&title===sample.title.en?(locale==='zh-CN'?sample.title.zh:sample.title.en):title;
 }

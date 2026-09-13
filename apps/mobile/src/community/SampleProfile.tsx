@@ -1,3 +1,5 @@
+import {DetailHeader} from '../components/DetailHeader';
+import {ACTIVE_COMMUNITY_TEST_POSTS} from './sample-catalog-v2';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,StyleSheet,Text,View} from 'react-native';
 import {useFocusEffect,useLocalSearchParams,useRouter} from 'expo-router';
@@ -33,11 +35,10 @@ function ProfileContent({id}:{id:string}){
  },[id,person]);
  useFocusEffect(useCallback(()=>{if(auth.owner!==undefined)void load();return()=>{sequence.current++;};},[load,auth.owner]));
  useEffect(()=>()=>{sequence.current++;},[]);
- const sample=person?COMMUNITY_TEST_POSTS.find(post=>post.profile.name===person.fixtureName):null;
+ const sample=person?[...ACTIVE_COMMUNITY_TEST_POSTS,...COMMUNITY_TEST_POSTS].find(post=>post.profile.name===person.fixtureName):null;
  const area=SG_COMMUNITIES.find(item=>item.id===person?.communitySlug);
- return <ScreenScaffold compact title={zh?'邻居资料':'Neighbour profile'} leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)}/>} refreshing={loading} onRefresh={person?()=>void load():undefined}>
+ return <ScreenScaffold header={person?<DetailHeader title={personText(person.name,locale)} subtitle={zh?'虚构测试用户':'Fictional test user'} onBack={()=>router.canGoBack()?router.back():router.replace('/' as never)} avatar={sample?<CommunityAuthorAvatar id={sample.id} avatarKey={sample.profile.avatarKey} size={32} linkToProfile={false}/>:undefined}/>:undefined} compact title={zh?'邻居资料':'Neighbour profile'} leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/' as never)}/>} refreshing={loading} onRefresh={person?()=>void load():undefined}>
   {!person?<Text style={{color:c.muted}}>{zh?'这份资料不可用。':'This profile is unavailable.'}</Text>:<>
-   <View style={s.heading}>{sample?<CommunityAuthorAvatar id={sample.id} avatarKey={sample.profile.avatarKey} size={72} linkToProfile={false}/>:null}<View style={{flex:1,gap:4}}><Text style={[s.name,{color:c.ink}]}>{personText(person.name,locale)}</Text><Text style={[s.meta,{color:c.muted}]}>{area?communityLabel(area,locale):''}</Text><Text style={[s.meta,{color:c.muted}]}>{zh?'虚构测试用户':'Fictional test user'}</Text></View></View>
    <Text style={[s.bio,{color:c.ink}]}>{personText(person.bio,locale)}</Text>
    <Text style={[s.meta,{color:c.muted}]}>{zh?'资料与照片为演示素材，不代表真实居民或目击。可进入帖子试用评论与点赞。':'Demo profile and imagery, not a real resident or sighting. Open a post to try comments and likes.'}</Text>
    <Text accessibilityRole="header" style={[s.section,{color:c.ink}]}>{zh?'帖子':'Posts'}</Text>

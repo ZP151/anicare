@@ -1,3 +1,4 @@
+import {ACTIVE_COMMUNITY_TEST_POSTS} from './sample-catalog-v2';
 import {getCommunityPost,type CommunityPost} from '../api/community';
 import {COMMUNITY_TEST_POSTS} from './test-samples';
 import {samplePerson} from './sample-people';
@@ -7,7 +8,7 @@ import {samplePerson} from './sample-people';
 export async function loadSampleProfilePosts(personId:string,read=getCommunityPost):Promise<readonly CommunityPost[]> {
  const person=samplePerson(personId);
  if(!person)return [];
- const matches=COMMUNITY_TEST_POSTS.filter(post=>post.profile.name===person.fixtureName);
+ const matches=[...ACTIVE_COMMUNITY_TEST_POSTS,...COMMUNITY_TEST_POSTS].filter(post=>post.profile.name===person.fixtureName);
  const posts=await Promise.all(matches.map(async sample=>{
   try{return await read(sample.id);}catch(error){
    if(error instanceof Error&&error.message==='community_post_hidden')return null;

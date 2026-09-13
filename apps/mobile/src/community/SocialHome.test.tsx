@@ -85,3 +85,8 @@ it('retains loaded cards after a failed pull refresh',async()=>{
  await act(async()=>view.getByTestId('social-home-grid-explore').props.refreshControl.props.onRefresh());
  await view.findByText('Could not refresh. Tap to retry');expect(view.getByText(post.body)).toBeTruthy();await view.unmount();
 });
+
+it('exposes the linked cat profile directly on the feed card',async()=>{
+ const catId='00000000-0000-4000-8000-00000000a133';mockList.mockResolvedValue({items:[{...post,catId}],nextCursor:null});
+ const view=await render(<SocialHome/>);await fireEvent.press(await view.findByLabelText('View cat profile'));expect(mockPush).toHaveBeenCalledWith(`/cat/${catId}`);await view.unmount();
+});

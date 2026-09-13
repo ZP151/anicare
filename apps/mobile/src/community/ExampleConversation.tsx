@@ -1,3 +1,4 @@
+import {DetailHeader} from '../components/DetailHeader';
 import {BackButton} from '../components/BackButton';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -24,12 +25,13 @@ function ExampleThread({ id }: { id: string }) {
   const [body, setBody] = useState(''), [written, setWritten] = useState<readonly string[]>([]);
   const addReply = () => { if (body.trim()) { setWritten(old => [...old, body.trim()]); setBody(''); } };
   return <ScreenScaffold compact title={example ? exampleText(example.name, zh) : (zh ? '示例会话' : 'Sample conversation')}
+    header={example?<DetailHeader title={exampleText(example.name,zh)} subtitle={`${exampleText(example.area,zh)} · ${zh?'示例会话':'Sample conversation'}`} avatar={<ProfileAvatar avatarKey={example.avatarKey} size={32}/>} onBack={()=>router.canGoBack()?router.back():router.replace('/discuss' as never)}/>:undefined}
     leading={<BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/discuss' as never)}/>}
     footer={example ? <GlassSurface style={s.composer}><TextInput accessibilityLabel={zh ? '试写回复' : 'Try a reply'} placeholder={zh ? '试写一条回复…' : 'Try a reply…'} placeholderTextColor={c.muted} value={body} onChangeText={setBody} multiline maxLength={2000} style={[s.input, { color: c.ink }]} /><Pressable accessibilityRole="button" accessibilityLabel={zh ? '添加试写回复' : 'Add practice reply'} disabled={!body.trim()} onPress={addReply} style={[s.send, { backgroundColor: c.actionPrimary, opacity: body.trim() ? 1 : 0.45 }]}><AppIcon name="send" size={19} color={c.onAction} /></Pressable></GlassSurface> : undefined}>
     <Text style={[s.note, { color: c.muted }]}>{zh ? '示例会话 · 仅供试用' : 'Sample conversation · practice only'}</Text>
     <Text style={[s.note, { color: c.muted }]}>{zh ? '试写内容仅在本页展示，离开后清除，不会发送给任何人。' : 'Practice replies stay on this page, clear when you leave, and are not sent to anyone.'}</Text>
     {example ? <>
-      <View style={s.person}><ProfileAvatar avatarKey={example.avatarKey} size={40} /><Text style={[s.note, { color: c.muted }]}>{exampleText(example.area, zh)}</Text></View>
+
       {example.messages.map((message, index) => <View key={index} style={[s.bubble, { alignSelf: message.mine ? 'flex-end' : 'flex-start', backgroundColor: message.mine ? c.actionPrimary : c.surface }]}><Text style={[s.body, { color: message.mine ? c.onAction : c.ink }]}>{exampleText(message.text, zh)}</Text></View>)}
       {written.map((text, index) => <View key={`practice-${index}`} style={[s.bubble, { alignSelf: 'flex-end', backgroundColor: c.actionPrimary }]}><Text style={[s.body, { color: c.onAction }]}>{text}</Text></View>)}
       {written.length ? <Text accessibilityLiveRegion="polite" style={[s.note, { textAlign: 'right', color: c.muted }]}>{zh ? '试写已添加 · 未发送' : 'Practice reply added · not sent'}</Text> : null}

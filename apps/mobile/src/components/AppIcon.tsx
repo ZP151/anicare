@@ -52,6 +52,7 @@ const symbols = {
   close: ['xmark', 'close'],
   community: ['text.bubble', 'forum-outline'],
   send: ['paperplane.fill', 'send'],
+  share: ['square.and.arrow.up', 'share-variant-outline'],
   reply: ['arrowshape.turn.up.left', 'reply-outline'],
 } as const;
 

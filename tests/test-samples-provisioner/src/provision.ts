@@ -1,3 +1,4 @@
+import {validateFixtureActor} from './actor.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { writeFile } from 'node:fs/promises';
@@ -5,8 +6,10 @@ import { resolve } from 'node:path';
 import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 import { ensurePortrait } from './portrait.js';
-import { samples, legacyEnglishNames, samplePlaces } from './fixtures.js';
-import { COMMUNITY_TEST_POSTS } from '../../../apps/mobile/src/community/test-samples.js';
+import { samples as legacySamples, samplePlaces } from './fixtures.js';
+import { SAMPLE_CATS_V2 as samples, SAMPLE_ACTORS_V2, ACTIVE_COMMUNITY_TEST_POSTS as COMMUNITY_TEST_POSTS } from '../../../apps/mobile/src/community/sample-catalog-v2.js';
+import { retireLegacySamples } from './retire-legacy.js';
+import { COMMUNITY_TEST_POSTS as legacyPosts } from '../../../apps/mobile/src/community/test-samples.js';
 import { ensureCommunitySample, readSampleExtras } from './community.js';
 import { canUpgradeNoPhotoPortrait } from './fixture-upgrade.js';
 import { validateCommunityMediaVariants, type CommunityMediaVariant } from './media.js';
@@ -18,8 +21,8 @@ function required(name: string) { const value = process.env[name]; if (!value) t
 function sha256(value: Uint8Array) { return createHash('sha256').update(value).digest('hex'); }
 function assetPath(filename: string) { return resolve(import.meta.dirname, '../../../docs/test-samples/ios-v1/assets', filename); }
 function thumbAssetPath(filename: string) { return assetPath(filename.replace(/\.jpg$/, '-thumb.jpg')); }
-function fixtureMediaId(index: number) { return `00000000-0000-4000-8000-00000000e${String(101 + index).padStart(3, '0')}`; }
-function fixtureMediaRequestId(index: number) { return `00000000-0000-4000-8000-00000000f${String(101 + index).padStart(3, '0')}`; }
+function fixtureMediaId(index: number) { return `00000000-0000-4000-8000-00000000e${String(501 + index).padStart(3, '0')}`; }
+function fixtureMediaRequestId(index: number) { return `00000000-0000-4000-8000-00000000f${String(501 + index).padStart(3, '0')}`; }
 function mediaPayloadHash(fixtureKey: string, position: number, display: CommunityMediaVariant, thumb: CommunityMediaVariant) {
   return sha256(Buffer.from(JSON.stringify({fixtureKey, position, display: {sha256: display.sha256, byteLength: display.bytes.byteLength, width: display.width, height: display.height}, thumb: {sha256: thumb.sha256, byteLength: thumb.bytes.byteLength, width: thumb.width, height: thumb.height}})));
 }
@@ -75,12 +78,25 @@ async function main() {
   const publicKey = required('SUPABASE_PUBLIC_KEY');
   const anonymous = createClient(url, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
+    // These actors have neither credentials nor confirmed age/consent. They only
+    // author labelled fixtures; the normal client cannot authenticate as them.
+    for (const actor of SAMPLE_ACTORS_V2) await db.begin(async sql=>{
+      await sql`select pg_advisory_xact_lock(hashtext(${actor.id}))`;
+      const existing=await sql`select id,raw_app_meta_data,email,phone,encrypted_password,email_confirmed_at,phone_confirmed_at,last_sign_in_at,is_anonymous from auth.users where id=${actor.id}::uuid`;
+      const identities=await sql`select id from auth.identities where user_id=${actor.id}::uuid`;
+      const sessions=await sql`select 1 from auth.sessions where user_id=${actor.id}::uuid union all select 1 from auth.refresh_tokens where user_id=${actor.id} limit 1`;
+      validateFixtureActor(existing[0],undefined,identities.length,actor,sessions.length);
+      if(!existing.length)await sql`insert into auth.users(id,raw_app_meta_data) values(${actor.id}::uuid,'{"fixture":"c1-samples-v2"}'::jsonb)`;
+      const profile=await sql`select public_name,avatar_key,adult_confirmed_at,training_consent_at,training_consent_withdrawn_at from public.user_profiles where id=${actor.id}::uuid`;
+      validateFixtureActor(existing[0],profile[0],identities.length,actor,sessions.length);
+      if(!profile.length)await sql`insert into public.user_profiles(id,public_name,avatar_key) values(${actor.id}::uuid,${actor.name},${actor.avatarKey})`;
+    });
     for (const [index, [key, id, alias, filename, cell]] of samples.entries()) {
-      const label = `测试样本 S${String(index + 1).padStart(2, '0')}`;
+      const label = `测试样本 S${key.slice(-2)}`;
       const path = filename ? `synthetic-test/${id}/portrait.jpg` : null;
       const bytes = filename ? await readFile(assetPath(filename)) : Buffer.from(`synthetic-test:${key}`);
       const sha = sha256(bytes);
-      const english = legacyEnglishNames[index];
+      const english: string | undefined = undefined;
       const displayAlias = english ? `${english} ${alias}` : alias;
       const place = samplePlaces[key];
       await db.begin(async sql => {
@@ -165,16 +181,16 @@ async function main() {
       process.stdout.write(`test_sample_post_started ${post.code}\n`);
       const visible = await db.begin(async sql => {
         await sql`select pg_advisory_xact_lock(hashtext(${post.id}))`;
-        const expected = {id:post.id,author_id:null,body:post.body.en,cat_id:post.catId,community_slug:post.communitySlug};
+        const expected = {id:post.id,author_id:post.profile.id,body:post.body.en,title:post.title.en,cat_id:post.catId,community_slug:post.communitySlug};
         const available = await ensureCommunitySample({
           read:async()=> (await sql`select * from public.community_posts where id=${post.id}::uuid`)[0] ?? null,
-          insert:()=>sql`insert into public.community_posts(id,author_id,body,cat_id,community_slug,created_at) values(${post.id}::uuid,null,${post.body.en},${post.catId}::uuid,${post.communitySlug},now()-${post.ageHours}*interval '1 hour')`,
+          insert:()=>sql`insert into public.community_posts(id,author_id,body,title,cat_id,community_slug,created_at) values(${post.id}::uuid,${post.profile.id}::uuid,${post.body.en},${post.title.en},${post.catId}::uuid,${post.communitySlug},now()-${post.ageHours}*interval '1 hour')`,
         },expected);
         if (!available) return false;
         await ensureCommunitySample({
           read:async()=> (await sql`select * from public.community_replies where id=${post.reply.id}::uuid`)[0] ?? null,
-          insert:()=>sql`insert into public.community_replies(id,post_id,author_id,body,created_at) values(${post.reply.id}::uuid,${post.id}::uuid,null,${post.reply.body.en},now()-${post.ageHours-1}*interval '1 hour')`,
-        },{id:post.reply.id,post_id:post.id,author_id:null,body:post.reply.body.en});
+          insert:()=>sql`insert into public.community_replies(id,post_id,author_id,body,created_at) values(${post.reply.id}::uuid,${post.id}::uuid,${post.replyProfile.id}::uuid,${post.reply.body.en},now()-${post.ageHours-1}*interval '1 hour')`,
+        },{id:post.reply.id,post_id:post.id,author_id:post.replyProfile.id,body:post.reply.body.en});
         return true;
       });
       if (!visible) continue;
@@ -194,8 +210,8 @@ async function main() {
             if (job.length !== 1 || !['reserved','finalized','attached'].includes(job[0]!.status)) throw new Error('test_sample_community_media_reprovision_required');
             return;
           }
-          await sql`insert into private.community_media_jobs(id,owner_id,request_id,payload_hash,thumb_sha256,thumb_byte_length,thumb_width,thumb_height,display_sha256,display_byte_length,display_width,display_height,reservation_expires_at,upload_token_expires_at,status) values(${mediaId}::uuid,null,${requestId}::uuid,${payloadHash},${variants.thumb.sha256},${variants.thumb.bytes.byteLength},${variants.thumb.width},${variants.thumb.height},${variants.display.sha256},${variants.display.bytes.byteLength},${variants.display.width},${variants.display.height},now()+interval '10 minutes',now()+interval '2 hours 10 minutes','reserved')`;
-          await sql`insert into private.community_media_cleanup_jobs(media_id,owner_id,not_before) values(${mediaId}::uuid,null,now()+interval '2 hours 15 minutes')`;
+          await sql`insert into private.community_media_jobs(id,owner_id,request_id,payload_hash,thumb_sha256,thumb_byte_length,thumb_width,thumb_height,display_sha256,display_byte_length,display_width,display_height,reservation_expires_at,upload_token_expires_at,status) values(${mediaId}::uuid,${post.profile.id}::uuid,${requestId}::uuid,${payloadHash},${variants.thumb.sha256},${variants.thumb.bytes.byteLength},${variants.thumb.width},${variants.thumb.height},${variants.display.sha256},${variants.display.bytes.byteLength},${variants.display.width},${variants.display.height},now()+interval '10 minutes',now()+interval '2 hours 10 minutes','reserved')`;
+          await sql`insert into private.community_media_cleanup_jobs(media_id,owner_id,not_before) values(${mediaId}::uuid,${post.profile.id}::uuid,now()+interval '2 hours 15 minutes')`;
           await sql`insert into private.test_sample_community_media(fixture_key,position,post_id,media_id,source_file,display_sha256,thumb_sha256) values(${fixture.fixtureKey},${fixture.position},${post.id}::uuid,${mediaId}::uuid,${fixture.sourceFile},${variants.display.sha256},${variants.thumb.sha256})`;
         });
         const bucket = storage.storage.from('community-media');
@@ -218,7 +234,7 @@ async function main() {
         retrySampleRead(signal=>anonymous.rpc('list_public_community_replies',{p_post_id:post.id,p_cursor:null,p_limit:30}).abortSignal(signal)),
         retrySampleRead(signal=>anonymous.rpc('get_community_post_reactions',{p_post_ids:[post.id]}).abortSignal(signal)),
       ]);
-      if (detailError || !Array.isArray(detail) || detail.length!==1 || detail[0].body!==post.body.en ||
+      if (detailError || !Array.isArray(detail) || detail.length!==1 || detail[0].body!==post.body.en || detail[0].catId!==post.catId || detail[0].author?.name!==post.profile.name ||
           replyError || !Array.isArray(replies) || reactionError || !Array.isArray(reaction) || reaction.length!==1) {
         process.stderr.write(JSON.stringify({sample:post.code,detailError:!!detailError,replyError:!!replyError,reactionError:!!reactionError,detailRows:Array.isArray(detail)?detail.length:null,reactionRows:Array.isArray(reaction)?reaction.length:null,bodyMatches:Array.isArray(detail)&&detail[0]?.body===post.body.en})+'\n');
         throw new Error('test_sample_community_journey_failed');
@@ -237,8 +253,17 @@ async function main() {
       });
       const expected = await readFile(assetPath(fixture.sourceFile));
       if (response.error || !response.contentType?.startsWith('image/jpeg') || sha256(response.bytes) !== sha256(expected)) throw new Error('test_sample_community_media_public_read_failed');
+      const thumb=await retrySampleRead(async signal=>{const r=await fetch(`${url}/functions/v1/community-media?postId=${fixture.post.id}&mediaId=${mediaId}&variant=thumb`,{headers:{apikey:publicKey},signal});return {error:!r.ok,bytes:new Uint8Array(await r.arrayBuffer())};});
+      if(thumb.error || sha256(thumb.bytes)!==sha256(await readFile(thumbAssetPath(fixture.sourceFile))))throw new Error('test_sample_community_thumb_read_failed');
     }
-    const manifest = { projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds, communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => visiblePostIds.includes(post.id) && post.media.length > 0).map(post => post.id), communityMediaCount: mediaFixtures.filter(fixture=>visiblePostIds.includes(fixture.post.id)).length, gallerySizes: [...new Set(COMMUNITY_TEST_POSTS.filter(post=>visiblePostIds.includes(post.id)).map(post=>post.media.length))].sort() };
+    for(const cat of samples){
+      const result=await retrySampleRead(signal=>anonymous.rpc('list_public_cat_stories',{p_cat_id:cat[1],p_cursor:null,p_limit:30}).abortSignal(signal));
+      const expected=COMMUNITY_TEST_POSTS.filter(post=>post.catId===cat[1]);
+      if(result.error || !Array.isArray(result.data?.items) || expected.some(post=>!result.data.items.some((item:any)=>item.postId===post.id && item.author.name===post.profile.name && item.title===post.title.en && item.media.length===post.media.length)))throw new Error('test_sample_cat_story_read_failed');
+    }
+    // Retire only after replacements and their public images are verified.
+    const retirement=await retireLegacySamples(db,legacyPosts,legacySamples);
+    const manifest = { catalogVersion:2,retirement,actorIds:SAMPLE_ACTORS_V2.map(actor=>actor.id), projectRef: 'fhugdtpjbgiatqhvjioy', fixtureKeys: samples.map(([key]) => key), portraitCount: portraitRows.length, communityPostIds:visiblePostIds, communityReplyIds:visibleReplyIds, communityMediaPostIds: COMMUNITY_TEST_POSTS.filter(post => visiblePostIds.includes(post.id) && post.media.length > 0).map(post => post.id), communityMediaCount: mediaFixtures.filter(fixture=>visiblePostIds.includes(fixture.post.id)).length, gallerySizes: [...new Set(COMMUNITY_TEST_POSTS.filter(post=>visiblePostIds.includes(post.id)).map(post=>post.media.length))].sort() };
     await writeFile(required('IOS26_TEST_SAMPLES_MANIFEST_PATH'), `${JSON.stringify(manifest)}\n`, { encoding: 'utf8', mode: 0o600 });
     process.stdout.write('ios26_test_samples_provisioned\n');
   } finally { await db.end({ timeout: 5 }); }

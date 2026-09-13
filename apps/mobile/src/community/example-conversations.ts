@@ -5,19 +5,19 @@ type Example = Readonly<{ id: string; name: Copy; area: Copy; avatarKey: Profile
 
 // Local UI examples, deliberately separate from account IDs, requests and RPCs.
 export const EXAMPLE_CONVERSATIONS: readonly Example[] = [
-  { id: 'west-coast', name: { en: 'Mei', zh: '小美' }, area: { en: 'West Coast', zh: '西海岸' }, avatarKey: 'human-01', messages: [
-    { mine: false, text: { en: 'Was that the orange cat you saw near the park?', zh: '你在公园附近看到的是那只橘猫吗？' } },
-    { mine: true, text: { en: 'I think so! It had a white tail tip.', zh: '应该是！它的尾巴尖是白色的。' } },
-    { mine: false, text: { en: 'That sounds like Mochi. I left some fresh water in the shade.', zh: '听起来像麻薯。我在阴凉处放了一碗清水。' } },
+  { id: 'west-coast', name: { en: 'Mei', zh: '小梅' }, area: { en: 'Jurong West', zh: '裕廊西' }, avatarKey: 'human-01', messages: [
+    { mine: false, text: { en: 'Was that Honey in your new album?', zh: '你新相册里的那只是蜜糖吗？' } },
+    { mine: true, text: { en: 'Yes, the orange cat with white socks. I linked the cat profile.', zh: '是的，那只穿白袜子的橘猫。我关联了它的档案。' } },
+    { mine: false, text: { en: 'Found it! Now I can see Kai’s different photo in the same cat album.', zh: '找到了！现在同一个猫咪相册里也能看到阿凯拍的另一张照片。' } },
   ] },
-  { id: 'clementi', name: { en: 'Kai', zh: '阿凯' }, area: { en: 'Clementi', zh: '金文泰' }, avatarKey: 'human-05', messages: [
-    { mine: false, text: { en: 'Your photo of the two cats made my morning 🙂', zh: '看到你拍的两只猫，今天心情都变好了 🙂' } },
-    { mine: true, text: { en: 'They sat together for ages. The little one kept falling asleep.', zh: '它们一起坐了好久。小的那只一直打瞌睡。' } },
-    { mine: false, text: { en: 'Hope I spot them on my next walk!', zh: '希望下次散步也能遇到它们！' } },
+  { id: 'clementi', name: { en: 'Kai', zh: '阿凯' }, area: { en: 'Tampines', zh: '淡滨尼' }, avatarKey: 'human-02', messages: [
+    { mine: false, text: { en: 'Your photo of Patch looking back made my morning 🙂', zh: '看到拼拼回头的照片，今天心情都变好了 🙂' } },
+    { mine: true, text: { en: 'That little black tail tip is such a useful clue.', zh: '黑色的小尾尖真是个好认的特征。' } },
+    { mine: false, text: { en: 'I’ll compare it with Noor’s photos in Patch’s album.', zh: '我去拼拼的相册里对照看看努尔拍的照片。' } },
   ] },
-  { id: 'tampines', name: { en: 'Aisha', zh: '艾莎' }, area: { en: 'Tampines', zh: '淡滨尼' }, avatarKey: 'human-07', messages: [
-    { mine: false, text: { en: 'Do you know if the little grey cat has a regular carer?', zh: '你知道那只小灰猫有没有固定照顾它的人吗？' } },
-    { mine: true, text: { en: 'Not sure yet. I added a sighting to its profile.', zh: '还不确定。我刚在它的档案里加了一条目击记录。' } },
+  { id: 'tampines', name: { en: 'Lin', zh: '小林' }, area: { en: 'MacRitchie', zh: '麦里芝' }, avatarKey: 'human-03', messages: [
+    { mine: false, text: { en: 'Was Pebble the grey cat in the rainy-day photos?', zh: '雨天照片里的小灰猫是卵石吗？' } },
+    { mine: true, text: { en: 'Yes. The small white throat patch is visible in the first photo.', zh: '是的，第一张照片里能看到喉咙处的小白斑。' } },
     { mine: false, text: { en: 'Thanks, I’ll check the community post too.', zh: '谢谢，我也去社区帖子里看看。' } },
   ] },
 ];

@@ -1,3 +1,5 @@
+import {communitySampleTitle} from './test-samples';
+import {ACTIVE_COMMUNITY_TEST_POSTS} from './sample-catalog-v2';
 import { COMMUNITY_TEST_POSTS, communitySampleAuthor, communitySampleText } from './test-samples';
 
 it('defines fifty-six persisted fixture conversations with local demo profiles', () => {
@@ -43,4 +45,10 @@ it('keeps every persisted demo post and reply visibly synthetic in either langua
 it('does not translate or relabel real posts even if they reuse demo text', () => {
   const body = COMMUNITY_TEST_POSTS[0]!.body.en;
   expect(communitySampleText('resident-post', body, 'zh-CN')).toEqual({ body, label: null });
+});
+
+it('translates only untouched V2 titles and preserves edited titles',()=>{
+ const post=ACTIVE_COMMUNITY_TEST_POSTS[0]!;
+ expect(communitySampleTitle(post.id,post.title.en,'zh-CN')).toBe(post.title.zh);
+ expect(communitySampleTitle(post.id,'My edited title','zh-CN')).toBe('My edited title');
 });

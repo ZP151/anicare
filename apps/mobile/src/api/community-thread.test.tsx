@@ -1,3 +1,6 @@
+const mockPin=()=>{const owner=mockOwner;return async()=>owner===mockOwner;};
+const mockFollow=jest.fn().mockResolvedValue(false);
+jest.mock('./follows',()=>({getFollowState:(...args:unknown[])=>mockFollow(...args),changeFollow:jest.fn()}));
 import {act,fireEvent,render,waitFor,within} from '@testing-library/react-native';
 import {DeviceEventEmitter,StyleSheet} from 'react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
@@ -13,7 +16,7 @@ jest.mock('./cats',()=>({getPublicCatSummary:async()=>({primaryAlias:'Mochi'})})
 jest.mock('./direct-messages',()=>({getCommunityAuthor:(...args:unknown[])=>mockAuthor(...args)}));
 let mockThread='00000000-0000-4000-8000-000000000001';
 jest.mock('./community',()=>({getCommunityPost:(...a:unknown[])=>mockGet(...a),listCommunityReplies:(...a:unknown[])=>mockList(...a),createCommunityReply:(...a:unknown[])=>mockReply(...a)}));
-jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),pin:()=>{const owner=mockOwner;return async()=>owner===mockOwner;}})}));
+jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),epoch:{current:0},pin:mockPin})}));
 jest.mock('../community/CommunityContentActions',()=>({CommunityContentActions:()=>null}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
 jest.mock('expo-router',()=>({useFocusEffect:(fn:()=>void)=>{mockFocus=fn;},useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread,editCat:mockEditCat})}));
@@ -152,4 +155,13 @@ it('forces a fresh post read after editing while an older focus read is in fligh
  const v=await render(<CommunityDetailScreen/>);await v.findByText('Finish link edit');let late!:(v:unknown)=>void;
  mockGet.mockImplementationOnce(()=>new Promise(resolve=>{late=resolve;})).mockResolvedValue({...parent,catId:'00000000-0000-4000-8000-000000000050'});
  await act(async()=>mockFocus());await fireEvent.press(v.getByText('Finish link edit'));await v.findByText('Mochi');await act(async()=>late(parent));expect(v.getByText('Mochi')).toBeTruthy();await v.unmount();
+});
+
+it('pins author identity and public actions outside post scrolling content',async()=>{
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ const header=within(view.getByTestId('screen-fixed-header'));
+ expect(header.getByLabelText('查看作者资料')).toBeTruthy();
+ expect(header.getByLabelText('分享帖子')).toBeTruthy();
+ expect(within(view.getByTestId('screen-scroll')).queryByLabelText('分享帖子')).toBeNull();
+ await view.unmount();
 });

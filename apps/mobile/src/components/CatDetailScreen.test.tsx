@@ -1,4 +1,5 @@
-import { fireEvent, render } from '@testing-library/react-native';
+jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'en'})}));
+import { fireEvent, render, within } from '@testing-library/react-native';
 
 import { CatDetailScreen } from './CatDetailScreen';
 
@@ -70,4 +71,12 @@ it('makes sharing a separate primary action while retaining sightings', async ()
  expect(share).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000102');
  expect(report).not.toHaveBeenCalled();
  expect(view.getByRole('button', { name: 'Report a sighting of Pepper' })).toBeTruthy();
+});
+
+it('keeps the back action and cat identity outside the scrolling story content', async () => {
+ const back=jest.fn();
+ const view=await render(<CatDetailScreen cat={{animalId:'00000000-0000-4000-8000-000000000102',primaryAlias:'Pepper',verificationLabel:'Reported',timeLabel:'Delayed'}} fixture={false} onBack={back} onReportSighting={jest.fn()}/>);
+ expect(within(view.getByTestId('cat-fixed-header')).getByText('Pepper')).toBeTruthy();
+ expect(within(view.getByTestId('cat-detail-scroll')).queryByRole('button',{name:'Back'})).toBeNull();
+ await fireEvent.press(view.getByRole('button',{name:'Back'}));expect(back).toHaveBeenCalledTimes(1);
 });

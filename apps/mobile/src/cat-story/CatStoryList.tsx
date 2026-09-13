@@ -7,7 +7,7 @@ import { useAccountSession } from '../auth/use-account-session';
 import { CommunityAuthorAvatar } from '../community/CommunityAuthorAvatar';
 import { CommunityAuthorSheet } from '../community/CommunityAuthorSheet';
 import { CommunityPostImage } from '../community/CommunityPostImage';
-import { communitySampleAuthor, communitySampleText } from '../community/test-samples';
+import { communitySampleAuthor, communitySampleTitle, communitySampleText } from '../community/test-samples';
 import { useNativeColors } from '../design/native-colors';
 import type { Locale } from '../i18n/catalog';
 
@@ -55,7 +55,7 @@ export function CatStoryList({ catId, locale }: { catId: string; locale: Locale 
   return <View style={{ gap: 14 }}>
     <View style={{ gap: 4 }}><Text accessibilityRole="header" style={{ color: c.ink, fontSize: 20, fontWeight: '700' }}>{zh ? '共同故事' : 'Shared stories'}</Text><Text style={{ color: c.muted, fontSize: 12 }}>{zh ? '来自认识它的邻居' : 'From neighbours who know this cat'}</Text></View>
     {visible.map(item => {
-      const sample = communitySampleText(item.postId, item.body, locale), title = item.title || sample.body, photo = item.media[0];
+      const sample = communitySampleText(item.postId, item.body, locale), title = communitySampleTitle(item.postId,item.title,locale) || sample.body, photo = item.media[0];
       return <View key={item.postId} style={{ backgroundColor: c.surface, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.line }}>
         <Pressable accessibilityRole="button" accessibilityLabel={`${zh ? '查看作者' : 'View author'} ${name(item)}`} onPress={() => setAuthor(item)} style={{ minHeight: 56, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
           <CommunityAuthorAvatar id={item.postId} avatarKey={item.author.avatarKey} photoUri={avatars.get(item.postId)} size={30} linkToProfile={false} />
