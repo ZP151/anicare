@@ -6,6 +6,12 @@ jest.mock('../api/community-extras',()=>({communityMediaUrl:()=> 'https://exampl
 import {CommunityPostImage} from './CommunityPostImage';
 const props={postId:'post',mediaId:'media',label:'Post photo',style:{width:120,height:120}};
 beforeEach(()=>{mockOwner='owner-a';mockSession.mockReset();});
+it('can retry an unavailable story photo without replacing it with a cat portrait',async()=>{
+ mockOwner=null;const view=await render(<CommunityPostImage {...props} retryLabel="Retry story photo"/>);
+ await fireEvent(view.getByLabelText('Post photo'),'error');
+ await fireEvent.press(view.getByRole('button',{name:'Retry story photo'}));
+ expect(view.getByLabelText('Post photo').props.source.uri).toContain('/community-media');
+});
 it('waits for the matching session and carries its bearer on every native image request',async()=>{
  mockSession.mockResolvedValue({data:{session:{user:{id:'owner-a'},access_token:'test-bearer'}},error:null});
  const view=await render(<CommunityPostImage {...props}/>);

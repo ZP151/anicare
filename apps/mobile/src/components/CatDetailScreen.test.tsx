@@ -19,7 +19,7 @@ describe('CatDetailScreen', () => {
     );
 
     expect(view.getByText('Pepper')).toBeTruthy();
-    expect(view.getAllByText('Community confirmed')).toHaveLength(2);
+    expect(view.getAllByText('Community confirmed')).toHaveLength(1);
     expect(view.getByText('Seen in a delayed weekly window')).toBeTruthy();
     expect(view.getByText(/Coarse neighbourhood activity/)).toBeTruthy();
     expect(JSON.stringify(view.toJSON())).not.toMatch(/00000000|coordinate|similarity|score|vector/i);
@@ -61,4 +61,13 @@ describe('CatDetailScreen', () => {
     expect(await view.findByText('无法创建已保存的报告，请在原生设备上重试。')).toBeTruthy();
     await view.unmount();
   });
+});
+
+it('makes sharing a separate primary action while retaining sightings', async () => {
+ const share = jest.fn(), report = jest.fn();
+ const view = await render(<CatDetailScreen cat={{ animalId: '00000000-0000-4000-8000-000000000102', primaryAlias: 'Pepper', verificationLabel: 'Reported', timeLabel: 'No public activity yet' }} fixture={false} onShareStory={share} onReportSighting={report} />);
+ await fireEvent.press(view.getByRole('button', { name: 'Share a story about Pepper' }));
+ expect(share).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000102');
+ expect(report).not.toHaveBeenCalled();
+ expect(view.getByRole('button', { name: 'Report a sighting of Pepper' })).toBeTruthy();
 });

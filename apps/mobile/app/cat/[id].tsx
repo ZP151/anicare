@@ -1,7 +1,8 @@
+import { CatStoryList } from '../../src/cat-story/CatStoryList';
 import {BackButton} from '../../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { FollowControl } from '../../src/following/FollowControl';
@@ -37,7 +38,7 @@ export default function CatRoute() {
     setStatus('loading');
     setAuthEpoch((epoch) => epoch + 1);
   }), []);
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setCat(null);
     setStatus('loading');
     if (!animalId || !opaqueAnimalId.test(animalId)) { setStatus('unavailable'); return; }
@@ -60,12 +61,12 @@ export default function CatRoute() {
         const presentation = presentations.get(row.animalId);
         if (presentation) setCat(current => current?.animalId === row.animalId ? {...current,...presentation} : current);
       })
-      .catch(() => { if (active) setStatus('unavailable'); });
+      .catch(() => { if (active && token === generation.current) setStatus('unavailable'); });
     return () => { active = false; ++generation.current; };
-  }, [animalId, locale, authEpoch]);
+  }, [animalId, locale, authEpoch]));
 
   if (status === 'ready' && cat) {
-    return <CatDetailScreen key={cat.animalId} cat={cat} fixture={false} locale={locale} onBack={() => router.back()} heroActions={<FollowControl compact key={cat.animalId} animalId={cat.animalId} />}
+    return <CatDetailScreen key={cat.animalId} cat={cat} fixture={false} locale={locale} stories={<CatStoryList catId={cat.animalId} locale={locale}/>} onShareStory={id=>router.push(`/community/new?catId=${id}` as never)} onBack={() => router.back()} heroActions={<FollowControl compact key={cat.animalId} animalId={cat.animalId} />}
       onReportSighting={async (selectedAnimalId) => {
         const draftId = await createOwnerAwareReportDraft({
           readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
@@ -73,7 +74,7 @@ export default function CatRoute() {
         }, opaqueAnimalId.test(selectedAnimalId)
           ? { identityIntent: { kind: 'existing', animalId: selectedAnimalId } } : {});
         router.push({ pathname: '/report/new', params: { draftId } } as never);
-      }} onRecordCare={(selectedAnimalId) => { router.push({ pathname: '/care/[id]', params: { id: selectedAnimalId } } as never); }} ><CatCommunityContext animalId={cat.animalId} locale={locale}/><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>router.push(`/safety/${cat.animalId}` as never)}><Text style={{color:colors.ink}}>{locale==='zh-CN'?'内容安全与身份纠错':'Content safety and identity correction'}</Text></Pressable></CatDetailScreen>;
+      }} onRecordCare={(selectedAnimalId) => { router.push({ pathname: '/care/[id]', params: { id: selectedAnimalId } } as never); }} ><CatCommunityContext animalId={cat.animalId} locale={locale} showDiscussion={false}/><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>router.push(`/safety/${cat.animalId}` as never)}><Text style={{color:colors.ink}}>{locale==='zh-CN'?'内容安全与身份纠错':'Content safety and identity correction'}</Text></Pressable></CatDetailScreen>;
   }
   return <ScreenScaffold
     subtitle={locale === 'zh-CN' ? '公开档案仅显示可公开的身份摘要与粗略活动。' : 'Public profiles show eligible identity summaries and coarse activity.'}

@@ -1,3 +1,4 @@
+jest.mock('../cat-story/CatStoryList',()=>({CatStoryList:()=>null}));
 import { act, render, waitFor } from '@testing-library/react-native';
 const mockId = '00000000-0000-4000-8000-000000002599';
 let mockParams = { id: mockId };
@@ -7,7 +8,7 @@ jest.mock('../maps/CatCommunityContext',()=>({CatCommunityContext:()=>null}));
 jest.mock('./cat-presentation', () => ({getCatPresentations: (...args: unknown[]) => mockPresentations(...args)}));
 const mockAuthListeners = new Set<() => void>();
 const mockAuthListener = () => mockAuthListeners.forEach(listener => listener());
-jest.mock('expo-router', () => ({ useLocalSearchParams: () => mockParams, useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('expo-router', () => ({ useFocusEffect:(fn:()=>void)=>require('react').useEffect(fn,[fn]), useLocalSearchParams: () => mockParams, useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('./supabase', () => ({ getSupabaseClient: () => ({ rpc: mockRpc }) }));
 jest.mock('../auth/session-subject', () => ({ readSessionSubjectStrict: async () => null, subscribeSessionSubject: (listener: () => void) => { mockAuthListeners.add(listener); return () => {mockAuthListeners.delete(listener);}; } }));
 jest.mock('../i18n/LocaleContext', () => ({ useLocale: () => ({ locale: 'en' }) }));
