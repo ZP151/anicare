@@ -3,19 +3,21 @@ import {DeviceEventEmitter,StyleSheet} from 'react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
 const mockGet=jest.fn(),mockList=jest.fn(),mockReply=jest.fn();
 let mockFocus:()=>void;
+let mockOwner:string|null|undefined='owner-a';
 const mockAuthor=jest.fn(),mockReactions=jest.fn(),mockLike=jest.fn(),mockPush=jest.fn();
 jest.mock('./community-reactions',()=>({getCommunityReactions:(...args:unknown[])=>mockReactions(...args),setCommunityLike:(...args:unknown[])=>mockLike(...args)}));
 jest.mock('./cats',()=>({getPublicCatSummary:async()=>({primaryAlias:'Mochi'})}));
 jest.mock('./direct-messages',()=>({getCommunityAuthor:(...args:unknown[])=>mockAuthor(...args)}));
 let mockThread='00000000-0000-4000-8000-000000000001';
 jest.mock('./community',()=>({getCommunityPost:(...a:unknown[])=>mockGet(...a),listCommunityReplies:(...a:unknown[])=>mockList(...a),createCommunityReply:(...a:unknown[])=>mockReply(...a)}));
-jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:'owner-a',failed:false,reload:jest.fn(),pin:()=>async()=>true})}));
+jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),pin:()=>{const owner=mockOwner;return async()=>owner===mockOwner;}})}));
 jest.mock('../community/CommunityContentActions',()=>({CommunityContentActions:()=>null}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
 jest.mock('expo-router',()=>({useFocusEffect:(fn:()=>void)=>{mockFocus=fn;},useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
 const mockExtras=jest.fn();
 jest.mock('./community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args),communityMediaUrl:(postId:string,mediaId:string)=>`https://media.test/${postId}/${mediaId}`}));
 import CommunityDetailScreen from '../../app/community/[id]';
+beforeEach(()=>{mockOwner='owner-a';});
 beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false,replyCount:0,communitySlug:'clementi',catId:'00000000-0000-4000-8000-000000000050'}));mockList.mockResolvedValue({items:[],nextCursor:null});mockExtras.mockResolvedValue(new Map());mockReactions.mockResolvedValue(new Map([[mockThread,{postId:mockThread,liked:false,likeCount:3}]]));mockLike.mockResolvedValue({postId:mockThread,liked:true,likeCount:4});});
 it('keeps the editable reply and send action outside the long post scroll, inside keyboard avoidance',async()=>{
  const view=await render(<CommunityDetailScreen/>);
@@ -91,4 +93,40 @@ it('binds the author action to the displayed post identity',async()=>{
 it('refreshes the post after returning from a comment discussion',async()=>{
  const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');mockGet.mockRejectedValueOnce(new Error('community_post_hidden'));
  await act(async()=>{mockFocus();});await view.findByText('讨论暂不可用，点此重试');expect(view.queryByText('Neighbour question')).toBeNull();await view.unmount();
+});
+
+it('refreshes on focus silently, reserving the top refresh control for a pull gesture',async()=>{
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ let finish!:(value:unknown)=>void;
+ const parent=await mockGet(mockThread);mockGet.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ await act(async()=>{mockFocus();});
+ expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(false);
+ expect(view.queryByLabelText('加载帖子')).toBeNull();
+ await act(async()=>{finish(parent);});
+ mockGet.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ await act(async()=>{view.getByTestId('screen-scroll').props.refreshControl.props.onRefresh();});
+ expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(true);
+ await act(async()=>{finish(parent);});
+ expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(false);await view.unmount();
+});
+
+it('waits for account initialization before a focus read and finishes without a stuck indicator',async()=>{
+ mockOwner=undefined;
+ const view=await render(<CommunityDetailScreen/>);await act(async()=>{mockFocus();});
+ expect(mockGet).not.toHaveBeenCalled();
+ mockOwner='owner-a';await view.rerender(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(false);
+ expect(view.queryByLabelText('加载帖子')).toBeNull();await view.unmount();
+});
+
+it('clears a previous account pull indicator when its request finishes late',async()=>{
+ const view=await render(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ let finish!:(value:unknown)=>void;
+ const parent=await mockGet(mockThread);mockGet.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ await act(async()=>{view.getByTestId('screen-scroll').props.refreshControl.props.onRefresh();});
+ mockOwner='owner-b';await view.rerender(<CommunityDetailScreen/>);await view.findByText('Neighbour question');
+ expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(false);
+ await act(async()=>{finish({...parent,body:'Previous account story'});});
+ expect(view.queryByText('Previous account story')).toBeNull();
+ expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(false);await view.unmount();
 });
