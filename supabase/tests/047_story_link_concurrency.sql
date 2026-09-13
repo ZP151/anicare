@@ -26,7 +26,7 @@ begin
   create or replace function public.__c1_race_link(target integer,revision bigint,request integer) returns text language plpgsql as $helper$
   begin
    perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000004701',true);
-   return public.change_my_story_cat_link('00000000-0000-4000-8000-000000004721',('00000000-0000-4000-8000-'||lpad(target::text,12,'0'))::uuid,'bishan',revision,('00000000-0000-4000-8000-'||lpad(request::text,12,'0'))::uuid)->>'revision';
+   return public.change_my_story_cat_link('00000000-0000-4000-8000-000000004721',regexp_replace('00000000-0000-4000-8000-000000000000','0{12}$',lpad(target::text,12,'0'))::uuid,'bishan',revision,regexp_replace('00000000-0000-4000-8000-000000000000','0{12}$',lpad(request::text,12,'0'))::uuid)->>'revision';
   exception when others then return sqlerrm;
   end $helper$;
   create or replace function public.__c1_race_delete() returns text language plpgsql as $helper$

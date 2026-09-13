@@ -29,8 +29,12 @@ select throws_ok($$select public.list_public_cat_stories('00000000-0000-4000-800
 reset role;
 delete from public.community_posts where id='00000000-0000-4000-8000-000000004522';
 insert into private.community_media_jobs(id,owner_id,request_id,payload_hash,thumb_sha256,thumb_byte_length,thumb_width,thumb_height,display_sha256,display_byte_length,display_width,display_height,reservation_expires_at,upload_token_expires_at,status)
-select ('00000000-0000-4000-8000-'||lpad((4540+n)::text,12,'0'))::uuid,'00000000-0000-4000-8000-000000004501',('00000000-0000-4000-8000-'||lpad((4550+n)::text,12,'0'))::uuid,repeat('a',64),repeat('b',64),100,100,100,repeat('c',64),1000,640,480,now()+interval '10 minutes',now()+interval '2 hours',case when n<3 then 'attached' else 'finalized' end
-from generate_series(1,3) n;
+select media_id::uuid,'00000000-0000-4000-8000-000000004501',request_id::uuid,repeat('a',64),repeat('b',64),100,100,100,repeat('c',64),1000,640,480,now()+interval '10 minutes',now()+interval '2 hours',case when n<3 then 'attached' else 'finalized' end
+from (values
+ (1,'00000000-0000-4000-8000-000000004541','00000000-0000-4000-8000-000000004551'),
+ (2,'00000000-0000-4000-8000-000000004542','00000000-0000-4000-8000-000000004552'),
+ (3,'00000000-0000-4000-8000-000000004543','00000000-0000-4000-8000-000000004553')
+) fixtures(n,media_id,request_id);
 insert into private.community_post_media(post_id,media_id,position) values
  ('00000000-0000-4000-8000-000000004521','00000000-0000-4000-8000-000000004541',1),
  ('00000000-0000-4000-8000-000000004521','00000000-0000-4000-8000-000000004542',0),
