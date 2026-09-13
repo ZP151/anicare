@@ -1,6 +1,6 @@
 # C1 breadth, navigation and glass repair — 0.4.17 (25)
 
-Status: implementation and candidate verification in progress; device acceptance pending. 0.4.16 rejection remains recorded. Accepted map/report behaviour is not reclassified.
+Status: candidate and hosted samples delivered and verified; device acceptance pending. 0.4.16 rejection remains recorded. Accepted map/report behaviour is not reclassified.
 
 ## Observable changes
 
@@ -32,3 +32,14 @@ The existing exact-ID retirement and real-reference guards remain. Four older po
 ## Hosted verifier follow-up
 
 Run 34767662923 stopped before new posts at `test_sample_discovery_failed`: the old verifier sent new cells to a filtered RPC limited to thirteen legacy fallback cells. All twelve portraits, summaries and exact-cell community activity had already passed. The verifier now pages the supported unfiltered discovery API and requires every fixture identity, with bounded pagination and repeated-cursor rejection. Exact-cell activity remains separately verified; no schema, read policy or user data was changed. The main map reads sightings, while the cat detail uses community activity. Independent SQL review approved this approach; provisioner 23 tests and typecheck pass. App source remains d1cd729ea3effc7371355d88e9118c197f8051de.
+
+## Candidate provenance
+
+- App source `d1cd729ea3effc7371355d88e9118c197f8051de`; [CI 34767662784](https://github.com/ZP151/anicare/actions/runs/34767662784) passed including database contracts.
+- Native [run 34768019573](https://github.com/ZP151/anicare/actions/runs/34768019573), artifact `10321446282`: 0.4.17 (25), arm64, `sg.animalhelper.app`. GitHub attestation, exact source/workflow/main ref, strict three-file manifest, SHA256/size, source pnpm/Pod locks and native icon resources passed.
+- IPA: `C:/Users/15492/Downloads/WhiskerCommons-0.4.17-build25.ipa`; 21,967,954 bytes; SHA256 `9c0278e68d5dcb7995955c38b6e198f7dd57c9060abe7d1c13487599ddc19b03`.
+- Fixture-verifier-only follow-up `c1e974a0c570ea293b1aeda79d6658e2ba5c5468`; [CI 34768302100](https://github.com/ZP151/anicare/actions/runs/34768302100) and repeat full workspace verify passed. No app source changed after the native build source.
+
+- Hosted apply [34768302216](https://github.com/ZP151/anicare/actions/runs/34768302216) succeeded on verifier source `c1e974a0c570ea293b1aeda79d6658e2ba5c5468`. [Receipt](../test-samples/ios-v1/catalog-v3-hosted-receipt.json) confirms twelve portraits/identities, sixteen posts/replies and twenty-four display/thumb pairs. All source/delivery hashes, public summaries, discoveries, exact-cell activity and post → cat → stories journeys passed. Retirement rerun retained the same four protected old posts and eight old cat identities; the receipt is cumulative/idempotent, not an additional 52-post deletion.
+
+0.4.17 (25) is ready for Sideloadly overwrite installation. User device acceptance remains pending, especially native glass, title transitions and large text. The next roadmap stage remains C2 after blocking C1 repairs; this release does not claim to include C2.
