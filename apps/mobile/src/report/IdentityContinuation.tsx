@@ -101,9 +101,8 @@ export function IdentityContinuation({ sightingId, draft, dependencies, locale, 
   const confirmLabel=locale==='zh-CN'?'确认选择这只猫':'Confirm selected cat';
   const photoLabel=locale==='zh-CN'?'放大猫咪照片':'Enlarge cat photo';
   return <View style={styles.panel}>
-    <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
+    <InfoDisclosure heading={copy.title} label={locale==='zh-CN'?'关于身份关联':'About identity linking'}>{copy.intro}</InfoDisclosure>
     <Text style={styles.copy}>{locale==='zh-CN'?'关联需审核':'Linking requires review'}</Text>
-    <InfoDisclosure label={locale==='zh-CN'?'关于身份关联':'About identity linking'}>{copy.intro}</InfoDisclosure>
     {existing ? <Pressable accessibilityRole="button" accessibilityLabel={copy.retry} disabled={busy} onPress={() => { void submit(existing.intent, existing.requestId); }} style={styles.primary}><Text style={styles.primaryText}>{copy.retry}</Text></Pressable> : <>
       <View style={styles.bubbles}>{visible.map(candidate=><IdentityBubble key={candidate.animalId} name={localizedCatName(candidate.animalId,candidate.primaryAlias,locale)} uri={portraits.get(candidate.animalId)?.portraitUri} disabled={busy} selected={selected?.animalId===candidate.animalId} onPress={()=>setSelected(candidate)}/>)}</View>
       {candidates.length>8||cursor?<View style={styles.pager}>
