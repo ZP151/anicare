@@ -1,6 +1,9 @@
 import {act,fireEvent,render,waitFor,within} from '@testing-library/react-native';
 import {DeviceEventEmitter,StyleSheet} from 'react-native';
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000000099'}));
+const mockLinkGet=jest.fn();let mockEditCat:string|undefined;
+jest.mock('./story-cat-link',()=>({getMyStoryCatLink:(...a:unknown[])=>mockLinkGet(...a)}));
+jest.mock('../cat-story/StoryCatLinkEditor',()=>({StoryCatLinkEditor:({onChanged,onClose}:any)=>{const React=require('react'),{Pressable,Text}=require('react-native');return React.createElement(Pressable,{accessibilityRole:'button',onPress:async()=>{await onChanged();onClose();}},React.createElement(Text,null,'Finish link edit'));}}));
 const mockGet=jest.fn(),mockList=jest.fn(),mockReply=jest.fn();
 let mockFocus:()=>void;
 let mockOwner:string|null|undefined='owner-a';
@@ -13,11 +16,11 @@ jest.mock('./community',()=>({getCommunityPost:(...a:unknown[])=>mockGet(...a),l
 jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:mockOwner,failed:false,reload:jest.fn(),pin:()=>{const owner=mockOwner;return async()=>owner===mockOwner;}})}));
 jest.mock('../community/CommunityContentActions',()=>({CommunityContentActions:()=>null}));
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'zh-CN'})}));
-jest.mock('expo-router',()=>({useFocusEffect:(fn:()=>void)=>{mockFocus=fn;},useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread})}));
+jest.mock('expo-router',()=>({useFocusEffect:(fn:()=>void)=>{mockFocus=fn;},useRouter:()=>({push:mockPush,canGoBack:()=>false,replace:jest.fn()}),useLocalSearchParams:()=>({id:mockThread,editCat:mockEditCat})}));
 const mockExtras=jest.fn();
 jest.mock('./community-extras',()=>({getCommunityPostExtras:(...args:unknown[])=>mockExtras(...args),communityMediaUrl:(postId:string,mediaId:string)=>`https://media.test/${postId}/${mediaId}`}));
 import CommunityDetailScreen from '../../app/community/[id]';
-beforeEach(()=>{mockOwner='owner-a';});
+beforeEach(()=>{mockOwner='owner-a';mockEditCat=undefined;mockLinkGet.mockRejectedValue(new Error('story_link_unavailable'));});
 beforeEach(()=>{jest.clearAllMocks();mockThread='00000000-0000-4000-8000-000000000001';mockGet.mockImplementation(async(id:string)=>({postId:id,body:'Neighbour question',createdAt:'2026-09-09T00:00:00Z',author:{name:'Neighbour',avatarKey:'cat'},canDelete:false,replyCount:0,communitySlug:'clementi',catId:'00000000-0000-4000-8000-000000000050'}));mockList.mockResolvedValue({items:[],nextCursor:null});mockExtras.mockResolvedValue(new Map());mockReactions.mockResolvedValue(new Map([[mockThread,{postId:mockThread,liked:false,likeCount:3}]]));mockLike.mockResolvedValue({postId:mockThread,liked:true,likeCount:4});});
 it('keeps the editable reply and send action outside the long post scroll, inside keyboard avoidance',async()=>{
  const view=await render(<CommunityDetailScreen/>);
@@ -129,4 +132,24 @@ it('clears a previous account pull indicator when its request finishes late',asy
  await act(async()=>{finish({...parent,body:'Previous account story'});});
  expect(view.queryByText('Previous account story')).toBeNull();
  expect(view.getByTestId('screen-scroll').props.refreshControl.props.refreshing).toBe(false);await view.unmount();
+});
+
+it('opens the later-link route only for the verified author and refreshes original context',async()=>{
+ mockEditCat='1';const parent={postId:mockThread,body:'My story',createdAt:'2026-09-09T00:00:00Z',author:{name:'Me',avatarKey:'cat'},canDelete:true,replyCount:0,catId:null,communitySlug:'bishan'};mockGet.mockResolvedValue(parent);
+ const v=await render(<CommunityDetailScreen/>);await v.findByText('Finish link edit');mockGet.mockResolvedValue({...parent,catId:'00000000-0000-4000-8000-000000000050'});
+ await fireEvent.press(v.getByText('Finish link edit'));await v.findByText('Mochi');expect(v.queryByText('Finish link edit')).toBeNull();await v.unmount();
+});
+it('does not open the editor for another author even with editCat in the URL',async()=>{
+ mockEditCat='1';const v=await render(<CommunityDetailScreen/>);await v.findByText('Neighbour question');expect(v.queryByText('Finish link edit')).toBeNull();await v.unmount();
+});
+it('offers owner-only repair when the public post is unavailable through its old cat',async()=>{
+ mockGet.mockRejectedValue(new Error('community_post_hidden'));mockLinkGet.mockResolvedValue({postId:mockThread,catId:'00000000-0000-4000-8000-000000000050',communitySlug:'bishan',revision:1});
+ const v=await render(<CommunityDetailScreen/>);await fireEvent.press(await v.findByLabelText('更正猫咪关联'));await v.findByText('Finish link edit');expect(v.queryByText('Neighbour question')).toBeNull();await v.unmount();
+});
+
+it('forces a fresh post read after editing while an older focus read is in flight',async()=>{
+ mockEditCat='1';const parent={postId:mockThread,body:'My story',createdAt:'2026-09-09T00:00:00Z',author:{name:'Me',avatarKey:'cat'},canDelete:true,replyCount:0,catId:null,communitySlug:'bishan'};mockGet.mockResolvedValue(parent);
+ const v=await render(<CommunityDetailScreen/>);await v.findByText('Finish link edit');let late!:(v:unknown)=>void;
+ mockGet.mockImplementationOnce(()=>new Promise(resolve=>{late=resolve;})).mockResolvedValue({...parent,catId:'00000000-0000-4000-8000-000000000050'});
+ await act(async()=>mockFocus());await fireEvent.press(v.getByText('Finish link edit'));await v.findByText('Mochi');await act(async()=>late(parent));expect(v.getByText('Mochi')).toBeTruthy();await v.unmount();
 });

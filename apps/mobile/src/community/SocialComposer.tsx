@@ -1,3 +1,6 @@
+import { CatPicker } from '../cat-story/CatPicker';
+import { getPublicCatSummary, type PublicCatSummary } from '../api/cats';
+import { localizedCatName } from '../i18n/cat-name';
 import {Gesture,GestureDetector,GestureHandlerRootView} from 'react-native-gesture-handler';
 import {ComposerPhotoEditor} from './ComposerPhotoEditor';
 import {ComposerPhotoGrid} from './ComposerPhotoGrid';
@@ -25,6 +28,10 @@ export function SocialComposer(){
  const params=useLocalSearchParams<{draftId?:string;communitySlug?:string;catId?:string}>();
  const [draft,setDraft]=useState<SocialDraft|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[picker,setPicker]=useState(false),[search,setSearch]=useState(''),[previews,setPreviews]=useState<Record<string,string>>({}),[locating,setLocating]=useState(false),[locationNotice,setLocationNotice]=useState('');
  const [dragging,setDragging]=useState(false);
+ const [catPicker,setCatPicker]=useState(false),[selectedCat,setSelectedCat]=useState<PublicCatSummary|null>(null),[catStatus,setCatStatus]=useState<'none'|'loading'|'ready'|'unavailable'|'failed'>('none'),[catRetry,setCatRetry]=useState(0),[publicationDeleted,setPublicationDeleted]=useState(false);
+ const pendingUnlink=useRef(false);
+ useEffect(()=>{let active=true;setSelectedCat(null);setCatStatus(draft?.catId?'loading':'none');if(draft?.catId&&draft.ownerId===auth.owner)void getPublicCatSummary(draft.catId).then(cat=>{if(active){setSelectedCat(cat);setCatStatus(cat?'ready':'unavailable');}}).catch(()=>{if(active)setCatStatus('failed');});return()=>{active=false;};},[draft?.catId,draft?.ownerId,auth.owner,catRetry]);
+
  const [photoMenu,setPhotoMenu]=useState<string|null>(null),[photoEditor,setPhotoEditor]=useState<{image:import('./post-draft').SocialImage;uri:string}|null>(null);
  const pendingPhotoAction=useRef<{owner:string|null;run:()=>void}|null>(null);
  const [photoHandoff,setPhotoHandoff]=useState(false);
@@ -60,7 +67,7 @@ export function SocialComposer(){
  },[]);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;pendingPhotoAction.current=null;if(timer.current)clearTimeout(timer.current);const last=live.current;if(last&&last.phase==='editing'&&!operation.current)void persist(last).catch(()=>{});scope.current.dispose();editorScope.current.dispose();};},[persist]);
  useEffect(()=>{
-  let active=true;pendingPhotoAction.current=null;setPhotoHandoff(false);pendingArea.current=null;manualArea.current=false;live.current=null;setDraft(null);setDragging(false);setPhotoMenu(null);closePhoto();setPreviews({});setNotice('');scope.current.dispose();scope.current=createSocialPreviewScope();
+  let active=true;setCatPicker(false);pendingUnlink.current=false;setPublicationDeleted(false);pendingPhotoAction.current=null;setPhotoHandoff(false);pendingArea.current=null;manualArea.current=false;live.current=null;setDraft(null);setDragging(false);setPhotoMenu(null);closePhoto();setPreviews({});setNotice('');scope.current.dispose();scope.current=createSocialPreviewScope();
   if(!auth.owner)return;
   const owner=auth.owner;
   void (async()=>{
@@ -129,12 +136,12 @@ export function SocialComposer(){
   const owner=initial.ownerId,current=()=>alive.current&&context.current===owner;
   try{
    await persist(initial);const postId=await publishSocialDraft(owner,initial.id,socialDraftStore,createSocialTransport(owner,current));
-   if(current()){live.current=null;router.replace(`/community/${postId}` as never);}
-  }catch{if(current()){const saved=await socialDraftStore.read(owner,initial.id).catch(()=>null);if(saved){revision.current.set(saved.id,saved.revision);put(saved);}setNotice(zh?'发布未完成，草稿已保留。请检查连接和参与资格后重试。':'Post not completed. Your draft is kept. Check connection and contributor eligibility, then retry.');}}
+   if(current()){live.current=null;router.replace(`/community/published?postId=${postId}` as never);}
+  }catch(error){if(current()){const saved=await socialDraftStore.read(owner,initial.id).catch(()=>null);if(saved){revision.current.set(saved.id,saved.revision);put(saved);}const reason=error instanceof Error?error.message:'';setPublicationDeleted(reason==='community_post_deleted');if(reason==='community_cat_not_available')setCatStatus('unavailable');setNotice(reason==='community_cat_not_available'?(zh?'所选猫已不可用，请改选；文字和照片都已保留。':'Selected cat unavailable. Choose another; your text and photos are kept.'):reason==='community_post_deleted'?(zh?'上次发布的帖子已删除，此草稿不会再次发布。':'The previous post was deleted. This draft will not publish again.'):(zh?'发布未完成，草稿已保留。请检查连接和参与资格后重试。':'Post not completed. Your draft is kept. Check connection and contributor eligibility, then retry.'));}}
   finally{operation.current=false;if(alive.current)setBusy(false);}
  };
  const locked=busy||photoHandoff||!!photoMenu||!!photoEditor||draft?.phase==='publishing';
- const publishDisabled=busy||dragging||photoHandoff||!draft||!draft.body.trim()||(!draft.catId&&!draft.communitySlug)||draft.ownerId!==auth.owner;
+ const publishDisabled=publicationDeleted||(draft?.phase==='editing'&&catStatus==='unavailable')||busy||dragging||photoHandoff||!draft||!draft.body.trim()||(!draft.catId&&!draft.communitySlug)||draft.ownerId!==auth.owner;
  return <GestureHandlerRootView style={{flex:1}}><ScreenScaffold compact avoidKeyboard scrollEnabled={!dragging} wrapScroll={scroll=><GestureDetector gesture={scrollGesture}>{scroll}</GestureDetector>} title={zh?'发布帖子':'New post'} header={<View style={[s.row,{justifyContent:'space-between'}]}>
   <Pressable accessibilityRole="button" accessibilityLabel={zh?'保存并关闭':'Save and close'} disabled={busy||dragging||photoHandoff} onPress={()=>void close()} style={s.touch}><Text style={{fontSize:15,color:c.actionPrimary}}>{zh?'取消':'Cancel'}</Text></Pressable>
   <Text accessibilityRole="header" style={{fontSize:17,fontWeight:'600',color:c.ink}}>{zh?'发布帖子':'New post'}</Text>
@@ -153,7 +160,8 @@ export function SocialComposer(){
    <TextInput accessibilityLabel={zh?'正文':'Caption'} placeholder={zh?'分享今天的发现…':'Share what you spotted…'} placeholderTextColor={c.muted} editable={!locked&&!dragging} value={draft.body} onChangeText={body=>edit({body})} multiline maxLength={2000} style={[s.body,{color:c.ink}]}/>
    <Pressable accessibilityRole="button" disabled={locked||dragging} onPress={()=>setPicker(true)} style={[s.touch,s.action,{borderTopWidth:StyleSheet.hairlineWidth,borderColor:c.line}]}><AppIcon name="location" color={c.actionPrimary}/><Text style={{flex:1,color:c.ink}}>{label(draft.communitySlug)??(locating?(zh?'正在定位…':'Finding your neighbourhood…'):(zh?'选择邻里':'Choose neighbourhood'))}</Text><AppIcon name="chevron" color={c.muted} size={16}/></Pressable>
    {locationNotice&&!draft.communitySlug?<Text style={{fontSize:12,color:c.muted}}>{locationNotice}</Text>:null}
-   {draft.catId?<Text style={{fontSize:13,color:c.muted}}>{zh?'已关联所选猫咪':'Linked to the selected cat'}</Text>:null}
+   <Pressable accessibilityRole="button" accessibilityLabel={zh?'选择猫咪':'Choose cat'} disabled={locked||dragging} onPress={()=>setCatPicker(true)} style={[s.touch,s.action,{borderTopWidth:StyleSheet.hairlineWidth,borderColor:c.line}]}><AppIcon name="cat" color={c.actionPrimary}/><View style={{flex:1,gap:3}}><Text style={{color:c.ink,fontSize:14}}>{draft.catId?(catStatus==='unavailable'?(zh?'所选猫已不可用':'Selected cat unavailable'):selectedCat?localizedCatName(selectedCat.animalId,selectedCat.primaryAlias,locale):(zh?'查看所选猫':'Check selected cat')):(zh?'关联猫咪（可选）':'Link a cat (optional)')}</Text>{!draft.catId?<Text style={{color:c.muted,fontSize:12}}>{zh?'不确定或多只猫，可只选择邻里':'Unknown or several cats? A neighbourhood is enough.'}</Text>:null}</View><AppIcon name="chevron" color={c.muted} size={16}/></Pressable>
+   {catStatus==='failed'?<Pressable accessibilityRole="button" onPress={()=>setCatRetry(n=>n+1)} style={s.touch}><Text style={{color:c.actionPrimary}}>{zh?'重试读取猫档案':'Retry cat profile'}</Text></Pressable>:null}
    {draft.phase==='publishing'?<Text style={{color:c.muted,fontSize:13}}>{zh?'正在确认上次发布；重试将继续同一帖子。':'Confirming the previous attempt. Retry continues the same post.'}</Text>:null}
 
   </>:null}
@@ -170,7 +178,8 @@ export function SocialComposer(){
     [zh?'移除照片':'Remove photo',()=>edit({images:draft.images.filter(image=>image.id!==photoMenu)})],
    ] as const).map(([label,action])=><Pressable key={label} accessibilityRole="button" onPress={()=>{if(Platform.OS==='ios'&&(label===(zh?'编辑照片':'Edit photo')||label===(zh?'替换照片':'Replace photo'))){pendingPhotoAction.current={owner:context.current??null,run:action};setPhotoHandoff(true);setPhotoMenu(null);}else{setPhotoMenu(null);action();}}} style={{minHeight:48,justifyContent:'center',borderBottomWidth:0.5,borderColor:c.line}}><Text style={{color:label===(zh?'移除照片':'Remove photo')?c.danger:c.ink,fontSize:15}}>{label}</Text></Pressable>):null}
   </View></View></Modal>
-  <Modal visible={picker} animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setPicker(false)}><ScreenScaffold title={zh?'选择邻里':'Choose neighbourhood'} trailing={<Pressable onPress={()=>setPicker(false)} style={s.touch}><AppIcon name="close" color={c.ink}/></Pressable>}><TextInput accessibilityLabel={zh?'搜索邻里':'Search neighbourhood'} value={search} onChangeText={setSearch} placeholder={zh?'西海岸、金文泰…':'West Coast, Clementi…'} placeholderTextColor={c.muted} style={[s.title,{color:c.ink}]}/>{browseSingaporeCommunities(search).map(area=><Pressable accessibilityRole="button" key={area.id} onPress={()=>{manualArea.current=true;edit({communitySlug:area.id});setPicker(false);}} style={s.touch}><Text style={{color:c.ink}}>{communityLabel(area,locale)}</Text></Pressable>)}</ScreenScaffold></Modal>
+  {catPicker&&draft&&draft.ownerId===auth.owner?<Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>setCatPicker(false)}><CatPicker selectedCatId={draft.catId} communitySlug={draft.communitySlug} owner={draft.ownerId} locale={locale} onCancel={()=>setCatPicker(false)} onConfirm={id=>{setCatPicker(false);if(id===null&&!live.current?.communitySlug&&live.current?.catId){pendingUnlink.current=true;setNotice(zh?'先选择邻里，再取消单猫关联。':'Choose a neighbourhood to remove the single-cat link.');setPicker(true);}else edit({catId:id});}}/></Modal>:null}
+  <Modal visible={picker} animationType="slide" presentationStyle="pageSheet" onRequestClose={()=>{pendingUnlink.current=false;setPicker(false);}}><ScreenScaffold title={zh?'选择邻里':'Choose neighbourhood'} trailing={<Pressable accessibilityLabel={zh?'取消邻里选择':'Cancel neighbourhood selection'} onPress={()=>{pendingUnlink.current=false;setPicker(false);}} style={s.touch}><AppIcon name="close" color={c.ink}/></Pressable>}><TextInput accessibilityLabel={zh?'搜索邻里':'Search neighbourhood'} value={search} onChangeText={setSearch} placeholder={zh?'西海岸、金文泰…':'West Coast, Clementi…'} placeholderTextColor={c.muted} style={[s.title,{color:c.ink}]}/>{browseSingaporeCommunities(search).map(area=><Pressable accessibilityRole="button" key={area.id} onPress={()=>{manualArea.current=true;edit({communitySlug:area.id,...(pendingUnlink.current?{catId:null}:{})});pendingUnlink.current=false;setPicker(false);}} style={s.touch}><Text style={{color:c.ink}}>{communityLabel(area,locale)}</Text></Pressable>)}</ScreenScaffold></Modal>
  </ScreenScaffold></GestureHandlerRootView>;
 }
 const s=StyleSheet.create({touch:{minWidth:44,minHeight:44,justifyContent:'center'},row:{flexDirection:'row',alignItems:'center',gap:8},action:{flexDirection:'row',alignItems:'center',gap:8,paddingVertical:10,paddingHorizontal:4},title:{fontSize:15,fontWeight:'500',minHeight:44,borderBottomWidth:StyleSheet.hairlineWidth},body:{fontSize:15,lineHeight:23,minHeight:120,textAlignVertical:'top'},publish:{minWidth:66,paddingHorizontal:12,minHeight:44,borderRadius:14,alignItems:'center',justifyContent:'center'}});

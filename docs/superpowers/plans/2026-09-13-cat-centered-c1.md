@@ -5,7 +5,7 @@
 **Goal:** 同一只猫汇集不同贡献者的可见故事；从猫主页分享、未知分享和本人更正均能完成，并保留原帖身份。
 **Spec:** [猫主体设计基线](../specs/2026-09-13-cat-centered-product-design.md)；[路线 v4](../../iteration-roadmap-v4.md)。
 **Visual target:** [C0 三页与边界状态](../../design/cat-centered-c0/index.html)。
-**Status:** C0 契约与任务拆分；以下新增接口和迁移均尚未实现。实施前检查编号占用。
+**Status:** Task 1–3 已实现并通过定向与独立审查；Task 4 统一验证与 0.4.15（23）候选交付进行中，真机验收保留待测。
 
 ## 当前源码与兼容依据
 
@@ -70,37 +70,41 @@ RPC `change_my_story_cat_link(p_post_id uuid, p_cat_id uuid|null, p_community_sl
 - `auth.uid()` 为作者且成年参与资格有效、无删除中的账户；帖未删除、未隐藏；新猫当前可见。旧猫不可用时，允许作者通过自己的管理入口取消／改选，不能因旧猫不可见锁死修复。此管理读取不向他人或聚合暴露旧猫信息。
 - 事务内锁顺序对齐既有创建／删除（先当前用户，再帖子；审核、删除和更正争用同一帖行）。检测当前 revision 与 expected 完全一致后改 cat_id 并加1；同值 no-op 不加1。增加私有审计表，记录 actor、post、old/new cat、revision、requestId；账户删除时按既有删除规则清除／匿名化，不公开审计详情。
 - `(actor,requestId)` 唯一、完整载荷指纹含 expectedRevision 和邻里；同键同载荷重放返回原操作结果但不再次写，客户端随后重读当前状态；同键异载荷 `idempotency_conflict`。不同键过期版本 `story_link_conflict`，重读并要求用户确认新意图，不能自动覆盖。
-- 明确事务校验顺序：当前账户资格/作者/帖未删除未隐藏 → 用户、帖及请求锁 → 同 requestId 完整载荷比较并重放已有结果 → 仅对新操作检查新猫当前可见及 expectedRevision。若成功更正后的猫随后不可用，重放仍返回原结果并立即重读当前管理状态，不再次写；客户端不得将旧结果覆盖较新 revision。相反，帖已删除或隐藏时先拒绝，即使是同键重放也不返回旧可见摘要。删除后的旧请求不得复活关联。并发删除/隐藏/新猫失效的事务行为用 dblink 测试，不以单线程 mock 替代。
+- 明确事务校验顺序：当前账户资格/作者/帖未删除未隐藏 → 用户、帖及请求锁 → 同 requestId 完整载荷比较并重放已有结果 → 仅对新操作检查新猫当前可见及 expectedRevision。若成功更正后的猫随后不可用，重放仍返回原结果并立即重读当前管理状态，不再次写；客户端不得将旧结果覆盖较新 revision。相反，帖已删除或隐藏时先拒绝，即使是同键重放也不返回旧可见摘要。删除后的旧请求不得复活关联。并发删除/隐藏/新猫失效的事务行为用 dblink 测试，不以单线程 mock 替代。具体用例独立放在 `047_story_link_concurrency.sql`，避免远端事务夹杂在 046 单会话回滚中。
 - `cat_unavailable`、`neighbourhood_required`、`story_link_conflict`、`idempotency_conflict` 为可识别错误；无权限和不存在统一 `story_link_unavailable`；网络错保留同 requestId 供重试。禁止从客户端提交 actor。
 - 不复制帖子、不换 postId、不改变作者/评论/附件，也不调用身份审核、报告或照护写接口。初始故事按现有 created_at 排序；C2 会通过服务器变更事件处理“新关联可见”的回访更新，不能把旧帖 created_at 当新关联事件时间。
 - 改关联后旧/新猫主页及原帖焦点刷新，缓存按账户隔离。未完成 C2 前不伪造更新徽章。第三方继续 `reportCommunityContent`；身份资料纠错使用已有身份流程，两者不能混淆。
+
+### 实施补充 · 旧猫不可见后的管理可达性
+
+新增 `list_my_story_link_repairs(p_cursor uuid|null, p_limit integer)`，返回最多 20 项本人尚未删除／隐藏且旧猫不可见的帖子：四个关联管理字段加本人 `title`（最多120字）和 `createdAt`。游标使用本人帖的 `(created_at,id)`；只给 authenticated，资格和注销中状态与管理接口一致。它不修改既有公开九字段列表，也不向他人暴露旧猫信息。“我的”帖子页显示紧凑的待更正入口，修复后焦点刷新移除。
 
 ## 任务顺序及 TDD
 
 ### Task 1 · 只读投影与猫主页
 
-- [ ] 在 045 SQL 和 `api/cat-stories.test.ts` 写失败用例：两作者同猫、不同猫、相同时间分页、删除锚点续页、双向屏蔽、猫失效、私图排除、缺附件、错误返回。
-- [ ] 实现契约 A；`CatStoryList.test.tsx` 覆盖加载/空/错误/重试/分页/账户与猫切换迟到响应，以及作者/原帖各自入口。
-- [ ] 修改 `CatDetailScreen.tsx` 与 `app/cat/[id].tsx`，按 C0 主次与公开信息实现；保留 `CatCommunityContext` 的足迹、报告、照护、关注和纠错入口，去掉重复的整页“讨论这只猫”入口。运行现有 cat-route/CatDetailScreen 回归。
-- [ ] 独立只读权限审查，修复后小提交。不能单独把 Task1 叫做 C1 完成。
+- [x] 在 045 SQL 和 `api/cat-stories.test.ts` 写失败用例：两作者同猫、不同猫、相同时间分页、删除锚点续页、双向屏蔽、猫失效、私图排除、缺附件、错误返回。
+- [x] 实现契约 A；`CatStoryList.test.tsx` 覆盖加载/空/错误/重试/分页/账户与猫切换迟到响应，以及作者/原帖各自入口。
+- [x] 修改 `CatDetailScreen.tsx` 与 `app/cat/[id].tsx`，按 C0 主次与公开信息实现；保留 `CatCommunityContext` 的足迹、报告、照护、关注和纠错入口，去掉重复的整页“讨论这只猫”入口。运行现有 cat-route/CatDetailScreen 回归。
+- [x] 独立只读权限审查，修复后小提交。不能单独把 Task1 叫做 C1 完成。
 
 ### Task 2 · 选猫、已发布回流、失败恢复
 
-- [ ] `CatPicker.test.tsx` / `SocialComposer.test.tsx`：预选、改选、取消、未知邻里、空关注、候选失败重试、隐藏目标、旧草稿、账户切换。
-- [ ] `post-publisher.test.ts` / 新 `post-transport.test.ts`：最终目标拒绝可恢复、失联不生成新帖、旧请求对账后更正、媒体到期保留输入；不得弱化原有上传验证。新增 SQL/传输回归必须覆盖：创建成功但响应丢失 → 猫隐藏 → 原键原载荷重放得到同一 postId → 结果页显示不可用且数据库仍只有一帖；删除后的重放为终态。
-- [ ] `PublicationResult.test.tsx`：已知/未知路由、隐藏原帖、猫关联已更正、换账户、刷新不写。
-- [ ] 实现契约 B；重跑六格、编辑、排序、加密恢复用例；独立只读审查后小提交。
+- [x] `CatPicker.test.tsx` / `SocialComposer.test.tsx`：预选、改选、取消、未知邻里、空关注、候选失败重试、隐藏目标、旧草稿、账户切换。
+- [x] `post-publisher.test.ts` / 新 `post-transport.test.ts`：最终目标拒绝可恢复、失联不生成新帖、旧请求对账后更正、媒体到期保留输入；不得弱化原有上传验证。新增 SQL/传输回归必须覆盖：创建成功但响应丢失 → 猫隐藏 → 原键原载荷重放得到同一 postId → 结果页显示不可用且数据库仍只有一帖；删除后的重放为终态。
+- [x] `PublicationResult.test.tsx`：已知/未知路由、隐藏原帖、猫关联已更正、换账户、刷新不写。
+- [x] 实现契约 B；重跑六格、编辑、排序、加密恢复用例；独立只读审查后小提交。
 
 ### Task 3 · 更正及并发一致性
 
-- [ ] 046 SQL：未知→A→B→null；同键重试、异载荷冲突、两设备版本竞争、成功更正后新猫失效再重放、非作者、旧猫失效、新猫失效、删除/隐藏竞争、缺邻里、账户删除清理。
-- [ ] `story-cat-link.test.ts` 严格解析/错误映射；`StoryCatLinkEditor.test.tsx` 覆盖预览/选择/确认/取消/迟到/冲突；`community-thread.test.tsx` 覆盖更正后上下文和真实帖子身份。
-- [ ] 实现契约 C，隐藏/删除/更正后的两个猫主页均重新校验，不返回旧摘要；独立并发与权限审查后小提交。
+- [x] 046 SQL：未知→A→B→null；同键重试、异载荷冲突、两设备版本竞争、成功更正后新猫失效再重放、非作者、旧猫失效、新猫失效、删除/隐藏竞争、缺邻里、账户删除清理。
+- [x] `story-cat-link.test.ts` 严格解析/错误映射；`StoryCatLinkEditor.test.tsx` 覆盖预览/选择/确认/取消/迟到/冲突；`community-thread.test.tsx` 覆盖更正后上下文和真实帖子身份。
+- [x] 实现契约 C，隐藏/删除/更正后的两个猫主页均重新校验，不返回旧摘要；独立并发与权限审查后小提交。
 
 ### Task 4 · 统一交付
 
 - [ ] 两位标注演示作者的一只演示猫走读；不新增虚假真实互动、关注或照护。C3 才整理四猫连续样本。
-- [ ] 更新迁移清单 `scripts/pilot-gate-2b-inputs.mjs` 及相关 inventory / evidence 测试，不修改已部署迁移。运行新增 pgTAP + 既有数据库全套、`pnpm verify` 和必要 CI。
+- [x] 更新迁移清单 `scripts/pilot-gate-2b-inputs.mjs` 及相关 inventory / evidence 测试，不修改已部署迁移。运行新增 pgTAP + 既有数据库全套、`pnpm verify` 和必要 CI。
 - [ ] 后端部署验证、证据晋升、原生构建及 IPA 来源检查；版本在真实候选时确定。一次集中设备测试：两账户同猫贡献、更正删除、未知分享、旧草稿恢复、换账户、浅深色/中英/大字/断网。
 - [ ] 台账逐项记录，未测真机就写待测；C2/C3 和研究价值均不因 C1 通过而完成。
 

@@ -1,3 +1,4 @@
+import {StoryLinkRepairs} from '../cat-story/StoryLinkRepairs';
 import {useCallback,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,StyleSheet,Text,View,useWindowDimensions} from 'react-native';
 import {useFocusEffect,useRouter} from 'expo-router';
@@ -17,6 +18,7 @@ function OwnerPosts(props:Props){
  const [mode,setMode]=useState<Mode>('posts');
  return <View style={s.section}>
   <View style={[s.tabs,{borderColor:c.line}]}>{(['posts','photos'] as const).map(tab=><Pressable key={tab} accessibilityRole="tab" accessibilityState={{selected:mode===tab}} onPress={()=>setMode(tab)} style={[s.tab,mode===tab&&{borderBottomColor:c.actionPrimary,borderBottomWidth:2}]}><Text style={{fontSize:14,fontWeight:'600',color:mode===tab?c.actionPrimary:c.muted}}>{tab==='posts'?(cn?'帖子':'Posts'):(cn?'照片':'Photos')}</Text></Pressable>)}</View>
+  {mode==='posts'?<StoryLinkRepairs {...props} locale={locale}/>:null}
   <Collection key={mode} {...props} mode={mode}/>
  </View>;
 }

@@ -72,3 +72,15 @@ it('batch management cannot delete another owner or an editing row that became p
  const second=await store.save(owner,createSocialDraft(owner,other,rid,now));await store.removeEditing(owner,second.id);
  expect(await store.read(owner,second.id)).toBeNull();sqlite.close();
 });
+
+it('reopens a six-photo attempt without changing local order, captions, target or bytes',async()=>{
+ const {store,sqlite}=setup();const base=await photo();
+ const images=Array.from({length:6},(_,i)=>({...base,id:`00000000-0000-4000-8000-00000000410${i}`,requestId:`00000000-0000-4000-8000-00000000430${i}`,mediaId:`00000000-0000-4000-8000-00000000440${i}`})).reverse();
+ let saved=await store.save(owner,{...createSocialDraft(owner,id,rid,now),title:'Six moments',body:'Keep all six',catId:other,communitySlug:'bishan',images},images.map(image=>({imageId:image.id,thumb,display})));
+ saved=await store.save(owner,freezeSocialDraft(saved,now));
+ let n=0;const reopened=await store.reopenExpired(owner,id,rid,()=>`00000000-0000-4000-8000-00000000420${n++}`);
+ expect(reopened).toMatchObject({phase:'editing',title:saved.title,body:saved.body,catId:other,communitySlug:'bishan'});
+ expect(reopened.images.map(image=>image.id)).toEqual(images.map(image=>image.id));
+ for(const image of reopened.images){expect(image.mediaId).toBeUndefined();expect(await store.readImage(owner,id,image.id)).toEqual({imageId:image.id,thumb,display});}
+ expect(reopened.requestId).not.toBe(rid);sqlite.close();
+});

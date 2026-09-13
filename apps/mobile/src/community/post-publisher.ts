@@ -11,6 +11,8 @@ export interface SocialTransport {
  publish(draft:SocialDraft):Promise<string>;
 }
 export class SocialMediaExpiredError extends Error{constructor(){super('community_media_expired');}}
+/** Server-only rejection after request reconciliation: no post was created. */
+export class SocialTargetUnavailableError extends Error{constructor(){super('community_cat_not_available');}}
 function record(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}
 function upload(value:unknown,jobId:string,variant:string,origin:string):{signedUrl:string;token:string}{
  if(!record(value)||typeof value.signedUrl!=='string'||typeof value.token!=='string'||!value.token)throw new Error('invalid_social_upload');
@@ -72,7 +74,7 @@ export async function publishSocialDraft(owner:string,id:string,store:PublisherS
   await t.assertOwner(owner);let postId:string;
   try{postId=await t.publish(draft);}
   catch(error){
-   if(error instanceof SocialMediaExpiredError){await t.assertOwner(owner);await store.reopenExpired(owner,id,draft.requestId,t.newId);}
+   if(error instanceof SocialMediaExpiredError || error instanceof SocialTargetUnavailableError){await t.assertOwner(owner);await store.reopenExpired(owner,id,draft.requestId,t.newId);}
    throw error;
   }
   await t.assertOwner(owner);

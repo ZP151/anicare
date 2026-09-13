@@ -16,7 +16,7 @@ const mockReplace = jest.fn();
 const mockRpc = jest.fn();
 const mockCreateSighting = jest.fn();
 const mockIds = jest.fn();
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, replace: mockReplace }), useLocalSearchParams: () => mockParams, useFocusEffect: () => {} }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush, replace: mockReplace }), useLocalSearchParams: () => mockParams, useFocusEffect: (fn:()=>void) => require('react').useEffect(fn,[fn]) }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => mockIds() }));
 jest.mock('../api/supabase', () => ({ getSupabaseClient: () => ({ rpc: mockRpc, auth: { getSession: async () => ({ data: { session: { user: { id: mockOwner }, access_token: 'test-token' } } }) } }) }));
 jest.mock('../auth/session-subject', () => ({ readSessionSubjectStrict: async () => mockOwner, subscribeSessionSubject: () => () => {} }));

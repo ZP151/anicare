@@ -6,7 +6,7 @@ let mockSubject:string|null=mockOwner;
 let mockListener:(subject:string|null)=>void=()=>{};
 const mockRpc=jest.fn(); const mockPush=jest.fn(); const mockStorage=new Map<string,string>();
 let mockParams={id:mockAnimal};
-jest.mock('expo-router',()=>({useLocalSearchParams:()=>mockParams,useRouter:()=>({push:mockPush})}));
+jest.mock('expo-router',()=>({useFocusEffect:(fn:()=>void)=>require('react').useEffect(fn,[fn]),useLocalSearchParams:()=>mockParams,useRouter:()=>({push:mockPush})}));
 jest.mock('expo-crypto',()=>({randomUUID:()=> '00000000-0000-4000-8000-000000008009'}));
 jest.mock('expo-secure-store',()=>({getItemAsync:async(key:string)=>mockStorage.get(key)??null,setItemAsync:async(key:string,value:string)=>{mockStorage.set(key,value);},deleteItemAsync:async(key:string)=>{mockStorage.delete(key);}}));
 jest.mock('../api/supabase',()=>({getSupabaseClient:()=>({rpc:mockRpc})}));

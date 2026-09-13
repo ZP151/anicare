@@ -8,6 +8,9 @@ let mockOwner:string|null=mockOwnerId;
 let mockSaved:any;
 let mockParams:any={draftId:mockDraftId};
 const mockLocation=jest.fn(),mockReadImage=jest.fn(async()=>({thumb:new Uint8Array([1])}));
+const mockCatSummary=jest.fn();
+jest.mock('../api/cats',()=>({getPublicCatSummary:(...args:unknown[])=>mockCatSummary(...args)}));
+jest.mock('../cat-story/CatPicker',()=>({CatPicker:({onConfirm,onCancel}:any)=>{const React=require('react');const {Pressable,Text}=require('react-native');return React.createElement(React.Fragment,null,React.createElement(Pressable,{accessibilityRole:'button',accessibilityLabel:'No single cat',onPress:()=>onConfirm(null)},React.createElement(Text,null,'No single cat')),React.createElement(Pressable,{accessibilityRole:'button',accessibilityLabel:'Pick another cat',onPress:()=>onConfirm('00000000-0000-4000-8000-000000004511')},React.createElement(Text,null,'Pick another cat')),React.createElement(Pressable,{accessibilityRole:'button',accessibilityLabel:'Cancel cat picker',onPress:onCancel},React.createElement(Text,null,'Cancel cat picker')));}}));
 jest.mock('../maps/device-location',()=>({requestDeviceLocation:()=>mockLocation()}));
 const mockSave=jest.fn(async(_owner:string,value:any)=>{mockSaved={...value,revision:value.revision+1};return mockSaved;});
 const mockBack=jest.fn(),mockReplace=jest.fn(),mockDispose=jest.fn(),mockPublish=jest.fn();
@@ -22,7 +25,7 @@ jest.mock('./post-publisher',()=>({publishSocialDraft:(...args:any[])=>mockPubli
 import {State} from 'react-native-gesture-handler';
 import {fireGestureHandler,getByGestureTestId} from 'react-native-gesture-handler/jest-utils';
 import {SocialComposer} from './SocialComposer';
-beforeEach(()=>{jest.clearAllMocks();mockParams={draftId:mockDraftId};mockLocation.mockResolvedValue({kind:'denied'});mockReadImage.mockResolvedValue({thumb:new Uint8Array([1])});mockOwner=mockOwnerId;mockSaved={schemaVersion:1,id:mockDraftId,ownerId:mockOwnerId,requestId:mockDraftId,title:'Saved caption',body:'Mochi beside the garden',communitySlug:'sg-clsz05',catId:null,images:[],phase:'editing',revision:1,updatedAt:'2026-09-11T00:00:00.000Z'};});
+beforeEach(()=>{jest.clearAllMocks();mockCatSummary.mockResolvedValue({animalId:"00000000-0000-4000-8000-000000004511",primaryAlias:"Pepper",verification:"reported",timeBucket:null});mockParams={draftId:mockDraftId};mockLocation.mockResolvedValue({kind:'denied'});mockReadImage.mockResolvedValue({thumb:new Uint8Array([1])});mockOwner=mockOwnerId;mockSaved={schemaVersion:1,id:mockDraftId,ownerId:mockOwnerId,requestId:mockDraftId,title:'Saved caption',body:'Mochi beside the garden',communitySlug:'sg-clsz05',catId:null,images:[],phase:'editing',revision:1,updatedAt:'2026-09-11T00:00:00.000Z'};});
 it('restores the draft and saves the latest text before closing',async()=>{
  const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');
  await fireEvent.changeText(view.getByLabelText('Caption'),'Updated before leaving');await fireEvent.press(view.getByLabelText('Save and close'));
@@ -168,4 +171,30 @@ it('waits for the iOS actions sheet to dismiss before presenting the photo edito
  expect(view.queryByLabelText('Rotate photo')).toBeNull();expect(view.getByLabelText('Post').props.accessibilityState.disabled).toBe(true);
  await fireEvent.press(view.getByLabelText('Post'));expect(mockPublish).not.toHaveBeenCalled();
  await act(async()=>dismissed());await view.findByLabelText('Rotate photo');await view.unmount();
+});
+
+it('restores all input when a previously linked cat is unavailable and allows a new selection',async()=>{
+ mockSaved.catId='00000000-0000-4000-8000-000000004512';mockCatSummary.mockResolvedValueOnce(null);
+ const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');
+ await view.findByText('Selected cat unavailable');expect(view.getByDisplayValue('Mochi beside the garden')).toBeTruthy();
+ await fireEvent.press(view.getByRole('button',{name:'Choose cat'}));
+ await fireEvent.press(view.getByRole('button',{name:'Pick another cat'}));
+ await view.findByText('Pepper');await fireEvent.press(view.getByLabelText('Save and close'));
+ expect(mockSaved.catId).toBe('00000000-0000-4000-8000-000000004511');expect(mockSaved.body).toBe('Mochi beside the garden');
+});
+it('routes a completed publication through the persisted result page',async()=>{
+ mockPublish.mockResolvedValue('00000000-0000-4000-8000-000000004599');
+ const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');
+ await fireEvent.press(view.getByLabelText('Post'));
+ await waitFor(()=>expect(mockReplace).toHaveBeenCalledWith('/community/published?postId=00000000-0000-4000-8000-000000004599'));
+});
+
+it('cancels a pending unlink without clearing the cat on a later neighbourhood edit',async()=>{
+ mockSaved={...mockSaved,catId:'00000000-0000-4000-8000-000000004511',communitySlug:null};
+ const view=await render(<SocialComposer/>);await view.findByDisplayValue('Saved caption');
+ await fireEvent.press(view.getByLabelText('Choose cat'));await fireEvent.press(view.getByLabelText('No single cat'));
+ await fireEvent.press(view.getByLabelText('Cancel neighbourhood selection'));
+ await fireEvent.press(view.getByText('Choose neighbourhood'));await fireEvent.press(view.getByText('Hougang'));
+ await fireEvent.press(view.getByLabelText('Save and close'));await waitFor(()=>expect(mockBack).toHaveBeenCalled());
+ expect(mockSaved.catId).toBe('00000000-0000-4000-8000-000000004511');expect(mockSaved.communitySlug).toBe('hougang');await view.unmount();
 });

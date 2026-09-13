@@ -1,6 +1,6 @@
 import {randomUUID} from 'expo-crypto';
 import {getSupabaseClient} from '../api/supabase';
-import {SocialMediaExpiredError,type SocialTransport} from './post-publisher';
+import {SocialMediaExpiredError,SocialTargetUnavailableError,type SocialTransport} from './post-publisher';
 
 export function createSocialTransport(ownerId:string,isCurrent:()=>boolean):SocialTransport {
  const client=getSupabaseClient();
@@ -21,6 +21,8 @@ export function createSocialTransport(ownerId:string,isCurrent:()=>boolean):Soci
   publish:async draft=>{
    await session();const {data,error}=await client!.rpc('create_community_post_with_media',{p_body:draft.body,p_title:draft.title,p_cat_id:draft.catId,p_community_slug:draft.communitySlug,p_media_ids:draft.images.map(image=>image.mediaId),p_request_id:draft.requestId});
    if(error?.code==='P0001'&&error.message==='community_media_expired')throw new SocialMediaExpiredError();
+   if(error?.code==='P0001'&&error.message==='community_cat_not_available')throw new SocialTargetUnavailableError();
+   if(error?.code==='P0001'&&error.message==='community_post_deleted')throw new Error('community_post_deleted');
    if(error||typeof data!=='string')throw new Error('social_publication_failed');return data;
   },
  };

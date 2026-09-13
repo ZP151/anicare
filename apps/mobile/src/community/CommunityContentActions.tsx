@@ -5,7 +5,7 @@ import {blockCommunityAuthor,deleteCommunityContent,reportCommunityContent} from
 import {AppIcon} from '../components/AppIcon';
 import {useNativeColors} from '../design/native-colors';
 
-export function CommunityContentActions({type,id,canDelete,zh,pin,onChanged,onNotice}:{type:'community_post'|'community_reply';id:string;canDelete:boolean;zh:boolean;pin:()=>()=>Promise<boolean>;onChanged:()=>void|Promise<void>;onNotice:(message:string)=>void}){
+export function CommunityContentActions({type,id,canDelete,zh,pin,onChanged,onNotice,onEditCat}:{type:'community_post'|'community_reply';id:string;canDelete:boolean;onEditCat?:()=>void;zh:boolean;pin:()=>()=>Promise<boolean>;onChanged:()=>void|Promise<void>;onNotice:(message:string)=>void}){
  const c=useNativeColors();const busy=useRef(false);const pending=useRef(new Map<string,string>());
  const open=()=>{
    const current=pin();
@@ -19,7 +19,7 @@ export function CommunityContentActions({type,id,canDelete,zh,pin,onChanged,onNo
      }catch{if(await current())onNotice(zh?'操作未完成，请重试。':'Could not complete the action. Please retry.');}finally{busy.current=false;}
    };
    const reasons=()=>Alert.alert(zh?'举报原因':'Report reason',undefined,[{text:zh?'垃圾信息':'Spam',onPress:()=>void run('report','spam')},{text:zh?'骚扰':'Harassment',onPress:()=>void run('report','harassment')},{text:zh?'暴露精确地点':'Precise location exposure',onPress:()=>void run('report','precise_location_exposure')},{text:zh?'取消':'Cancel',style:'cancel'}]);
-   Alert.alert(zh?'内容选项':'Content options',undefined,canDelete?[{text:zh?'删除':'Delete',style:'destructive',onPress:()=>void run('delete')},{text:zh?'取消':'Cancel',style:'cancel'}]:[{text:zh?'举报':'Report',onPress:reasons},{text:zh?'屏蔽作者':'Block author',style:'destructive',onPress:()=>void run('block')},{text:zh?'取消':'Cancel',style:'cancel'}]);
+   Alert.alert(zh?'内容选项':'Content options',undefined,canDelete?[...(type==='community_post'&&onEditCat?[{text:zh?'更正猫咪关联':'Correct cat link',onPress:()=>{void current().then(valid=>{if(valid)onEditCat();});}}]:[]),{text:zh?'删除':'Delete',style:'destructive',onPress:()=>void run('delete')},{text:zh?'取消':'Cancel',style:'cancel'}]:[{text:zh?'举报':'Report',onPress:reasons},{text:zh?'屏蔽作者':'Block author',style:'destructive',onPress:()=>void run('block')},{text:zh?'取消':'Cancel',style:'cancel'}]);
  };
  return <Pressable accessibilityRole="button" accessibilityLabel={zh?'内容选项':'Content options'} onPress={open} style={{width:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="more" size={20} color={c.muted}/></Pressable>;
 }

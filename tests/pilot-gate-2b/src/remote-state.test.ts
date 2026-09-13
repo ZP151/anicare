@@ -15,8 +15,8 @@ function env(): HostedGateEnvironment {
 describe('remote hosted deployment state', () => {
   it('requires the community cleanup schedule migration at the remote head', () => {
     expect(EXPECTED_REMOTE_MIGRATIONS.at(-1)).toEqual({
-      version: '202609130022',
-      name: 'community_media_schedule',
+      version: '202609130024',
+      name: 'story_cat_links',
     });
   });
 

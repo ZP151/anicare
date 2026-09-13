@@ -1,5 +1,5 @@
 import {createSocialDraft,editSocialDraft,type SocialDraft,type SocialImage} from './post-draft';
-import {publishSocialDraft,uploadSocialImage,type SocialTransport} from './post-publisher';
+import {publishSocialDraft,uploadSocialImage,SocialTargetUnavailableError,type SocialTransport} from './post-publisher';
 const owner='00000000-0000-4000-8000-000000004101',id='00000000-0000-4000-8000-000000004102',requestId='00000000-0000-4000-8000-000000004103',jobId='00000000-0000-4000-8000-000000004104';
 const now='2026-09-11T00:00:00.000Z',expiresAt='2026-09-11T00:15:00.000Z',origin='https://project.supabase.co';
 const variant={width:100,height:100,sha256:'a'.repeat(64),byteLength:3};
@@ -31,4 +31,19 @@ it('retains the exact frozen publication on uncertain failure and replays its re
  await expect(publishSocialDraft(owner,id,store,t)).rejects.toThrow('offline');expect(current.phase).toBe('publishing');expect(store.remove).not.toHaveBeenCalled();
  await expect(publishSocialDraft(owner,id,store,t)).resolves.toBe(jobId);
  expect((t.publish as jest.Mock).mock.calls[0]?.[0]).toEqual((t.publish as jest.Mock).mock.calls[1]?.[0]);expect(store.remove).toHaveBeenCalledWith(owner,id);
+});
+it('reopens only a definitely rejected target with the frozen request ID guard',async()=>{
+ let current=editSocialDraft(createSocialDraft(owner,id,requestId,now),{body:'A quiet afternoon',catId:jobId},now);
+ const t=transport();(t.publish as jest.Mock).mockRejectedValue(new SocialTargetUnavailableError());
+ const store={read:async()=>current,save:async(_owner:string,draft:SocialDraft)=>{current={...draft,revision:draft.revision+1};return current;},readImage:async()=>bytes,remove:jest.fn(async()=>{}),reopenExpired:jest.fn(async()=>current)};
+ await expect(publishSocialDraft(owner,id,store,t)).rejects.toThrow('community_cat_not_available');
+ expect(store.reopenExpired).toHaveBeenCalledWith(owner,id,requestId,t.newId);
+ expect(store.remove).not.toHaveBeenCalled();
+});
+it('does not reopen or create a new key when replay finds the original post deleted',async()=>{
+ let current=editSocialDraft(createSocialDraft(owner,id,requestId,now),{body:'A quiet afternoon',catId:jobId},now);
+ const t=transport();(t.publish as jest.Mock).mockRejectedValue(new Error('community_post_deleted'));
+ const store={read:async()=>current,save:async(_owner:string,draft:SocialDraft)=>{current={...draft,revision:draft.revision+1};return current;},readImage:async()=>bytes,remove:jest.fn(async()=>{}),reopenExpired:jest.fn(async()=>current)};
+ await expect(publishSocialDraft(owner,id,store,t)).rejects.toThrow('community_post_deleted');
+ expect(store.reopenExpired).not.toHaveBeenCalled();expect(current.requestId).toBe(requestId);
 });
