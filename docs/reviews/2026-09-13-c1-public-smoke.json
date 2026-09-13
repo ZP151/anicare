@@ -1,0 +1,14 @@
+{
+  "sourceCommit": "b8b37ecb9decaf2d1d0a6b91047288d2222ea0cf",
+  "hostedRun": 34750862354,
+  "checkedAt": "2026-09-13T10:11:45.178998+00:00",
+  "sampleCatId": "00000000-0000-4000-8000-00000000a115",
+  "visibleOriginalPosts": 1,
+  "attachedImages": 1,
+  "originalPostIdentityVerified": true,
+  "anonymousPrivateRPCsDenied": [
+    "get_my_story_cat_link",
+    "list_my_story_link_repairs"
+  ],
+  "twoAuthorJourney": "local pgTAP fixtures passed; two authenticated device accounts pending"
+}
