@@ -31,7 +31,7 @@ Replacement portraits, post details, cat story lists, display JPEGs and thumbnai
 - V2 dry run: all 32 JPEG variants matched their provenance hashes.
 - Independent data review: title persistence, credentialless actor checks and reference guards strengthened; child-record FK protections verified locally; final independent review passed with no remaining blockers.
 - Independent UI review: no concrete blockers. Narrow-device/font visual acceptance remains on the device checklist.
-- Full workspace `pnpm verify`: passed; mobile 146 suites / 1293 tests. Provisioner 18 tests and local retirement integration passed. Hosted provisioning receipt and IPA provenance: pending.
+- Full workspace `pnpm verify`: passed; mobile 146 suites / 1293 tests. Provisioner 18 tests and local retirement integration passed. Hosted provisioning and IPA provenance passed; see delivery record below.
 
 ## Device acceptance (pending)
 
@@ -44,3 +44,17 @@ Replacement portraits, post details, cat story lists, display JPEGs and thumbnai
 ## Hosted import follow-up
 
 Preflight run 34757626076 passed source-file hashes. Apply run 34757723203 attempt 1 stopped on a transient portrait-directory read. Attempt 2 passed portraits and stopped at C57 because the encoder omitted the JFIF APP0 header required by the production JPEG decoder. No historical retirement ran. The provisioner now prepares a minimal JFIF container header without changing compressed pixels, checks every real V2 display/thumb through the unchanged production decoder before remote writes (also in dry run), and verifies delivered bytes against the prepared hashes. Actor/cat ledgers and source portrait bytes remain unchanged. Provisioner tests: 20 passed; typecheck and full-catalogue dry run passed. Backend-only follow-up; no app-bundle changes.
+
+## Candidate provenance
+
+- App source: `5ccf3f6d394e9bd1cad1351d39f7cf5f8898b327`; [CI 34757610148](https://github.com/ZP151/anicare/actions/runs/34757610148) passed including database contracts.
+- Native [run 34757667134](https://github.com/ZP151/anicare/actions/runs/34757667134), artifact `10318385829`: 0.4.16 (24), arm64, bundle `sg.animalhelper.app`. GitHub attestation, exact workflow/source/main ref, strict three-file manifest, SHA256/size, source pnpm/Pod locks and native icon resources passed.
+- IPA: `C:/Users/15492/Downloads/WhiskerCommons-0.4.16-build24.ipa`; SHA256 `89ab6d46464de204929d46c083fa71f849bf533ea0ea381964a299cf3c054244`.
+- Backend-only JPEG preparation source: `bbafeb989334d2f7f6eb088201e05e158f681d25`; [CI 34758323267](https://github.com/ZP151/anicare/actions/runs/34758323267) passed. This changes fixture provisioning and tests, not the app bundle.
+- Hosted apply [34758323334](https://github.com/ZP151/anicare/actions/runs/34758323334): succeeded. [Receipt](../test-samples/ios-v1/catalog-v2-hosted-receipt.json) confirms all eight posts/replies, four portraits/cat journeys and sixteen display/thumb pairs passed public-read/hash checks before retirement. Device acceptance remains pending.
+
+## Completed lifecycle update
+
+The hosted transaction retired 52 of the 56 historical posts and archived 24 of 32 historical cats, with 24 synthetic sightings and 24 synthetic care records. Four posts (C05, C08, C18, C47) and eight cats (S01, S02, S04, S12, S14, S18, S22, S31) were conservatively preserved by the identity/change/reference guards. This is not a claim that every old record is unused, or that every retained row has the same reason. Real authors and all non-allowlisted records were outside the cleanup scope. Old media are subject to the existing per-post cleanup lifecycle; no broad storage purge was performed. Source assets/IDs stay in the repository only as historical provenance and compatibility records.
+
+The replacement eight linked posts, four cats, sixteen independent photographs, fixed detail headers and native sharing are delivered in 0.4.16 (24). User device acceptance remains pending; previously accepted map/report behaviour remains accepted. Future iterations must add labelled/versioned fixtures, validate every source and delivery variant before remote writes, verify public journeys before retiring predecessors, and keep the per-ID preserve/retire receipt.
