@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { createBoundedFetch } from './bounded-fetch';
 
 const secureStorage = {
   getItem: (key: string) => SecureStore.getItemAsync(key),
@@ -18,6 +19,7 @@ export function getSupabaseClient(): SupabaseClient | null {
     return client;
   }
   client = createClient(url, anonKey, {
+    global: { fetch: createBoundedFetch(fetch) },
     auth: {
       storage: secureStorage,
       persistSession: true,

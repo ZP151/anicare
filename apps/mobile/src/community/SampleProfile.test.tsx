@@ -15,7 +15,7 @@ const post={postId:'public-post',body:'An evening walk',createdAt:'2026-09-12T00
 beforeEach(()=>{jest.clearAllMocks();mockId='mei';mockLoad.mockResolvedValue([post]);mockExtras.mockResolvedValue(new Map([[post.postId,{media:[{mediaId:'m1'},{mediaId:'m2'}]}]]));});
 it('shows a labelled persona, actual returned posts and multiple photos with a working post entry',async()=>{
  const view=await render(<SampleProfile/>);await view.findByText('An evening walk');
- expect(view.getByText('Fictional test user')).toBeTruthy();expect(view.getByText(/2 photos/)).toBeTruthy();
+ expect(view.getByText(/Fictional community sample/)).toBeTruthy();expect(view.getByText(/2 photos/)).toBeTruthy();
  await fireEvent.press(view.getByRole('button',{name:'An evening walk'}));expect(mockPush).toHaveBeenCalledWith('/community/public-post');await view.unmount();
 });
 it('allows retry after a read failure instead of injecting catalogue posts',async()=>{

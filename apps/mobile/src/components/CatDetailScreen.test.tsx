@@ -19,7 +19,7 @@ describe('CatDetailScreen', () => {
       />,
     );
 
-    expect(view.getByText('Pepper')).toBeTruthy();
+    expect(within(view.getByTestId('screen-large-title')).getByText('Pepper')).toBeTruthy();
     expect(view.getAllByText('Community confirmed')).toHaveLength(1);
     expect(view.getByText('Seen in a delayed weekly window')).toBeTruthy();
     expect(view.getByText(/Coarse neighbourhood activity/)).toBeTruthy();
@@ -76,7 +76,7 @@ it('makes sharing a separate primary action while retaining sightings', async ()
 it('keeps the back action and cat identity outside the scrolling story content', async () => {
  const back=jest.fn();
  const view=await render(<CatDetailScreen cat={{animalId:'00000000-0000-4000-8000-000000000102',primaryAlias:'Pepper',verificationLabel:'Reported',timeLabel:'Delayed'}} fixture={false} onBack={back} onReportSighting={jest.fn()}/>);
- expect(within(view.getByTestId('cat-fixed-header')).getByText('Pepper')).toBeTruthy();
- expect(within(view.getByTestId('cat-detail-scroll')).queryByRole('button',{name:'Back'})).toBeNull();
+ expect(within(view.getByTestId('cat-fixed-header')).getByText('Pepper',{includeHiddenElements:true})).toBeTruthy();
+ expect(within(view.getByTestId('screen-scroll')).queryByRole('button',{name:'Back'})).toBeNull();
  await fireEvent.press(view.getByRole('button',{name:'Back'}));expect(back).toHaveBeenCalledTimes(1);
 });

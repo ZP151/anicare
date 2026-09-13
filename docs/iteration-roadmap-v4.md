@@ -1,6 +1,6 @@
 # Iteration roadmap v4 — 猫主体社区迭代计划
 
-> 2026-09-13 更新：C1 已在 0.4.15 实现并交付，但用户验收不通过。当前优先修正样本生命周期、同猫跨作者关联和固定顶部栏；0.4.16 待交付／待验收。C2/C3 保持后续，不以旧样本堆量代替核心体验。详见 [修正台账](reviews/2026-09-13-c1-acceptance-repair.md)。
+> 2026-09-14 更新：0.4.16 样本广度、猫页加载和标题布局验收未通过。0.4.17 优先修正这些阻塞项，保留 C1 待验收；C2/C3 按顺序继续。见 [本轮记录](reviews/2026-09-14-c1-breadth-glass.md)。
 
 > **For agentic workers:** 按本路线分批推进；每批展开具体任务计划后，使用 `superpowers:executing-plans` 或在明确采用代理协作时使用 `superpowers:subagent-driven-development` 执行。复选框仅在对应证据齐全时更新。
 

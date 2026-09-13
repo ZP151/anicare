@@ -1,3 +1,4 @@
+import {BackButton} from '../../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams,useRouter } from 'expo-router';
 import { useCallback,useEffect,useRef,useState } from 'react';
@@ -19,7 +20,7 @@ export default function SafetyRoute(){
  const load=useCallback(async(cursor:string|null=null)=>{const token=++epoch.current;const current=requests.pin();setLoading(true);setFailed(false);if(!cursor){setPage({items:[],nextCursor:null});setSelected(null);}try{const result=await listSafetyActivity(animalId,cursor);if(token!==epoch.current||!await current())return;setPage(previous=>({items:cursor?[...new Map([...previous.items,...result.items].map(r=>[r.sightingId,r])).values()]:result.items,nextCursor:result.nextCursor===cursor?null:result.nextCursor}));}catch{if(token===epoch.current&&await current())setFailed(true);}finally{if(token===epoch.current)setLoading(false);}},[animalId,requests.pin]);
  useEffect(()=>{setPage({items:[],nextCursor:null});setSelected(null);if(requests.owner!==undefined)void load();return()=>{++epoch.current;};},[load,requests.owner,requests.sent]);
  const disabled=!adult||!requests.owner||!requests.ready||requests.busy||!!requests.pending||!selected;
- return <ScreenScaffold title={cn?'内容安全':'Content safety'} subtitle={cn?'选择一条延迟公开的活动。举报由人工处理，不代表已派出救援。':'Select delayed public activity. Reports go to human review; this does not dispatch rescue.'}>
+ return <ScreenScaffold collapseTitle leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/profile' as never)}/>} title={cn?'内容安全':'Content safety'} subtitle={cn?'选择一条延迟公开的活动。举报由人工处理，不代表已派出救援。':'Select delayed public activity. Reports go to human review; this does not dispatch rescue.'}>
  <Pressable accessibilityRole="button" style={styles.choice} onPress={()=>router.push('/privacy' as never)}><Text>{cn?'隐私与请求':'Privacy and requests'}</Text></Pressable>
  <RequestNotice requests={requests}/>
  {requests.owner&&!adult?<Pressable accessibilityRole="button" style={styles.choice} onPress={()=>router.push('/profile' as never)}><Text>{cn?'举报和屏蔽需要确认成年贡献者资格':'Confirm adult contributor eligibility to report or block'}</Text></Pressable>:null}

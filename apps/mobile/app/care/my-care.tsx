@@ -1,3 +1,4 @@
+import {BackButton} from '../../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -33,7 +34,7 @@ export default function MyCareRoute() {
     if (!auth.session?.pending) return;
     try { await auth.perform(auth.session.pending); setEditing(null); await load(); } catch { /* Retained request remains retryable. */ }
   };
-  return <ScreenScaffold title={cn ? '我的照护记录' : 'My care records'} subtitle={cn ? '查看、更正或撤回自己的完成记录。' : 'View, correct or withdraw your completed records.'}>
+  return <ScreenScaffold collapseTitle leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/profile' as never)}/>} title={cn ? '我的照护记录' : 'My care records'} subtitle={cn ? '查看、更正或撤回自己的完成记录。' : 'View, correct or withdraw your completed records.'}>
     {!auth.session ? <><Text>{auth.failed ? (cn ? '无法读取账户状态。' : 'Could not load account state.') : (cn ? '正在加载…' : 'Loading…')}</Text>{auth.failed ? <Pressable accessibilityRole="button" onPress={() => { void auth.reload(); }} style={styles.choice}><Text>{cn ? '重试' : 'Retry'}</Text></Pressable> : null}</>
       : !auth.session.owner ? <><Text>{cn ? '登录后可查看自己的照护记录。' : 'Sign in to view your care records.'}</Text><Pressable accessibilityRole="button" onPress={() => router.push('/profile' as never)} style={styles.choice}><Text>{cn ? '登录' : 'Sign in'}</Text></Pressable></>
       : <>

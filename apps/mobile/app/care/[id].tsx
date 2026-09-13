@@ -1,3 +1,4 @@
+import {BackButton} from '../../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -43,7 +44,7 @@ export default function CareRoute() {
     if (!auth.session?.pending) return;
     try { const pending = auth.session.pending; await auth.perform(pending); setDone(pending.kind === 'record' && pending.targetId === animalId); await load(); } catch { /* The durable pending notice keeps the request. */ }
   };
-  return <ScreenScaffold title={cn ? '照护记录' : 'Care record'} subtitle={cn ? '已完成的社区照护及延迟公开历史。' : 'Completed community care and delayed public history.'}>
+  return <ScreenScaffold collapseTitle leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/profile' as never)}/>} title={cn ? '照护记录' : 'Care record'} subtitle={cn ? '已完成的社区照护及延迟公开历史。' : 'Completed community care and delayed public history.'}>
     <Pressable accessibilityRole="button" onPress={() => router.push('/care/my-care' as never)} style={styles.choice}><Text>{cn ? '我的照护记录' : 'My care records'}</Text></Pressable>
     {!auth.session ? <><Text>{auth.failed ? (cn ? '无法读取账户状态。' : 'Could not load account state.') : (cn ? '正在加载…' : 'Loading…')}</Text>{auth.failed ? <Pressable accessibilityRole="button" onPress={() => { void auth.reload(); }} style={styles.choice}><Text>{cn ? '重试' : 'Retry'}</Text></Pressable> : null}</> : <>
       {done ? <Text accessibilityLiveRegion="polite">{cn ? '已记录完成的照护。' : 'Completed care recorded.'}</Text> : null}

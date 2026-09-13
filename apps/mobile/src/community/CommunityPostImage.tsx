@@ -15,7 +15,9 @@ export function CommunityPostImage({postId,mediaId,variant='thumb',style,label,r
   return()=>{active=false;};
  },[auth.owner,postId,mediaId,retry]);
  const uri=communityMediaUrl(postId,mediaId,variant);
+ const publicKey=process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+ const headers={...(publicKey?{apikey:publicKey}:{}),...(auth.owner&&identity?{Authorization:`Bearer ${identity.token}`}:{})};
  const ready=auth.owner===null||!!auth.owner&&identity?.owner===auth.owner;
  if(!uri||!ready||failed)return <View accessibilityLabel={label} style={[style,{backgroundColor:c.leafSoft,alignItems:'center',justifyContent:'center'}]}><AppIcon name="photo" size={24} color={c.muted}/><Text style={{fontSize:11,color:c.muted}}>Photo unavailable</Text>{retryLabel?<Pressable accessibilityRole="button" accessibilityLabel={retryLabel} onPress={()=>{setFailed(false);setRetry(n=>n+1);}} style={{minHeight:44,justifyContent:'center'}}><Text style={{color:c.actionPrimary,fontSize:12}}>{retryLabel}</Text></Pressable>:null}</View>;
- return <Image accessibilityLabel={label} source={{uri,cache:'reload',headers:auth.owner&&identity?{Authorization:`Bearer ${identity.token}`}:{}}} onError={()=>setFailed(true)} resizeMode={resizeMode} style={style}/>;
+ return <Image accessibilityLabel={label} source={{uri,cache:'reload',headers}} onError={()=>setFailed(true)} resizeMode={resizeMode} style={style}/>;
 }

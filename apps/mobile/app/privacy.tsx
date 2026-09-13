@@ -1,3 +1,4 @@
+import {BackButton} from '../src/components/BackButton';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as Linking from 'expo-linking';
@@ -38,7 +39,7 @@ export default function PrivacyRoute(){
  const blocked=!requests.owner||!requests.ready||requests.busy||!!requests.pending;
  const configured=process.env.EXPO_PUBLIC_RIGHTS_CONTACT_URL;let contact:string|null=null;
  try{if(configured){const url=new URL(configured);if((url.protocol==='https:'&&url.username===''&&url.password==='')||url.protocol==='mailto:')contact=configured;}}catch{/* Only configured contact channels are shown. */}
- return <ScreenScaffold title={cn?'隐私与请求':'Privacy and requests'} subtitle={cn?'请求由人工受理。训练默认关闭，身份变更仍需独立确认。':'Requests go to human handling. Training is off by default; identity changes still need independent confirmation.'}>
+ return <ScreenScaffold collapseTitle leading={<BackButton onPress={()=>router.canGoBack()?router.back():router.replace('/profile' as never)}/>} title={cn?'隐私与请求':'Privacy and requests'} subtitle={cn?'请求由人工受理。训练默认关闭，身份变更仍需独立确认。':'Requests go to human handling. Training is off by default; identity changes still need independent confirmation.'}>
  {contact?<Pressable accessibilityRole="link" style={styles.choice} onPress={()=>{void Linking.openURL(contact!).catch(()=>setFailed(true));}}><Text style={styles.choiceText}>{cn?'联系隐私受理人员':'Contact the privacy team'}</Text></Pressable>:<Text style={styles.note}>{cn?'当前未提供站外受理渠道。请保存回执；账户移除后无法在应用内查询进度。':'An external contact channel is not available yet. Save your receipt; in-app tracking ends after account removal.'}</Text>}
  {requests.owner===undefined?<Text>{cn?'正在读取账户…':'Loading account…'}</Text>:!requests.owner?<><Text>{cn?'登录后查看和提交请求。':'Sign in to view and submit requests.'}</Text><Pressable accessibilityRole="button" style={styles.choice} onPress={()=>router.push('/profile' as never)}><Text>{cn?'登录':'Sign in'}</Text></Pressable>{receipt?<Text selectable>{cn?'本机保留的删除请求回执：':'Deletion request receipt saved on this device: '}{receipt}{cn?'。退出后的本地回执不证明清理完成。':'. A local receipt does not prove cleanup has completed.'}</Text>:null}</>:<>
  <RequestNotice requests={requests}/>

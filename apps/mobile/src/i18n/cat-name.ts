@@ -11,6 +11,14 @@ const names = [
   ['豆腐', 'Tofu'], ['乌檀', 'Sable'], ['像素', 'Pixel'], ['茴香', 'Fennel'],
   ['珠珠', 'Zuzu'], ['彗星', 'Comet'], ['常春藤', 'Ivy'], ['罗文', 'Rowan'],
   ['蜜糖', 'Honey'], ['卵石', 'Pebble'], ['拼拼', 'Patch'], ['星环', 'Orbit'],
+  ['雪团', 'Snowdrop'],
+  ['芝麻', 'Sesame'],
+  ['可豆', 'Cocoa'],
+  ['蕨蕨', 'Fern'],
+  ['炭炭', 'Ash'],
+  ['芒果', 'Mango'],
+  ['雾雾', 'Mist'],
+  ['点点', 'Dot'],
 ] as const;
 
 export function localizedCatName(animalId: string, alias: string, locale: Locale): string {

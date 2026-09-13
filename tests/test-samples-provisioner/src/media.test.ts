@@ -16,7 +16,7 @@ test('refuses an asset that cannot be decoded as a JPEG', async () => {
   await assert.rejects(validateCommunityMediaVariants(new Uint8Array([1, 2, 3]), deterministicJpegFixture().bytes), /test_sample_community_media_invalid/);
 });
 
-test('prepares every approved V2 photograph and thumbnail for the production decoder',async()=>{
+test('prepares every active catalogue photograph and thumbnail for the production decoder',async()=>{
  for(const filename of new Set(ACTIVE_COMMUNITY_TEST_POSTS.flatMap(post=>post.media))){
   const display=await readFile(new URL('../../../docs/test-samples/ios-v1/assets/'+filename,import.meta.url));
   const thumb=await readFile(new URL('../../../docs/test-samples/ios-v1/assets/'+filename.replace(/\.jpg$/,'-thumb.jpg'),import.meta.url));

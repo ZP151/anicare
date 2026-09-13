@@ -1,3 +1,5 @@
+import {ScreenScaffold} from '../components/ScreenScaffold';
+import {BackButton} from '../components/BackButton';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -111,9 +113,7 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
   const filters=[['all',locale==='zh-CN'?'全部':'All','All reports'],['photos',locale==='zh-CN'?'有照片':'Photos','Reports with photos'],['review',locale==='zh-CN'?'待审核':'Awaiting review','Reports awaiting review']] as const;
   const refresh = () => { void load('refresh'); };
 
-  return <SafeAreaView style={styles.safeArea}>
-    <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.leaf} />}>
-      <View style={styles.heading}><Text accessibilityRole="header" style={styles.title}>{copy.historyTitle}</Text><Text style={styles.subtitle}>{copy.historySubtitle}</Text></View>
+  return <ScreenScaffold compact collapseTitle title={copy.historyTitle} subtitle={copy.historySubtitle} leading={<BackButton locale={locale} onPress={()=>dependencies.navigate('/profile')}/>} refreshing={refreshing} onRefresh={refresh}>
       <Pressable accessibilityLabel={copy.refreshReports} accessibilityRole="button" onPress={refresh} style={({ pressed }) => [styles.refreshAction, pressed && styles.pressed]}><Text style={styles.refreshText}>{copy.refreshReports}</Text></Pressable>
       {state === 'loading' ? <View accessibilityLiveRegion="polite" style={styles.loading}><ActivityIndicator color={colors.leaf} /><Text style={styles.notice}>{copy.historyLoading}</Text></View> : null}
       {state === 'signed_out' ? <View style={styles.state}><Text accessibilityLiveRegion="polite" style={styles.notice}>{copy.historySignIn}</Text><Pressable accessibilityRole="button" accessibilityLabel={copy.profileAction} onPress={() => dependencies.navigate('/profile')} style={styles.profileAction}><Text style={styles.profileText}>{copy.profileAction}</Text></Pressable></View> : null}
@@ -130,8 +130,7 @@ export function MyReportsScreen({ dependencies, locale }: Readonly<{ dependencie
           : <View key={row.key} style={styles.row}>{content}</View>;
       })}
       {snapshot?.nextCursor ? <Pressable accessibilityRole="button" accessibilityLabel={copy.loadMoreReports} disabled={loadingMore} onPress={() => { void load('more'); }} style={({ pressed }) => [styles.loadMore, (pressed || loadingMore) && styles.pressed]}><Text style={styles.loadMoreText}>{loadingMore ? copy.historyLoading : copy.loadMoreReports}</Text></Pressable> : null}
-    </ScrollView>
-  </SafeAreaView>;
+  </ScreenScaffold>;
 }
 
 const makeStyles = (colors:ReturnType<typeof useNativeColors>)=>StyleSheet.create({

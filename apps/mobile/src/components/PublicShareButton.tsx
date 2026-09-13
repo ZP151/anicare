@@ -1,3 +1,4 @@
+import {GlassSurface} from '../design/GlassSurface';
 import {useRef,useState} from 'react';
 import {Alert,Pressable,Share} from 'react-native';
 import {AppIcon} from './AppIcon';
@@ -11,5 +12,5 @@ export function PublicShareButton({kind,id,zh}:{kind:'post'|'cat';id:string;zh:b
   catch{Alert.alert(zh?'暂时无法分享':'Could not share',zh?'请稍后重试。':'Please try again.');}
   finally{pending.current=false;setBusy(false);}
  }
- return <Pressable accessibilityRole="button" accessibilityLabel={zh?(kind==='cat'?'分享猫主页':'分享帖子'):(kind==='cat'?'Share cat home':'Share post')} disabled={!valid||busy} onPress={()=>void share()} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="share" size={21} color={c.ink}/></Pressable>;
+ return <GlassSurface interactive style={{borderRadius:24}}><Pressable accessibilityRole="button" accessibilityLabel={zh?(kind==='cat'?'分享猫主页':'分享帖子'):(kind==='cat'?'Share cat home':'Share post')} disabled={!valid||busy} onPress={()=>void share()} style={{minWidth:44,minHeight:44,alignItems:'center',justifyContent:'center'}}><AppIcon name="share" size={21} color={c.ink}/></Pressable></GlassSurface>;
 }

@@ -31,3 +31,10 @@ it('keeps a readable placeholder after a thumbnail load failure',async()=>{
  await fireEvent(view.getByLabelText('Post photo'),'error');
  expect(view.getByText('Photo unavailable')).toBeTruthy();expect(view.getByLabelText('Post photo')).toBeTruthy();await view.unmount();
 });
+
+it('sends the public gateway key for guest photos without impersonating an authenticated user',async()=>{
+ const old=process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY='public-test-key';
+ try {mockOwner=null;const view=await render(<CommunityPostImage {...props}/>);
+ expect(view.getByLabelText('Post photo').props.source.headers).toEqual({apikey:'public-test-key'});await view.unmount();
+ } finally {if(old===undefined)delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;else process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY=old;}
+});

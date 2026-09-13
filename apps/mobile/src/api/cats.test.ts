@@ -22,3 +22,13 @@ it('does not query an invalid ID and masks transport failures', async () => {
  expect(rpc).not.toHaveBeenCalled();
  await expect(getPublicCatSummary(animalId, { rpc })).rejects.toThrow('public_cat_unavailable');
 });
+
+it('bounds a stalled profile request so the screen can offer retry', async () => {
+ jest.useFakeTimers();
+ try {
+  const request = getPublicCatSummary(animalId, {rpc: () => new Promise(() => {})});
+  const result = expect(request).rejects.toThrow('public_cat_unavailable');
+  await jest.advanceTimersByTimeAsync(15000);
+  await result;
+ } finally { jest.useRealTimers(); }
+});

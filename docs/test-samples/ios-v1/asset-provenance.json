@@ -774,6 +774,182 @@
       "height": 480,
       "bytes": 68711,
       "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-snowdrop-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "White longhair, amber eyes, Pasir Ris blue-tiled seaside housing and casuarina trees. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "a7c0c13f5c3be61a753ed96e44c6614d9323049966c45e18a87cf3d1333c43ee",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 456807,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-snowdrop-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "White longhair, amber eyes, Pasir Ris blue-tiled seaside housing and casuarina trees. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "b25e3dd9f37bff9df65882ecf8fbc0c17575cda4c8623bd3a5f7b9307a8b649a",
+      "width": 360,
+      "height": 480,
+      "bytes": 69560,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-sesame-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Chocolate tortoiseshell, cream eyebrow, Joo Chiat terracotta shophouse walkway. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "0b5515b02b7d81651710d6341ce0caf1d797e65337516db8f6a8ac9a7e9fc3a2",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 290335,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-sesame-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Chocolate tortoiseshell, cream eyebrow, Joo Chiat terracotta shophouse walkway. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "36d4627c6fcd22fec24fec8e2d3a9e4115e1f2ce02fb3d837a84c741446ddf76",
+      "width": 360,
+      "height": 480,
+      "bytes": 46000,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-cocoa-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Cream seal-point appearance, blue eyes, Bukit Batok granite park. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "a423c8f38799607b8dcf2ec94e685231a9c9c701f4f2e4455490c02c16d44dd6",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 601517,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-cocoa-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Cream seal-point appearance, blue eyes, Bukit Batok granite park. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "452a08345335f9154b3641a3be9f250b38eadd926e67742872b5e03bf383b4da",
+      "width": 360,
+      "height": 480,
+      "bytes": 86936,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-fern-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Small brown mackerel tabby, green eyes, Woodlands fern planter garden. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "abec4b06da1411b7874cd4ebd9e88d0a26e48ebb2a872cff297a96d2554a5bc3",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 559596,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-fern-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Small brown mackerel tabby, green eyes, Woodlands fern planter garden. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "cb83fa2ac1a31d3346a131f172f01d85a0b69d9cc26323c9d102ed0b02043cc0",
+      "width": 360,
+      "height": 480,
+      "bytes": 82543,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-ash-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Solid black, yellow eyes, Yishun void deck and blue benches. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "de5b2e0e247308044c789aedb3183119745e02c54554d0629616df44f77ebd8d",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 320555,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-ash-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Solid black, yellow eyes, Yishun void deck and blue benches. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "a84c2ab219fdc15bd1ee2791cd2d3cec910f41a667deed8352a9a03f1d3d2ca4",
+      "width": 360,
+      "height": 480,
+      "bytes": 49730,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-mango-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Stocky longhair ginger, fluffy tail, Hougang brick planter. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "e201671e1751b1ed6143ada4b9f849beb4affcbafcdc3d74200e7893a5e02208",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 485889,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-mango-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Stocky longhair ginger, fluffy tail, Hougang brick planter. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "e1321226359c2c122cdb7344c65f1afc591aec81a09caed3816cd95cfa8d9fb4",
+      "width": 360,
+      "height": 480,
+      "bytes": 72044,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-mist-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Silver classic tabby with dark swirls, Punggol waterfront bench and grasses. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "243fd331267c84fd82fc01c45530db7642dc530314e68ddf4f00362fc2c09c0c",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 558187,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-mist-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Silver classic tabby with dark swirls, Punggol waterfront bench and grasses. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "62dd8bd97c363cc14740def6eee0f6286c810303c7b2a0ceec2796ba2d869d47",
+      "width": 360,
+      "height": 480,
+      "bytes": 78362,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-dot-1.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Mostly white, two black back spots and black tail, Queenstown cream wall and pastel flats. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "f1e9cef1d9e3a3a79ec98d5956cc0a13c7cc995c8bdde42338df72c84dc9e3a7",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 346439,
+      "format": "jpeg"
+    },
+    {
+      "file": "assets/v3-dot-1-thumb.jpg",
+      "source": "synthetic_test",
+      "generator": "OpenAI image_gen",
+      "content": "Mostly white, two black back spots and black tail, Queenstown cream wall and pastel flats. Fictional cat and location illustration; not an actual resident or sighting.",
+      "sha256": "589193afd9aebdfcc30c4936d7b9872d4e3daa1e863a4c52a0eaeef4b32132d3",
+      "width": 360,
+      "height": 480,
+      "bytes": 50739,
+      "format": "jpeg"
     }
   ]
 }

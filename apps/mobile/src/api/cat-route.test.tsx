@@ -1,21 +1,24 @@
 jest.mock('../cat-story/CatStoryList',()=>({CatStoryList:()=>null}));
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 const mockId = '00000000-0000-4000-8000-000000002599';
 let mockParams = { id: mockId };
 const mockRpc = jest.fn();
+const mockBack = jest.fn();
+const mockReplace = jest.fn();
+const mockCanGoBack = jest.fn(() => false);
 const mockPresentations = jest.fn();
 jest.mock('../maps/CatCommunityContext',()=>({CatCommunityContext:()=>null}));
 jest.mock('./cat-presentation', () => ({getCatPresentations: (...args: unknown[]) => mockPresentations(...args)}));
 const mockAuthListeners = new Set<() => void>();
 const mockAuthListener = () => mockAuthListeners.forEach(listener => listener());
-jest.mock('expo-router', () => ({ useFocusEffect:(fn:()=>void)=>require('react').useEffect(fn,[fn]), useLocalSearchParams: () => mockParams, useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('expo-router', () => ({ useFocusEffect:(fn:()=>void)=>require('react').useEffect(fn,[fn]), useLocalSearchParams: () => mockParams, useRouter: () => ({ push: jest.fn(), back:mockBack, replace:mockReplace, canGoBack:mockCanGoBack }) }));
 jest.mock('./supabase', () => ({ getSupabaseClient: () => ({ rpc: mockRpc }) }));
 jest.mock('../auth/session-subject', () => ({ readSessionSubjectStrict: async () => null, subscribeSessionSubject: (listener: () => void) => { mockAuthListeners.add(listener); return () => {mockAuthListeners.delete(listener);}; } }));
 jest.mock('../i18n/LocaleContext', () => ({ useLocale: () => ({ locale: 'en' }) }));
 jest.mock('../offline/draft-store', () => ({ saveOfflineDraft: jest.fn() }));
 jest.mock('../components/ScreenScaffold', () => {
  const React = require('react'); const { Text, View } = require('react-native');
- return { ScreenScaffold: ({title,children}: {title:string;children:React.ReactNode}) => React.createElement(View,null,React.createElement(Text,null,title),children) };
+ return { ScreenScaffold: ({title,children,header,leading}: {title:string;children:React.ReactNode;header:React.ReactNode;leading:React.ReactNode}) => React.createElement(View,null,leading,React.createElement(Text,null,title),children) };
 });
 import CatRoute from '../../app/cat/[id]';
 beforeEach(() => { mockAuthListeners.clear(); mockParams = { id: mockId }; mockRpc.mockReset(); mockPresentations.mockReset().mockResolvedValue(new Map()); });
@@ -59,4 +62,29 @@ it('discards a photo signing response after the account changes', async () => {
  await act(async () => {finish(new Map([[mockId,{portraitUri:'https://example.test/stale'}]]));});
  expect(view.queryByText('Test cat')).toBeNull();
  expect(JSON.stringify(view.toJSON())).not.toContain('https://example.test/stale');
+});
+
+it('offers retry after a transport failure and recovers the same profile', async () => {
+ mockRpc.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({data:[{animalId:mockId,primaryAlias:'Recovered cat',verification:'reported',timeBucket:null}],error:null});
+ const view=await render(<CatRoute/>);
+ const retry=await view.findByRole('button',{name:'Retry'});
+ fireEvent.press(retry);
+ expect(await view.findByText('Recovered cat')).toBeTruthy();
+});
+it('keeps a loaded summary available when the optional portrait fails', async () => {
+ mockRpc.mockResolvedValue({data:[{animalId:mockId,primaryAlias:'Readable cat',verification:'reported',timeBucket:null}],error:null});
+ mockPresentations.mockRejectedValue(new Error('photo signing failed'));
+ const view=await render(<CatRoute/>);
+ await waitFor(()=>expect(mockPresentations).toHaveBeenCalled());
+ expect(view.getByText('Readable cat')).toBeTruthy();
+ expect(view.queryByText('Cat profile unavailable')).toBeNull();
+});
+
+it("returns a cold cat link to Home when no previous route exists", async()=>{
+ mockRpc.mockResolvedValue({data:[],error:null});
+ const view=await render(<CatRoute/>);
+ await view.findByText("Cat profile unavailable");
+ fireEvent.press(view.getByRole("button",{name:"Back"}));
+ expect(mockReplace).toHaveBeenCalledWith("/");
+ expect(mockBack).not.toHaveBeenCalled();
 });

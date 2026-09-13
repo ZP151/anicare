@@ -1,3 +1,4 @@
+import {GlassSurface} from '../design/GlassSurface';
 import { CatPicker } from '../cat-story/CatPicker';
 import { getPublicCatSummary, type PublicCatSummary } from '../api/cats';
 import { localizedCatName } from '../i18n/cat-name';
@@ -143,8 +144,8 @@ export function SocialComposer(){
  const locked=busy||photoHandoff||!!photoMenu||!!photoEditor||draft?.phase==='publishing';
  const publishDisabled=publicationDeleted||(draft?.phase==='editing'&&catStatus==='unavailable')||busy||dragging||photoHandoff||!draft||!draft.body.trim()||(!draft.catId&&!draft.communitySlug)||draft.ownerId!==auth.owner;
  return <GestureHandlerRootView style={{flex:1}}><ScreenScaffold compact avoidKeyboard scrollEnabled={!dragging} wrapScroll={scroll=><GestureDetector gesture={scrollGesture}>{scroll}</GestureDetector>} title={zh?'发布帖子':'New post'} header={<View style={[s.row,{justifyContent:'space-between'}]}>
-  <Pressable accessibilityRole="button" accessibilityLabel={zh?'保存并关闭':'Save and close'} disabled={busy||dragging||photoHandoff} onPress={()=>void close()} style={s.touch}><Text style={{fontSize:15,color:c.actionPrimary}}>{zh?'取消':'Cancel'}</Text></Pressable>
-  <Text accessibilityRole="header" style={{fontSize:17,fontWeight:'600',color:c.ink}}>{zh?'发布帖子':'New post'}</Text>
+  <GlassSurface interactive style={{borderRadius:24,paddingHorizontal:10}}><Pressable accessibilityRole="button" accessibilityLabel={zh?'保存并关闭':'Save and close'} disabled={busy||dragging||photoHandoff} onPress={()=>void close()} style={s.touch}><Text style={{fontSize:15,color:c.actionPrimary}}>{zh?'取消':'Cancel'}</Text></Pressable></GlassSurface>
+  <GlassSurface style={{borderRadius:24,paddingHorizontal:12,paddingVertical:12}}><Text accessibilityRole="header" style={{fontSize:17,fontWeight:'600',color:c.ink}}>{zh?'发布帖子':'New post'}</Text></GlassSurface>
   <Pressable accessibilityRole="button" accessibilityLabel={zh?'发布':'Post'} disabled={publishDisabled} onPress={()=>void publish()} style={[s.publish,{backgroundColor:c.actionPrimary,opacity:publishDisabled ? 0.5 : 1}]}>{busy?<ActivityIndicator color={c.onAction}/>:<Text style={{color:c.onAction,fontWeight:'600'}}>{zh?'发布':'Post'}</Text>}</Pressable>
  </View>}>
   {auth.owner===undefined&&!auth.failed?<ActivityIndicator/>:null}

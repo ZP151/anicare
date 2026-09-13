@@ -35,6 +35,14 @@ export const samples = [
 ] as const;
 export const legacyEnglishNames=['Marmalade','Cloud','Tiger','Oreo','Echo','Amber'];
 export const samplePlaces:Readonly<Record<string,{residenceType:'hdb'|'condo'|'other';name:string}>>={
+ 'ios26-s37':{residenceType:'other',name:'Demo neighbourhood · Pasir Ris'},
+ 'ios26-s38':{residenceType:'other',name:'Demo neighbourhood · Geylang'},
+ 'ios26-s39':{residenceType:'other',name:'Demo neighbourhood · Bukit Batok'},
+ 'ios26-s40':{residenceType:'other',name:'Demo neighbourhood · Woodlands'},
+ 'ios26-s41':{residenceType:'other',name:'Demo neighbourhood · Yishun'},
+ 'ios26-s42':{residenceType:'other',name:'Demo neighbourhood · Hougang'},
+ 'ios26-s43':{residenceType:'other',name:'Demo neighbourhood · Punggol'},
+ 'ios26-s44':{residenceType:'other',name:'Demo neighbourhood · Queenstown'},
  'ios26-s01':{residenceType:'hdb',name:'Demo HDB · Jurong West'},
  'ios26-s02':{residenceType:'condo',name:'Demo Condo · Jurong West'},
  'ios26-s07':{residenceType:'hdb',name:'Demo HDB Block A · Woodlands'},

@@ -6,7 +6,7 @@ jest.mock('../auth/use-account-session',()=>({useAccountSession:()=>({owner:'000
 jest.mock('../i18n/LocaleContext',()=>({useLocale:()=>({locale:'en'})}));
 jest.mock('../components/AppIcon',()=>({AppIcon:()=>null}));
 jest.mock('../profile/ProfileAvatar',()=>({ProfileAvatar:()=>null}));
-jest.mock('react-native-safe-area-context',()=>({SafeAreaView:require('react-native').View}));
+jest.mock('react-native-safe-area-context',()=>({SafeAreaView:require('react-native').View,SafeAreaInsetsContext:require('react').createContext(null)}));
 jest.mock('../api/direct-messages',()=>({listDirectConversations:(...args:unknown[])=>mockList(...args)}));
 const base={isIncoming:true,otherMember:{name:'Mei',avatarKey:'person'},lastMessagePreview:'Hello',lastMessageAt:'2026-09-11T00:00:00Z',unreadCount:1,createdAt:'2026-09-11T00:00:00Z',cursor:'c'};
 beforeEach(()=>jest.clearAllMocks());

@@ -22,6 +22,7 @@ import { CatCommunityContext } from '../../src/maps/CatCommunityContext';
 const opaqueAnimalId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function CatRoute() {
+  "use no memo"; // Auth epochs deliberately invalidate focus work; Expo compiler prunes deps-only epochs.
   const { locale } = useLocale();
   const colors = useNativeColors();
   const styles = makeStyles(colors);
@@ -29,7 +30,7 @@ export default function CatRoute() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const animalId = typeof id === 'string' ? id : null;
   const [cat, setCat] = useState<SelectedCatSummary | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [authEpoch, setAuthEpoch] = useState(0);
   const generation = useRef(0);
   useEffect(() => subscribeSessionSubject(() => {
@@ -56,17 +57,17 @@ export default function CatRoute() {
             : locale === 'zh-CN' ? '暂无公开活动' : 'No public activity yet',
         });
         setStatus('ready');
-        const presentations = await getCatPresentations([row.animalId]);
+        const presentations = await getCatPresentations([row.animalId]).catch(() => new Map());
         if (!active || token !== generation.current) return;
         const presentation = presentations.get(row.animalId);
         if (presentation) setCat(current => current?.animalId === row.animalId ? {...current,...presentation} : current);
       })
-      .catch(() => { if (active && token === generation.current) setStatus('unavailable'); });
+      .catch(() => { if (active && token === generation.current) setStatus('error'); });
     return () => { active = false; ++generation.current; };
   }, [animalId, locale, authEpoch]));
 
   if (status === 'ready' && cat) {
-    return <CatDetailScreen key={cat.animalId} cat={cat} fixture={false} locale={locale} stories={<CatStoryList catId={cat.animalId} locale={locale}/>} onShareStory={id=>router.push(`/community/new?catId=${id}` as never)} onBack={() => router.back()} heroActions={<FollowControl compact key={cat.animalId} animalId={cat.animalId} />}
+    return <CatDetailScreen key={cat.animalId} cat={cat} fixture={false} locale={locale} stories={<CatStoryList catId={cat.animalId} locale={locale}/>} onShareStory={id=>router.push(`/community/new?catId=${id}` as never)} onBack={() => router.canGoBack() ? router.back() : router.replace('/')} heroActions={<FollowControl compact key={cat.animalId} animalId={cat.animalId} />}
       onReportSighting={async (selectedAnimalId) => {
         const draftId = await createOwnerAwareReportDraft({
           readAuthSnapshot: async () => ({ ownerSubject: await readSessionSubjectStrict() }),
@@ -77,12 +78,12 @@ export default function CatRoute() {
       }} onRecordCare={(selectedAnimalId) => { router.push({ pathname: '/care/[id]', params: { id: selectedAnimalId } } as never); }} ><CatCommunityContext animalId={cat.animalId} locale={locale} showDiscussion={false}/><Pressable accessibilityRole="button" style={{minHeight:48,justifyContent:'center'}} onPress={()=>router.push(`/safety/${cat.animalId}` as never)}><Text style={{color:colors.ink}}>{locale==='zh-CN'?'内容安全与身份纠错':'Content safety and identity correction'}</Text></Pressable></CatDetailScreen>;
   }
   return <ScreenScaffold
-    subtitle={locale === 'zh-CN' ? '公开档案仅显示可公开的身份摘要与粗略活动。' : 'Public profiles show eligible identity summaries and coarse activity.'}
-    title={status === 'loading' ? (locale === 'zh-CN' ? '正在加载猫档案' : 'Loading cat profile') : (locale === 'zh-CN' ? '猫档案不可用' : 'Cat profile unavailable')}
-    leading={<BackButton onPress={() => router.back()}/>}
+
+    title={status === 'loading' ? (locale === 'zh-CN' ? '正在加载猫档案' : 'Loading cat profile') : status === 'error' ? (locale === 'zh-CN' ? '暂时无法加载' : 'Could not load profile') : (locale === 'zh-CN' ? '猫档案不可用' : 'Cat profile unavailable')}
+    leading={<BackButton onPress={() => router.canGoBack() ? router.back() : router.replace('/')}/>}
   ><Text accessibilityLiveRegion="polite" style={styles.status}>
     {status === 'loading' ? (locale === 'zh-CN' ? '正在读取公开档案…' : 'Loading the public profile…')
-      : (locale === 'zh-CN' ? '该档案当前不可公开访问。' : 'This profile is currently unavailable.')}
-  </Text></ScreenScaffold>;
+      : status === 'error' ? (locale === 'zh-CN' ? '请检查网络连接，然后重试。' : 'Check your connection and try again.') : (locale === 'zh-CN' ? '该档案当前不可公开访问。' : 'This profile is currently unavailable.')}
+  </Text>{status !== 'loading' && animalId && opaqueAnimalId.test(animalId) ? <Pressable accessibilityRole="button" onPress={() => setAuthEpoch(epoch => epoch + 1)} style={{minHeight:48,justifyContent:'center'}}><Text style={{color:colors.actionPrimary}}>{locale === 'zh-CN' ? '重试' : 'Retry'}</Text></Pressable> : null}</ScreenScaffold>;
 }
 const makeStyles = (colors: ReturnType<typeof useNativeColors>) => StyleSheet.create({ status: { color: colors.muted, fontSize: 14, lineHeight: 21 } });

@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-09-13",
+  "purpose": "Labelled synthetic browsing fixtures; appearance descriptions do not assert pedigree.",
+  "transform": "Proportional JPEG encoding and thumbnail only; original PNGs retained.",
+  "images": [
+    {
+      "name": "snowdrop",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-f2cc8a26-497d-4a1b-b36c-9d9e094cc742.png",
+      "scene": "White longhair, amber eyes, Pasir Ris blue-tiled seaside housing and casuarina trees",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. White longhair, amber eyes, Pasir Ris blue-tiled seaside housing and casuarina trees. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "sesame",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-835b3b1d-ecfe-484d-a740-837f400b3331.png",
+      "scene": "Chocolate tortoiseshell, cream eyebrow, Joo Chiat terracotta shophouse walkway",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Chocolate tortoiseshell, cream eyebrow, Joo Chiat terracotta shophouse walkway. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "cocoa",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-98c605d5-6c99-49b1-871a-51548af490c0.png",
+      "scene": "Cream seal-point appearance, blue eyes, Bukit Batok granite park",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Cream seal-point appearance, blue eyes, Bukit Batok granite park. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "fern",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-37f8be6d-e70b-4f4e-a828-4268d36a755a.png",
+      "scene": "Small brown mackerel tabby, green eyes, Woodlands fern planter garden",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Small brown mackerel tabby, green eyes, Woodlands fern planter garden. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "ash",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-6c831d8b-601a-47f0-a9ff-56bbe1754884.png",
+      "scene": "Solid black, yellow eyes, Yishun void deck and blue benches",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Solid black, yellow eyes, Yishun void deck and blue benches. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "mango",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-d54937c4-c563-4d27-a078-2a676cdcbf9f.png",
+      "scene": "Stocky longhair ginger, fluffy tail, Hougang brick planter",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Stocky longhair ginger, fluffy tail, Hougang brick planter. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "mist",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-bf949a2d-d49c-4151-9d66-97598c12cba4.png",
+      "scene": "Silver classic tabby with dark swirls, Punggol waterfront bench and grasses",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Silver classic tabby with dark swirls, Punggol waterfront bench and grasses. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    },
+    {
+      "name": "dot",
+      "original": "C:\\Users\\15492\\.codex\\generated_images\\01a07121-edde-7763-8d26-c66f470e2595\\exec-6c61ad09-95b5-4739-a9c2-e4bd68f03e84.png",
+      "scene": "Mostly white, two black back spots and black tail, Queenstown cream wall and pastel flats",
+      "promptSummary": "One photorealistic-natural fictional synthetic test photograph for a Singapore community-cat app. Mostly white, two black back spots and black tail, Queenstown cream wall and pastel flats. Vertical 3:4 candid smartphone view, full cat visible, respectful few metres away, detailed fur, tropical natural light, distinct surroundings. Only one cat, no people, text, watermark or collage."
+    }
+  ]
+}
