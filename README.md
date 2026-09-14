@@ -143,8 +143,11 @@ Without a configured backend, some screens can show demo/fallback content,
 while authenticated and persisted workflows need a configured environment.
 Web export is a build check and preview surface, not the native release target.
 
-iOS uses Apple Maps. Android map builds require the build-time
-`GOOGLE_MAPS_ANDROID_API_KEY`; see [app configuration](apps/mobile/app.config.ts).
+iOS uses Apple Maps. For Android, supply `GOOGLE_MAPS_ANDROID_API_KEY` in the
+build process environment before generating the native app (or in the
+configured EAS build environment). This is a separate build-time key read by
+[app configuration](apps/mobile/app.config.ts), not an `EXPO_PUBLIC_*` runtime
+setting. Restrict it to the intended Android app in Google Cloud.
 The experimental Windows-to-iPhone candidate verification and signing path is
 documented in the [device runbook](docs/runbooks/ios-free-account-device-test.md).
 There is no public App Store installation path documented for this pilot yet.

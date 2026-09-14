@@ -17,6 +17,7 @@ secrets into mobile configuration.
 | Runtime | Settings |
 | --- | --- |
 | Mobile | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`; an actual `EXPO_PUBLIC_RIGHTS_CONTACT_URL` before real-user use. |
+| Android native build | `GOOGLE_MAPS_ANDROID_API_KEY` in the build process or EAS build environment; restrict it to the intended Android app. This is separate from the mobile runtime variables. |
 | Admin | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ADMIN_APP_URL`; server-only `SUPABASE_SERVICE_ROLE_KEY` for protected review media and account erasure. |
 | Report/media Edge Functions | `PRECISE_LOCATION_ENCRYPTION_KEY`, `MEDIA_ALLOWED_ORIGIN`, `MEDIA_PUBLIC_SUPABASE_ORIGIN`, plus the functions' required Supabase runtime credentials. |
 | Optional AI service | `AWS_REGION`, `WHISKER_INTERNAL_AI_TOKEN`; identity assistance remains disabled unless explicitly enabled as described below. |
