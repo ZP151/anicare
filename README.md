@@ -1,172 +1,323 @@
-# WhiskerCommons
+<p align="center">
+  <img src="apps/mobile/assets/app-icon-v2.png" width="96" alt="WhiskerCommons app icon" />
+</p>
 
-WhiskerCommons is a privacy-first, free community-cat identity and care record platform for a closed Singapore pilot. It treats AI as a review aid, never as an automatic identity authority.
+<h1 align="center">WhiskerCommons</h1>
 
-Current product status (2026-09-07): [functional review](docs/reviews/2026-09-07-product-delivery-review.md),
-[iteration roadmap v3](docs/iteration-roadmap-v3.md), [product goals](docs/product-goals.md),
-and [regression playbook](docs/regression-playbook.md).
-Next: report-to-identity creation/review and useful care history. AI remains an
-unproven, optional assistance capability. Historical hosted evidence, evidence
-consumption and iOS build work retain their release boundaries; they do not block
-unrelated local feature development. These changes are not yet integrated into main.
+<p align="center">
+  <strong>One cat. Shared stories. Lasting care.</strong><br />
+  让同一只猫，被不同的人持续认识、记住和关心。<br />
+  A free, privacy-first community-cat platform taking shape in Singapore.
+</p>
 
-Fast local behavior regression: `pnpm test:product-core`. Required CI still runs
-the complete root verification and the independent database integration job.
+<p align="center">
+  <a href="#what-you-can-do">Features</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#project-status">Project status</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
 
-## Current implementation
+<p align="center">
+  <a href="https://github.com/ZP151/anicare/actions/workflows/ci.yml"><img src="https://github.com/ZP151/anicare/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue" alt="Apache 2.0 license" /></a>
+</p>
 
-WhiskerCommons is the display brand only. Existing package scopes, Python import
-path, OAuth scheme, bundle identifiers, database identifiers and offline-key
-names remain compatible technical identifiers.
+WhiskerCommons helps neighbours recognise a recurring community cat, share their
+encounters, and preserve useful identity and care records. Its current focus is
+a cat's shared story across different contributors, with human review for
+identity decisions and privacy built into reporting.
 
-- Expo SDK 57 mobile app with Nearby, Map, Report, Following and Profile tabs,
-  bilingual navigation, and platform-adaptive Liquid Glass/fallbacks.
-- Manual opaque-mask review, canonical JPEG rendering and encrypted local
-  reviewed-media recovery. Automatic person, licence-plate and cat detectors,
-  and native-device execution, are not implemented release gates.
-- SQLCipher offline report drafts whose stored form excludes coordinates and
-  access tokens, plus local reviewed-media receipt/journal boundaries. Native
-  report submission now recovers a stable sighting by its draft ID, appends the
-  immutable sighting ID, and drives private media retry through the local CAS
-  coordinator; supported-device validation remains a release gate.
-- Backend private Supabase staging/quarantine, cleanup contracts and strict JPEG
-  marker validation, plus authenticated native artifact access and the
-  reserve-to-signed-upload-to-finalize wiring, are implemented. Hosted/native
-  redirect coverage and true post-storage-token-expiry cleanup/replay remain
-  required before release. No media is promoted to public storage: a durable
-  `quarantined` result is private and is not public availability.
-- Narrow public-feed/report/block contracts and an authenticated, audited admin
-  contract. Their non-media database runtime verification and two-session
-  concurrency remain required gates.
-- Versioned, model-free AI contracts for crops, embeddings, callbacks and public
-  results, plus synthetic evaluation fixtures. The internal identify route is
-  disabled by default and requires both the exact non-secret
-  `WHISKER_AI_IDENTITY_ASSISTANCE_ENABLED=true` flag and the secret
-  `WHISKER_INTERNAL_AI_TOKEN` at its ASGI boundary. Enabling this compatibility
-  route activates only the synthetic/model-free contract, not live cat-face
-  inference. There are no model weights, labelled dataset, ANN, queue, real
-  callback, or production accuracy claim.
+**Development snapshot — 2026-09-15:** iOS **0.4.18 (26)** has recorded build,
+provenance and delivery evidence; its device acceptance is pending. The app is
+under active development toward a closed Singapore pilot. Current validation
+uses synthetic data and does not establish public-pilot readiness.
 
-The UI includes synthetic demo/fallback content and configured RPC-backed feed,
-report and authenticated admin paths. Those integrations do not establish
-production or physical-device readiness. Use synthetic data for current
-validation; this repository does not claim pilot readiness.
+![Product design overview: neighbourhood discovery, map, create, messages and profile](docs/images/product-overview-v6.jpg)
 
-## Requirements
+*Product design · v6. Synthetic content, not an app capture. The concepts show
+the visual direction; implemented features and pending work are described below.*
 
-- Node.js 22+
-- pnpm 11.19
-- Python 3.12–3.13 for the AI service
-- Docker Desktop, Supabase CLI and Deno for local database/Edge contract checks
+## Why WhiskerCommons?
 
-## Development
+A photo captures one encounter. A lasting community record should help the next
+person recognise the same cat, understand what others have observed or done,
+and correct a mistake without losing the history.
+
+- **Give each cat a continuing story.** Bring different people's encounters
+  together on a cat profile, with links back to the original posts and authors.
+- **Make care understandable.** Keep completed care and sighting records
+  distinct from casual stories, so a photo or comment does not imply treatment
+  or a recent sighting.
+- **Let people contribute before they know the identity.** Share an unknown or
+  multi-cat encounter, then add or correct its cat association later.
+- **Protect the animals and their neighbours.** Use approximate, delayed
+  sighting locations, independent identity review, and auditable correction.
+
+The [current product goals](docs/product-goals.md) and
+[v4 roadmap](docs/iteration-roadmap-v4.md) define this direction. The
+[original charter](docs/product-charter.md) preserves the formal pilot goals;
+its early feature exclusions are historical where later approved iterations
+have added community posts and private messages.
+
+## What you can do
+
+These workflows are implemented in the current source. Device acceptance and
+remaining product work are tracked separately below.
+
+| Workflow | Current experience |
+| --- | --- |
+| Discover neighbourhood cats | Browse photo-led community posts and a Singapore map, explore neighbourhoods, and open cat profiles. |
+| Read and share a cat's stories | Read visible posts from different authors on one cat profile; publish with an optional cat link, return to the profile, or correct your own post's association. |
+| Report a sighting | Follow a four-step report, review and mask its photo, save an encrypted draft, and continue identity selection or review from the receipt. |
+| Record completed care | Add care events, read permitted history, and correct or withdraw your own records. |
+| Participate in the community | Publish text or 1–6 photos, edit and reorder images, comment and reply, react, and open activity notifications. Private messaging includes request/accept/decline flows. |
+| Find your contributions again | Follow cats, reopen drafts and reports, manage posts and photos, and edit your public name, avatar and neighbourhood. A dedicated followed-cat story update feed is still planned. |
+| Review and resolve problems | Report or block content, submit rights requests, and use the role-gated Admin identity and rights queues. |
+
+The mobile interface supports English and Simplified Chinese, light and dark
+appearance, and native iOS glass with accessible fallbacks. Platform appearance,
+large text and assistive-technology behaviour require device verification.
+
+![Product design details: photo post, comments, multi-photo publishing, direct messages and activity](docs/images/stories-and-conversations-v6.jpg)
+
+*Product design · v6. These sample stories, people and conversations illustrate
+the intended experience, not real community activity or device acceptance.*
+
+### Two connected journeys
+
+```text
+Discover a cat → Read shared stories → Share an encounter → Revisit its profile
+                                           |
+                              Add or correct a story's cat link
+
+Report a sighting → Propose an identity → Independent review → Cat record
+                                                                |
+                                                 Completed care + corrections
+```
+
+**A story's cat link is the author's association, not an identity decision.**
+Stories do not automatically create sightings or completed care. AI remains
+optional assistance under development and never confirms identity on its own.
+
+The later [C0 cat-profile and publishing design](docs/design/cat-centered-c0/README.md)
+extends the v6 foundation around shared cat stories.
+
+## Quick start
+
+### Requirements
+
+- **Node.js 22** to match CI; **pnpm 11.19.0** as pinned in `package.json`.
+- **Python 3.12–3.13** for the AI service and full workspace verification.
+- **Docker**, **Supabase CLI 2.84.2**, and **Deno 2.9.5** for local database/Edge
+  integration checks, matching the CI configuration.
+- A custom native build for SQLCipher, native maps and device media flows.
+  Expo Go and a web preview do not exercise the complete app.
+
+### Install and run from source
 
 ```bash
-pnpm install
-pnpm test
-pnpm typecheck
+git clone https://github.com/ZP151/anicare.git
+cd anicare
+pnpm install --frozen-lockfile
+pnpm --filter @animalhelper/domain build
+```
+
+Use [`.env.example`](.env.example) as the variable reference. Put **only** the
+mobile `EXPO_PUBLIC_*` values in `apps/mobile/.env.local`; put the Admin
+`NEXT_PUBLIC_*` and required server settings in `apps/admin/.env.local`.
+These files are ignored by Git. Use your own development Supabase project and
+its public client key; the repository's recorded hosted project is not a shared
+development service. See [backend configuration](docs/runbooks/development-operations.md)
+for migrations, Auth, media and server-only settings.
+
+Run each client in a separate terminal:
+
+```bash
 pnpm --filter @animalhelper/mobile dev
 pnpm --filter @animalhelper/admin dev
 ```
 
-For the AI HTTP service:
+The mobile command starts the Expo development server; Admin starts Next.js.
+Without a configured backend, some screens can show demo/fallback content,
+while authenticated and persisted workflows need a configured environment.
+Web export is a build check and preview surface, not the native release target.
+
+iOS uses Apple Maps. For Android, supply `GOOGLE_MAPS_ANDROID_API_KEY` in the
+build process environment before generating the native app (or in the
+configured EAS build environment). This is a separate build-time key read by
+[app configuration](apps/mobile/app.config.ts), not an `EXPO_PUBLIC_*` runtime
+setting. Restrict it to the intended Android app in Google Cloud.
+The experimental Windows-to-iPhone candidate verification and signing path is
+documented in the [device runbook](docs/runbooks/ios-free-account-device-test.md).
+There is no public App Store installation path documented for this pilot yet.
+
+### Optional AI development service
 
 ```bash
 python -m pip install -e "services/ai[dev]"
 pnpm --filter @animalhelper/ai dev
 ```
 
-Copy `.env.example` to a local untracked environment file and populate it with development-only values. `PRECISE_LOCATION_ENCRYPTION_KEY` must be a base64-encoded 32-byte key. Never reuse keys across environments. Set `MEDIA_ALLOWED_ORIGIN` to the single trusted web origin for media Edge Functions; it is used only for CORS. Set the non-secret `MEDIA_PUBLIC_SUPABASE_ORIGIN` to the exact public Supabase API origin trusted by clients (scheme, host, and optional port only). Native requests have no `Origin` header and are authenticated normally, but browsers from an absent or different origin are rejected.
+This starts the FastAPI service. The internal identity endpoint is disabled by
+default; its explicit flag and token enable a model-free compatibility
+contract, not production cat recognition. See [AI contracts](docs/ai-contracts.md)
+and the separate [offline evaluation guide](services/ai/OFFLINE_EVALUATION.md).
+Install the Python dependencies above before full workspace verification even
+when you do not run the service.
 
-Configure `animalhelper://**` as an allowed Supabase Auth redirect and enable the Apple/Google providers before testing social sign-in. Invoke `private.apply_location_retention()` and `private.purge_expired_location_grants()` daily from a trusted database scheduler; only `service_role` can execute them. Invoke `cleanup-media-staging` from the same trusted scheduler with its service credential: it retains active quarantined-job metadata for later deletion, handles orphaned private staging jobs, and waits through signed-upload replay windows before physical deletion. Its client-facing `uploadCredentialUsableUntil` is a conservative pre-mint lower bound, never a claim that the token expires at that exact instant.
-
-Deploy the cleanup handler with an authenticated Supabase CLI, then keep [`.github/workflows/community-media-cleanup.yml`](.github/workflows/community-media-cleanup.yml) enabled on the default branch:
+## Development checks
 
 ```bash
-supabase functions deploy cleanup-community-media --project-ref fhugdtpjbgiatqhvjioy --use-docker
+# Fast regression for the core report, identity, care and account journeys
+pnpm test:product-core
+
+# Full workspace policy, workflow, lint, type, test and build checks
+pnpm verify
+
+# Independent local Supabase HTTP/Auth/Storage and database integration
+pnpm pilot-gate-2a
 ```
 
-The workflow provides manual cleanup from the protected `hosted-gate-2b` environment using its existing server-only `SUPABASE_SERVICE_ROLE_KEY`. It requires the environment's existing review; unattended scheduling is pending R4 and is not enabled. The handler only claims expired unbound or deletion-pending jobs, so attached live media is excluded. R4 will configure a Vault-backed database scheduler through the authorized deployment runtime, without recurring GitHub approval requests.
+The required [CI workflow](.github/workflows/ci.yml) runs `verify` and
+`database-contracts` as separate jobs, plus peer dependency and Python Ruff/mypy
+checks. The fast product suite does not replace them. Consult the
+[regression playbook](docs/regression-playbook.md) for targeted checks and
+when hosted or physical-device evidence is needed.
 
-## Safety invariants
+## Privacy and trust boundaries
 
-- Public clients receive H3 r9 cells, not latitude/longitude.
-- Normal sightings appear after two hours, sensitive sightings after 24 hours, and critical sightings remain hidden for review.
-- Contributor AI selections remain tentative until an independent trusted review.
-- Public responses use confidence bands and reasons; internal numeric scores are not exposed.
-- Selected source-image bytes are never uploaded. Only a newly rendered JPEG
-  tied to a valid review receipt may enter private staging; public media
-  promotion is disabled.
-- Offline drafts never persist coordinates; location is requested again only at explicit submission time.
-- Production precise-location access is task-specific, expires within 24 hours and is audited.
+| Boundary | Behaviour |
+| --- | --- |
+| Sighting locations | Public projections use H3 resolution 9 cells, not precise coordinates. Normal sightings are delayed two hours, sensitive ones 24 hours, and critical ones remain hidden for review. |
+| Report photos | Source-image bytes are not uploaded. A reviewed, newly rendered JPEG enters private staging/quarantine; report-media public promotion remains disabled. |
+| Community photos and avatars | Separate media flows serve currently permitted public content. Publishing a story does not expose private report material or grant identity verification. |
+| Local drafts | Encrypted, account-bound recovery; sighting drafts do not persist coordinates or access tokens. Location is requested again at explicit submission. |
+| Identity and AI | Contributor selections are tentative until independent review. Public results use confidence bands and reasons rather than internal numeric scores. Live AI assistance remains disabled by default. |
+| Privileged operations | Precise-location grants are task-specific, audited and expire within 24 hours. Service-role credentials stay in trusted server runtimes. |
+| Rights and deletion | The Admin queue records durable completion, pending cleanup or retryable failure. An intake receipt or a cleanup invocation is not proof of completed deletion. |
 
-## Repository map
+Automatic person, licence-plate and cat detectors remain disabled pending their
+device, model, licence and adversarial-corpus gates. Supply an operated rights
+contact and complete the [Singapore launch checklist](docs/singapore-launch-checklist.md)
+before real-user use. Operational details are in the
+[development and operations guide](docs/runbooks/development-operations.md).
 
-- `apps/mobile` — Expo mobile client
-- `apps/admin` — private operations console
-- `packages/domain` — shared privacy and governance behavior
-- `supabase` — migrations, pgTAP tests and Edge Functions
-- `services/ai` — candidate fusion, evaluation and Lambda/FastAPI entrypoint
+## Project status
 
-## Release gates
+The latest recorded candidate is **0.4.18 (26)**, built from **`74e3b49`**.
+Its [delivery record](docs/reviews/2026-09-14-global-simplification.md) links the
+CI and native build results and records artifact integrity and provenance.
+**Device acceptance remains pending.** The previously accepted core baseline
+is 0.4.13, with the subsequent refresh fix also confirmed; C1 device failures
+and their repairs remain visible in the [device test ledger](docs/ios-next-device-test.md).
 
-Gate 2A evidence and the remaining gates that still block pilot-ready status
-are:
+| Area | Evidence and remaining work |
+| --- | --- |
+| Core reports, care and community | Implemented through the M-series and v6 iterations, with automated and recorded incremental device checks. Evidence applies to its named version and scenario. |
+| C1 shared cat stories | Profile aggregation, linked publishing and owner correction are implemented. 0.4.17 repaired loading, sample breadth and headers; two-account contribution and remaining device checks are pending. |
+| Hosted media and delivery | Gate 2A local-stack and Gate 2B hosted evidence exist. The earlier evidence-consumer blocker has been resolved; the committed Gate 2B receipt is source-bound and expires after 72 hours, so it is not evergreen release approval. |
+| Media maintenance | The signed database scheduler and hosted expiry checks were delivered in 0.4.13. The protected GitHub cleanup job remains a manual maintenance path. |
+| AI and public pilot | Offline tooling and synthetic contracts exist; licensed held-out identity data and real accuracy results are still missing. Operational, privacy and formal pilot gates remain open. |
 
-- The protected Hosted Gate 2B producer and its local promotion validator are
-  implemented; see the [operator runbook](docs/runbooks/hosted-gate-2b.md).
-  The real [run 33784288981](https://github.com/ZP151/anicare/actions/runs/33784288981)
-  passed correctness, cleanup and evidence issuance at `6797215`. The evidence
-  consumer currently rejects the actual signing issuer; canonical 72-hour
-  evidence has not been committed. Delivery readiness remains blocked until
-  that consumer is fixed and validated evidence is promoted while fresh.
+The [Gate 2B runbook](docs/runbooks/hosted-gate-2b.md),
+[committed readiness receipt](docs/evidence/pilot-gate-2b-readiness.json), and
+[media-maintenance evidence](docs/reviews/2026-09-13-v6-r0413-core-continuation.md)
+contain the exact scope. Recorded delivery does not imply that every device,
+environment or later commit has passed the same checks.
 
-- The experimental Windows [iOS free-account device-test runbook](docs/runbooks/ios-free-account-device-test.md)
-  and its [empty physical evidence template](docs/evidence/ios-device-physical-test-template.md)
-  are handoff material only. They fail closed until a protected unsigned
-  candidate's provenance and checksum are verified, retain Apple Account and
-  device identifiers locally, and do not claim Gate 2B, candidate, installation,
-  or physical-device completion.
+## Roadmap
 
-- Gate 2A media proof is complete for local-stack HTTP/Auth/Storage composition
-  with two synthetic sessions, evidenced on the fresh GitHub Actions run
-  [33208195906](https://github.com/ZP151/anicare/actions/runs/33208195906) with both
-  required jobs green:
-  [verify](https://github.com/ZP151/anicare/actions/runs/33208195906/job/98974573537)
-  and
-  [database-contracts](https://github.com/ZP151/anicare/actions/runs/33208195906/job/98974573765).
-- Build and test the manual review flow on supported native devices. Automatic
-  person, licence-plate and cat detection remain disabled until device, model,
-  licence and adversarial-corpus gates pass.
-- Keep public media promotion disabled until trusted server-side residual checks
-  are implemented and verified. Client attestation alone never permits it.
-- Exercise the authenticated artifact reader and complete
-  reserve-to-signed-upload-to-finalize media transport on hosted or native
-  paths, including redirects, capability expiry and cleanup races. Local unit
-  coverage and local-stack CI are not a substitute for that completion.
-- Validate true post-storage-token-expiry cleanup and replay behavior in Gate 2B.
-- Complete non-media and cross-functional gates: feed/report/admin runtime,
-  legal/compliance operations, Singapore legal structures, real-user/test-data
-  policy, and production AI accuracy evidence on consented data.
-- Use a qualified, consented labelled dataset before evaluating Recall@3 at
-  least 85%, unknown rejection at least 80%, and likely false matches on unknown
-  cats at most 5%. Current evaluation is synthetic only and establishes no
-  production accuracy result.
+| Stage | Outcome and status |
+| --- | --- |
+| Foundation and safe capture | Privacy/domain contracts, private media staging, encrypted drafts, identity review and local/hosted verification foundations. |
+| M0–M5 and A0 | Manual report → identity → care loop, discovery/following, rights operations, faster regression, iOS candidates and bounded offline AI evaluation. |
+| 0.2–0.3 neighbourhood iterations | Singapore neighbourhood navigation, bilingual presentation, community participation and device-feedback fixes. |
+| v6 / 0.4.0–0.4.13 | Multi-photo publishing, real interactions and private messages, photo editing, draft recovery, personal albums and scheduled cleanup. |
+| C0–C1 / 0.4.14–0.4.18 | Cat-centred design, shared stories, optional cat linking and correction, then device-feedback repairs and simpler actions. C0 is complete; C1 device acceptance remains open. |
+| Next: C2 | Discover/followed views, new stories grouped by followed cat, and reliable read progress. Planned after C1 stabilises. |
+| Then: C3 | A cat's shared photo album, contribution management and a complete journey ready for small user studies. Planned. |
 
-### 身份审核工作台的服务端配置
+The [v4 roadmap](docs/iteration-roadmap-v4.md) supersedes unfinished priorities
+in older plans. Video, administrator/Bot experiences and further chat expansion
+are deferred. Reliability, deletion, account isolation and old-draft
+compatibility remain ongoing responsibilities.
 
-`/identity` 供具有有效 trusted contributor、area steward 或 platform admin 授权的独立审核者使用。普通平台管理入口仍限定 platform admin；身份审核按授权区域及回避规则返回队列。
+The care-value target is the number of cats with independently confirmed
+identity, valid contributions from at least two people, and at least one
+completed care event within 14 days. Shared-story participation and useful
+return visits are additional proposed measures. **These product outcomes are
+not yet measured**; synthetic sample counts are not adoption or welfare results.
+See [metric definitions](docs/product-goals.md).
 
-Admin 服务端媒体代理还需在它自己的服务端环境设置 `SUPABASE_SERVICE_ROLE_KEY`。该变量仅用于读取已授权的审核素材，不得加 `NEXT_PUBLIC_` 前缀，也不得写入移动端或浏览器环境。缺少配置时素材代理返回不可用；工作台不提供公开 Storage URL。已有本地/托管密钥由运行环境提供，不在仓库保存。
+## Architecture
 
-### Rights and account erasure operations
+```text
+Expo / React Native mobile           Next.js Admin
+  stories, maps, reports               identity review, rights, moderation
+  encrypted local drafts                         |
+             |                                    |
+             +------- Supabase Auth + RPC / Edge --+
+                                |
+                  PostgreSQL / RLS / audit records
+                                |
+            Private report media | Community media / avatars
 
-`/rights` in Admin is a real authenticated intake queue. An active platform admin can move human requests to review, request a new identity proposal, or close intake. These actions do not merge cats or change identity decisions.
+Python AI service: isolated contracts and offline evaluation;
+live identity assistance remains gated.
+```
 
-Account deletion processing additionally uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to claim the owner-requested erasure, query/delete the Auth user, call the existing `cleanup-media-staging`, `cleanup-legacy-media`, `cleanup-profile-avatars`, and `cleanup-community-media` handlers, and reconcile linked cleanup jobs. Deploy those handlers to the same project and configure their existing required runtime settings. Only an authorized Admin Server Action invokes this flow; the mobile app never receives service credentials or an Auth target UUID. The queue displays the exact durable result from `finish_account_erasure` (`completed`, `cleanup pending`, or `retryable`) rather than treating invocation as completion. Revisit pending items and retry cleanup until the DB reports convergence. Storage credential lifetime and terminal legacy failures still prevent premature completion.
+| Area | Location |
+| --- | --- |
+| Mobile app, native configuration and device policies | [`apps/mobile`](apps/mobile) |
+| Private operations console | [`apps/admin`](apps/admin) |
+| Shared domain and privacy behaviour | [`packages/domain`](packages/domain) |
+| Migrations, pgTAP tests and Edge Functions | [`supabase`](supabase) |
+| Python AI contracts and evaluation | [`services/ai`](services/ai) |
+| CI, deployment evidence and verification tooling | [`scripts`](scripts) |
 
-When `create_community_post_with_media` returns PostgreSQL error `P0001` with message `community_media_expired`, it guarantees that no post or post idempotency result was created for that actor and request ID; exact prior publication replay is checked first. Preserve the draft, reopen editing only for that exact error, reserve/finalize replacement media with new media request IDs, then publish using a new post request ID. Do not use this recovery path for `community_media_not_available` or `idempotency_conflict`.
+WhiskerCommons is the display brand. The repository name `anicare`, package
+scope `@animalhelper`, Python imports, `animalhelper://` OAuth scheme and native
+identifiers remain compatible technical names. See the
+[architecture notes](docs/architecture.md) for the foundational data model and
+the v4 plans for later story and community extensions.
 
-Set mobile `EXPO_PUBLIC_RIGHTS_CONTACT_URL` to an **actual operated** HTTPS contact page or `mailto:` address before real-user use. The example is intentionally empty. Without it, the UI states that external contact is unavailable; the authenticated queue still receives requests, but post-deletion contact acceptance is incomplete. A saved local receipt is not proof of deletion completion and grants no anonymous status access. The operating owner/SLA and real contact channel remain product inputs, not generated addresses.
+## Documentation
 
-The offline AI experiment is documented in [services/ai/OFFLINE_EVALUATION.md](services/ai/OFFLINE_EVALUATION.md). It does not enable product AI or replace a licensed identity dataset and held-out evaluation.
+| Start here | Purpose |
+| --- | --- |
+| [Product goals](docs/product-goals.md) · [v4 roadmap](docs/iteration-roadmap-v4.md) | Current priorities, outcomes and next increments. |
+| [Device test ledger](docs/ios-next-device-test.md) · [delivery reviews](docs/reviews) | Versioned delivery evidence, feedback and pending checks. Local IPA paths in historical records are maintainer handoff paths. |
+| [Development and operations](docs/runbooks/development-operations.md) | Auth, service configuration, cleanup and rights processing. |
+| [Regression playbook](docs/regression-playbook.md) · [Hosted Gate 2B](docs/runbooks/hosted-gate-2b.md) | Verification layers and evidence promotion. |
+| [Synthetic sample catalogue](docs/test-samples/ios-v1/README.md) | Test content, provenance and fixture boundaries. |
+| [Product charter](docs/product-charter.md) · [launch checklist](docs/singapore-launch-checklist.md) | Original pilot goals and formal launch requirements. |
+| [AI contracts](docs/ai-contracts.md) · [offline evaluation](services/ai/OFFLINE_EVALUATION.md) | Disabled-by-default assistance and evaluation requirements. |
+
+## Contributing
+
+Start with the current roadmap and a reproducible user journey. For a bug,
+[open an issue](https://github.com/ZP151/anicare/issues) with the app version,
+platform, steps, expected/actual behaviour and sanitised evidence. Use synthetic
+data in reproductions; keep credentials, precise locations and private photos
+out of issues and commits. Include the relevant regression checks in your PR.
+
+## Related projects and documentation references
+
+These references informed the README's organisation, not claims of feature
+parity or code reuse:
+
+- [MergePilot](https://github.com/ZP151/mergepilot) and
+  [Archeform](https://github.com/ZP151/archeform): product-first introductions,
+  workflow explanations, quick starts, architecture and evidence-backed status.
+- [iNaturalist](https://github.com/inaturalist/inaturalist) and its
+  [React Native client](https://github.com/inaturalist/iNaturalistReactNative):
+  community observation context, contributor guidance and explicit mobile setup.
+- [Immich](https://github.com/immich-app/immich): a visual project introduction,
+  scannable feature tables and direct documentation links.
+- [Animal Shelter Manager](https://github.com/sheltermanager/asm3): an adjacent
+  animal-care project with explicit runtime and operational dependencies.
+
+## License
+
+WhiskerCommons is licensed under [Apache 2.0](LICENSE).
